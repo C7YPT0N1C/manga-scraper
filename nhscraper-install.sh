@@ -54,46 +54,34 @@ function install_ricterz_nhentai() {
 
 function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
-    if [ ! -d "$NHENTAI_DIR" ]; then
-        mkdir -p "$NHENTAI_DIR"
-    fi
+    mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
     read -p "Would you like to install the Beta Version instead of the Stable Version? [y/N]: " beta
-    case "$beta" in
-        [yY]|[yY][eE][sS])
-            echo "[*] Continuing to use Stable Version."
-            
-            # Clone Stable branch
-            if [ ! -d "$NHENTAI_DIR/.git" ]; then
-                echo "[*] Cloning nhentai-scraper..."
-                if git clone --depth 1 --branch main https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-                    echo "[+] Cloned from Gitea."
-                else
-                    echo "[!] Gitea clone failed, trying GitHub..."
-                    git clone --depth 1 --branch main https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
-                fi
-            else
-                git pull || echo "[!] Could not update scraper repo."
-            fi
-            ;;
-        *)
-            echo "[*] Swithcing to Beta Version."
+    beta=${beta,,}  # convert input to lowercase
 
-            # Clone Beta branch
-            if [ ! -d "$NHENTAI_DIR/.git" ]; then
-                echo "[*] Cloning nhentai-scraper..."
-                if git clone --depth 1 --branch dev https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-                    echo "[+] Cloned from Gitea."
-                else
-                    echo "[!] Gitea clone failed, trying GitHub..."
-                    git clone --depth 1 --branch dev https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
-                fi
-            else
-                git pull || echo "[!] Could not update scraper repo."
-            fi
-            ;;
-    esac
+    if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
+        BRANCH="dev"
+        echo "[*] Installing Beta Version (dev branch)..."
+    else
+        BRANCH="main"
+        echo "[*] Installing Stable Version (main branch)..."
+    fi
+
+    if [ ! -d "$NHENTAI_DIR/.git" ]; then
+        echo "[*] Cloning nhentai-scraper branch $BRANCH..."
+        if git clone --depth 1 --branch "$BRANCH" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
+            echo "[+] Cloned from Gitea."
+        else
+            echo "[!] Gitea clone failed, trying GitHub..."
+            git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
+        fi
+    else
+        echo "[*] Repository already exists, pulling latest changes..."
+        git fetch origin "$BRANCH"
+        git reset --hard "origin/$BRANCH"
+    fi
+}
 
     # Create venv if missing
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
