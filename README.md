@@ -1,20 +1,20 @@
 ## Table of Contents
 
 - [**Overview and Disclaimer**](#overview-and-disclaimer)
-- [Features](#features)
+- [**Features**](#features)
   - [Suwayomi Category Automation](#suwayomi-category-automation)
   - [Features Coming Soon](#features-coming-soon)
-- [Installation](#installation)
+- [**Installation**](#installation)
   - [System Requirements](#system-requirements)
-  - [**Installation Commands**](#installation-commands)
-- [Post Install](#post-install)
+  - [Installation Commands](#installation-commands)
+- [**Post Install**](#post-install)
+- [**Usage**](#usage-and-documentation)
+  - [CLI Arguments](#cli-arguments)
+  - [Examples](#examples)
+  - [Directory Layout](#directory-layout)
   - [Systemd Services](#systemd-services)
   - [GraphQL API Queries](#graphql-api-queries)
   - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
-- [Usage](#usage)
-  - [CLI Arguments](#cli-arguments)
-  - [Examples](#examples)
-- [Directory Layout](#directory-layout)
 
 # nhentai-scraper
 
@@ -63,28 +63,6 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 - Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql`
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
 
-### Systemd Services
-sudo systemctl daemon-reload
-
-- Suwayomi: `sudo systemctl enable|start suwayomi
-- Nhentai Scraper: `sudo systemctl enable|start nhentai-scraper` , `sudo systemctl enable|start nhentai-scraper.timer`
-
-### GraphQL API Queries
-- Info will be added T-T...
-
-### Flask Monitoring Endpoint
-- URL: `http://<SERVER-IP-OR-DOMAIN>:5000/scraper_status`
-- JSON output example:
-```json
-{
-  "last_run": "2025-08-24T02:00:00",
-  "success": true,
-  "downloaded": 15,
-  "skipped": 3,
-  "error": null
-}
-```
-
 ## Usage and Documentation
 ### CLI Arguments
 - A config file for the scraper `config.json` will be automatically created after installation.
@@ -119,7 +97,7 @@ python3 nhentai-scraper.py --root /mnt/nhentai --start 600000 --end 600050 --thr
 python3 nhentai-scraper.py --use-tor --exclude-tags "yaoi,shotacon"
 ```
 
-## Directory Layout
+### Directory Layout
 Galleries (Suwayomi compatible) saved as:
 ```
 ARTIST_FOLDER/
@@ -138,5 +116,27 @@ Suwayomi metadata format:
   "genre": ["tags_here"],
   "status": "1",
   "_status values": ["0=Unknown","1=Ongoing","2=Completed","3=Licensed"]
+}
+```
+
+### Systemd Services
+sudo systemctl daemon-reload
+
+- Suwayomi: `sudo systemctl enable|start suwayomi
+- Nhentai Scraper: `sudo systemctl enable|start nhentai-scraper` , `sudo systemctl enable|start nhentai-scraper.timer`
+
+### GraphQL API Queries
+- Info will be added T-T...
+
+### Flask Monitoring Endpoint
+- URL: `http://<SERVER-IP-OR-DOMAIN>:5000/scraper_status`
+- JSON output example:
+```json
+{
+  "last_run": "2025-08-24T02:00:00",
+  "success": true,
+  "downloaded": 15,
+  "skipped": 3,
+  "error": null
 }
 ```
