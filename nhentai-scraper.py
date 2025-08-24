@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 import os
 import sys
-import json
-import subprocess
 import logging
 import argparse
 from datetime import datetime
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ===============================
 # CONFIGURATION
 # ===============================
 NHENTAI_DIR = "/opt/nhentai-scraper"
 RICTERZ_DIR = "/opt/ricterz_nhentai"
-RICTERZ_BIN = os.path.join(RICTERZ_DIR, "nhentai", "cmdline.py")
 SUWAYOMI_DIR = "/opt/suwayomi"
 LOGS_DIR = os.path.join(NHENTAI_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+
+# Add RicterZ to path
+sys.path.insert(0, RICTERZ_DIR)
+from nhentai import cmdline
 
 # ===============================
 # LOGGING
@@ -52,8 +52,6 @@ args = parser.parse_args()
 if args.verbose:
     logger.setLevel(logging.DEBUG)
 
-PYTHON_BIN = os.path.join(NHENTAI_DIR, "venv", "bin", "python3")
-
 # ===============================
 # UTILITIES
 # ===============================
@@ -61,43 +59,32 @@ def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def run_ricterz(gallery_id, output_dir):
-    """Run RicterZ nhentai cmdline.py for a given gallery ID with per-image progress"""
-    cmd = [
-        PYTHON_BIN,
-        RICTERZ_BIN,
-        "--id", str(gallery_id),
-        "--download",
-        "-t", str(args.threads_images),
-        "-o", output_dir,
-        "--cookie", args.cookie,
-        "--user-agent", args.user_agent
-    ]
-    if args.use_tor:
-        cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
-
+    """Download gallery images using RicterZ cmdline.py logic"""
     if args.dry_run:
-        logger.info(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        logger.info(f"[DRY-RUN] Would download gallery {gallery_id} to {output_dir}")
         return True
 
-    logger.debug(f"Running RicterZ command: {' '.join(cmd)}")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        for line in result.stdout.splitlines():
-            if "Downloading image" in line:
-                logger.info(f"[{gallery_id}] {line.strip()}")
+        # RicterZ module handles cookies, user-agent, and optional proxy
+        cmdline.download_gallery(
+            gallery_id,
+            output_dir,
+            threads=args.threads_images,
+            cookie=args.cookie,
+            user_agent=args.user_agent,
+            use_tor=args.use_tor
+        )
         logger.info(f"[+] Successfully processed gallery {gallery_id}")
         return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"[!] Failed to process gallery {gallery_id}: {e.stderr.strip()}")
+    except Exception as e:
+        logger.error(f"[!] Failed to process gallery {gallery_id}: {e}")
         return False
 
 def get_artists(meta):
     """Return list of artists, handle missing or multiple artists"""
     artist_field = meta.get("artist") or meta.get("group") or "Unknown"
     artists = [a.strip() for a in artist_field.replace("|", ",").split(",") if a.strip()]
-    if not artists:
-        artists = ["Unknown"]
-    return artists
+    return artists if artists else ["Unknown"]
 
 def suwayomi_folder_name(meta, artist):
     """Generate Suwayomi-compatible folder name"""
@@ -157,24 +144,14 @@ def main():
     for gallery_id in range(args.start, args.end + 1):
         logger.info(f"[*] Starting gallery {gallery_id}")
 
-        if args.dry_run:
-            logger.info(f"[DRY-RUN] Would fetch metadata and download gallery {gallery_id}")
-            continue
-
-        meta_cmd = [
-            PYTHON_BIN,
-            RICTERZ_BIN,
-            "--id", str(gallery_id),
-            "--cookie", args.cookie,
-            "--user-agent", args.user_agent,
-            "--show"
-        ]
-        if args.use_tor:
-            meta_cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
-
         try:
-            meta_output = subprocess.check_output(meta_cmd, text=True)
-            meta = json.loads(meta_output)
+            # Fetch metadata using RicterZ internal module
+            meta = cmdline.get_gallery_metadata(
+                gallery_id,
+                cookie=args.cookie,
+                user_agent=args.user_agent,
+                use_tor=args.use_tor
+            )
         except Exception as e:
             logger.error(f"[!] Failed to fetch metadata for {gallery_id}: {e}")
             continue
