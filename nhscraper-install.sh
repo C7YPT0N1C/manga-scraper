@@ -84,6 +84,11 @@ function install_scraper() {
 }
 
     # Create venv if missing
+    if ! python3 -m venv --help >/dev/null 2>&1; then
+        echo "[!] python3-venv not found. Installing..."
+        apt-get install -y python3-venv
+    fi
+    
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
         echo "[*] Creating venv..."
         python3 -m venv "$NHENTAI_DIR/venv"
