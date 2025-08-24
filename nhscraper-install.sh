@@ -28,7 +28,7 @@ fi
 function create_logs_dir() {
     mkdir -p "$LOGS_DIR"
     chmod 755 "$LOGS_DIR"
-    echo "\n[+] Logs directory created at $LOGS_DIR"
+    echo "[+] Logs directory created at $LOGS_DIR"
 }
 
 function create_env_file() {
@@ -53,11 +53,13 @@ function update_env() {
     source "$ENV_FILE" 2>/dev/null || true
     echo "Current environment values:"
     echo "NHENTAI_COOKIE=${NHENTAI_COOKIE:-<not set>}"
-    echo "NHENTAI_USER_AGENT=${NHENTAI_USER_AGENT:-<not set>}"
+    echo "NHENTAI_USER_AGENT=${NHENTAI_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36}"
     echo "NHENTAI_DRY_RUN=${NHENTAI_DRY_RUN:-false}"
     echo "USE_TOR=${USE_TOR:-false}"
     echo "NHENTAI_START_ID=${NHENTAI_START_ID:-500000}"
     echo "NHENTAI_END_ID=${NHENTAI_END_ID:-500010}"
+    echo "THREADS_GALLERIES=${THREADS_GALLERIES:-3}"
+    echo "THREADS_IMAGES=${THREADS_IMAGES:-5}"
 
     read -p "Enter new nhentai.net cookie (leave blank to keep current): " NEW_COOKIE
     read -p "Enter new browser User-Agent (leave blank to keep current): " NEW_UA
@@ -65,9 +67,11 @@ function update_env() {
     read -p "Use Tor proxy? (true/false, leave blank to keep current): " NEW_TOR
     read -p "Enter start gallery ID (leave blank to keep current): " NEW_START
     read -p "Enter end gallery ID (leave blank to keep current): " NEW_END
+    read -p "Enter number of threads to use per gallery (leave blank to keep current): " NEW_GALLERY_THREADS
+    read -p "Enter number of threads to use per image (leave blank to keep current): " NEW_IMAGE_THREADS
 
     cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%F-%T)"
-    echo "\n[*] Backup saved as $ENV_FILE.bak.$(date +%F-%T)"
+    echo "[*] Backup saved as $ENV_FILE.bak.$(date +%F-%T)"
 
     if [ ! -z "$NEW_COOKIE" ]; then
         sed -i "/^NHENTAI_COOKIE=/d" "$ENV_FILE"
@@ -85,7 +89,6 @@ function update_env() {
         sed -i "/^USE_TOR=/d" "$ENV_FILE"
         echo "USE_TOR='$NEW_TOR'" >> "$ENV_FILE"
     fi
-
     if [ ! -z "$NEW_START" ]; then
         sed -i "/^NHENTAI_START_ID=/d" "$ENV_FILE"
         echo "NHENTAI_START_ID='$NEW_START'" >> "$ENV_FILE"
@@ -93,6 +96,14 @@ function update_env() {
     if [ ! -z "$NEW_END" ]; then
         sed -i "/^NHENTAI_END_ID=/d" "$ENV_FILE"
         echo "NHENTAI_END_ID='$NEW_END'" >> "$ENV_FILE"
+    fi
+    if [ ! -z "$NEW_GALLERY_THREADS" ]; then
+        sed -i "/^THREADS_GALLERIES=/d" "$ENV_FILE"
+        echo "THREADS_GALLERIES='$NEW_GALLERY_THREADS'" >> "$ENV_FILE"
+    fi
+    if [ ! -z "$NEW_IMAGE_THREADS" ]; then
+        sed -i "/^THREADS_IMAGES=/d" "$ENV_FILE"
+        echo "THREADS_IMAGES='$NEW_IMAGE_THREADS'" >> "$ENV_FILE"
     fi
 
     echo "[*] Updated environment file:"
@@ -104,7 +115,7 @@ function update_env() {
 }
 
 function uninstall_all() {
-    echo "\n[*] Stopping and disabling services..."
+    echo "[*] Stopping and disabling services..."
     systemctl stop nhentai-scraper nhentai-monitor suwayomi filebrowser || true
     systemctl disable nhentai-scraper nhentai-monitor suwayomi filebrowser || true
 
@@ -120,7 +131,7 @@ function uninstall_all() {
 }
 
 function install_system_packages() {
-    echo "\n[*] Installing system packages..."
+    echo "[*] Installing system packages..."
     apt-get update
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
@@ -128,14 +139,14 @@ function install_system_packages() {
 
 function check_venv() {
     if ! python3 -m venv --help >/dev/null 2>&1; then
-        echo "\n[!] python3-venv missing, installing..."
+        echo "[!] python3-venv missing, installing..."
         apt-get install -y python3-venv
     fi
 }
 
 function install_ricterz_nhentai() {
     if [ ! -d "$RICTERZ_DIR" ]; then
-        echo "\n[*] Cloning RicterZ nhentai repository..."
+        echo "[*] Cloning RicterZ nhentai repository..."
         git clone https://github.com/RicterZ/nhentai.git "$RICTERZ_DIR"
     else
         echo "[*] RicterZ nhentai repo exists. Pulling latest..."
@@ -145,7 +156,7 @@ function install_ricterz_nhentai() {
 }
 
 function install_scraper() {
-    echo "\n[*] Installing nhentai-scraper..."
+    echo "[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
@@ -171,13 +182,13 @@ function install_scraper() {
 
     check_venv
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        echo "\n[*] Creating Python virtual environment..."
+        echo "[*] Creating Python virtual environment..."
         python3 -m venv "$NHENTAI_DIR/venv"
     fi
 
     source "$NHENTAI_DIR/venv/bin/activate"
 
-    echo "\n[*] Installing Python requirements..."
+    echo "[*] Installing Python requirements..."
     pip install --upgrade pip setuptools wheel pysocks requests requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
     echo "[+] Python requirements installed."
 
@@ -186,7 +197,7 @@ function install_scraper() {
 }
 
 function install_suwayomi() {
-    echo "\n[*] Installing Suwayomi..."
+    echo "[*] Installing Suwayomi..."
     mkdir -p "$SUWAYOMI_DIR"
     cd "$SUWAYOMI_DIR"
     TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
@@ -199,7 +210,7 @@ function install_suwayomi() {
 }
 
 function install_filebrowser() {
-    echo "\n[*] Installing FileBrowser..."
+    echo "[*] Installing FileBrowser..."
     curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
     mkdir -p /etc/filebrowser
     if [ ! -f /etc/filebrowser/filebrowser.db ]; then
@@ -209,7 +220,7 @@ function install_filebrowser() {
 }
 
 function create_systemd_services() {
-    echo "\n[*] Creating systemd services..."
+    echo  "[*] Creating systemd services..."
 
     PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
     RICTERZ_BIN="$RICTERZ_DIR/nhentai/cmdline.py"
@@ -300,7 +311,7 @@ EOF
 
 function print_links() {
     IP=$(hostname -I | awk '{print $1}')
-    echo -e "\n[*] Access Links:"
+    echo -e "[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
     echo "FileBrowser: http://$IP:8080/"
