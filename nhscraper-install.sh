@@ -86,7 +86,7 @@ function install_scraper() {
 
     # PYTHON REQUIREMENTS
     echo "[*] Installing Python requirements..."
-    pip install --upgrade pip setuptools wheel cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
+    pip install --upgrade pip setuptools wheel pysocks requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
     echo "[+] Python requirements installed."
 }
 
@@ -182,7 +182,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/scraper_monitor.py"
+ExecStart=/bin/bash -c '
+source /opt/nhentai-scraper/venv/bin/activate
+exec python3 /opt/nhentai-scraper/scraper_monitor.py
+'
 Restart=on-failure
 User=root
 

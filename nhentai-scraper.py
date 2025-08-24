@@ -1,225 +1,205 @@
 #!/usr/bin/env python3
-import os
-import sys
-import json
-import time
 import argparse
-import threading
+import os, sys, json, time, re
 import subprocess
-from pathlib import Path
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from bs4 import BeautifulSoup
+from datetime import datetime
 import requests
 
-# =======================
-# DEFAULT CONFIG
-# =======================
+# ===============================
+# CONFIG / DEFAULTS
+# ===============================
 DEFAULT_ROOT = "/opt/suwayomi/local/"
-PROGRESS_FILE = "progress.json"
-SKIPPED_LOG = "skipped.log"
-VERBOSE = True
-
 DEFAULT_EXCLUDE_TAGS = ["snuff","guro","cuntboy","cuntbusting","ai generated"]
 DEFAULT_INCLUDE_TAGS = []
 DEFAULT_LANGUAGE = "english"
+DEFAULT_THREADS_GALLERIES = 3
+DEFAULT_THREADS_IMAGES = 5
+DEFAULT_USE_TOR = False
+DEFAULT_USE_VPN = False
+DEFAULT_BASE_URL = "https://nhentai.net/g/"
+STATUS_FILE = "/opt/nhentai-scraper/status.json"
+SUWAYOMI_GRAPHQL = "http://localhost:4567/api/graphql"
+IGNORED_CATEGORIES = ["Favorites"]
 
-RICTERZ_CMD = "nhentai"  # RicterZ/nhentai CLI must be installed and in PATH
-TOR_PROXY = "socks5h://127.0.0.1:9050"
+# ===============================
+# UTILITIES
+# ===============================
+def sanitize_folder_name(name):
+    return re.sub(r'[\\/*?:"<>|]', "_", name)
 
-scraper_status = {
-    "running": False,
-    "last_checked": None,
-    "last_gallery": None,
-    "errors": [],
-    "active_galleries": [],
-    "using_tor": False,
-}
-
-# =======================
-# UTILITY FUNCTIONS
-# =======================
 def log(msg):
-    if VERBOSE:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+    print(f"{datetime.now().isoformat()} | {msg}", flush=True)
 
-def load_progress():
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, "r") as f:
-            return json.load(f)
-    return {"last_id": 0}
+def save_status(**kwargs):
+    status = {}
+    if os.path.exists(STATUS_FILE):
+        try:
+            status = json.load(open(STATUS_FILE))
+        except: pass
+    status.update(kwargs)
+    with open(STATUS_FILE, "w") as f:
+        json.dump(status, f, indent=2)
 
-def save_progress(last_id):
-    with open(PROGRESS_FILE, "w") as f:
-        json.dump({"last_id": last_id}, f)
+# ===============================
+# GRAPHQL (Suwayomi)
+# ===============================
+def graphql_query(query, variables=None):
+    payload = {"query": query, "variables": variables or {}}
+    resp = requests.post(SUWAYOMI_GRAPHQL, json=payload, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
-def sanitize(name: str):
-    return "".join(c if c.isalnum() or c in " ._-" else "_" for c in name)
+def get_categories():
+    query = "query { categories { id name } }"
+    result = graphql_query(query)
+    return {c["name"]: c["id"] for c in result["data"]["categories"]}
 
-def log_skipped(gallery_id, reason, root):
-    with open(os.path.join(root, SKIPPED_LOG), "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now().isoformat()} | {gallery_id} | {reason}\n")
-    log(f"[-] Skipped {gallery_id}: {reason}")
+def create_category(name):
+    query = "mutation($name: String!) { createCategory(input: {name: $name}) { id name } }"
+    result = graphql_query(query, {"name": name})
+    return result["data"]["createCategory"]
 
-# =======================
-# METADATA GENERATION
-# =======================
-def generate_suwayomi_metadata(gallery):
-    metadata = {
-        "title": gallery["title"],
-        "author": gallery["artists"][0] if gallery["artists"] else "Unknown Artist",
-        "artist": gallery["artists"][0] if gallery["artists"] else "Unknown Artist",
-        "description": f"An archive of {gallery['artists'][0]}'s works." if gallery["artists"] else "",
-        "genre": gallery["tags"],
+def add_gallery(gallery_input):
+    query = "mutation($gallery: GalleryInput!) { createGallery(input: $gallery) { id title } }"
+    result = graphql_query(query, {"gallery": gallery_input})
+    return result["data"]["createGallery"]
+
+def report_to_suwayomi(meta):
+    existing = get_categories()
+    cat_ids = []
+    for tag in meta["genre"]:
+        if tag in IGNORED_CATEGORIES: continue
+        if tag not in existing:
+            cat = create_category(tag)
+            cat_ids.append(cat["id"])
+            existing[tag] = cat["id"]
+        else:
+            cat_ids.append(existing[tag])
+    gallery_input = {
+        "title": meta["title"],
+        "author": meta["author"],
+        "artist": meta["artist"],
+        "description": meta["description"],
+        "status": meta["status"],
+        "genre": meta["genre"],
+        "categories": cat_ids,
+        "files": [f"{i+1}.jpg" for i in range(len(meta.get("images", [])))],
+    }
+    add_gallery(gallery_input)
+
+# ===============================
+# DOWNLOADER (RicterZ/nhentai CLI)
+# ===============================
+def check_tor(proxy="socks5h://127.0.0.1:9050"):
+    """Check current IP through Tor."""
+    try:
+        import socks  # PySocks dependency
+    except ImportError:
+        print("[!] Missing PySocks. Install with: pip install pysocks requests[socks]")
+        return None
+
+    session = requests.Session()
+    session.proxies = {"http": proxy, "https": proxy}
+    try:
+        r = session.get("https://httpbin.org/ip", timeout=10)
+        ip = r.json().get("origin")
+        print(f"[*] Tor IP detected: {ip}")
+        return ip
+    except Exception as e:
+        print(f"[!] Tor check failed: {e}")
+        return None
+
+def download_gallery(gid, root, cookie, user_agent, use_tor=False, verbose=True):
+    """Download a single gallery via RicterZ/nhentai CLI."""
+    if verbose:
+        print(f"[*] Starting gallery {gid}...")
+
+    cmd = [
+        "nhentai",
+        "--useragent", user_agent,
+        "--cookie", cookie,
+        "--id", str(gid)
+    ]
+
+    if use_tor:
+        cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
+
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        if verbose:
+            print(result.stdout)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"[!] Gallery {gid} failed with exit code {e.returncode}")
+        if verbose:
+            print(e.stderr)
+        return False
+
+# ===============================
+# METADATA CREATION
+# ===============================
+def generate_metadata(artist, title, tags):
+    return {
+        "title": title,
+        "author": artist,
+        "artist": artist,
+        "description": f"An archive of {artist}'s works.",
+        "genre": tags,
         "status": "1",
         "_status values": ["0=Unknown","1=Ongoing","2=Completed","3=Licensed"]
     }
-    return metadata
 
-# =======================
-# FETCH & PARSE
-# =======================
-def fetch_gallery_html(gallery_id, session, use_tor=False):
-    url = f"https://nhentai.net/g/{gallery_id}/"
-    headers = {"User-Agent": args.user_agent}
-    cookies = {"session": args.cookie}
+# ===============================
+# PARALLEL GALLERY DOWNLOAD
+# ===============================
+def download_range(start, end, root, cookie, user_agent, threads_galleries, threads_images, exclude_tags, include_tags, language, use_tor, verbose):
+    with ThreadPoolExecutor(max_workers=threads_galleries) as executor:
+        futures = {}
+        for gid in range(start, end+1):
+            futures[executor.submit(download_gallery, gid, root, cookie, user_agent, use_tor, verbose)] = gid
+        for fut in as_completed(futures):
+            gid = futures[fut]
+            try:
+                fut.result()
+                save_status(last_gallery=gid)
+            except Exception as e:
+                log(f"{gid} | Error: {e}")
 
-    proxies = {"http": TOR_PROXY, "https": TOR_PROXY} if use_tor else None
-
-    for _ in range(3):
-        try:
-            r = session.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=10)
-            if r.status_code == 404:
-                return None
-            if r.status_code == 200:
-                return r.text
-        except Exception as e:
-            time.sleep(1)
-    return None
-
-def parse_gallery(gallery_id, session, root):
-    html = fetch_gallery_html(gallery_id, session, args.use_tor)
-    if not html:
-        log_skipped(gallery_id, "404/fetch failed", root)
-        return None
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    lang_tag = soup.find("span", class_="language")
-    if lang_tag and args.language.lower() not in lang_tag.text.lower():
-        log_skipped(gallery_id, f"Non-{args.language}", root)
-        return None
-
-    tags = [t.text.lower() for t in soup.select(".tags a.tag")]
-    if any(tag in args.exclude_tags for tag in tags):
-        log_skipped(gallery_id, "Excluded tags", root)
-        return None
-    if args.include_tags and not any(tag in args.include_tags for tag in tags):
-        log_skipped(gallery_id, "Missing required tags", root)
-        return None
-
-    artist_tags = soup.select(".artist a") + soup.select(".group a")
-    artists = [sanitize(t.text.strip()) for t in artist_tags] or ["Unknown Artist"]
-
-    title_tag = soup.select_one(".title h1,.title h2")
-    title = sanitize(title_tag.text.strip()) if title_tag else f"Gallery_{gallery_id}"
-
-    return {
-        "id": gallery_id,
-        "artists": artists,
-        "title": title,
-        "tags": tags
-    }
-
-# =======================
-# DOWNLOAD
-# =======================
-def download_gallery(gallery, root):
-    try:
-        scraper_status["active_galleries"].append(gallery["id"])
-        for artist in gallery["artists"]:
-            artist_dir = Path(root) / artist
-            artist_dir.mkdir(parents=True, exist_ok=True)
-            doujin_dir = artist_dir / gallery["title"]
-            doujin_dir.mkdir(exist_ok=True)
-
-            # Build RicterZ command
-            cmd = [
-                RICTERZ_CMD,
-                "--id", str(gallery["id"]),
-                "--useragent", args.user_agent,
-                "--cookie", args.cookie,
-                "--output", str(doujin_dir)
-            ]
-            if args.use_tor:
-                cmd = ["torsocks"] + cmd
-
-            subprocess.run(cmd, check=True)
-
-            # Generate details.json
-            details_path = doujin_dir / "details.json"
-            with open(details_path, "w", encoding="utf-8") as f:
-                json.dump(generate_suwayomi_metadata(gallery), f, indent=2)
-        log(f"[+] Downloaded gallery {gallery['id']}")
-    except Exception as e:
-        log_skipped(gallery["id"], f"Failed: {e}", root)
-        scraper_status["errors"].append(str(e))
-    finally:
-        scraper_status["active_galleries"].remove(gallery["id"])
-        scraper_status["last_gallery"] = gallery["id"]
-        save_progress(gallery["id"])
-
-# =======================
-# MAIN
-# =======================
-def main():
-    global args, VERBOSE
-
+# ===============================
+# CLI
+# ===============================
+if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=DEFAULT_ROOT)
-    parser.add_argument("--start", type=int, default=None)
-    parser.add_argument("--end", type=int, default=999999)
-    parser.add_argument("--threads-galleries", type=int, default=3)
-    parser.add_argument("--threads-images", type=int, default=5)
-    parser.add_argument("--exclude-tags", type=str, default=",".join(DEFAULT_EXCLUDE_TAGS))
-    parser.add_argument("--include-tags", type=str, default=",".join(DEFAULT_INCLUDE_TAGS))
+    parser.add_argument("--start", type=int)
+    parser.add_argument("--end", type=int)
+    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES)
+    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES)
+    parser.add_argument("--exclude-tags", default=",".join(DEFAULT_EXCLUDE_TAGS))
+    parser.add_argument("--include-tags", default=",".join(DEFAULT_INCLUDE_TAGS))
     parser.add_argument("--language", default=DEFAULT_LANGUAGE)
-    parser.add_argument("--use-tor", action="store_true")
-    parser.add_argument("--use-vpn", action="store_true")
-    parser.add_argument("--user-agent", required=True)
+    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR)
+    parser.add_argument("--use-vpn", action="store_true", default=DEFAULT_USE_VPN)
+    parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument("--cookie", required=True)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--useragent", required=True)
     args = parser.parse_args()
 
-    VERBOSE = args.verbose
-    args.exclude_tags = [t.strip().lower() for t in args.exclude_tags.split(",") if t.strip()]
-    args.include_tags = [t.strip().lower() for t in args.include_tags.split(",") if t.strip()]
+    ROOT = args.root
+    os.makedirs(ROOT, exist_ok=True)
 
-    root = args.root
-    Path(root).mkdir(parents=True, exist_ok=True)
+    exclude_tags = [t.strip().lower() for t in args.exclude_tags.split(",") if t.strip()]
+    include_tags = [t.strip().lower() for t in args.include_tags.split(",") if t.strip()]
 
-    progress = load_progress()
-    start_id = args.start if args.start else progress.get("last_id", 0) + 1
+    START = args.start or 1
+    END = args.end or START+10
 
-    session = requests.Session()
-
-    log("[*] Starting scraper...")
-    scraper_status["running"] = True
-    scraper_status["using_tor"] = args.use_tor
-
-    with ThreadPoolExecutor(max_workers=args.threads_galleries) as executor:
-        futures = {}
-        for gallery_id in range(start_id, args.end + 1):
-            gallery = parse_gallery(gallery_id, session, root)
-            if gallery:
-                futures[executor.submit(download_gallery, gallery, root)] = gallery_id
-            time.sleep(0.2)
-
-        for fut in as_completed(futures):
-            pass
-
-    scraper_status["running"] = False
-    log("[*] All done.")
-
-if __name__ == "__main__":
-    main()
+    log(f"Downloading galleries {START} → {END} to {ROOT}")
+    download_range(
+        START, END, ROOT, args.cookie, args.useragent,
+        args.threads_galleries, args.threads_images,
+        exclude_tags, include_tags, args.language,
+        args.use_tor, args.verbose
+    )
+    log("[*] Done!")
