@@ -16,14 +16,14 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
 }
 
 function install_python_requirements() {
     echo "[*] Installing Python requirements in venv..."
     # Make sure pip inside venv is used
     source "$NHENTAI_DIR/venv/bin/activate"
-    pip install --upgrade pip setuptools wheel
+    pip install --upgrade pip setuptools wheel cloudscraper
 
     TMP_REQ=$(mktemp)
     cat > "$TMP_REQ" <<EOF
@@ -113,15 +113,19 @@ function install_filebrowser() {
     mkdir -p /etc/filebrowser
     if [ ! -f /etc/filebrowser/filebrowser.db ]; then
         $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db config init
-        $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db users add admin DefaultPassword123!
+        $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db users add admin "DefaultPassword123!"
     fi
 }
 
 function create_config_file() {
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo "[*] Creating default config.json..."
+        echo "[*] Creating config.json..."
+        read -p "Enter your NHentai User-Agent: " USER_AGENT
+        read -p "Enter your NHentai session cookie: " COOKIE
         cat >"$CONFIG_FILE" <<EOF
 {
+  "user_agent": "$USER_AGENT",
+  "cookie": "$COOKIE",
   "ROOT_FOLDER": "/opt/suwayomi/local/",
   "EXCLUDED_TAGS": ["snuff","guro","cuntboy","cuntbusting","ai generated"],
   "INCLUDE_TAGS": [],
@@ -173,7 +177,7 @@ Description=FileBrowser
 After=network.target
 
 [Service]
-ExecStart=$FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db -r $SUWAYOMI_DIR/local
+ExecStart=/usr/local/bin/filebrowser -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
 Restart=on-failure
 User=root
 
@@ -182,7 +186,7 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # Scraper
+    # Scraper service
     if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
         cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
@@ -190,8 +194,28 @@ Description=nhentai-scraper
 After=network.target
 
 [Service]
+Type=simple
 WorkingDirectory=$NHENTAI_DIR
-ExecStart=/usr/bin/env python3 $NHENTAI_DIR/scraper.py
+ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/scraper.py"
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
+
+    # Monitor service
+    if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
+        cat >/etc/systemd/system/nhentai-monitor.service <<EOF
+[Unit]
+Description=nhentai-scraper Monitor
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$NHENTAI_DIR
+ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/monitor.py"
 Restart=on-failure
 User=root
 
@@ -201,8 +225,8 @@ EOF
     fi
 
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper
-    systemctl start suwayomi filebrowser nhentai-scraper
+    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-monitor
+    systemctl start suwayomi filebrowser nhentai-scraper nhentai-monitor
 }
 
 function print_links() {
