@@ -13,11 +13,20 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 - Retry failed/skipped galleries
 - Configurable root folder
 
+## Notes
+- Supports multi-threaded downloads
+- Automatic retry of skipped galleries
+- Metadata compatible with Suwayomi
+- Dynamic IP / DNS friendly (use DDNS if monitoring remotely)
+- Fully compatible with dynamic IPs for outbound connections.
+- Use a Dynamic DNS service for remote Flask monitoring if IP is not static.
+
 ## Installation
 ### System Requirements
 - Linux server / VM
 - Python 3.x
 - pip
+- Optional: [Suwayomi-server](https://github.com/Suwayomi/Suwayomi-Server)
 - Optional: Tor (`sudo apt install tor`) or VPN (OpenVPN, WireGuard)
 
 ### Python Modules
@@ -57,15 +66,34 @@ Suwayomi metadata format:
 ```
 
 ## Usage
+### CLI Arguments
 ```bash
-# Run with default root folder
+--root             Root folder (default: /opt/suwayomi/local/)
+--start            Start gallery ID (default: last progress +1)
+--end              End gallery ID (default: latest ID)
+--threads-galleries Number of gallery threads (default: 3)
+--threads-images   Number of image threads per gallery (default: 5)
+--exclude-tags     Comma-separated tags to skip (default: snuff,guro,cuntboy,cuntbusting,ai generated)
+--include-tags     Comma-separated tags to require
+--language         Language filter (default: english)
+--use-tor          Route requests through Tor
+--use-vpn          Use system VPN
+--verbose          Enable detailed logging
+```
+### Examples
+```bash
+# Default run (latest galleries)
 python3 nhentai-scraper.py
 
-# Specify root folder
-python3 nhentai-scraper.py /opt/suwayomi/local/
+# Specify a gallery range
+python3 nhentai-scraper.py --start 500000 --end 500100
 
-# Specify root folder and max gallery ID
-python3 nhentai-scraper.py /opt/suwayomi/local/ 500000
+# Custom root and threads
+python3 nhentai-scraper.py --root /mnt/nhentai --start 600000 --end 600050 --threads-galleries 5 --threads-images 10
+
+# Use Tor and exclude certain tags
+python3 nhentai-scraper.py --use-tor --exclude-tags "yaoi,shotacon"
+
 ```
 
 ## Configuration
@@ -96,13 +124,3 @@ sudo systemctl start nhentai-scraper.timer
   "error": null
 }
 ```
-
-## Dynamic IP/DNS
-- Fully compatible with dynamic IPs for outbound connections.
-- Use a Dynamic DNS service for remote Flask monitoring if IP is not static.
-
-## Notes
-- Supports multi-threaded downloads
-- Automatic retry of skipped galleries
-- Metadata compatible with Suwayomi
-- Dynamic IP / DNS friendly (use DDNS if monitoring remotely)
