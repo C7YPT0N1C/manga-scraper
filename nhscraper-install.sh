@@ -93,7 +93,7 @@ function install_suwayomi() {
     cd "$SUWAYOMI_DIR"
 
     # Download latest tar.gz release
-    TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/latest/download/suwayomi-server.tar.gz"
+    TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
     wget -O suwayomi-server.tar.gz "$TARA_URL"
 
     # Extract
