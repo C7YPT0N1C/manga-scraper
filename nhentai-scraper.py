@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 
 import requests
 import cloudscraper
+from dotenv import load_dotenv, set_key
 
 # ===============================
 # CONFIGURATION
@@ -18,6 +19,7 @@ NHENTAI_DIR = "/opt/nhentai-scraper"
 RICTERZ_DIR = "/opt/ricterz_nhentai"
 RICTERZ_BIN = os.path.normpath(os.path.join(RICTERZ_DIR, "nhentai", "cmdline.py"))
 SUWAYOMI_DIR = "/opt/suwayomi/local"
+ENV_FILE = os.path.join(NHENTAI_DIR, "nhentai-scraper.env")
 LOGS_DIR = os.path.join(NHENTAI_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
@@ -38,38 +40,78 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 # ===============================
+# LOAD ENV
+# ===============================
+load_dotenv(dotenv_path=ENV_FILE)
+
+def update_env(key, value):
+    """Update .env file with new value."""
+    set_key(ENV_FILE, key, str(value))
+
+# ===============================
 # ARGUMENTS
 # ===============================
 parser = argparse.ArgumentParser(description="NHentai Scraper Wrapper")
-parser.add_argument("--start", type=int, required=True, help="Start gallery ID")
-parser.add_argument("--end", type=int, required=True, help="End gallery ID")
-parser.add_argument("--threads-galleries", type=int, default=3, help="(reserved) concurrent galleries")
-parser.add_argument("--threads-images", type=int, default=5, help="threads for RicterZ downloader")
-parser.add_argument("--cookie", type=str, required=True, help="nhentai cookie string")
-parser.add_argument("--user-agent", type=str, required=True, help="browser User-Agent")
+
+parser.add_argument("--start", type=int, help="Start gallery ID")
+parser.add_argument("--end", type=int, help="End gallery ID")
+parser.add_argument("--threads-galleries", type=int, help="Concurrent galleries")
+parser.add_argument("--threads-images", type=int, help="Threads for RicterZ downloader")
+parser.add_argument("--cookie", type=str, help="nhentai cookie string")
+parser.add_argument("--user-agent", type=str, help="browser User-Agent")
 parser.add_argument("--use-tor", action="store_true", help="route requests via Tor (socks5h://127.0.0.1:9050)")
 parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 parser.add_argument("--dry-run", action="store_true", help="Simulate downloads and GraphQL")
+
 args = parser.parse_args()
 
-if args.verbose:
+# ===============================
+# MERGE ENV + ARGS (Args override env)
+# ===============================
+def get_config(name, default=None, is_bool=False):
+    env_val = os.getenv(name)
+    arg_val = getattr(args, name.lower(), None)
+    if arg_val is not None:
+        update_env(name, arg_val if not is_bool else str(arg_val))
+        return arg_val
+    if env_val is not None:
+        if is_bool:
+            return str(env_val).lower() in ("1", "true", "yes")
+        if isinstance(default, int):
+            return int(env_val)
+        return env_val
+    return default
+
+config = {
+    "start": get_config("NHENTAI_START_ID", 0),
+    "end": get_config("NHENTAI_END_ID", 0),
+    "threads_galleries": get_config("THREADS_GALLERIES", 3),
+    "threads_images": get_config("THREADS_IMAGES", 5),
+    "cookie": get_config("NHENTAI_COOKIE", ""),
+    "user_agent": get_config("NHENTAI_USER_AGENT", ""),
+    "use_tor": get_config("USE_TOR", False, True),
+    "verbose": get_config("NHENTAI_VERBOSE", False, True),
+    "dry_run": get_config("NHENTAI_DRY_RUN", False, True),
+}
+
+if config["verbose"]:
     logger.setLevel(logging.DEBUG)
 
 PYTHON_BIN = os.path.join(NHENTAI_DIR, "venv", "bin", "python3")
 
 # ===============================
-# HTTP SESSION (Cloudflare-aware)
+# HTTP SESSION
 # ===============================
 def build_session():
     s = cloudscraper.create_scraper()
     s.headers.update({
-        "User-Agent": args.user_agent,
+        "User-Agent": config["user_agent"],
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://nhentai.net/",
-        "Cookie": args.cookie,
+        "Cookie": config["cookie"],
     })
-    if args.use_tor:
+    if config["use_tor"]:
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies.update({"http": proxy, "https": proxy})
         logger.debug("[*] Using Tor proxy for metadata/API calls")
@@ -84,10 +126,6 @@ def timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_gallery_metadata_api(gallery_id: int):
-    """
-    Fetch metadata from nhentai public API: /api/gallery/{id}
-    Returns a dict or None.
-    """
     url = urljoin(NHENTAI_API_BASE, f"gallery/{gallery_id}")
     try:
         logger.debug(f"[API] GET {url}")
@@ -96,16 +134,12 @@ def get_gallery_metadata_api(gallery_id: int):
             logger.error(f"[!] API {gallery_id} HTTP {r.status_code}")
             return None
         data = r.json()
-        # Shape metadata
         title_obj = data.get("title", {}) or {}
         title = title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{gallery_id}"
         tags = data.get("tags", []) or []
-
-        # Extract artists from tags
         artists = [t["name"] for t in tags if t.get("type") == "artist"]
         if not artists:
             artists = ["Unknown"]
-
         meta = {
             "id": data.get("id", gallery_id),
             "title": title,
@@ -116,11 +150,8 @@ def get_gallery_metadata_api(gallery_id: int):
         }
         logger.debug(f"[API] Parsed metadata for {gallery_id}: {json.dumps(meta)[:300]}")
         return meta
-    except requests.RequestException as e:
-        logger.error(f"[!] API request failed for {gallery_id}: {e}")
-        return None
-    except (ValueError, json.JSONDecodeError) as e:
-        logger.error(f"[!] API JSON decode failed for {gallery_id}: {e}")
+    except Exception as e:
+        logger.error(f"[!] Failed to fetch metadata for {gallery_id}: {e}")
         return None
 
 def get_artists(meta):
@@ -146,10 +177,10 @@ def write_details_json(folder, meta):
         logger.error(f"[!] Failed to write details.json in {folder}: {e}")
 
 # ===============================
-# GRAPHQL FUNCTIONS
+# GRAPHQL
 # ===============================
 def graphql_request(query, variables):
-    if args.dry_run:
+    if config["dry_run"]:
         logger.info("[DRY-RUN] Skipping GraphQL request")
         return None
     payload = {"query": query, "variables": variables}
@@ -182,33 +213,32 @@ def create_or_update_gallery(meta, folder):
         logger.info(f"[+] Gallery {meta.get('id')} sent to Suwayomi GraphQL")
 
 # ===============================
-# DOWNLOADER (RicterZ cmdline.py)
+# RICTERZ DOWNLOADER
 # ===============================
 def run_ricterz_download(gallery_id, output_dir):
-    """
-    Use RicterZ/nhentai/cmdline.py to download images to output_dir.
-    """
+    if os.path.exists(os.path.join(output_dir, "details.json")):
+        logger.info(f"[SKIP] {output_dir} already exists")
+        return True
     cmd = [
         PYTHON_BIN,
         RICTERZ_BIN,
         "--id", str(gallery_id),
         "--download",
-        "-t", str(args.threads_images),
+        "-t", str(config["threads_images"]),
         "-o", output_dir,
-        "--cookie", args.cookie,
-        "--user-agent", args.user_agent,
+        "--cookie", config["cookie"],
+        "--user-agent", config["user_agent"],
     ]
-    if args.use_tor:
+    if config["use_tor"]:
         cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
 
-    if args.dry_run:
+    if config["dry_run"]:
         logger.info(f"[DRY-RUN] Would run: {' '.join(cmd)}")
         return True
 
     logger.debug(f"Running RicterZ command: {' '.join(cmd)}")
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        # Surface some progress lines if present
         for line in result.stdout.splitlines():
             if "Downloading" in line or "image" in line.lower():
                 logger.info(f"[{gallery_id}] {line.strip()}")
@@ -223,35 +253,25 @@ def run_ricterz_download(gallery_id, output_dir):
 # MAIN LOOP
 # ===============================
 def main():
-    logger.info(f"Starting galleries {args.start} -> {args.end}")
-    if args.dry_run:
+    logger.info(f"Starting galleries {config['start']} -> {config['end']}")
+    if config["dry_run"]:
         logger.info("[*] Dry-run mode is active; no files will be downloaded.\n")
 
-    for gallery_id in range(args.start, args.end + 1):
+    for gallery_id in range(config["start"], config["end"] + 1):
         logger.info(f"[*] Starting gallery {gallery_id}")
 
-        # 1) Fetch metadata from API
         meta = get_gallery_metadata_api(gallery_id)
         if not meta:
             logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
             continue
 
-        # 2) For each artist, prepare folder (artist/title), write metadata, send GraphQL
         artists = get_artists(meta)
         for artist in artists:
             folder = suwayomi_folder_name(meta, artist)
             os.makedirs(folder, exist_ok=True)
             write_details_json(folder, meta)
-
-            # GraphQL (active unless dry-run)
             create_or_update_gallery(meta, folder)
-
-            # 3) Download images via RicterZ tool
-            success = run_ricterz_download(gallery_id, folder)
-            if success:
-                logger.info(f"[+] Gallery {gallery_id} processed for artist '{artist}'")
-            else:
-                logger.error(f"[!] Gallery {gallery_id} failed for artist '{artist}'")
+            run_ricterz_download(gallery_id, folder)
 
     logger.info("[*] All galleries processed.")
 
