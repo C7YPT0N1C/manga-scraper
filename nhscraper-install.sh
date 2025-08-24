@@ -10,10 +10,7 @@ SUWAYOMI_DIR="/opt/suwayomi"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 LOGS_DIR="$NHENTAI_DIR/logs"
-
-# CLI ARGUMENTS
-INSTALL_COOKIE=""
-INSTALL_UA=""
+WRAPPER_SCRIPT="$NHENTAI_DIR/nhentai-scraper-wrapper.sh"
 
 # ===============================
 # ROOT CHECK
@@ -32,8 +29,9 @@ echo "===================================================="
 echo ""
 echo "DISCLAIMER:"
 echo "This installer will install, update, or uninstall the following components:"
-echo "- RicterZ/nhentai scraper"
-echo "- Suwayomi Server"
+echo "- RicterZ/nhentai"
+echo "- C7YPT0N1C/nhentai-scraper"
+echo "- Suwayomi/Suwayomi-Server"
 echo "- FileBrowser"
 echo ""
 echo "Existing installations in /opt/ may be overwritten."
@@ -52,20 +50,6 @@ case "$consent" in
 esac
 
 # ===============================
-# PARSE INSTALL OPTIONS
-# ===============================
-while [[ "$1" != "" ]]; do
-    case $1 in
-        --install) shift ;;
-        --update-env) shift ;;
-        --uninstall) shift ;;
-        --cookie) INSTALL_COOKIE="$2"; shift 2 ;;
-        --user-agent) INSTALL_UA="$2"; shift 2 ;;
-        *) shift ;;
-    esac
-done
-
-# ===============================
 # FUNCTIONS
 # ===============================
 
@@ -80,8 +64,8 @@ function create_env_file() {
     if [ ! -f "$ENV_FILE" ]; then
         cat >"$ENV_FILE" <<EOF
 # NHentai Scraper Environment
-NHENTAI_COOKIE="${INSTALL_COOKIE:-""}"
-NHENTAI_USER_AGENT="${INSTALL_UA:-"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"}"
+NHENTAI_COOKIE=""
+NHENTAI_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
 NHENTAI_DRY_RUN="false"
 USE_TOR="false"
 NHENTAI_START_ID="500000"
@@ -90,11 +74,33 @@ THREADS_GALLERIES="3"
 THREADS_IMAGES="3"
 EOF
         echo "[+] Created default environment file at $ENV_FILE"
-    else
-        # Update existing env with provided cookie/UA if given
-        [ ! -z "$INSTALL_COOKIE" ] && sed -i "/^NHENTAI_COOKIE=/d" "$ENV_FILE" && echo "NHENTAI_COOKIE='$INSTALL_COOKIE'" >> "$ENV_FILE"
-        [ ! -z "$INSTALL_UA" ] && sed -i "/^NHENTAI_USER_AGENT=/d" "$ENV_FILE" && echo "NHENTAI_USER_AGENT='$INSTALL_UA'" >> "$ENV_FILE"
     fi
+}
+
+function create_wrapper_script() {
+    cat >"$WRAPPER_SCRIPT" <<'EOF'
+#!/usr/bin/env bash
+set -e
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+ENV_FILE="$SCRIPT_DIR/nhentai-scraper.env"
+PYTHON_BIN="$SCRIPT_DIR/venv/bin/python3"
+SCRAPER_SCRIPT="$SCRIPT_DIR/nhentai-scraper.py"
+
+# Load environment variables
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+fi
+
+# Construct command arguments
+ARGS=("--start" "$NHENTAI_START_ID" "--end" "$NHENTAI_END_ID" "--threads-galleries" "$THREADS_GALLERIES" "--threads-images" "$THREADS_IMAGES" "--cookie" "$NHENTAI_COOKIE" "--user-agent" "$NHENTAI_USER_AGENT")
+[ "$NHENTAI_DRY_RUN" = "true" ] && ARGS+=("--dry-run")
+[ "$USE_TOR" = "true" ] && ARGS+=("--use-tor")
+ARGS+=("--verbose")
+
+exec "$PYTHON_BIN" "$SCRAPER_SCRIPT" "${ARGS[@]}"
+EOF
+    chmod +x "$WRAPPER_SCRIPT"
+    echo "[+] Wrapper script created at $WRAPPER_SCRIPT"
 }
 
 function update_env() {
@@ -221,6 +227,7 @@ function install_scraper() {
 
     create_logs_dir
     create_env_file
+    create_wrapper_script
 }
 
 function install_suwayomi() {
@@ -248,8 +255,6 @@ function install_filebrowser() {
 
 function create_systemd_services() {
     echo  "[*] Creating systemd services..."
-
-    PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
 
     # Suwayomi service
     if [ ! -f /etc/systemd/system/suwayomi.service ]; then
@@ -286,7 +291,7 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # NHentai Scraper Service
+    # NHentai Scraper Service (wrapper script)
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -296,8 +301,7 @@ Wants=tor.service
 [Service]
 Type=simple
 WorkingDirectory=$NHENTAI_DIR
-EnvironmentFile=$ENV_FILE
-ExecStart=$NHENTAI_DIR/nhentai-scraper-wrapper.sh
+ExecStart=/bin/bash $WRAPPER_SCRIPT
 Restart=on-failure
 RestartSec=10
 User=root
@@ -332,7 +336,7 @@ Wants=nhentai-scraper.service tor.service
 Type=simple
 WorkingDirectory=$NHENTAI_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=$PYTHON_BIN $NHENTAI_DIR/scraper_monitor.py
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/scraper_monitor.py
 Restart=on-failure
 RestartSec=10
 User=root
@@ -343,11 +347,10 @@ StandardError=append:$LOGS_DIR/nhentai-monitor.log
 WantedBy=multi-user.target
 EOF
 
-    create_wrapper_script
-
     systemctl daemon-reload
     systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
     systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
+    echo "[+] Systemd services created and started."
 }
 
 function print_links() {
@@ -365,7 +368,7 @@ function print_links() {
 case "$1" in
     --update-env) update_env ;;
     --uninstall) uninstall_all ;;
-    --install) 
+    --install)
         install_system_packages
         install_ricterz_nhentai
         install_scraper
@@ -373,9 +376,11 @@ case "$1" in
         install_filebrowser
         create_systemd_services
         print_links
+        echo "[+] Installation complete. Now updating environment settings."
+        sudo bash ./nhscraper-install.sh --update-env
         ;;
     *)
-        echo "Usage: $0 --install [--cookie YOUR_COOKIE] [--user-agent YOUR_UA] | --update-env | --uninstall"
+        echo "Usage: $0 --install | --update-env | --uninstall"
         exit 1
         ;;
 esac
