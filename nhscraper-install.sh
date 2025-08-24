@@ -113,7 +113,7 @@ function install_filebrowser() {
     mkdir -p /etc/filebrowser
     if [ ! -f /etc/filebrowser/filebrowser.db ]; then
         $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db config init
-        $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db users add admin admin
+        $FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db users add admin DefaultPassword123!
     fi
 }
 
@@ -212,7 +212,7 @@ function print_links() {
     echo -e "\n[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/"
+    echo "FileBrowser: http://$IP:8080/" (User: admin, Password: DefaultPassword123!)
     echo "Scraper Flask status: http://$IP:5000/scraper_status"
     if [ ! -z "$HOSTNAME" ]; then
         echo "Suwayomi Web: http://$HOSTNAME:4567/"

@@ -61,7 +61,7 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 ## Post Install
 - Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
 - Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql`
-- FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
+- FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/` (User: admin, Password: DefaultPassword123!)
 
 ## Usage and Documentation
 ### CLI Arguments
