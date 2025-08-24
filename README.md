@@ -28,7 +28,7 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 
 ## Installation
 ### System Requirements
-- Linux server / VM
+- Linux server / VM (Recommended Distro: Ubuntu)
 - Minimum 4 GB RAM
 - **WARNING - Storage: I honest haven't tested this yet so please do assume you're going to need a *LOT* of storage, especially if you're not limiting the range of gallery IDs.** 
 - Python 3.x
