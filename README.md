@@ -41,6 +41,9 @@ A lot of this code was originally written by ChatGPT because the original projec
 - Update Command: `sudo ./install.sh update`
 - Uninstall Command: `sudo ./install.sh uninstall`
 ## Post Install
+- Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
+- Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql`
+- FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
 ### Systemd Service
 Enable service and optional timer:
 ```bash
@@ -52,7 +55,7 @@ sudo systemctl start nhentai-scraper.timer
 ```
 
 ### Flask Monitoring Endpoint
-- URL: `http://<SERVER_IP>:5000/scraper_status`
+- URL: `http://<SERVER-IP-OR-DOMAIN>:5000/scraper_status`
 - JSON output example:
 ```json
 {
