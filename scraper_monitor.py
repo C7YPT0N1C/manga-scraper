@@ -3,7 +3,7 @@ from flask import Flask, jsonify
 import requests
 import time
 import threading
-from nhentai_scraper_core import load_config, make_session, check_session, log
+from scraper_core import load_config, make_session, check_session, log
 
 app = Flask(__name__)
 

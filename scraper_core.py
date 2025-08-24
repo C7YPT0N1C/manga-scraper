@@ -23,13 +23,41 @@ TOR_PROXY = "socks5h://127.0.0.1:9050"
 PROXIES = {"http": TOR_PROXY, "https": TOR_PROXY} if USE_TOR else None
 
 # === CONFIG UTILITIES ===
-def load_config():
+CONFIG_FILE = "config.json"
+
+DEFAULT_CONFIG = {
+    "language": "english",
+    "exclude_tags": [],
+    "include_tags": [],
+    "threads_galleries": 2,
+    "threads_images": 4,
+    "use_tor": False,
+    "root": "./downloads",
+    "user_agent": "",
+    "cookie": ""
+}
+
+def load_config() -> dict:
+    """Load config.json, return dict merged with defaults."""
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {}
+            try:
+                cfg = json.load(f)
+                if not isinstance(cfg, dict):
+                    return DEFAULT_CONFIG.copy()
+                merged = DEFAULT_CONFIG.copy()
+                merged.update(cfg)
+                return merged
+            except json.JSONDecodeError:
+                return DEFAULT_CONFIG.copy()
+    return DEFAULT_CONFIG.copy()
 
-config = load_config()
+def save_config(cfg: dict):
+    """Save dict to config.json safely."""
+    if not isinstance(cfg, dict):
+        raise TypeError("Config must be a dictionary, got: " + str(type(cfg)))
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(cfg, f, indent=2)
 
 def save_progress(last_id):
     json.dump({"last_id": last_id}, open(PROGRESS_FILE,"w"))
@@ -49,8 +77,8 @@ def log_skipped(root, gallery_id, reason, verbose=True):
 # === FETCHING ===
 def fetch_page(url, use_tor=False, verbose=True):
     scraper = cloudscraper.create_scraper()
-    headers = {"User-Agent": config.get("user_agent", "Mozilla/5.0")}
-    cookies = {"session": config.get("cookie","")}
+    headers = {"User-Agent": CONFIG_FILE.get("user_agent", "Mozilla/5.0")}
+    cookies = {"session": CONFIG_FILE.get("cookie","")}
     proxies = PROXIES if use_tor else None
 
     for _ in range(RETRY_LIMIT):
