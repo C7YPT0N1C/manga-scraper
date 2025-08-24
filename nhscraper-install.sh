@@ -25,8 +25,16 @@ fi
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
+    # SYSTEM REQUIREMENTS
     apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
+}
+
+function check_venv() {
+    if ! python3 -m venv --help >/dev/null 2>&1; then
+        echo "[!] python3-venv missing, installing..."
+        apt-get install -y python3-venv
+    fi
 }
 
 function install_ricterz_nhentai() {
@@ -46,7 +54,7 @@ function install_scraper() {
     cd "$NHENTAI_DIR"
 
     read -p "Install Beta Version instead of Stable? [y/N]: " beta
-    beta=${beta,,}  # lowercase
+    beta=${beta,,}
     if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
         BRANCH="dev"
         echo "[*] Installing Beta Version (dev branch)..."
@@ -67,20 +75,19 @@ function install_scraper() {
         git reset --hard "origin/$BRANCH"
     fi
 
-    # Create venv
+    check_venv
+
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        echo "[*] Creating virtual environment..."
+        echo "[*] Creating Python virtual environment..."
         python3 -m venv "$NHENTAI_DIR/venv"
-        source "$NHENTAI_DIR/venv/bin/activate"
-        pip install --upgrade pip setuptools wheel cloudscraper
-        echo "[+] Virtual environment created at $NHENTAI_DIR/venv"
-    else
-        source "$NHENTAI_DIR/venv/bin/activate"
     fi
 
-    # Install Python requirements
-    pip install --upgrade pip setuptools wheel
-    pip install requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
+    source "$NHENTAI_DIR/venv/bin/activate"
+
+    # PYTHON REQUIREMENTS
+    echo "[*] Installing Python requirements..."
+    pip install --upgrade pip setuptools wheel cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
+    echo "[+] Python requirements installed."
 }
 
 function install_suwayomi() {
@@ -109,7 +116,6 @@ function install_filebrowser() {
 function create_systemd_services() {
     echo "[*] Creating systemd services..."
 
-    # Suwayomi
     cat >/etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
@@ -125,7 +131,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
 
-    # FileBrowser
     cat >/etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
@@ -140,7 +145,6 @@ User=root
 WantedBy=multi-user.target
 EOF
 
-    # nhentai-scraper
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -173,11 +177,9 @@ function print_links() {
 # ===============================
 # MAIN
 # ===============================
-
 echo "===================================================="
 echo "           NHentai Scraper INSTALLER               "
 echo "===================================================="
-echo ""
 read -p "Do you want to proceed? [y/N]: " consent
 case "$consent" in
     [yY]|[yY][eE][sS]) echo "[*] Continuing...";;
