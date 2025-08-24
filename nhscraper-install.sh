@@ -11,6 +11,10 @@ FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 LOGS_DIR="$NHENTAI_DIR/logs"
 
+# CLI ARGUMENTS
+INSTALL_COOKIE=""
+INSTALL_UA=""
+
 # ===============================
 # ROOT CHECK
 # ===============================
@@ -20,7 +24,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # ===============================
-# DISCLAIMER & USER CONSENT
+# CONSENT / DISCLAIMER
 # ===============================
 echo "===================================================="
 echo "           nhentai-scraper INSTALLER               "
@@ -48,6 +52,20 @@ case "$consent" in
 esac
 
 # ===============================
+# PARSE INSTALL OPTIONS
+# ===============================
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --install) shift ;;
+        --update-env) shift ;;
+        --uninstall) shift ;;
+        --cookie) INSTALL_COOKIE="$2"; shift 2 ;;
+        --user-agent) INSTALL_UA="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+# ===============================
 # FUNCTIONS
 # ===============================
 
@@ -62,16 +80,20 @@ function create_env_file() {
     if [ ! -f "$ENV_FILE" ]; then
         cat >"$ENV_FILE" <<EOF
 # NHentai Scraper Environment
-NHENTAI_COOKIE=
-NHENTAI_USER_AGENT=Mozilla/5.0\ (Windows\ NT\ 10.0;\ Win64;\ x64)\ AppleWebKit/537.36\ (KHTML,\ like\ Gecko)\ Chrome/137.0.0.0\ Safari/537.36
-NHENTAI_DRY_RUN=false
-USE_TOR=false
-NHENTAI_START_ID=500000
-NHENTAI_END_ID=
-THREADS_GALLERIES=3
-THREADS_IMAGES=3
+NHENTAI_COOKIE="${INSTALL_COOKIE:-""}"
+NHENTAI_USER_AGENT="${INSTALL_UA:-"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"}"
+NHENTAI_DRY_RUN="false"
+USE_TOR="false"
+NHENTAI_START_ID="500000"
+NHENTAI_END_ID=""
+THREADS_GALLERIES="3"
+THREADS_IMAGES="3"
 EOF
         echo "[+] Created default environment file at $ENV_FILE"
+    else
+        # Update existing env with provided cookie/UA if given
+        [ ! -z "$INSTALL_COOKIE" ] && sed -i "/^NHENTAI_COOKIE=/d" "$ENV_FILE" && echo "NHENTAI_COOKIE='$INSTALL_COOKIE'" >> "$ENV_FILE"
+        [ ! -z "$INSTALL_UA" ] && sed -i "/^NHENTAI_USER_AGENT=/d" "$ENV_FILE" && echo "NHENTAI_USER_AGENT='$INSTALL_UA'" >> "$ENV_FILE"
     fi
 }
 
@@ -95,26 +117,20 @@ function update_env() {
     read -p "Use Tor proxy? (true/false, leave blank to keep current): " NEW_TOR
     read -p "Enter start gallery ID (leave blank to keep current): " NEW_START
     read -p "Enter end gallery ID (leave blank to keep current): " NEW_END
-    read -p "Enter number of threads per gallery (leave blank to keep current): " NEW_GALLERY_THREADS
-    read -p "Enter number of threads per image (leave blank to keep current): " NEW_IMAGE_THREADS
+    read -p "Enter number of threads to use per gallery (leave blank to keep current): " NEW_GALLERY_THREADS
+    read -p "Enter number of threads to use per image (leave blank to keep current): " NEW_IMAGE_THREADS
 
     cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%F-%T)"
     echo "[*] Backup saved as $ENV_FILE.bak.$(date +%F-%T)"
 
-    function update_var() {
-        local key=$1 value=$2
-        sed -i "/^$key=/d" "$ENV_FILE"
-        echo "$key=$value" >> "$ENV_FILE"
-    }
-
-    [[ -n "$NEW_COOKIE" ]] && update_var "NHENTAI_COOKIE" "$NEW_COOKIE"
-    [[ -n "$NEW_UA" ]] && update_var "NHENTAI_USER_AGENT" "$NEW_UA"
-    [[ -n "$NEW_DRY" ]] && update_var "NHENTAI_DRY_RUN" "$NEW_DRY"
-    [[ -n "$NEW_TOR" ]] && update_var "USE_TOR" "$NEW_TOR"
-    [[ -n "$NEW_START" ]] && update_var "NHENTAI_START_ID" "$NEW_START"
-    [[ -n "$NEW_END" ]] && update_var "NHENTAI_END_ID" "$NEW_END"
-    [[ -n "$NEW_GALLERY_THREADS" ]] && update_var "THREADS_GALLERIES" "$NEW_GALLERY_THREADS"
-    [[ -n "$NEW_IMAGE_THREADS" ]] && update_var "THREADS_IMAGES" "$NEW_IMAGE_THREADS"
+    [ ! -z "$NEW_COOKIE" ] && sed -i "/^NHENTAI_COOKIE=/d" "$ENV_FILE" && echo "NHENTAI_COOKIE='$NEW_COOKIE'" >> "$ENV_FILE"
+    [ ! -z "$NEW_UA" ] && sed -i "/^NHENTAI_USER_AGENT=/d" "$ENV_FILE" && echo "NHENTAI_USER_AGENT='$NEW_UA'" >> "$ENV_FILE"
+    [ ! -z "$NEW_DRY" ] && sed -i "/^NHENTAI_DRY_RUN=/d" "$ENV_FILE" && echo "NHENTAI_DRY_RUN='$NEW_DRY'" >> "$ENV_FILE"
+    [ ! -z "$NEW_TOR" ] && sed -i "/^USE_TOR=/d" "$ENV_FILE" && echo "USE_TOR='$NEW_TOR'" >> "$ENV_FILE"
+    [ ! -z "$NEW_START" ] && sed -i "/^NHENTAI_START_ID=/d" "$ENV_FILE" && echo "NHENTAI_START_ID='$NEW_START'" >> "$ENV_FILE"
+    [ ! -z "$NEW_END" ] && sed -i "/^NHENTAI_END_ID=/d" "$ENV_FILE" && echo "NHENTAI_END_ID='$NEW_END'" >> "$ENV_FILE"
+    [ ! -z "$NEW_GALLERY_THREADS" ] && sed -i "/^THREADS_GALLERIES=/d" "$ENV_FILE" && echo "THREADS_GALLERIES='$NEW_GALLERY_THREADS'" >> "$ENV_FILE"
+    [ ! -z "$NEW_IMAGE_THREADS" ] && sed -i "/^THREADS_IMAGES=/d" "$ENV_FILE" && echo "THREADS_IMAGES='$NEW_IMAGE_THREADS'" >> "$ENV_FILE"
 
     echo "[*] Updated environment file:"
     cat "$ENV_FILE"
@@ -173,21 +189,35 @@ function install_scraper() {
     read -p "Install Beta Version instead of Stable? [y/N]: " beta
     beta=${beta,,}
     BRANCH="main"
-    [[ "$beta" == "y" || "$beta" == "yes" ]] && BRANCH="dev" && echo "[*] Installing Beta Version (dev branch)..."
+    if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
+        BRANCH="dev"
+        echo "[*] Installing Beta Version (dev branch)..."
+    fi
 
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        git clone --depth 1 --branch "$BRANCH" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
-        git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
+        if git clone --depth 1 --branch "$BRANCH" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
+            echo "[+] Cloned nhentai-scraper from Gitea."
+        else
+            echo "[!] Gitea clone failed, trying GitHub..."
+            git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
+        fi
     else
         git fetch origin "$BRANCH"
         git reset --hard "origin/$BRANCH"
     fi
 
     check_venv
-    [ ! -d "$NHENTAI_DIR/venv" ] && python3 -m venv "$NHENTAI_DIR/venv"
+    if [ ! -d "$NHENTAI_DIR/venv" ]; then
+        echo "[*] Creating Python virtual environment..."
+        python3 -m venv "$NHENTAI_DIR/venv"
+    fi
 
     source "$NHENTAI_DIR/venv/bin/activate"
-    pip install --upgrade pip python-dotenv setuptools wheel pysocks requests requests[socks] cloudscraper flask beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
+
+    echo "[*] Installing Python requirements..."
+    pip install --upgrade pip python-dotenv setuptools wheel pysocks requests requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
+
+    echo "[+] Python requirements installed."
 
     create_logs_dir
     create_env_file
@@ -197,7 +227,8 @@ function install_suwayomi() {
     echo "[*] Installing Suwayomi..."
     mkdir -p "$SUWAYOMI_DIR"
     cd "$SUWAYOMI_DIR"
-    wget -O suwayomi-server.tar.gz "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
+    TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
+    wget -O suwayomi-server.tar.gz "$TARA_URL"
     tar -xzf suwayomi-server.tar.gz --strip-components=1
     rm suwayomi-server.tar.gz
     mkdir -p "$SUWAYOMI_DIR/local"
@@ -217,10 +248,12 @@ function install_filebrowser() {
 
 function create_systemd_services() {
     echo  "[*] Creating systemd services..."
+
     PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
 
     # Suwayomi service
-    [ ! -f /etc/systemd/system/suwayomi.service ] && cat >/etc/systemd/system/suwayomi.service <<EOF
+    if [ ! -f /etc/systemd/system/suwayomi.service ]; then
+        cat >/etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
@@ -234,9 +267,11 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
     # FileBrowser service
-    [ ! -f /etc/systemd/system/filebrowser.service ] && cat >/etc/systemd/system/filebrowser.service <<EOF
+    if [ ! -f /etc/systemd/system/filebrowser.service ]; then
+        cat >/etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
@@ -249,8 +284,9 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
-    # NHentai Scraper service
+    # NHentai Scraper Service
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -261,7 +297,7 @@ Wants=tor.service
 Type=simple
 WorkingDirectory=$NHENTAI_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=$PYTHON_BIN $NHENTAI_DIR/nhentai-scraper.py --start \$NHENTAI_START_ID --end \$NHENTAI_END_ID --threads-galleries \$THREADS_GALLERIES --threads-images \$THREADS_IMAGES --cookie \$NHENTAI_COOKIE --user-agent \$NHENTAI_USER_AGENT \$( [ "\$NHENTAI_DRY_RUN" = "true" ] && echo "--dry-run" ) \$( [ "\$USE_TOR" = "true" ] && echo "--use-tor") --verbose
+ExecStart=$NHENTAI_DIR/nhentai-scraper-wrapper.sh
 Restart=on-failure
 RestartSec=10
 User=root
@@ -285,7 +321,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    # NHentai Monitor service
+    # NHentai Monitor Service
     cat >/etc/systemd/system/nhentai-monitor.service <<EOF
 [Unit]
 Description=NHentai Scraper Monitor
@@ -306,6 +342,8 @@ StandardError=append:$LOGS_DIR/nhentai-monitor.log
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    create_wrapper_script
 
     systemctl daemon-reload
     systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
@@ -337,7 +375,7 @@ case "$1" in
         print_links
         ;;
     *)
-        echo "Usage: $0 --install | --update-env | --uninstall"
+        echo "Usage: $0 --install [--cookie YOUR_COOKIE] [--user-agent YOUR_UA] | --update-env | --uninstall"
         exit 1
         ;;
 esac
