@@ -35,9 +35,9 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 - **WARNING - Storage: I honest haven't tested this yet so please do assume you're going to need a *LOT* of storage, especially if you're not limiting the range of gallery IDs.** 
 
 ### Installation Commands
-- Install Command: `sudo ./install.sh`
-- Update Command: `sudo ./install.sh update`
-- Uninstall Command: `sudo ./install.sh uninstall`
+- Install Command: `sudo ./nhscraper-install.sh`
+- Update Command: `sudo ./nhscraper-install.sh update`
+- Uninstall Command: `sudo ./nhscraper-install.sh uninstall`
 
 ## Post Install
 - Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
