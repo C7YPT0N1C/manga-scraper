@@ -33,7 +33,7 @@ beautifulsoup4>=4.12.2
 tqdm>=4.66.1
 aiohttp>=3.9.2
 gql[all]>=3.5.0
-nhentai>=2.0.1
+nhentai>=0.5.25
 EOF
 
     pip install -r "$TMP_REQ"
