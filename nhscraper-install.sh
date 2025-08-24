@@ -229,6 +229,34 @@ function update_all() {
 # ===============================
 # MAIN
 # ===============================
+
+# Disclaimer
+echo "===================================================="
+echo "           nhentai-scraper INSTALLER               "
+echo "===================================================="
+echo ""
+echo "DISCLAIMER:"
+echo "This installer will install, update, or uninstall the following components:"
+echo "- RicterZ/nhentai scraper"
+echo "- Suwayomi Server"
+echo "- FileBrowser"
+echo ""
+echo "Existing installations in /opt/ may be overwritten."
+echo "Ensure you have backups of any important data."
+echo ""
+read -p "Do you want to proceed? [y/N]: " consent
+
+case "$consent" in
+    [yY]|[yY][eE][sS])
+        echo "[*] Consent given. Continuing..."
+        ;;
+    *)
+        echo "[!] Operation cancelled by user."
+        exit 0
+        ;;
+esac
+
+# Handle uninstall or update modes first
 if [[ "$1" == "uninstall" ]]; then
     uninstall_all
     exit 0
@@ -238,6 +266,7 @@ elif [[ "$1" == "update" ]]; then
     exit 0
 fi
 
+# Default: install everything
 install_system_packages
 install_ricterz_nhentai
 install_scraper
