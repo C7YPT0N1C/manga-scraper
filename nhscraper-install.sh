@@ -11,34 +11,22 @@ FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 CONFIG_FILE="$NHENTAI_DIR/config.json"
 
 # ===============================
-# FUNCTIONS (REQUIREMENTS ARE HERE)
+# ROOT CHECK
 # ===============================
+if [[ $EUID -ne 0 ]]; then
+    echo "[!] Please run this installer as root."
+    exit 1
+fi
+
+# ===============================
+# FUNCTIONS
+# ===============================
+
 function install_system_packages() {
     echo "[*] Installing system packages..."
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
-}
-
-function install_python_requirements() {
-    echo "[*] Installing Python requirements in venv..."
-    # Make sure pip inside venv is used
-    source "$NHENTAI_DIR/venv/bin/activate"
-    pip install --upgrade pip setuptools wheel cloudscraper
-
-    TMP_REQ=$(mktemp)
-    cat > "$TMP_REQ" <<EOF
-requests>=2.31.0
-flask>=2.3.3
-beautifulsoup4>=4.12.2
-tqdm>=4.66.1
-aiohttp>=3.9.2
-gql[all]>=3.5.0
-nhentai>=0.5.25
-EOF
-
-    pip install -r "$TMP_REQ"
-    rm "$TMP_REQ"
-    echo "[+] Python requirements installed."
+    apt-get update
+    apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
+    echo "[+] System packages installed."
 }
 
 function install_ricterz_nhentai() {
@@ -57,9 +45,8 @@ function install_scraper() {
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
-    read -p "Would you like to install the Beta Version instead of the Stable Version? [y/N]: " beta
-    beta=${beta,,}  # convert input to lowercase
-
+    read -p "Install Beta Version instead of Stable? [y/N]: " beta
+    beta=${beta,,}  # lowercase
     if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
         BRANCH="dev"
         echo "[*] Installing Beta Version (dev branch)..."
@@ -69,56 +56,43 @@ function install_scraper() {
     fi
 
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        echo "[*] Cloning nhentai-scraper branch $BRANCH..."
         if git clone --depth 1 --branch "$BRANCH" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-            echo "[+] Cloned from Gitea."
+            echo "[+] Cloned nhentai-scraper from Gitea."
         else
             echo "[!] Gitea clone failed, trying GitHub..."
             git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
         fi
     else
-        echo "[*] Repository already exists, pulling latest changes..."
         git fetch origin "$BRANCH"
         git reset --hard "origin/$BRANCH"
     fi
-}
 
-    # Create venv if missing
-    if ! python3 -m venv --help >/dev/null 2>&1; then
-        echo "[!] python3-venv not found. Installing..."
-        apt-get install -y python3-venv
-    fi
-
+    # Create venv
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        echo "[*] Creating venv..."
+        echo "[*] Creating virtual environment..."
         python3 -m venv "$NHENTAI_DIR/venv"
         source "$NHENTAI_DIR/venv/bin/activate"
-        "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-        echo "[+] Created venv at $NHENTAI_DIR/venv"
+        pip install --upgrade pip setuptools wheel cloudscraper
+        echo "[+] Virtual environment created at $NHENTAI_DIR/venv"
     else
         source "$NHENTAI_DIR/venv/bin/activate"
     fi
 
     # Install Python requirements
-    install_python_requirements
+    pip install --upgrade pip setuptools wheel
+    pip install requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
+}
 
 function install_suwayomi() {
-    echo "[*] Installing Suwayomi via tar.gz..."
+    echo "[*] Installing Suwayomi..."
     mkdir -p "$SUWAYOMI_DIR"
     cd "$SUWAYOMI_DIR"
-
-    # Download latest tar.gz release
     TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
     wget -O suwayomi-server.tar.gz "$TARA_URL"
-
-    # Extract
     tar -xzf suwayomi-server.tar.gz --strip-components=1
     rm suwayomi-server.tar.gz
-
-    # Create local folder
     mkdir -p "$SUWAYOMI_DIR/local"
     chmod 755 "$SUWAYOMI_DIR/local"
-
     echo "[+] Suwayomi installed at $SUWAYOMI_DIR"
 }
 
@@ -132,214 +106,89 @@ function install_filebrowser() {
     fi
 }
 
-function create_config_file() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "[*] Creating config.json..."
-        read -p "Enter your NHentai session cookie: " COOKIE
-        cat >"$CONFIG_FILE" <<EOF
-{
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36",
-  "cookie": "$COOKIE",
-  "ROOT_FOLDER": "/opt/suwayomi/local/",
-  "EXCLUDED_TAGS": ["snuff","guro","cuntboy","cuntbusting","ai generated"],
-  "INCLUDE_TAGS": [],
-  "LANGUAGE_FILTER": "english",
-  "MAX_THREADS_GALLERIES": 3,
-  "MAX_THREADS_IMAGES": 5,
-  "RETRY_LIMIT": 3,
-  "SLEEP_BETWEEN_GALLERIES": 0.2,
-  "VERBOSE": true,
-  "BASE_URL": "https://nhentai.net/g/",
-  "PROGRESS_FILE": "progress.json",
-  "SKIPPED_LOG": "skipped.log",
-  "SUWAYOMI_GRAPHQL": "http://localhost:4567/api/graphql",
-  "SUWAYOMI_AUTH_HEADER": null,
-  "USE_TOR": false,
-  "TOR_PROXY": "socks5h://127.0.0.1:9050",
-  "USE_VPN": false
-}
-EOF
-    fi
-}
-
 function create_systemd_services() {
     echo "[*] Creating systemd services..."
 
     # Suwayomi
-    if [ ! -f /etc/systemd/system/suwayomi.service ]; then
-        cat >/etc/systemd/system/suwayomi.service <<EOF
+    cat >/etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/suwayomi
+WorkingDirectory=$SUWAYOMI_DIR
 ExecStart=/bin/bash ./suwayomi-server.sh
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
     # FileBrowser
-    if [ ! -f /etc/systemd/system/filebrowser.service ]; then
-        cat >/etc/systemd/system/filebrowser.service <<EOF
+    cat >/etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/filebrowser -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
+ExecStart=$FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
 Restart=on-failure
 User=root
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
-    # Scraper service
-    if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
-        cat >/etc/systemd/system/nhentai-scraper.service <<EOF
+    # nhentai-scraper
+    cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai-scraper.py --start 500000 --threads-galleries 3 --threads-images 5" --use-tor
+WorkingDirectory=$NHENTAI_DIR
+ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/nhentai_scraper.py --start 500000 --threads-galleries 3 --threads-images 5"
 Restart=on-failure
 User=root
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
-
-    # Monitor service
-    if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
-        cat >/etc/systemd/system/nhentai-monitor.service <<EOF
-[Unit]
-Description=NHentai Scraper Monitor
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/scraper_monitor.py"
-Restart=on-failure
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    fi
 
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-monitor
-    systemctl start suwayomi filebrowser nhentai-scraper nhentai-monitor
+    systemctl enable suwayomi filebrowser nhentai-scraper
+    systemctl start suwayomi filebrowser nhentai-scraper
 }
 
 function print_links() {
     IP=$(hostname -I | awk '{print $1}')
-    HOSTNAME=$(hostname)
-
     echo -e "\n[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
-    echo "Scraper Flask status: http://$IP:5000/scraper_status"
-    if [ ! -z "$HOSTNAME" ]; then
-        echo -e "\nDNS Hostname Links:"
-        echo "Suwayomi Web: http://$HOSTNAME:4567/"
-        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
-        echo "FileBrowser: http://$HOSTNAME:8080/"
-        echo "Scraper Flask status: http://$HOSTNAME:5000/scraper_status"
-    fi
-}
-
-function uninstall_all() {
-    echo "[*] Stopping and disabling services..."
-    systemctl stop nhentai-scraper nhentai-monitor filebrowser suwayomi || true
-    systemctl disable nhentai-scraper nhentai-monitor filebrowser suwayomi || true
-
-    echo "[*] Removing systemd service files..."
-    rm -f /etc/systemd/system/nhentai-scraper.service
-    rm -f /etc/systemd/system/nhentai-monitor.service
-    rm -f /etc/systemd/system/filebrowser.service
-    rm -f /etc/systemd/system/suwayomi.service
-    systemctl daemon-reload
-
-    echo "[*] Removing installed directories..."
-    rm -rf "$NHENTAI_DIR"
-    rm -rf "$SUWAYOMI_DIR"
-    rm -rf "$RICTERZ_DIR"
-    rm -rf /etc/filebrowser/filebrowser.db
-
-    echo "[*] Uninstallation complete!"
-}
-
-function update_all() {
-    echo "[*] Updating nhentai-scraper, RicterZ nhentai, and Suwayomi..."
-    install_nhentai_repo
-    install_scraper
-    install_suwayomi
-    echo "[*] Restarting services..."
-    systemctl restart suwayomi filebrowser nhentai-scraper
-    echo "[*] Update complete!"
+    echo "FileBrowser: http://$IP:8080/"
 }
 
 # ===============================
 # MAIN
 # ===============================
 
-# Disclaimer
 echo "===================================================="
-echo "           nhentai-scraper INSTALLER               "
+echo "           NHentai Scraper INSTALLER               "
 echo "===================================================="
-echo ""
-echo "DISCLAIMER:"
-echo "This installer will install, update, or uninstall the following components:"
-echo "- RicterZ/nhentai"
-echo "- nhentai-scraper (this project)"
-echo "- Suwayomi Server"
-echo "- FileBrowser"
-echo ""
-echo "Existing installations in /opt/ may be overwritten."
-echo "Ensure you have backups of any important data."
 echo ""
 read -p "Do you want to proceed? [y/N]: " consent
-
 case "$consent" in
-    [yY]|[yY][eE][sS])
-        echo "[*] Consent given. Continuing..."
-        ;;
-    *)
-        echo "[!] Operation cancelled by user."
-        exit 0
-        ;;
+    [yY]|[yY][eE][sS]) echo "[*] Continuing...";;
+    *) echo "[!] Cancelled"; exit 0;;
 esac
 
-# Handle uninstall or update modes first
-if [[ "$1" == "uninstall" || "$1" == "remove" ]]; then
-    uninstall_all
-    exit 0
-elif [[ "$1" == "update" ]]; then
-    update_all
-    print_links
-    exit 0
-fi
-
-# Default: install everything
 install_system_packages
 install_ricterz_nhentai
 install_scraper
 install_suwayomi
 install_filebrowser
-create_config_file
 create_systemd_services
 print_links
 
