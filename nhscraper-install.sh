@@ -42,6 +42,8 @@ NHENTAI_DRY_RUN="false"
 USE_TOR="false"
 NHENTAI_START_ID="500000"
 NHENTAI_END_ID="500010"
+THREADS_GALLERIES="3"
+THREADS_IMAGES="3"
 EOF
         echo "[+] Created default environment file at $ENV_FILE"
     fi
@@ -260,7 +262,7 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # NHentai Scraper service
+    # NHentai Scraper Service
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -282,7 +284,21 @@ StandardError=append:$LOGS_DIR/nhentai-scraper.log
 WantedBy=multi-user.target
 EOF
 
-    # NHentai Monitor service
+    # NHentai Scraper Service Timer
+    cat >/etc/systemd/system/nhentai-scraper.timer <<EOF
+[Unit]
+Description=Run NHentai Scraper Daily at 02:00
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
+EOF
+
+    # NHentai Monitor Service
     cat >/etc/systemd/system/nhentai-monitor.service <<EOF
 [Unit]
 Description=NHentai Scraper Monitor
@@ -305,8 +321,8 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-monitor
-    systemctl start suwayomi filebrowser nhentai-scraper nhentai-monitor
+    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
+    systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
 }
 
 function print_links() {
