@@ -1,3 +1,5 @@
+# nhentai-scraper
+
 ## Table of Contents
 
 - [**Overview and Disclaimer**](#overview-and-disclaimer)
@@ -15,8 +17,6 @@
   - [Systemd Services](#systemd-services)
   - [GraphQL API Queries](#graphql-api-queries)
   - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
-
-# nhentai-scraper
 
 ## Overview and Disclaimer
 nhentai-scraper is a fully-featured Python scraper for nhentai.net that downloads galleries, supports multi-artist/group galleries, automatically creates Suwayomi categories based on gallery tags, assigns galleries to their corresponding categories, and can run as a systemd service.
