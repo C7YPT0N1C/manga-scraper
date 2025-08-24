@@ -9,6 +9,7 @@
   - [**Installation Commands**](#installation-commands)
 - [Post Install](#post-install)
   - [Systemd Services](#systemd-services)
+  - [GraphQL API Queries](#graphql-api-queries)
   - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
 - [Usage](#usage)
   - [CLI Arguments](#cli-arguments)
@@ -67,6 +68,9 @@ sudo systemctl daemon-reload
 
 - Suwayomi: `sudo systemctl enable|start suwayomi
 - Nhentai Scraper: `sudo systemctl enable|start nhentai-scraper` , `sudo systemctl enable|start nhentai-scraper.timer`
+
+### GraphQL API Queries
+- Info will be added T-T...
 
 ### Flask Monitoring Endpoint
 - URL: `http://<SERVER-IP-OR-DOMAIN>:5000/scraper_status`
