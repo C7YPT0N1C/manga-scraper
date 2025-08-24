@@ -116,62 +116,100 @@ function install_filebrowser() {
 function create_systemd_services() {
     echo "[*] Creating systemd services..."
 
-    cat >/etc/systemd/system/suwayomi.service <<EOF
+    # Suwayomi
+    if [ ! -f /etc/systemd/system/suwayomi.service ]; then
+        cat >/etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$SUWAYOMI_DIR
+WorkingDirectory=/opt/suwayomi
 ExecStart=/bin/bash ./suwayomi-server.sh
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
-    cat >/etc/systemd/system/filebrowser.service <<EOF
+    # FileBrowser
+    if [ ! -f /etc/systemd/system/filebrowser.service ]; then
+        cat >/etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
 
 [Service]
-ExecStart=$FILEBROWSER_BIN -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
+ExecStart=/usr/local/bin/filebrowser -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
 Restart=on-failure
 User=root
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
-    cat >/etc/systemd/system/nhentai-scraper.service <<EOF
+    # Scraper service
+    if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
+        cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$NHENTAI_DIR
-ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/nhentai_scraper.py --start 500000 --threads-galleries 3 --threads-images 5"
+WorkingDirectory=/opt/nhentai-scraper
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai_scraper.py --start 400000 --end 400010 --threads-galleries 3 --threads-images 5"
 Restart=on-failure
 User=root
 
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
+
+    # Monitor service
+    if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
+        cat >/etc/systemd/system/nhentai-monitor.service <<EOF
+[Unit]
+Description=NHentai Scraper Monitor
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nhentai-scraper
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/monitor.py"
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
 
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper
-    systemctl start suwayomi filebrowser nhentai-scraper
+    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-monitor
+    systemctl start suwayomi filebrowser nhentai-scraper nhentai-monitor
 }
 
 function print_links() {
     IP=$(hostname -I | awk '{print $1}')
+    HOSTNAME=$(hostname)
+
     echo -e "\n[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/"
+    echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
+    echo "Scraper Flask status: http://$IP:5000/scraper_status"
+    if [ ! -z "$HOSTNAME" ]; then
+        echo -e "\nDNS Hostname Links:"
+        echo "Suwayomi Web: http://$HOSTNAME:4567/"
+        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
+        echo "FileBrowser: http://$HOSTNAME:8080/"
+        echo "Scraper Flask status: http://$HOSTNAME:5000/scraper_status"
+    fi
 }
 
 # ===============================

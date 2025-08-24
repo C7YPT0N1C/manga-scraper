@@ -3,7 +3,7 @@ from flask import Flask, jsonify
 import requests
 import time
 import threading
-from scraper_core import load_config, make_session, check_session, log
+from scraper_core import load_config, make_session  # Make sure scraper_core is in PYTHONPATH
 
 app = Flask(__name__)
 
@@ -23,7 +23,8 @@ def status():
 def check_ip():
     """Check what IP the scraper is using (to confirm Tor proxy)."""
     try:
-        session = make_session(load_config())
+        cfg = load_config()
+        session = make_session(cfg)
         if scraper_status["using_tor"]:
             session.proxies.update({
                 "http": "socks5h://127.0.0.1:9050",
@@ -35,15 +36,20 @@ def check_ip():
         return jsonify({"error": str(e)}), 500
 
 def run_flask():
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, threaded=True)
 
 def start_monitor():
     thread = threading.Thread(target=run_flask, daemon=True)
     thread.start()
+    print("[*] Monitor started on http://0.0.0.0:5000")
 
 if __name__ == "__main__":
-    log("[*] Starting monitor on :5000")
     start_monitor()
-    while True:
-        scraper_status["last_checked"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        time.sleep(10)
+    scraper_status["running"] = True
+    try:
+        while True:
+            scraper_status["last_checked"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            time.sleep(10)
+    except KeyboardInterrupt:
+        scraper_status["running"] = False
+        print("[*] Monitor stopped")
