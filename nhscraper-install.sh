@@ -21,6 +21,8 @@ function install_system_packages() {
 
 function install_python_requirements() {
     echo "[*] Installing Python requirements in venv..."
+    # Make sure pip inside venv is used
+    source "$NHENTAI_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel
 
     TMP_REQ=$(mktemp)
@@ -54,14 +56,11 @@ function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     if [ ! -d "$NHENTAI_DIR" ]; then
         mkdir -p "$NHENTAI_DIR"
-        cd "$NHENTAI_DIR"
+    fi
+    cd "$NHENTAI_DIR"
 
-        # Create venv
-        python3 -m venv nhentai-venv
-        source nhentai-venv/bin/activate
-        echo "[+] Created and activated nhentai venv."
-
-        # Clone repo
+    # Clone repo
+    if [ ! -d "$NHENTAI_DIR/.git" ]; then
         echo "[*] Cloning nhentai-scraper..."
         if git clone --depth 1 https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
             echo "[+] Cloned from Gitea."
@@ -70,12 +69,17 @@ function install_scraper() {
             git clone --depth 1 https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
         fi
     else
-        cd "$NHENTAI_DIR"
-        source nhentai-venv/bin/activate
         git pull || echo "[!] Could not update scraper repo."
     fi
 
-    # Install Python requirements inside venv
+    # Create venv if missing
+    if [ ! -d "$NHENTAI_DIR/venv" ]; then
+        echo "[*] Creating venv..."
+        python3 -m venv "$NHENTAI_DIR/venv"
+        echo "[+] Created venv at $NHENTAI_DIR/venv"
+    fi
+
+    # Install Python requirements
     install_python_requirements
 }
 
