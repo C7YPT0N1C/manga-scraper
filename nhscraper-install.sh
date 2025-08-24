@@ -16,7 +16,7 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    apt-get install -y python3 python3-pip git build-essential curl wget nodejs npm dnsutils
+    apt-get install -y python3 python3-pip python3.12-venv git build-essential curl wget nodejs npm dnsutils
 }
 
 function install_python_requirements() {
@@ -76,7 +76,11 @@ function install_scraper() {
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
         echo "[*] Creating venv..."
         python3 -m venv "$NHENTAI_DIR/venv"
+        source "$NHENTAI_DIR/venv/bin/activate"
+        "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
         echo "[+] Created venv at $NHENTAI_DIR/venv"
+    else
+        source "$NHENTAI_DIR/venv/bin/activate"
     fi
 
     # Install Python requirements
