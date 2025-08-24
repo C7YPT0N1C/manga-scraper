@@ -16,7 +16,7 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget nodejs npm dnsutils
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils
 }
 
 function install_python_requirements() {
@@ -88,15 +88,23 @@ function install_scraper() {
 }
 
 function install_suwayomi() {
-    echo "[*] Installing Suwayomi..."
-    if [ ! -d "$SUWAYOMI_DIR" ]; then
-        git clone https://github.com/Suwayomi/Suwayomi-Server.git "$SUWAYOMI_DIR"
-    else
-        cd "$SUWAYOMI_DIR" && git pull
-    fi
-    cd "$SUWAYOMI_DIR" && npm install
+    echo "[*] Installing Suwayomi via tar.gz..."
+    mkdir -p "$SUWAYOMI_DIR"
+    cd "$SUWAYOMI_DIR"
+
+    # Download latest tar.gz release
+    TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/latest/download/suwayomi-server.tar.gz"
+    wget -O suwayomi-server.tar.gz "$TARA_URL"
+
+    # Extract
+    tar -xzf suwayomi-server.tar.gz --strip-components=1
+    rm suwayomi-server.tar.gz
+
+    # Create local folder
     mkdir -p "$SUWAYOMI_DIR/local"
     chmod 755 "$SUWAYOMI_DIR/local"
+
+    echo "[+] Suwayomi installed at $SUWAYOMI_DIR"
 }
 
 function install_filebrowser() {
@@ -148,10 +156,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$SUWAYOMI_DIR
-ExecStart=/usr/bin/npm start
+WorkingDirectory=/opt/suwayomi
+ExecStart=/bin/bash ./suwayomi-server.sh
 Restart=on-failure
-User=root
 
 [Install]
 WantedBy=multi-user.target
