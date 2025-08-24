@@ -127,8 +127,6 @@ function install_ricterz_nhentai() {
 function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
-    create_logs_dir
-    create_env_file
     cd "$NHENTAI_DIR"
 
     read -p "Install Beta Version instead of Stable? [y/N]: " beta
@@ -162,6 +160,9 @@ function install_scraper() {
     echo "[*] Installing Python requirements..."
     pip install --upgrade pip setuptools wheel pysocks requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
     echo "[+] Python requirements installed."
+
+    create_logs_dir
+    create_env_file
 }
 
 function install_suwayomi() {
