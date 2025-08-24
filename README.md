@@ -3,7 +3,7 @@
 ## Overview and Disclaimer
 nhentai-scraper is a fully-featured Python scraper for nhentai.net that downloads galleries, supports multi-artist/group galleries, automatically creates Suwayomi categories based on gallery tags, assigns galleries to their corresponding categories, and can run as a systemd service.
 
-A lot of this code was originally written by ChatGPT because the original project was supposed to be just for me (I was lazy) and I started this at 2am. However, now that I am releasing this to the public, I have gone over the code line by line myself and have check it thoroughly. Still, use this at your own discretion.
+**DISCLAIMER: A lot of this code was originally written by ChatGPT because the original project was supposed to be just for me (I was lazy) and I started this at 2am. However, now that I am releasing this to the public, I have gone over the code line by line myself and have check it thoroughly. Still, use this at your own discretion.**
 
 ## Features
 - Gallery download with language/tag filters
