@@ -32,14 +32,18 @@ A lot of this code was originally written by ChatGPT because the original projec
 - Python 3.x
 - pip
 - Optional: Tor (`sudo apt install tor`) or VPN (OpenVPN, WireGuard)
+- **WARNING - Storage: I honest haven't tested this yet so please do assume you're going to need a *LOT* of storage, especially if you're not limiting the range of gallery IDs.** 
+
 ### Installation Commands
 - Install Command: `sudo ./install.sh`
 - Update Command: `sudo ./install.sh update`
 - Uninstall Command: `sudo ./install.sh uninstall`
+
 ## Post Install
 - Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
 - Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql`
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
+
 ### Systemd Service
 Enable service and optional timer:
 ```bash
@@ -81,6 +85,7 @@ sudo systemctl start nhentai-scraper.timer
 --use-vpn          Use system VPN
 --verbose          Enable detailed logging
 ```
+
 ### Examples ()
 ```bash
 # Default run (latest galleries)
@@ -95,6 +100,7 @@ python3 nhentai-scraper.py --root /mnt/nhentai --start 600000 --end 600050 --thr
 # Use Tor and exclude certain tags
 python3 nhentai-scraper.py --use-tor --exclude-tags "yaoi,shotacon"
 ```
+
 ## Directory Layout
 Galleries (Suwayomi compatible) saved as:
 ```
