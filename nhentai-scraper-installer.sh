@@ -11,7 +11,7 @@ FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 CONFIG_FILE="$NHENTAI_DIR/config.json"
 
 # ===============================
-# FUNCTIONS
+# FUNCTIONS (REQUIREMENTS ARE HERE)
 # ===============================
 function install_system_packages() {
     echo "[*] Installing system packages..."
