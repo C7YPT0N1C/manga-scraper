@@ -96,7 +96,6 @@ function install_scraper() {
 
     # Install Python requirements
     install_python_requirements
-}
 
 function install_suwayomi() {
     echo "[*] Installing Suwayomi via tar.gz..."
