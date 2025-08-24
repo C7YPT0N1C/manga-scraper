@@ -1,0 +1,5 @@
+
+progress.json
+skipped.log
+*.pyc
+__pycache__/
