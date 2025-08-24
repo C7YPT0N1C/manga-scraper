@@ -153,7 +153,7 @@ EOF
 
     # Scraper service
     if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
-        cat >/etc/systemd/system/nhentai-scraper.service <<EOF
+        cat >/etc/systemd/system/nhentai-scraper.service <<'EOF'
 [Unit]
 Description=NHentai Scraper
 After=network.target
@@ -161,7 +161,9 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai_scraper.py --start 400000 --end 400010 --threads-galleries 3 --threads-images 5"
+Environment="USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36"
+Environment="COOKIE=YOUR_NHENTAI_SESSION_COOKIE"
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai_scraper.py --start 500000 --end 500010 --threads-galleries 3 --threads-images 5 --verbose --user-agent \"$USER_AGENT\" --cookie \"$COOKIE\" --use-tor"
 Restart=on-failure
 User=root
 
@@ -172,7 +174,7 @@ EOF
 
     # Monitor service
     if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
-        cat >/etc/systemd/system/nhentai-monitor.service <<EOF
+        cat >/etc/systemd/system/nhentai-monitor.service <<'EOF'
 [Unit]
 Description=NHentai Scraper Monitor
 After=network.target
@@ -180,7 +182,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/monitor.py"
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/scraper_monitor.py"
 Restart=on-failure
 User=root
 
