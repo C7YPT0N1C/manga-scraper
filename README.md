@@ -7,18 +7,14 @@ A lot of this code was originally written by ChatGPT because the original projec
 
 ## Features
 - Gallery download with language/tag filters
-- Multi-artist/group duplication
-- Automatic creation of Suwayomi categories from tags/genres
-- Galleries assigned to corresponding categories
-- Suwayomi metadata generation
+- Downloads sorted by artists and groups (downloads sorted by genres via Suwayomi)
+- Multi-threaded download supports
+- Automatic retry of failed/skipped galleries
 - Tor/VPN support
+- Configurable Suwayomi root folder
+- Automatic Suwayomi metadata generation
 - Flask monitoring endpoint
 - Systemd service & timer
-- Retry failed/skipped galleries
-- Configurable root folder
-- Supports multi-threaded downloads
-- Automatic retry of skipped galleries
-- Metadata compatible with Suwayomi
 - Dynamic IP / DNS friendly (use DDNS if monitoring remotely)
 
 ### Suwayomi Category Automation
