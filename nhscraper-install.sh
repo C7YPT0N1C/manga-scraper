@@ -16,7 +16,7 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
+    apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
 }
 
 function install_python_requirements() {
