@@ -215,8 +215,7 @@ function print_links() {
     echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
     echo "Scraper Flask status: http://$IP:5000/scraper_status"
     if [ ! -z "$HOSTNAME" ]; then
-        echo ""
-        echo "DNS Hostname Links:"
+        echo -e "\nDNS Hostname Links:"
         echo "Suwayomi Web: http://$HOSTNAME:4567/"
         echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
         echo "FileBrowser: http://$HOSTNAME:8080/"
