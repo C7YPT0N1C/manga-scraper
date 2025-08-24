@@ -20,8 +20,8 @@ function install_system_packages() {
 }
 
 function install_python_requirements() {
-    echo "[*] Installing Python requirements..."
-    pip3 install --upgrade pip setuptools wheel
+    echo "[*] Installing Python requirements in venv..."
+    pip install --upgrade pip setuptools wheel
 
     TMP_REQ=$(mktemp)
     cat > "$TMP_REQ" <<EOF
@@ -34,8 +34,9 @@ gql[all]>=3.5.0
 nhentai>=2.0.1
 EOF
 
-    pip3 install -r "$TMP_REQ"
+    pip install -r "$TMP_REQ"
     rm "$TMP_REQ"
+    echo "[+] Python requirements installed."
 }
 
 function install_ricterz_nhentai() {
@@ -53,7 +54,15 @@ function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     if [ ! -d "$NHENTAI_DIR" ]; then
         mkdir -p "$NHENTAI_DIR"
-        echo "[*] Cloning Gitea..."
+        cd "$NHENTAI_DIR"
+
+        # Create venv
+        python3 -m venv nhentai-venv
+        source nhentai-venv/bin/activate
+        echo "[+] Created and activated nhentai venv."
+
+        # Clone repo
+        echo "[*] Cloning nhentai-scraper..."
         if git clone --depth 1 https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
             echo "[+] Cloned from Gitea."
         else
@@ -62,9 +71,11 @@ function install_scraper() {
         fi
     else
         cd "$NHENTAI_DIR"
+        source nhentai-venv/bin/activate
         git pull || echo "[!] Could not update scraper repo."
     fi
 
+    # Install Python requirements inside venv
     install_python_requirements
 }
 
