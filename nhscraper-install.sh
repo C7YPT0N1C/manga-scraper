@@ -249,11 +249,12 @@ function print_links() {
 
 function uninstall_all() {
     echo "[*] Stopping and disabling services..."
-    systemctl stop nhentai-scraper filebrowser suwayomi || true
-    systemctl disable nhentai-scraper filebrowser suwayomi || true
+    systemctl stop nhentai-scraper nhentai-monitor filebrowser suwayomi || true
+    systemctl disable nhentai-scraper nhentai-monitor filebrowser suwayomi || true
 
     echo "[*] Removing systemd service files..."
     rm -f /etc/systemd/system/nhentai-scraper.service
+    rm -f /etc/systemd/system/nhentai-monitor.service
     rm -f /etc/systemd/system/filebrowser.service
     rm -f /etc/systemd/system/suwayomi.service
     systemctl daemon-reload
