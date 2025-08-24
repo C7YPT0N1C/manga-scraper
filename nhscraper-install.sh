@@ -15,8 +15,8 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 # ===============================
 function install_system_packages() {
     echo "[*] Installing system packages..."
-    apt-get update
-    apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
 }
 
 function install_python_requirements() {
@@ -88,7 +88,7 @@ function install_scraper() {
         echo "[!] python3-venv not found. Installing..."
         apt-get install -y python3-venv
     fi
-    
+
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
         echo "[*] Creating venv..."
         python3 -m venv "$NHENTAI_DIR/venv"
