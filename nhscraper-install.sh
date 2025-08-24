@@ -16,7 +16,7 @@ CONFIG_FILE="$NHENTAI_DIR/config.json"
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    apt-get install -y python3 python3-pip python3.12-venv git build-essential curl wget nodejs npm dnsutils
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget nodejs npm dnsutils
 }
 
 function install_python_requirements() {
