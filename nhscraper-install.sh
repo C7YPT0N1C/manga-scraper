@@ -237,7 +237,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/monitor.py"
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/scraper_monitor.py"
 Restart=on-failure
 User=root
 
