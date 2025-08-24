@@ -212,7 +212,7 @@ function print_links() {
     echo -e "\n[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/" (User: admin, Password: DefaultPassword123!)
+    echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
     echo "Scraper Flask status: http://$IP:5000/scraper_status"
     if [ ! -z "$HOSTNAME" ]; then
         echo "Suwayomi Web: http://$HOSTNAME:4567/"
