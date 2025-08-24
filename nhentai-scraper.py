@@ -1,205 +1,199 @@
 #!/usr/bin/env python3
-import argparse
-import os, sys, json, time, re
+import os
+import sys
+import json
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import argparse
 from datetime import datetime
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ===============================
-# CONFIG / DEFAULTS
+# CONFIGURATION
 # ===============================
-DEFAULT_ROOT = "/opt/suwayomi/local/"
-DEFAULT_EXCLUDE_TAGS = ["snuff","guro","cuntboy","cuntbusting","ai generated"]
-DEFAULT_INCLUDE_TAGS = []
-DEFAULT_LANGUAGE = "english"
-DEFAULT_THREADS_GALLERIES = 3
-DEFAULT_THREADS_IMAGES = 5
-DEFAULT_USE_TOR = False
-DEFAULT_USE_VPN = False
-DEFAULT_BASE_URL = "https://nhentai.net/g/"
-STATUS_FILE = "/opt/nhentai-scraper/status.json"
-SUWAYOMI_GRAPHQL = "http://localhost:4567/api/graphql"
-IGNORED_CATEGORIES = ["Favorites"]
+NHENTAI_DIR = "/opt/nhentai-scraper"
+RICTERZ_DIR = "/opt/ricterz_nhentai"
+RICTERZ_BIN = os.path.join(RICTERZ_DIR, "nhentai", "cmdline.py")
+SUWAYOMI_DIR = "/opt/suwayomi"
+LOGS_DIR = os.path.join(NHENTAI_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+
+# ===============================
+# LOGGING
+# ===============================
+logger = logging.getLogger("nhentai-scraper")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
+fh = logging.FileHandler(os.path.join(LOGS_DIR, "nhentai-scraper.log"))
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+ch = logging.StreamHandler(sys.stdout)
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
+# ===============================
+# ARGUMENTS
+# ===============================
+parser = argparse.ArgumentParser(description="NHentai Scraper Wrapper")
+parser.add_argument("--start", type=int, required=True, help="Start gallery ID")
+parser.add_argument("--end", type=int, required=True, help="End gallery ID")
+parser.add_argument("--threads-galleries", type=int, default=3)
+parser.add_argument("--threads-images", type=int, default=5)
+parser.add_argument("--cookie", type=str, required=True)
+parser.add_argument("--user-agent", type=str, required=True)
+parser.add_argument("--use-tor", action="store_true")
+parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+parser.add_argument("--dry-run", action="store_true", help="Simulate downloads")
+args = parser.parse_args()
+
+if args.verbose:
+    logger.setLevel(logging.DEBUG)
+
+PYTHON_BIN = os.path.join(NHENTAI_DIR, "venv", "bin", "python3")
 
 # ===============================
 # UTILITIES
 # ===============================
-def sanitize_folder_name(name):
-    return re.sub(r'[\\/*?:"<>|]', "_", name)
+def timestamp():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-def log(msg):
-    print(f"{datetime.now().isoformat()} | {msg}", flush=True)
-
-def save_status(**kwargs):
-    status = {}
-    if os.path.exists(STATUS_FILE):
-        try:
-            status = json.load(open(STATUS_FILE))
-        except: pass
-    status.update(kwargs)
-    with open(STATUS_FILE, "w") as f:
-        json.dump(status, f, indent=2)
-
-# ===============================
-# GRAPHQL (Suwayomi)
-# ===============================
-def graphql_query(query, variables=None):
-    payload = {"query": query, "variables": variables or {}}
-    resp = requests.post(SUWAYOMI_GRAPHQL, json=payload, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
-
-def get_categories():
-    query = "query { categories { id name } }"
-    result = graphql_query(query)
-    return {c["name"]: c["id"] for c in result["data"]["categories"]}
-
-def create_category(name):
-    query = "mutation($name: String!) { createCategory(input: {name: $name}) { id name } }"
-    result = graphql_query(query, {"name": name})
-    return result["data"]["createCategory"]
-
-def add_gallery(gallery_input):
-    query = "mutation($gallery: GalleryInput!) { createGallery(input: $gallery) { id title } }"
-    result = graphql_query(query, {"gallery": gallery_input})
-    return result["data"]["createGallery"]
-
-def report_to_suwayomi(meta):
-    existing = get_categories()
-    cat_ids = []
-    for tag in meta["genre"]:
-        if tag in IGNORED_CATEGORIES: continue
-        if tag not in existing:
-            cat = create_category(tag)
-            cat_ids.append(cat["id"])
-            existing[tag] = cat["id"]
-        else:
-            cat_ids.append(existing[tag])
-    gallery_input = {
-        "title": meta["title"],
-        "author": meta["author"],
-        "artist": meta["artist"],
-        "description": meta["description"],
-        "status": meta["status"],
-        "genre": meta["genre"],
-        "categories": cat_ids,
-        "files": [f"{i+1}.jpg" for i in range(len(meta.get("images", [])))],
-    }
-    add_gallery(gallery_input)
-
-# ===============================
-# DOWNLOADER (RicterZ/nhentai CLI)
-# ===============================
-def check_tor(proxy="socks5h://127.0.0.1:9050"):
-    """Check current IP through Tor."""
-    try:
-        import socks  # PySocks dependency
-    except ImportError:
-        print("[!] Missing PySocks. Install with: pip install pysocks requests[socks]")
-        return None
-
-    session = requests.Session()
-    session.proxies = {"http": proxy, "https": proxy}
-    try:
-        r = session.get("https://httpbin.org/ip", timeout=10)
-        ip = r.json().get("origin")
-        print(f"[*] Tor IP detected: {ip}")
-        return ip
-    except Exception as e:
-        print(f"[!] Tor check failed: {e}")
-        return None
-
-def download_gallery(gid, root, cookie, user_agent, use_tor=False, verbose=True):
-    """Download a single gallery via RicterZ/nhentai CLI."""
-    if verbose:
-        print(f"[*] Starting gallery {gid}...")
-
+def run_ricterz(gallery_id, output_dir):
+    """Run RicterZ nhentai cmdline.py for a given gallery ID with per-image progress"""
     cmd = [
-        "nhentai",
-        "--useragent", user_agent,
-        "--cookie", cookie,
-        "--id", str(gid)
+        PYTHON_BIN,
+        RICTERZ_BIN,
+        "--id", str(gallery_id),
+        "--download",
+        "-t", str(args.threads_images),
+        "-o", output_dir,
+        "--cookie", args.cookie,
+        "--user-agent", args.user_agent
     ]
-
-    if use_tor:
+    if args.use_tor:
         cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
 
+    if args.dry_run:
+        logger.info(f"[DRY-RUN] Would run: {' '.join(cmd)}")
+        return True
+
+    logger.debug(f"Running RicterZ command: {' '.join(cmd)}")
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        if verbose:
-            print(result.stdout)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        for line in result.stdout.splitlines():
+            if "Downloading image" in line:
+                logger.info(f"[{gallery_id}] {line.strip()}")
+        logger.info(f"[+] Successfully processed gallery {gallery_id}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[!] Gallery {gid} failed with exit code {e.returncode}")
-        if verbose:
-            print(e.stderr)
+        logger.error(f"[!] Failed to process gallery {gallery_id}: {e.stderr.strip()}")
         return False
 
+def get_artists(meta):
+    """Return list of artists, handle missing or multiple artists"""
+    artist_field = meta.get("artist") or meta.get("group") or "Unknown"
+    artists = [a.strip() for a in artist_field.replace("|", ",").split(",") if a.strip()]
+    if not artists:
+        artists = ["Unknown"]
+    return artists
+
+def suwayomi_folder_name(meta, artist):
+    """Generate Suwayomi-compatible folder name"""
+    title = meta.get("title", f"Gallery_{meta.get('id', '000000')}")
+    safe_artist = artist.replace("/", "-").replace("\\", "-")
+    return os.path.join(SUWAYOMI_DIR, safe_artist, title)
+
 # ===============================
-# METADATA CREATION
+# GRAPHQL FUNCTIONS
 # ===============================
-def generate_metadata(artist, title, tags):
-    return {
-        "title": title,
-        "author": artist,
-        "artist": artist,
-        "description": f"An archive of {artist}'s works.",
-        "genre": tags,
-        "status": "1",
-        "_status values": ["0=Unknown","1=Ongoing","2=Completed","3=Licensed"]
+def graphql_request(query, variables):
+    """Send a GraphQL request to Suwayomi server"""
+    if args.dry_run:
+        logger.info("[DRY-RUN] Skipping GraphQL request")
+        return None
+    payload = {"query": query, "variables": variables}
+    try:
+        resp = requests.post(GRAPHQL_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.error(f"[!] GraphQL request failed: {e}")
+        return None
+
+def create_or_update_gallery(meta, folder):
+    """Add or update gallery in Suwayomi via GraphQL"""
+    query = """
+    mutation addGallery($input: GalleryInput!) {
+        addGallery(input: $input) {
+            id
+            title
+        }
     }
+    """
+    variables = {
+        "input": {
+            "id": meta.get("id"),
+            "title": meta.get("title"),
+            "artists": get_artists(meta),
+            "tags": meta.get("tags", []),
+            "url": meta.get("url"),
+            "local_path": folder
+        }
+    }
+    result = graphql_request(query, variables)
+    if result:
+        logger.info(f"[+] Gallery {meta.get('id')} sent to Suwayomi GraphQL")
 
 # ===============================
-# PARALLEL GALLERY DOWNLOAD
+# MAIN LOOP
 # ===============================
-def download_range(start, end, root, cookie, user_agent, threads_galleries, threads_images, exclude_tags, include_tags, language, use_tor, verbose):
-    with ThreadPoolExecutor(max_workers=threads_galleries) as executor:
-        futures = {}
-        for gid in range(start, end+1):
-            futures[executor.submit(download_gallery, gid, root, cookie, user_agent, use_tor, verbose)] = gid
-        for fut in as_completed(futures):
-            gid = futures[fut]
-            try:
-                fut.result()
-                save_status(last_gallery=gid)
-            except Exception as e:
-                log(f"{gid} | Error: {e}")
+def main():
+    logger.info(f"Starting galleries {args.start} -> {args.end}")
+    if args.dry_run:
+        logger.info("[*] Dry-run mode is active; no files will be downloaded.\n")
 
-# ===============================
-# CLI
-# ===============================
-if __name__=="__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default=DEFAULT_ROOT)
-    parser.add_argument("--start", type=int)
-    parser.add_argument("--end", type=int)
-    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES)
-    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES)
-    parser.add_argument("--exclude-tags", default=",".join(DEFAULT_EXCLUDE_TAGS))
-    parser.add_argument("--include-tags", default=",".join(DEFAULT_INCLUDE_TAGS))
-    parser.add_argument("--language", default=DEFAULT_LANGUAGE)
-    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR)
-    parser.add_argument("--use-vpn", action="store_true", default=DEFAULT_USE_VPN)
-    parser.add_argument("--verbose", action="store_true", default=False)
-    parser.add_argument("--cookie", required=True)
-    parser.add_argument("--useragent", required=True)
-    args = parser.parse_args()
+    for gallery_id in range(args.start, args.end + 1):
+        logger.info(f"[*] Starting gallery {gallery_id}")
 
-    ROOT = args.root
-    os.makedirs(ROOT, exist_ok=True)
+        if args.dry_run:
+            logger.info(f"[DRY-RUN] Would fetch metadata and download gallery {gallery_id}")
+            continue
 
-    exclude_tags = [t.strip().lower() for t in args.exclude_tags.split(",") if t.strip()]
-    include_tags = [t.strip().lower() for t in args.include_tags.split(",") if t.strip()]
+        meta_cmd = [
+            PYTHON_BIN,
+            RICTERZ_BIN,
+            "--id", str(gallery_id),
+            "--cookie", args.cookie,
+            "--user-agent", args.user_agent,
+            "--show"
+        ]
+        if args.use_tor:
+            meta_cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
 
-    START = args.start or 1
-    END = args.end or START+10
+        try:
+            meta_output = subprocess.check_output(meta_cmd, text=True)
+            meta = json.loads(meta_output)
+        except Exception as e:
+            logger.error(f"[!] Failed to fetch metadata for {gallery_id}: {e}")
+            continue
 
-    log(f"Downloading galleries {START} → {END} to {ROOT}")
-    download_range(
-        START, END, ROOT, args.cookie, args.useragent,
-        args.threads_galleries, args.threads_images,
-        exclude_tags, include_tags, args.language,
-        args.use_tor, args.verbose
-    )
-    log("[*] Done!")
+        artists = get_artists(meta)
+        for artist in artists:
+            folder = suwayomi_folder_name(meta, artist)
+            os.makedirs(folder, exist_ok=True)
+
+            # Always send to GraphQL
+            create_or_update_gallery(meta, folder)
+
+            success = run_ricterz(gallery_id, folder)
+            if success:
+                logger.info(f"[+] Gallery {gallery_id} processed for artist '{artist}'")
+            else:
+                logger.error(f"[!] Gallery {gallery_id} failed for artist '{artist}'")
+
+    logger.info("[*] All galleries processed.")
+
+if __name__ == "__main__":
+    main()

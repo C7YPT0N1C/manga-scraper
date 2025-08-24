@@ -8,6 +8,9 @@ NHENTAI_DIR="/opt/nhentai-scraper"
 RICTERZ_DIR="/opt/ricterz_nhentai"
 SUWAYOMI_DIR="/opt/suwayomi"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
+ENV_FILE="/etc/nhentai-scraper/nhentai-scraper.env"
+
+LOGS_DIR="$NHENTAI_DIR/logs"
 CONFIG_FILE="$NHENTAI_DIR/config.json"
 
 # ===============================
@@ -22,11 +25,84 @@ fi
 # FUNCTIONS
 # ===============================
 
+function create_logs_dir() {
+    mkdir -p "$LOGS_DIR"
+    chmod 755 "$LOGS_DIR"
+    echo "[+] Logs directory created at $LOGS_DIR"
+}
+
+function create_env_file() {
+    mkdir -p "$(dirname "$ENV_FILE")"
+    if [ ! -f "$ENV_FILE" ]; then
+        cat >"$ENV_FILE" <<EOF
+# NHentai Scraper Environment
+NHENTAI_COOKIE=""
+NHENTAI_USER_AGENT=""
+NHENTAI_DRY_RUN="false"
+EOF
+        echo "[+] Created default environment file at $ENV_FILE"
+    fi
+}
+
+function update_env() {
+    create_env_file
+
+    source "$ENV_FILE" 2>/dev/null || true
+    echo "Current environment values:"
+    echo "NHENTAI_COOKIE=${NHENTAI_COOKIE:-<not set>}"
+    echo "NHENTAI_USER_AGENT=${NHENTAI_USER_AGENT:-<not set>}"
+    echo "NHENTAI_DRY_RUN=${NHENTAI_DRY_RUN:-false}"
+
+    read -p "Enter new nhentai.net cookie (leave blank to keep current): " NEW_COOKIE
+    read -p "Enter new browser User-Agent (leave blank to keep current): " NEW_UA
+    read -p "Enable dry-run mode? (true/false, leave blank to keep current): " NEW_DRY
+
+    cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%F-%T)"
+    echo "[*] Backup saved as $ENV_FILE.bak.$(date +%F-%T)"
+
+    if [ ! -z "$NEW_COOKIE" ]; then
+        sed -i "/^NHENTAI_COOKIE=/d" "$ENV_FILE"
+        echo "NHENTAI_COOKIE='$NEW_COOKIE'" >> "$ENV_FILE"
+    fi
+    if [ ! -z "$NEW_UA" ]; then
+        sed -i "/^NHENTAI_USER_AGENT=/d" "$ENV_FILE"
+        echo "NHENTAI_USER_AGENT='$NEW_UA'" >> "$ENV_FILE"
+    fi
+    if [ ! -z "$NEW_DRY" ]; then
+        sed -i "/^NHENTAI_DRY_RUN=/d" "$ENV_FILE"
+        echo "NHENTAI_DRY_RUN='$NEW_DRY'" >> "$ENV_FILE"
+    fi
+
+    echo "[*] Updated environment file:"
+    cat "$ENV_FILE"
+
+    echo "[*] Reloading systemd services..."
+    systemctl daemon-reload
+    systemctl restart nhentai-scraper nhentai-monitor
+    systemctl status nhentai-scraper nhentai-monitor --no-pager
+    echo "[+] Environment update complete."
+}
+
+function uninstall_all() {
+    echo "[*] Stopping and disabling services..."
+    systemctl stop nhentai-scraper nhentai-monitor suwayomi filebrowser || true
+    systemctl disable nhentai-scraper nhentai-monitor suwayomi filebrowser || true
+
+    echo "[*] Removing directories..."
+    rm -rf "$NHENTAI_DIR" "$RICTERZ_DIR" "$SUWAYOMI_DIR"
+    rm -f /etc/systemd/system/nhentai-*.service
+    rm -f /etc/filebrowser/filebrowser.db
+    rm -f "$ENV_FILE"
+
+    systemctl daemon-reload
+    echo "[+] Uninstallation complete."
+    exit 0
+}
+
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
-    # SYSTEM REQUIREMENTS
-    apt-get install -y python3 python3-pip python3-venv python3.12-venv git build-essential curl wget dnsutils tor torsocks
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
 }
 
@@ -51,16 +127,16 @@ function install_ricterz_nhentai() {
 function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
+    create_logs_dir
+    create_env_file
     cd "$NHENTAI_DIR"
 
     read -p "Install Beta Version instead of Stable? [y/N]: " beta
     beta=${beta,,}
+    BRANCH="main"
     if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
         BRANCH="dev"
         echo "[*] Installing Beta Version (dev branch)..."
-    else
-        BRANCH="main"
-        echo "[*] Installing Stable Version (main branch)..."
     fi
 
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
@@ -76,7 +152,6 @@ function install_scraper() {
     fi
 
     check_venv
-
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
         echo "[*] Creating Python virtual environment..."
         python3 -m venv "$NHENTAI_DIR/venv"
@@ -84,7 +159,6 @@ function install_scraper() {
 
     source "$NHENTAI_DIR/venv/bin/activate"
 
-    # PYTHON REQUIREMENTS
     echo "[*] Installing Python requirements..."
     pip install --upgrade pip setuptools wheel pysocks requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
     echo "[+] Python requirements installed."
@@ -115,6 +189,9 @@ function install_filebrowser() {
 
 function create_systemd_services() {
     echo "[*] Creating systemd services..."
+
+    PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
+    RICTERZ_BIN="$RICTERZ_DIR/nhentai/cmdline.py"  # <- updated to use cmdline.py
 
     # Suwayomi
     if [ ! -f /etc/systemd/system/suwayomi.service ]; then
@@ -152,89 +229,80 @@ EOF
     fi
 
     # Scraper service
-    if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
-        cat >/etc/systemd/system/nhentai-scraper.service <<'EOF'
+    cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
-After=network.target
+After=network.target tor.service
+Wants=tor.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-Environment="USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36"
-Environment="COOKIE=YOUR_NHENTAI_SESSION_COOKIE"
-ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai_scraper.py --start 500000 --end 500010 --threads-galleries 3 --threads-images 5 --verbose --user-agent \"$USER_AGENT\" --cookie \"$COOKIE\" --use-tor"
+WorkingDirectory=$NHENTAI_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$PYTHON_BIN $RICTERZ_BIN --start 500000 --end 500010 --threads-galleries 3 --threads-images 5 --cookie "\$NHENTAI_COOKIE" --user-agent "\$NHENTAI_USER_AGENT" --verbose
 Restart=on-failure
+RestartSec=10
 User=root
+StandardOutput=append:$LOGS_DIR/nhentai-scraper.log
+StandardError=append:$LOGS_DIR/nhentai-scraper.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
     # Monitor service
-    if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
-        cat >/etc/systemd/system/nhentai-monitor.service <<'EOF'
+    cat >/etc/systemd/system/nhentai-monitor.service <<EOF
 [Unit]
 Description=NHentai Scraper Monitor
-After=network.target
+After=network.target nhentai-scraper.service tor.service
+Wants=nhentai-scraper.service tor.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash -c '
-source /opt/nhentai-scraper/venv/bin/activate
-exec python3 /opt/nhentai-scraper/scraper_monitor.py
-'
+WorkingDirectory=$NHENTAI_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$PYTHON_BIN $NHENTAI_DIR/scraper_monitor.py
 Restart=on-failure
+RestartSec=10
 User=root
+StandardOutput=append:$LOGS_DIR/nhentai-monitor.log
+StandardError=append:$LOGS_DIR/nhentai-monitor.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-monitor
-    systemctl start suwayomi filebrowser nhentai-scraper nhentai-monitor
+    systemctl enable nhentai-scraper nhentai-monitor
+    systemctl start nhentai-scraper nhentai-monitor
 }
 
 function print_links() {
     IP=$(hostname -I | awk '{print $1}')
-    HOSTNAME=$(hostname)
-
     echo -e "\n[*] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
+    echo "FileBrowser: http://$IP:8080/"
     echo "Scraper Flask status: http://$IP:5000/scraper_status"
-    if [ ! -z "$HOSTNAME" ]; then
-        echo -e "\nDNS Hostname Links:"
-        echo "Suwayomi Web: http://$HOSTNAME:4567/"
-        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
-        echo "FileBrowser: http://$HOSTNAME:8080/"
-        echo "Scraper Flask status: http://$HOSTNAME:5000/scraper_status"
-    fi
 }
 
 # ===============================
 # MAIN
 # ===============================
-echo "===================================================="
-echo "           NHentai Scraper INSTALLER               "
-echo "===================================================="
-read -p "Do you want to proceed? [y/N]: " consent
-case "$consent" in
-    [yY]|[yY][eE][sS]) echo "[*] Continuing...";;
-    *) echo "[!] Cancelled"; exit 0;;
+case "$1" in
+    --update-env) update_env ;;
+    --uninstall) uninstall_all ;;
+    --install) 
+        install_system_packages
+        install_ricterz_nhentai
+        install_scraper
+        install_suwayomi
+        install_filebrowser
+        create_systemd_services
+        print_links
+        ;;
+    *)
+        echo "Usage: $0 --install | --update-env | --uninstall"
+        exit 1
+        ;;
 esac
-
-install_system_packages
-install_ricterz_nhentai
-install_scraper
-install_suwayomi
-install_filebrowser
-create_systemd_services
-print_links
-
-echo "[*] Installation complete!"
