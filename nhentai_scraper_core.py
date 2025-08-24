@@ -40,83 +40,106 @@ def load_progress():
 def sanitize_folder_name(name):
     return re.sub(r'[\\/*?:"<>|]', "_", name)
 
-def log_skipped(root, gallery_id, reason):
+def log_skipped(root, gallery_id, reason, verbose=True):
     with open(os.path.join(root, SKIPPED_LOG), "a", encoding="utf-8") as f:
         f.write(f"{datetime.now().isoformat()} | {gallery_id} | {reason}\n")
-    print(f"[-] Skipped {gallery_id}: {reason}")
+    if verbose:
+        print(f"{datetime.now().isoformat()} | {gallery_id} | {reason}")
 
 # === FETCHING ===
-def fetch_page(url):
+def fetch_page(url, use_tor=False, verbose=True):
     scraper = cloudscraper.create_scraper()
-    headers = {"User-Agent": config["user_agent"]}
-    cookies = {"session": config["cookie"]}
+    headers = {"User-Agent": config.get("user_agent", "Mozilla/5.0")}
+    cookies = {"session": config.get("cookie","")}
+    proxies = PROXIES if use_tor else None
+
     for _ in range(RETRY_LIMIT):
         try:
-            if USE_TOR:
-                r = scraper.get(url, headers=headers, cookies=cookies, proxies=PROXIES, timeout=10)
-            else:
-                r = scraper.get(url, headers=headers, cookies=cookies, timeout=10)
-        except Exception:
+            r = scraper.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=10)
+            if r.status_code == 200:
+                return r.text
+            elif r.status_code == 404:
+                return None
+            elif r.status_code == 403:
+                if verbose:
+                    print(f"{datetime.now().isoformat()} | [!] Forbidden – likely bad cookie or user-agent.")
+                return "FORBIDDEN"
+        except Exception as e:
             time.sleep(1)
-            continue
-        if r.status_code == 200: return r.text
-        elif r.status_code == 404: return None
     return None
 
 # === PARSE GALLERY ===
-def parse_gallery(gallery_id, root, language_filter="english", excluded_tags=[], include_tags=[]):
-    html = fetch_page(f"{BASE_URL}{gallery_id}/")
-    if not html: log_skipped(root,gallery_id,"404/fetch failed"); return None
+def parse_gallery(gallery_id, root, language_filter="english", excluded_tags=[], include_tags=[], use_tor=False, verbose=True):
+    html = fetch_page(f"{BASE_URL}{gallery_id}/", use_tor, verbose)
+    if html is None:
+        log_skipped(root, gallery_id, "404/fetch failed", verbose)
+        return None
+    if html == "FORBIDDEN":
+        log_skipped(root, gallery_id, "Forbidden (bad cookie or UA)", verbose)
+        return None
+
     soup = BeautifulSoup(html,"html.parser")
     lang_tag = soup.find("span", class_="language")
-    if not lang_tag or language_filter not in lang_tag.text.lower(): log_skipped(root,gallery_id,f"Non-{language_filter}"); return None
+    if not lang_tag or language_filter not in lang_tag.text.lower():
+        log_skipped(root, gallery_id,f"Non-{language_filter}", verbose)
+        return None
+
     tags = [t.text.lower() for t in soup.select(".tags a.tag")]
-    if any(tag in excluded_tags for tag in tags): log_skipped(root,gallery_id,"Excluded tags"); return None
-    if include_tags and not any(tag in include_tags for tag in tags): log_skipped(root,gallery_id,"Missing required tags"); return None
+    if any(tag in excluded_tags for tag in tags):
+        log_skipped(root, gallery_id,"Excluded tags", verbose)
+        return None
+    if include_tags and not any(tag in include_tags for tag in tags):
+        log_skipped(root, gallery_id,"Missing required tags", verbose)
+        return None
+
     artist_tags = soup.select(".artist a") + soup.select(".group a")
     artists=[]
     for tag in artist_tags:
         name = sanitize_folder_name(tag.text.strip())
         if name: artists.extend([sanitize_folder_name(a.strip()) for a in name.split("|")])
     if not artists: artists=["Unknown Artist"]
+
     title_tag = soup.select_one(".title h1,.title h2")
     title = sanitize_folder_name(title_tag.text.strip()) if title_tag else f"Gallery_{gallery_id}"
+
     images = [img.get("data-src") or img.get("src") for img in soup.select(".thumb-container img")]
     images = [src.replace("t.nhentai.net","i.nhentai.net").replace("t.",".") for src in images]
+
     return {"id":gallery_id,"artists":artists,"title":title,"tags":tags,"images":images}
 
-def download_image(url, path):
+# === IMAGE DOWNLOAD ===
+def download_image(url, path, use_tor=False):
     if os.path.exists(path): return
     scraper = cloudscraper.create_scraper()
-    headers = {"User-Agent": config["user_agent"]}
-    cookies = {"session": config["cookie"]}
+    headers = {"User-Agent": config.get("user_agent", "Mozilla/5.0")}
+    cookies = {"session": config.get("cookie","")}
+    proxies = PROXIES if use_tor else None
+
     for _ in range(RETRY_LIMIT):
         try:
-            if USE_TOR:
-                r = scraper.get(url, headers=headers, cookies=cookies, proxies=PROXIES, timeout=10)
-            else:
-                r = scraper.get(url, headers=headers, cookies=cookies, timeout=10)
+            r = scraper.get(url, headers=headers, cookies=cookies, proxies=proxies, timeout=10)
             with open(path, "wb") as f: f.write(r.content)
             break
-        except Exception: time.sleep(1)
+        except Exception:
+            time.sleep(1)
 
 # === GALLERY DOWNLOAD ===
-def download_gallery(g, gallery_root, max_threads_images=5):
+def download_gallery(g, gallery_root, max_threads_images=5, use_tor=False):
     for artist in g["artists"]:
         artist_folder = os.path.join(gallery_root, artist)
         doujin_folder = os.path.join(artist_folder, g["title"])
         os.makedirs(doujin_folder, exist_ok=True)
         with ThreadPoolExecutor(max_workers=max_threads_images) as ex:
-            futures=[ex.submit(download_image, img, os.path.join(doujin_folder, f"{i+1}.{img.split('.')[-1].split('?')[0]}")) for i,img in enumerate(g["images"])]
+            futures=[ex.submit(download_image, img, os.path.join(doujin_folder, f"{i+1}.{img.split('.')[-1].split('?')[0]}"), use_tor) for i,img in enumerate(g["images"])]
             for _ in as_completed(futures): pass
 
-def download_galleries_parallel(start_id, end_id, root, language_filter="english", excluded_tags=[], include_tags=[], max_threads_galleries=3, max_threads_images=5):
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+# === PARALLEL DOWNLOAD ===
+def download_galleries_parallel(start_id, end_id, root, language_filter="english", excluded_tags=[], include_tags=[], max_threads_galleries=3, max_threads_images=5, use_tor=False, verbose=True):
     with ThreadPoolExecutor(max_workers=max_threads_galleries) as ex:
-        futures = {ex.submit(parse_gallery, gid, root, language_filter, excluded_tags, include_tags): gid for gid in range(start_id, end_id+1)}
+        futures = {ex.submit(parse_gallery, gid, root, language_filter, excluded_tags, include_tags, use_tor, verbose): gid for gid in range(start_id, end_id+1)}
         for fut in as_completed(futures):
             gid = futures[fut]
             g = fut.result()
-            if g: download_gallery(g, root, max_threads_images)
+            if g: download_gallery(g, root, max_threads_images, use_tor)
             save_progress(gid)
             time.sleep(SLEEP_BETWEEN_GALLERIES)

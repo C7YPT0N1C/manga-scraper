@@ -59,18 +59,41 @@ function install_scraper() {
     fi
     cd "$NHENTAI_DIR"
 
-    # Clone repo
-    if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        echo "[*] Cloning nhentai-scraper..."
-        if git clone --depth 1 https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-            echo "[+] Cloned from Gitea."
-        else
-            echo "[!] Gitea clone failed, trying GitHub..."
-            git clone --depth 1 https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
-        fi
-    else
-        git pull || echo "[!] Could not update scraper repo."
-    fi
+    read -p "Would you like to install the Beta Version instead of the Stable Version? [y/N]: " beta
+    case "$beta" in
+        [yY]|[yY][eE][sS])
+            echo "[*] Continuing to use Stable Version."
+            
+            # Clone Stable branch
+            if [ ! -d "$NHENTAI_DIR/.git" ]; then
+                echo "[*] Cloning nhentai-scraper..."
+                if git clone --depth 1 --branch main https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
+                    echo "[+] Cloned from Gitea."
+                else
+                    echo "[!] Gitea clone failed, trying GitHub..."
+                    git clone --depth 1 --branch main https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
+                fi
+            else
+                git pull || echo "[!] Could not update scraper repo."
+            fi
+            ;;
+        *)
+            echo "[*] Swithcing to Beta Version."
+
+            # Clone Beta branch
+            if [ ! -d "$NHENTAI_DIR/.git" ]; then
+                echo "[*] Cloning nhentai-scraper..."
+                if git clone --depth 1 --branch dev https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
+                    echo "[+] Cloned from Gitea."
+                else
+                    echo "[!] Gitea clone failed, trying GitHub..."
+                    git clone --depth 1 --branch dev https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
+                fi
+            else
+                git pull || echo "[!] Could not update scraper repo."
+            fi
+            ;;
+    esac
 
     # Create venv if missing
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
@@ -120,11 +143,10 @@ function install_filebrowser() {
 function create_config_file() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "[*] Creating config.json..."
-        read -p "Enter your NHentai User-Agent: " USER_AGENT
         read -p "Enter your NHentai session cookie: " COOKIE
         cat >"$CONFIG_FILE" <<EOF
 {
-  "user_agent": "$USER_AGENT",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36",
   "cookie": "$COOKIE",
   "ROOT_FOLDER": "/opt/suwayomi/local/",
   "EXCLUDED_TAGS": ["snuff","guro","cuntboy","cuntbusting","ai generated"],
@@ -190,13 +212,13 @@ EOF
     if [ ! -f /etc/systemd/system/nhentai-scraper.service ]; then
         cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
-Description=nhentai-scraper
+Description=NHentai Scraper
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$NHENTAI_DIR
-ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/scraper.py"
+WorkingDirectory=/opt/nhentai-scraper
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/nhentai_scraper.py --start 400000 --end 400010 --threads-galleries 3 --threads-images 5"
 Restart=on-failure
 User=root
 
@@ -209,13 +231,13 @@ EOF
     if [ ! -f /etc/systemd/system/nhentai-monitor.service ]; then
         cat >/etc/systemd/system/nhentai-monitor.service <<EOF
 [Unit]
-Description=nhentai-scraper Monitor
+Description=NHentai Scraper Monitor
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$NHENTAI_DIR
-ExecStart=/bin/bash -c "source $NHENTAI_DIR/venv/bin/activate && exec python3 $NHENTAI_DIR/monitor.py"
+WorkingDirectory=/opt/nhentai-scraper
+ExecStart=/bin/bash -c "source /opt/nhentai-scraper/venv/bin/activate && exec python3 /opt/nhentai-scraper/monitor.py"
 Restart=on-failure
 User=root
 

@@ -1,20 +1,49 @@
 #!/usr/bin/env python3
 from flask import Flask, jsonify
-import json
+import requests
+import time
+import threading
+from nhentai_scraper_core import load_config, make_session, check_session, log
 
-STATUS_FILE = "/opt/nhentai-scraper/status.json"
 app = Flask(__name__)
 
-def load_status():
-    try:
-        with open(STATUS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"last_run": None, "downloaded": 0, "skipped": 0, "success": False, "error": None}
+scraper_status = {
+    "running": False,
+    "last_checked": None,
+    "last_gallery": None,
+    "errors": [],
+    "using_tor": False,
+}
 
 @app.route("/scraper_status")
-def scraper_status():
-    return jsonify(load_status())
+def status():
+    return jsonify(scraper_status)
 
-if __name__=="__main__":
+@app.route("/check_ip")
+def check_ip():
+    """Check what IP the scraper is using (to confirm Tor proxy)."""
+    try:
+        session = make_session(load_config())
+        if scraper_status["using_tor"]:
+            session.proxies.update({
+                "http": "socks5h://127.0.0.1:9050",
+                "https": "socks5h://127.0.0.1:9050",
+            })
+        r = session.get("https://httpbin.org/ip", timeout=10)
+        return jsonify(r.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def run_flask():
     app.run(host="0.0.0.0", port=5000)
+
+def start_monitor():
+    thread = threading.Thread(target=run_flask, daemon=True)
+    thread.start()
+
+if __name__ == "__main__":
+    log("[*] Starting monitor on :5000")
+    start_monitor()
+    while True:
+        scraper_status["last_checked"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        time.sleep(10)
