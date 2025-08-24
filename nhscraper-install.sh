@@ -320,7 +320,7 @@ case "$consent" in
 esac
 
 # Handle uninstall or update modes first
-if [[ "$1" == "uninstall" ]]; then
+if [[ "$1" == "uninstall" || "$1" == "remove" ]]; then
     uninstall_all
     exit 0
 elif [[ "$1" == "update" ]]; then
