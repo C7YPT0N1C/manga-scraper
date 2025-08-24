@@ -1,3 +1,20 @@
+## Table of Contents
+
+- [Overview and Disclaimer](#overview-and-disclaimer)
+- [Features](#features)
+  - [Suwayomi Category Automation](#suwayomi-category-automation)
+  - [Features Coming Soon](#features-coming-soon)
+- [Installation](#installation)
+  - [System Requirements](#system-requirements)
+  - [Installation Commands](#installation-commands)
+  - [Post Install](#post-install)
+  - [Systemd Services](#systemd-services)
+  - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
+- [Usage](#usage)
+  - [CLI Arguments](#cli-arguments)
+  - [Examples](#examples)
+- [Directory Layout](#directory-layout)
+
 # nhentai-scraper
 
 ## Overview and Disclaimer
@@ -45,15 +62,11 @@ nhentai-scraper is a fully-featured Python scraper for nhentai.net that download
 - Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql`
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
 
-### Systemd Service
-Enable service and optional timer:
-```bash
+### Systemd Services
 sudo systemctl daemon-reload
-sudo systemctl enable nhentai-scraper.service
-sudo systemctl start nhentai-scraper.service
-sudo systemctl enable nhentai-scraper.timer
-sudo systemctl start nhentai-scraper.timer
-```
+
+- Suwayomi: `sudo systemctl enable|start suwayomi
+- Nhentai Scraper: `sudo systemctl enable|start nhentai-scraper` , `sudo systemctl enable|start nhentai-scraper.timer`
 
 ### Flask Monitoring Endpoint
 - URL: `http://<SERVER-IP-OR-DOMAIN>:5000/scraper_status`
