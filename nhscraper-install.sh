@@ -8,7 +8,7 @@ NHENTAI_DIR="/opt/nhentai-scraper"
 RICTERZ_DIR="/opt/ricterz_nhentai"
 SUWAYOMI_DIR="/opt/suwayomi"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
-ENV_FILE="/etc/nhentai-scraper/nhentai-scraper.env"
+ENV_FILE="/opt/nhentai-scraper/nhentai-scraper.env"
 
 LOGS_DIR="$NHENTAI_DIR/logs"
 CONFIG_FILE="$NHENTAI_DIR/config.json"
@@ -40,8 +40,8 @@ NHENTAI_COOKIE=""
 NHENTAI_USER_AGENT=""
 NHENTAI_DRY_RUN="false"
 USE_TOR="false"
-NHENTAI_START_ID=500000
-NHENTAI_END_ID=500010
+NHENTAI_START_ID="500000"
+NHENTAI_END_ID="500010"
 EOF
         echo "[+] Created default environment file at $ENV_FILE"
     fi
@@ -178,7 +178,7 @@ function install_scraper() {
     source "$NHENTAI_DIR/venv/bin/activate"
 
     echo "\n[*] Installing Python requirements..."
-    pip install --upgrade pip setuptools wheel pysocks requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai
+    pip install --upgrade pip setuptools wheel pysocks requests requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
     echo "[+] Python requirements installed."
 
     create_logs_dir
