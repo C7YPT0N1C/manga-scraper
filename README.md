@@ -86,7 +86,7 @@ sudo systemctl start nhentai-scraper.timer
 --verbose          Enable detailed logging
 ```
 
-### Examples ()
+### Examples
 ```bash
 # Default run (latest galleries)
 python3 nhentai-scraper.py
