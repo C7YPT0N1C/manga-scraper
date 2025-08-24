@@ -1,13 +1,13 @@
 ## Table of Contents
 
-- [Overview and Disclaimer](#overview-and-disclaimer)
+- [**Overview and Disclaimer**](#overview-and-disclaimer)
 - [Features](#features)
   - [Suwayomi Category Automation](#suwayomi-category-automation)
   - [Features Coming Soon](#features-coming-soon)
 - [Installation](#installation)
   - [System Requirements](#system-requirements)
-  - [Installation Commands](#installation-commands)
-  - [Post Install](#post-install)
+  - [**Installation Commands**](#installation-commands)
+- [Post Install](#post-install)
   - [Systemd Services](#systemd-services)
   - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
 - [Usage](#usage)
