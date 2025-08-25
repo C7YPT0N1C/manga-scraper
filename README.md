@@ -50,9 +50,7 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
 - **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
 
 ### Installation Commands
-One Line Install (does not give warning): `wget -O - https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh | bash -s -- --install -y`
-
-`wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
+One Line Install: `wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
 
 ```bash
 # Clone the repository
@@ -98,6 +96,8 @@ Please refer to [RicterZ/nhentai's README](https://github.com/RicterZ/nhentai/bl
 - Some CLI arguments used (like `--cookie` or `--user-agent`) will be saved in `config.env`.
 ```bash
 USAGE:
+--help START_ID                           Display Usage Help
+
 --start START_ID                          Starting gallery ID (Default: 500000)
 --end  END_ID                             Ending gallery ID (Default: 600000)
 --excluded-tags TAG1, TAG2, TAG3          Comma-separated list of tags to exclude galleries (e.g: video game, yaoi, cosplay) (Default: none)

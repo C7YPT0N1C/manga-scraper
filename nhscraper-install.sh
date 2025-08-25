@@ -313,22 +313,11 @@ echo "- Suwayomi Server"
 echo "- FileBrowser"
 echo ""
 
-AUTO_YES=false
-for arg in "$@"; do
-    if [[ "$arg" == "-y" || "$arg" == "--yes" ]]; then
-        AUTO_YES=true
-    fi
-done
-
-if [ "$AUTO_YES" = true ]; then
-    echo "[*] Auto-consent given via -y flag."
-else
-    read -p "Do you want to proceed? [y/N]: " consent
-    case "$consent" in
-        [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
-        *) echo "[!] Operation cancelled by user."; exit 0 ;;
-    esac
-fi
+read -p "Do you want to proceed? [y/N]: " consent
+case "$consent" in
+    [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
+    *) echo "[!] Operation cancelled by user."; exit 0 ;;
+esac
 
 if [[ "$1" == "--install" ]]; then
     start_install
