@@ -183,6 +183,7 @@ function reload_systemd_services() { # Updatable, update as needed.
             echo "[!] $svc.service not found, skipping."
         fi
     done
+}
 
 function create_systemd_services() { # Updatable, update as needed.
     echo -e "\n[*] Creating systemd services..."
