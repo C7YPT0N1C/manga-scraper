@@ -5,12 +5,11 @@ set -e
 # VARIABLES
 # ===============================
 NHENTAI_DIR="/opt/nhentai-scraper"
-RICTERZ_DIR="/opt/ricterz_nhentai"
 SUWAYOMI_DIR="/opt/suwayomi"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 LOGS_DIR="$NHENTAI_DIR/logs"
-WRAPPER_SCRIPT="$NHENTAI_DIR/nhentai-scraper-wrapper.sh"
+SCRAPER_SCRIPT="$NHENTAI_DIR/nhentai-scraper.py"
 
 # ===============================
 # ROOT CHECK
@@ -29,8 +28,7 @@ echo "===================================================="
 echo ""
 echo "DISCLAIMER:"
 echo "This installer will install, update, or uninstall the following components:"
-echo "- RicterZ/nhentai"
-echo "- C7YPT0N1C/nhentai-scraper"
+echo "- nhentai-scraper (Python-native, cloudscraper-based)"
 echo "- Suwayomi/Suwayomi-Server"
 echo "- FileBrowser"
 echo ""
@@ -38,15 +36,9 @@ echo "Existing installations in /opt/ may be overwritten."
 echo "Ensure you have backups of any important data."
 echo ""
 read -p "Do you want to proceed? [y/N]: " consent
-
 case "$consent" in
-    [yY]|[yY][eE][sS])
-        echo "[*] Consent given. Continuing..."
-        ;;
-    *)
-        echo "[!] Operation cancelled by user."
-        exit 0
-        ;;
+    [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
+    *) echo "[!] Operation cancelled by user." ; exit 0 ;;
 esac
 
 # ===============================
@@ -59,7 +51,6 @@ function create_logs_dir() {
     echo "[+] Logs directory created at $LOGS_DIR"
 }
 
-# Gallery Min and Max IDs to scrape. Change here.
 function create_env_file() {
     mkdir -p "$(dirname "$ENV_FILE")"
     if [ ! -f "$ENV_FILE" ]; then
@@ -78,55 +69,19 @@ EOF
     fi
 }
 
-function create_wrapper_script() {
-    cat >"$WRAPPER_SCRIPT" <<'EOF'
-#!/usr/bin/env bash
-set -e
-
-# Load environment
-ENV_FILE="/opt/nhentai-scraper/nhentai-scraper.env"
-if [ -f "$ENV_FILE" ]; then
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
-fi
-
-# Paths
-NHENTAI_DIR="/opt/nhentai-scraper"
-PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
-SCRAPER="$NHENTAI_DIR/nhentai-scraper.py"
-LOG_FILE="$NHENTAI_DIR/logs/nhentai-scraper.log"
-
-# Build argument list
-ARGS=()
-[ -n "$NHENTAI_START_ID" ] && ARGS+=(--start "$NHENTAI_START_ID")
-[ -n "$NHENTAI_END_ID" ] && ARGS+=(--end "$NHENTAI_END_ID")
-[ -n "$THREADS_GALLERIES" ] && ARGS+=(--threads-galleries "$THREADS_GALLERIES")
-[ -n "$THREADS_IMAGES" ] && ARGS+=(--threads-images "$THREADS_IMAGES")
-[ -n "$NHENTAI_COOKIE" ] && ARGS+=(--cookie "$NHENTAI_COOKIE")
-[ -n "$NHENTAI_USER_AGENT" ] && ARGS+=(--user-agent "$NHENTAI_USER_AGENT")
-[ "$USE_TOR" = "true" ] && ARGS+=(--use-tor)
-[ "$NHENTAI_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
-[ "$NHENTAI_VERBOSE" = "true" ] && ARGS+=(--verbose)
-
-# Run scraper
-"$PYTHON_BIN" "$SCRAPER" "${ARGS[@]}" >> "$LOG_FILE" 2>&1
-EOF
-    chmod +x "$WRAPPER_SCRIPT"
-    echo "[+] Wrapper script created at $WRAPPER_SCRIPT"
-}
-
 function update_env() {
     create_env_file
-
     source "$ENV_FILE" 2>/dev/null || true
+
     echo "Current environment values:"
     echo "NHENTAI_COOKIE=${NHENTAI_COOKIE:-<not set>}"
     echo "NHENTAI_USER_AGENT=${NHENTAI_USER_AGENT:-Mozilla/5.0 ...}"
     echo "NHENTAI_DRY_RUN=${NHENTAI_DRY_RUN:-false}"
     echo "USE_TOR=${USE_TOR:-false}"
-    echo "NHENTAI_START_ID=${NHENTAI_START_ID:-500000}" # Gallery Min and Max IDs to scrape. Change here too.
+    echo "NHENTAI_START_ID=${NHENTAI_START_ID:-500000}"
     echo "NHENTAI_END_ID=${NHENTAI_END_ID:-600000}"
     echo "THREADS_GALLERIES=${THREADS_GALLERIES:-3}"
-    echo "THREADS_IMAGES=${THREADS_IMAGES:-5}"
+    echo "THREADS_IMAGES=${THREADS_IMAGES:-3}"
 
     read -p "Enter new nhentai.net cookie (leave blank to keep current): " NEW_COOKIE
     read -p "Enter new browser User-Agent (leave blank to keep current): " NEW_UA
@@ -151,7 +106,6 @@ function update_env() {
 
     echo "[*] Updated environment file:"
     cat "$ENV_FILE"
-
     echo "[*] Reloading systemd services..."
     create_systemd_services
     echo "[+] Environment update complete."
@@ -163,8 +117,9 @@ function uninstall_all() {
     systemctl disable nhentai-scraper nhentai-monitor suwayomi filebrowser || true
 
     echo "[*] Removing directories..."
-    rm -rf "$NHENTAI_DIR" "$RICTERZ_DIR" "$SUWAYOMI_DIR"
+    rm -rf "$NHENTAI_DIR" "$SUWAYOMI_DIR"
     rm -f /etc/systemd/system/nhentai-*.service
+    rm -f /etc/systemd/system/nhentai-scraper.timer
     rm -f /etc/filebrowser/filebrowser.db
     rm -f "$ENV_FILE"
 
@@ -187,37 +142,14 @@ function check_venv() {
     fi
 }
 
-function install_ricterz_nhentai() {
-    if [ ! -d "$RICTERZ_DIR" ]; then
-        echo "[*] Cloning RicterZ nhentai repository..."
-        git clone https://github.com/RicterZ/nhentai.git "$RICTERZ_DIR"
-    else
-        echo "[*] RicterZ nhentai repo exists. Pulling latest..."
-        cd "$RICTERZ_DIR"
-        git pull || echo "[!] Could not update RicterZ nhentai repo."
-    fi
-}
-
 function install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
-    read -p "Install Beta Version instead of Stable? [y/N]: " beta
-    beta=${beta,,}
     BRANCH="main"
-    if [[ "$beta" == "y" || "$beta" == "yes" ]]; then
-        BRANCH="dev"
-        echo "[*] Installing Beta Version (dev branch)..."
-    fi
-
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        if git clone --depth 1 --branch "$BRANCH" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-            echo "[+] Cloned nhentai-scraper from Gitea."
-        else
-            echo "[!] Gitea clone failed, trying GitHub..."
-            git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
-        fi
+        git clone --depth 1 --branch "$BRANCH" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
     else
         git fetch origin "$BRANCH"
         git reset --hard "origin/$BRANCH"
@@ -225,20 +157,15 @@ function install_scraper() {
 
     check_venv
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        echo "[*] Creating Python virtual environment..."
         python3 -m venv "$NHENTAI_DIR/venv"
     fi
 
     source "$NHENTAI_DIR/venv/bin/activate"
 
-    echo "[*] Installing Python requirements..."
-    pip install --upgrade pip python-dotenv setuptools wheel pysocks requests requests[socks] cloudscraper requests flask beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
-
-    echo "[+] Python requirements installed."
+    pip install --upgrade pip python-dotenv setuptools wheel pysocks requests requests[socks] cloudscraper beautifulsoup4 tqdm aiohttp gql[all] nhentai aiohttp
 
     create_logs_dir
     create_env_file
-    create_wrapper_script
 }
 
 function install_suwayomi() {
@@ -265,11 +192,10 @@ function install_filebrowser() {
 }
 
 function create_systemd_services() {
-    echo  "[*] Creating systemd services..."
+    echo "[*] Creating systemd services..."
 
-    # Suwayomi service
-    if [ ! -f /etc/systemd/system/suwayomi.service ]; then
-        cat >/etc/systemd/system/suwayomi.service <<EOF
+    # Suwayomi
+    cat >/etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
@@ -283,11 +209,9 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
-    # FileBrowser service
-    if [ ! -f /etc/systemd/system/filebrowser.service ]; then
-        cat >/etc/systemd/system/filebrowser.service <<EOF
+    # FileBrowser
+    cat >/etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
@@ -300,9 +224,8 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
-    # NHentai Scraper Service (wrapper script)
+    # NHentai Scraper
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -311,13 +234,14 @@ Wants=tor.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-ExecStart=/bin/bash /opt/nhentai-scraper/run_scraper.sh
+WorkingDirectory=$NHENTAI_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $SCRAPER_SCRIPT --verbose
 Restart=on-failure
 RestartSec=10
 User=root
-StandardOutput=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
-StandardError=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
+StandardOutput=append:$LOGS_DIR/nhentai-scraper.log
+StandardError=append:$LOGS_DIR/nhentai-scraper.log
 
 [Install]
 WantedBy=multi-user.target
@@ -336,7 +260,7 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    # NHentai Monitor Service
+    # NHentai Monitor
     cat >/etc/systemd/system/nhentai-monitor.service <<EOF
 [Unit]
 Description=NHentai Scraper Monitor
@@ -358,10 +282,9 @@ StandardError=append:$LOGS_DIR/nhentai-monitor.log
 WantedBy=multi-user.target
 EOF
 
-    chmod +x /opt/nhentai-scraper/run_scraper.sh
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
-    systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
+    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
+    systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
     echo "[+] Systemd services created and started."
 }
 
@@ -382,13 +305,12 @@ case "$1" in
     --uninstall) uninstall_all ;;
     --install)
         install_system_packages
-        install_ricterz_nhentai
         install_scraper
         install_suwayomi
         install_filebrowser
         create_systemd_services
         print_links
-        echo "[+] Installation complete. Please updated environment settings by running: sudo bash ./nhscraper-install.sh --update-env"
+        echo "[+] Installation complete. Update environment settings: sudo bash $0 --update-env"
         ;;
     *)
         echo "Usage: $0 --install | --update-env | --uninstall"
