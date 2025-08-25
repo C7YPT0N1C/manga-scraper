@@ -75,7 +75,7 @@ function install_scraper() {
             fi
         fi
     else
-        git pull || echo "[!] Could not update scraper repo."
+        git pull || echo "[!] Could not update scraper repo. Please check your network connection."
     fi
 
     if [ ! -d "$NHENTAI_DIR/venv" ]; then
