@@ -10,15 +10,14 @@ FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 
 # ===============================
-# FUNCTIONS
+# INSTALL FUNCTIONS
 # ===============================
 function install_system_packages() {
     echo "[*] Installing system packages..."
     apt-get update
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
-}
-
-function install_python_requirements() {
+    echo "[+] System packages installed."
+    
     echo "[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel cloudscraper
@@ -69,7 +68,7 @@ function install_scraper() {
         source "$NHENTAI_DIR/venv/bin/activate"
     fi
 
-    install_python_requirements
+    install_system_packages
 }
 
 function install_suwayomi() {
@@ -183,34 +182,29 @@ function print_links() {
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
     echo "FileBrowser: http://$IP:8080/ (User: admin, Password: DefaultPassword123!)"
-    echo "Scraper Flask status: http://$IP:5000/scraper_status"
+    echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
         echo -e "\nDNS Hostname Links:"
         echo "Suwayomi Web: http://$HOSTNAME:4567/"
         echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
         echo "FileBrowser: http://$HOSTNAME:8080/"
-        echo "Scraper Flask status: http://$HOSTNAME:5000/scraper_status"
+        echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
     fi
 }
 
-function uninstall_all() {
-    echo "[*] Stopping and disabling services..."
-    systemctl stop nhentai-scraper nhentai-monitor filebrowser suwayomi || true
-    systemctl disable nhentai-scraper nhentai-monitor filebrowser suwayomi || true
+# ===============================
+# INSTALLER ARGUMENTS
+# ===============================
+function start_install() {
+    install_system_packages
+    install_scraper
+    install_suwayomi
+    install_filebrowser
+    create_env_file
+    create_systemd_services
+    print_links
 
-    echo "[*] Removing systemd service files..."
-    rm -f /etc/systemd/system/nhentai-scraper.service
-    rm -f /etc/systemd/system/nhentai-monitor.service
-    rm -f /etc/systemd/system/filebrowser.service
-    rm -f /etc/systemd/system/suwayomi.service
-    systemctl daemon-reload
-
-    echo "[*] Removing installed directories..."
-    rm -rf "$NHENTAI_DIR"
-    rm -rf "$SUWAYOMI_DIR"
-    rm -rf /etc/filebrowser/filebrowser.db
-
-    echo "[*] Uninstallation complete!"
+    echo "[*] Installation complete!"
 }
 
 function update_all() {
@@ -222,6 +216,30 @@ function update_all() {
     echo "[*] Update complete!"
 }
 
+function update_env() {
+    echo "[*] Testing 'UPDATE ENV'!"
+}
+
+function uninstall_all() {
+    echo "[*] Stopping and disabling services..."
+    systemctl stop suwayomi filebrowser nhentai-api || true
+    systemctl disable suwayomi filebrowser nhentai-api || true
+
+    echo "[*] Removing systemd service files..."
+    rm -f /etc/systemd/system/suwayomi.service
+    rm -f /etc/systemd/system/filebrowser.service
+    rm -f /etc/systemd/system/nhentai-api.service
+    
+    systemctl daemon-reload
+
+    echo "[*] Removing installed directories..."
+    rm -rf "$NHENTAI_DIR"
+    rm -rf "$SUWAYOMI_DIR"
+    rm -rf /etc/filebrowser/filebrowser.db
+
+    echo "[*] Uninstallation complete!"
+}
+
 # ===============================
 # MAIN
 # ===============================
@@ -230,7 +248,7 @@ echo "           nhentai-scraper INSTALLER               "
 echo "===================================================="
 echo ""
 echo "This installer will install, update, or uninstall the following components:"
-echo "- nhentai-scraper"
+echo "- C7YPT0N1C/nhentai-scraper"
 echo "- Suwayomi Server"
 echo "- FileBrowser"
 echo ""
@@ -241,21 +259,17 @@ case "$consent" in
     *) echo "[!] Operation cancelled by user."; exit 0 ;;
 esac
 
-if [[ "$1" == "uninstall" ]]; then
-    uninstall_all
+if [[ "$1" == "--install" ]]; then
+    start_install
     exit 0
-elif [[ "$1" == "update" ]]; then
+elif [[ "$1" == "--update" ]]; then
     update_all
     print_links
     exit 0
+elif [[ "$1" == "--update-env" ]]; then
+    update_env
+    exit 0
+elif [[ "$1" == "--uninstall" ]]; then
+    uninstall_all
+    exit 0
 fi
-
-install_system_packages
-install_scraper
-install_suwayomi
-install_filebrowser
-create_env_file
-create_systemd_services
-print_links
-
-echo "[*] Installation complete!"

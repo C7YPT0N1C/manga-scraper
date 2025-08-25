@@ -4,6 +4,12 @@ import subprocess, threading, time
 
 app = Flask(__name__)
 
+def log(msg):
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+# ------------------------
+# API CALLS
+# ------------------------
 status = {
     "running_galleries": [],
     "last_checked": None,
@@ -12,12 +18,6 @@ status = {
     "errors": [],
 }
 
-def log(msg):
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
-
-# ------------------------
-# TOR CHECK
-# ------------------------
 def check_tor():
     try:
         cmd = ["curl", "-s", "--socks5-hostname", "127.0.0.1:9050", "https://httpbin.org/ip"]
@@ -29,7 +29,10 @@ def check_tor():
     except Exception as e:
         status["tor_ip"] = str(e)
 
-@app.route("/scraper_status")
+# ------------------------
+# API ENDPOINTS
+# ------------------------
+@app.route("/status")
 def scraper_status():
     return jsonify(status)
 
@@ -47,3 +50,4 @@ if __name__ == "__main__":
     while True:
         status["last_checked"] = time.strftime("%Y-%m-%d %H:%M:%S")
         time.sleep(10)
+        
