@@ -65,6 +65,7 @@ function uninstall_all() {
     systemctl disable nhentai-scraper nhentai-monitor suwayomi filebrowser || true
     rm -rf "$NHENTAI_DIR" "$SUWAYOMI_DIR"
     rm -f /etc/systemd/system/nhentai-*.service
+    rm -f /etc/systemd/system/nhentai-*.timer
     rm -f "$ENV_FILE"
     systemctl daemon-reload
     exit 0
@@ -113,6 +114,7 @@ function install_scraper() {
 }
 
 function create_systemd_services() {
+    # Scraper service
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -141,9 +143,38 @@ StandardError=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
 WantedBy=multi-user.target
 EOF
 
+    # Monitor service
+    cat >/etc/systemd/system/nhentai-monitor.service <<EOF
+[Unit]
+Description=Monitor NHentai Scraper
+After=nhentai-scraper.service
+Requires=nhentai-scraper.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'systemctl is-active --quiet nhentai-scraper || systemctl restart nhentai-scraper'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Timer for reruns
+    cat >/etc/systemd/system/nhentai-scraper.timer <<EOF
+[Unit]
+Description=Run NHentai Scraper periodically
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
     systemctl daemon-reload
-    systemctl enable nhentai-scraper
-    systemctl start nhentai-scraper
+    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
+    systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
 }
 
 # ===============================
