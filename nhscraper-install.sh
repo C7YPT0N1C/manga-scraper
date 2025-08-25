@@ -28,12 +28,12 @@ function check_python_version() {
         echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
-        echo "\n[*] Python version OK: $PYTHON_VERSION"
+        echo -e "\n[*] Python version OK: $PYTHON_VERSION"
     fi
 }
 
 function install_system_packages() {
-    echo "\n[*] Upgrading and Installing system packages..."
+    echo -e "\n[*] Upgrading and Installing system packages..."
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get update
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks # Updatable, update as needed.
@@ -41,7 +41,7 @@ function install_system_packages() {
 }    
 
 function install_python_packages() {
-    echo "\n[*] Installing Python requirements in venv..."
+    echo -e "\n[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel # Updatable, update as needed.
     pip install .
@@ -52,10 +52,11 @@ function install_python_packages() {
 # Install Programs
 # ----------------------------
 function install_scraper() { # Updatable, update as needed.
-    echo "\n[*] Installing nhentai-scraper..."
+    echo -e "\n[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
+    echo ""
     read -p "Install Beta Version instead of Stable? There is no guarantee it will be compatible. [y/N]: " beta
     branch="main"
     [[ "$beta" =~ ^[yY] ]] && branch="dev"
@@ -95,7 +96,7 @@ function install_scraper() { # Updatable, update as needed.
 }
 
 function install_suwayomi() { # Updatable, update as needed.
-    echo "\n[*] Installing Suwayomi..."
+    echo -e "\n[*] Installing Suwayomi..."
     mkdir -p "$SUWAYOMI_DIR"
     cd "$SUWAYOMI_DIR"
 
@@ -109,7 +110,7 @@ function install_suwayomi() { # Updatable, update as needed.
 }
 
 function install_filebrowser() { # Updatable, update as needed.
-    echo "\n[*] Installing FileBrowser..."
+    echo -e "\n[*] Installing FileBrowser..."
 
     # Download installer script instead of piping directly to bash
     curl -fsSLO https://raw.githubusercontent.com/filebrowser/get/master/get.sh
@@ -145,7 +146,7 @@ function install_filebrowser() { # Updatable, update as needed.
 }
 
 function create_env_file() { # Updatable, update as needed.
-    echo "\n[*] Updating nhentai-scraper Environment File..."
+    echo -e "\n[*] Updating nhentai-scraper Environment File..."
     echo "[*] This will overwrite current settings. CTRL + C now to cancel."
     read -p "Enter your NHentai session cookie: " COOKIE
     cat >"$ENV_FILE" <<EOF
@@ -164,7 +165,7 @@ EOF
 }
 
 function create_systemd_services() { # Updatable, update as needed.
-    echo "\n[*] Creating systemd services..."
+    echo -e "\n[*] Creating systemd services..."
 
     # Suwayomi
     if [ ! -f /etc/systemd/system/suwayomi.service ]; then
@@ -263,7 +264,7 @@ function print_links() {
 function start_install() {
     check_python_version
     echo ""
-    echo "\n[*] Starting installation..."
+    echo -e "\n[*] Starting installation..."
     echo "[*] This may take a while depending on your internet speed and system performance."
 
     install_system_packages
@@ -274,43 +275,43 @@ function start_install() {
     create_systemd_services
     print_links
 
-    echo "\n[*] Installation complete!"
+    echo -e "\n[*] Installation complete!"
 }
 
 function update_all() {
-    echo "\n[*] Updating nhentai-scraper and Suwayomi..."
+    echo -e "\n[*] Updating nhentai-scraper and Suwayomi..."
     install_scraper
     install_suwayomi
     ln -sf "$NHENTAI_DIR/venv/bin/nh-scraper" /usr/local/bin/nh-scraper # refresh symlink
 
-    echo "\n[*] Restarting services..."
+    echo -e "\n[*] Restarting services..."
     systemctl restart suwayomi filebrowser nhentai-api
-    echo "\n[*] Update complete!"
+    echo -e "\n[*] Update complete!"
 }
 
 function update_env() {
-    echo "\n[*] Testing 'UPDATE ENV'!"
+    echo -e "\n[*] Testing 'UPDATE ENV'!"
     create_env_file
 }
 
 function uninstall_all() {
-    echo "\n[*] Stopping and disabling services..."
+    echo -e "\n[*] Stopping and disabling services..."
     systemctl stop suwayomi filebrowser nhentai-api || true
     systemctl disable suwayomi filebrowser nhentai-api || true
 
-    echo "\n[*] Removing systemd service files..."
+    echo -e "\n[*] Removing systemd service files..."
     rm -f /etc/systemd/system/suwayomi.service
     rm -f /etc/systemd/system/filebrowser.service
     rm -f /etc/systemd/system/nhentai-api.service
     
     systemctl daemon-reload
 
-    echo "\n[*] Removing installed directories..."
+    echo -e "\n[*] Removing installed directories..."
     rm -rf "$NHENTAI_DIR"
     rm -rf "$SUWAYOMI_DIR"
     rm -rf /etc/filebrowser/filebrowser.db
 
-    echo "\n[*] Uninstallation complete!"
+    echo -e "\n[*] Uninstallation complete!"
 }
 
 # ===============================
