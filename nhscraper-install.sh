@@ -20,7 +20,6 @@ ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 # ===============================
 # Updatable Variables
 # ===============================
-REQUIRED_PYTHON_VERSION ="3.9"
 REQUIRED_SYSTEM_PACKAGES=(python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks)
 
 
@@ -28,6 +27,8 @@ REQUIRED_SYSTEM_PACKAGES=(python3 python3-pip python3-venv git build-essential c
 # INSTALL FUNCTIONS
 # ===============================
 function check_python_version() {
+    REQUIRED_PYTHON_VERSION ="3.9" # Minimum required Python version
+
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
 
     if [[ $(printf '%s\n' "$REQUIRED_PYTHON_VERSION" "$PYTHON_VERSION" | sort -V | head -n1) != "$REQUIRED_PYTHON_VERSION" ]]; then
