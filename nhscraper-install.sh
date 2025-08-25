@@ -59,6 +59,7 @@ function create_logs_dir() {
     echo "[+] Logs directory created at $LOGS_DIR"
 }
 
+# Gallery Min and Max IDs to scrape. Change here.
 function create_env_file() {
     mkdir -p "$(dirname "$ENV_FILE")"
     if [ ! -f "$ENV_FILE" ]; then
@@ -69,7 +70,7 @@ NHENTAI_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 NHENTAI_DRY_RUN="false"
 USE_TOR="false"
 NHENTAI_START_ID="500000"
-NHENTAI_END_ID=""
+NHENTAI_END_ID="600000"
 THREADS_GALLERIES="3"
 THREADS_IMAGES="3"
 EOF
@@ -81,23 +82,33 @@ function create_wrapper_script() {
     cat >"$WRAPPER_SCRIPT" <<'EOF'
 #!/usr/bin/env bash
 set -e
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-ENV_FILE="$SCRIPT_DIR/nhentai-scraper.env"
-PYTHON_BIN="$SCRIPT_DIR/venv/bin/python3"
-SCRAPER_SCRIPT="$SCRIPT_DIR/nhentai-scraper.py"
 
-# Load environment variables
+# Load environment
+ENV_FILE="/opt/nhentai-scraper/nhentai-scraper.env"
 if [ -f "$ENV_FILE" ]; then
-    source "$ENV_FILE"
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi
 
-# Construct command arguments
-ARGS=("--start" "$NHENTAI_START_ID" "--end" "$NHENTAI_END_ID" "--threads-galleries" "$THREADS_GALLERIES" "--threads-images" "$THREADS_IMAGES" "--cookie" "$NHENTAI_COOKIE" "--user-agent" "$NHENTAI_USER_AGENT")
-[ "$NHENTAI_DRY_RUN" = "true" ] && ARGS+=("--dry-run")
-[ "$USE_TOR" = "true" ] && ARGS+=("--use-tor")
-ARGS+=("--verbose")
+# Paths
+NHENTAI_DIR="/opt/nhentai-scraper"
+PYTHON_BIN="$NHENTAI_DIR/venv/bin/python3"
+SCRAPER="$NHENTAI_DIR/nhentai-scraper.py"
+LOG_FILE="$NHENTAI_DIR/logs/nhentai-scraper.log"
 
-exec "$PYTHON_BIN" "$SCRAPER_SCRIPT" "${ARGS[@]}"
+# Build argument list
+ARGS=()
+[ -n "$NHENTAI_START_ID" ] && ARGS+=(--start "$NHENTAI_START_ID")
+[ -n "$NHENTAI_END_ID" ] && ARGS+=(--end "$NHENTAI_END_ID")
+[ -n "$THREADS_GALLERIES" ] && ARGS+=(--threads-galleries "$THREADS_GALLERIES")
+[ -n "$THREADS_IMAGES" ] && ARGS+=(--threads-images "$THREADS_IMAGES")
+[ -n "$NHENTAI_COOKIE" ] && ARGS+=(--cookie "$NHENTAI_COOKIE")
+[ -n "$NHENTAI_USER_AGENT" ] && ARGS+=(--user-agent "$NHENTAI_USER_AGENT")
+[ "$USE_TOR" = "true" ] && ARGS+=(--use-tor)
+[ "$NHENTAI_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+[ "$NHENTAI_VERBOSE" = "true" ] && ARGS+=(--verbose)
+
+# Run scraper
+"$PYTHON_BIN" "$SCRAPER" "${ARGS[@]}" >> "$LOG_FILE" 2>&1
 EOF
     chmod +x "$WRAPPER_SCRIPT"
     echo "[+] Wrapper script created at $WRAPPER_SCRIPT"
@@ -112,8 +123,8 @@ function update_env() {
     echo "NHENTAI_USER_AGENT=${NHENTAI_USER_AGENT:-Mozilla/5.0 ...}"
     echo "NHENTAI_DRY_RUN=${NHENTAI_DRY_RUN:-false}"
     echo "USE_TOR=${USE_TOR:-false}"
-    echo "NHENTAI_START_ID=${NHENTAI_START_ID:-500000}"
-    echo "NHENTAI_END_ID=${NHENTAI_END_ID:-<not set>}"
+    echo "NHENTAI_START_ID=${NHENTAI_START_ID:-500000}" # Gallery Min and Max IDs to scrape. Change here too.
+    echo "NHENTAI_END_ID=${NHENTAI_END_ID:-600000}"
     echo "THREADS_GALLERIES=${THREADS_GALLERIES:-3}"
     echo "THREADS_IMAGES=${THREADS_IMAGES:-5}"
 
@@ -300,13 +311,13 @@ Wants=tor.service
 
 [Service]
 Type=simple
-WorkingDirectory=$NHENTAI_DIR
-ExecStart=/bin/bash $WRAPPER_SCRIPT
+WorkingDirectory=/opt/nhentai-scraper
+ExecStart=/bin/bash /opt/nhentai-scraper/run_scraper.sh
 Restart=on-failure
 RestartSec=10
 User=root
-StandardOutput=append:$LOGS_DIR/nhentai-scraper.log
-StandardError=append:$LOGS_DIR/nhentai-scraper.log
+StandardOutput=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
+StandardError=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
 
 [Install]
 WantedBy=multi-user.target
@@ -347,6 +358,7 @@ StandardError=append:$LOGS_DIR/nhentai-monitor.log
 WantedBy=multi-user.target
 EOF
 
+    chmod +x /opt/nhentai-scraper/run_scraper.sh
     systemctl daemon-reload
     systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
     systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor
@@ -376,8 +388,7 @@ case "$1" in
         install_filebrowser
         create_systemd_services
         print_links
-        echo "[+] Installation complete. Now updating environment settings."
-        sudo bash ./nhscraper-install.sh --update-env
+        echo "[+] Installation complete. Please updated environment settings by running: sudo bash ./nhscraper-install.sh --update-env"
         ;;
     *)
         echo "Usage: $0 --install | --update-env | --uninstall"

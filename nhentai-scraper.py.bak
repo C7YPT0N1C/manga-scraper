@@ -78,11 +78,8 @@ def get_config(name, default=None, is_bool=False):
         if is_bool:
             return str(env_val).lower() in ("1", "true", "yes")
         if isinstance(default, int):
-            try:
-                return int(env_val)
-            except ValueError:
-                return default
-        return str(env_val).strip('"').strip("'")
+            return int(env_val)
+        return env_val
     return default
 
 config = {
@@ -222,10 +219,6 @@ def run_ricterz_download(gallery_id, output_dir):
     if os.path.exists(os.path.join(output_dir, "details.json")):
         logger.info(f"[SKIP] {output_dir} already exists")
         return True
-
-    cookie = config["cookie"].strip('"').strip("'")
-    user_agent = config["user_agent"].strip('"').strip("'")
-
     cmd = [
         PYTHON_BIN,
         RICTERZ_BIN,
@@ -233,8 +226,8 @@ def run_ricterz_download(gallery_id, output_dir):
         "--download",
         "-t", str(config["threads_images"]),
         "-o", output_dir,
-        "--cookie", cookie,
-        "--user-agent", user_agent,
+        "--cookie", config["cookie"],
+        "--user-agent", config["user_agent"],
     ]
     if config["use_tor"]:
         cmd += ["--proxy", "socks5h://127.0.0.1:9050"]
@@ -243,7 +236,7 @@ def run_ricterz_download(gallery_id, output_dir):
         logger.info(f"[DRY-RUN] Would run: {' '.join(cmd)}")
         return True
 
-    logger.debug(f"[CMD] Running RicterZ command: {' '.join(cmd)}")
+    logger.debug(f"Running RicterZ command: {' '.join(cmd)}")
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         for line in result.stdout.splitlines():
