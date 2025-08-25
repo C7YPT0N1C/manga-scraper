@@ -113,37 +113,36 @@ function install_suwayomi() { # Updatable, update as needed.
 function install_filebrowser() { # Updatable, update as needed.
     echo -e "\n[*] Installing FileBrowser..."
 
-    # Download installer script instead of piping directly to bash
+    # Download installer
     curl -fsSLO https://raw.githubusercontent.com/filebrowser/get/master/get.sh
-
-    # Optional: Verify checksum (recommended if you maintain your own checksum file)
-    # echo "expected_sha256  get.sh" | sha256sum -c -
-
-    # Run the installer explicitly
     bash get.sh
-
-    # Clean up script
     rm -f get.sh
 
-    # Setup FileBrowser config
-    mkdir -p /etc/nhentai-scraper/filebrowser
+    # Initialize default config in current user's home (~/.filebrowser)
     filebrowser config init -a 0.0.0.0
 
-    # Prompt for password instead of hardcoding
+    # Prompt for password
     echo -n "[?] Enter FileBrowser admin password: "
     read -s FILEBROWSER_PASS
     echo
 
-    # If empty, generate a random secure password
+    # Generate random password if empty
     if [ -z "$FILEBROWSER_PASS" ]; then
         FILEBROWSER_PASS=$(openssl rand -base64 16)
         echo "[!] No password entered. Generated random password: $FILEBROWSER_PASS"
         echo "[!] Please save this password!"
     fi
 
-    # Create admin user
-    filebrowser users add admin "$FILEBROWSER_PASS" --perm.admin
-    echo "[+] FileBrowser installed. Access it at http://<SERVER-IP>:8080 with username 'admin'."
+    # Create or update admin user in default database
+    if filebrowser users list | grep -qw admin; then
+        filebrowser users update admin --password "$FILEBROWSER_PASS" --perm.admin
+        echo "[*] Admin user password updated."
+    else
+        filebrowser users add admin "$FILEBROWSER_PASS" --perm.admin
+        echo "[*] Admin user created."
+    fi
+
+    echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
 }
 
 function create_env_file() { # Updatable, update as needed.
@@ -235,6 +234,7 @@ EOF
 
     systemctl daemon-reload
     systemctl enable suwayomi filebrowser nhentai-api tor
+    systemctl restart filebrowser # Just in case FileBrowser's installer started it already
     systemctl start suwayomi filebrowser nhentai-api tor
     echo "[+] systemd services created and started."
 }
