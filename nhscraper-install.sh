@@ -17,7 +17,9 @@ function install_system_packages() {
     apt-get update
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
-    
+}    
+
+function install_python_packages() {
     echo "[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel cloudscraper
@@ -68,7 +70,7 @@ function install_scraper() {
         source "$NHENTAI_DIR/venv/bin/activate"
     fi
 
-    install_system_packages
+    install_python_packages
 }
 
 function install_suwayomi() {
