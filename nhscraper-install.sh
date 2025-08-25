@@ -183,6 +183,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
     fi
+    systemctl enable suwayomi
 
     # FileBrowser
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
@@ -200,8 +201,11 @@ User=root
 WantedBy=multi-user.target
 EOF
     fi
+    systemctl enable filebrowser
 
     # API service
+    echo "[*] Creating nhentai-api.service..."
+
     if [ ! -f /etc/systemd/system/nhentai-api.service ]; then
         cat >/etc/systemd/system/nhentai-api.service <<EOF
 [Unit]
@@ -221,9 +225,18 @@ WantedBy=multi-user.target
 EOF
     fi
 
+    if /etc/systemd/system/nhentai-api.service; then
+        echo "[*] nhentai-api.service created."
+    else
+        echo "[!] Failed to create nhentai-api.service."
+
+        exit 1
+    fi
+    systemctl enable nhentai-api tor
+
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-api
-    systemctl start suwayomi filebrowser nhentai-api
+    systemctl start suwayomi filebrowser nhentai-api tor
+    echo "[+] systemd services created and started."
 }
 
 function print_links() {
@@ -297,7 +310,7 @@ function uninstall_all() {
     rm -rf "$SUWAYOMI_DIR"
     rm -rf /etc/filebrowser/filebrowser.db
 
-    echo "[*] Uninstallation complete!"
+    echo "\n[*] Uninstallation complete!"
 }
 
 # ===============================
