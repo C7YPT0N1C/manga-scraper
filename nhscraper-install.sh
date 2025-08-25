@@ -61,11 +61,10 @@ EOF
 }
 
 function uninstall_all() {
-    systemctl stop nhentai-scraper nhentai-monitor suwayomi filebrowser || true
-    systemctl disable nhentai-scraper nhentai-monitor suwayomi filebrowser || true
+    systemctl stop nhentai-scraper nhentai-monitor nhentai-scraper.timer suwayomi filebrowser || true
+    systemctl disable nhentai-scraper nhentai-monitor nhentai-scraper.timer suwayomi filebrowser || true
     rm -rf "$NHENTAI_DIR" "$SUWAYOMI_DIR"
-    rm -f /etc/systemd/system/nhentai-*.service
-    rm -f /etc/systemd/system/nhentai-*.timer
+    rm -f /etc/systemd/system/nhentai-*.service /etc/systemd/system/nhentai-*.timer /etc/systemd/system/suwayomi.service /etc/systemd/system/filebrowser.service
     rm -f "$ENV_FILE"
     systemctl daemon-reload
     exit 0
@@ -73,7 +72,7 @@ function uninstall_all() {
 
 function install_system_packages() {
     apt-get update
-    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget tor torsocks
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget tor torsocks openjdk-17-jre
 }
 
 function check_venv() {
@@ -114,7 +113,45 @@ function install_scraper() {
 }
 
 function create_systemd_services() {
-    # Scraper service
+    # suwayomi
+    cat >/etc/systemd/system/suwayomi.service <<EOF
+[Unit]
+Description=Suwayomi Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$SUWAYOMI_DIR
+ExecStart=/bin/bash ./suwayomi-server.sh
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=append:$LOGS_DIR/suwayomi.log
+StandardError=append:$LOGS_DIR/suwayomi.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # filebrowser
+    cat >/etc/systemd/system/filebrowser.service <<EOF
+[Unit]
+Description=File Browser
+After=network.target
+
+[Service]
+ExecStart=$FILEBROWSER_BIN -r /
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=append:$LOGS_DIR/filebrowser.log
+StandardError=append:$LOGS_DIR/filebrowser.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # nhentai scraper
     cat >/etc/systemd/system/nhentai-scraper.service <<EOF
 [Unit]
 Description=NHentai Scraper
@@ -123,9 +160,9 @@ Wants=tor.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper
-EnvironmentFile=/opt/nhentai-scraper/nhentai-scraper.env
-ExecStart=/opt/nhentai-scraper/venv/bin/python3 /opt/nhentai-scraper/nhentai-scraper.py \\
+WorkingDirectory=$NHENTAI_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhentai-scraper.py \\
     --start \${NHENTAI_START_ID} --end \${NHENTAI_END_ID} \\
     --threads-galleries \${THREADS_GALLERIES} --threads-images \${THREADS_IMAGES} \\
     \${NHENTAI_COOKIE:+--cookie \${NHENTAI_COOKIE}} \\
@@ -136,45 +173,50 @@ ExecStart=/opt/nhentai-scraper/venv/bin/python3 /opt/nhentai-scraper/nhentai-scr
 Restart=on-failure
 RestartSec=10
 User=root
-StandardOutput=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
-StandardError=append:/opt/nhentai-scraper/logs/nhentai-scraper.log
+StandardOutput=append:$LOGS_DIR/nhentai-scraper.log
+StandardError=append:$LOGS_DIR/nhentai-scraper.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    # Monitor service
-    cat >/etc/systemd/system/nhentai-monitor.service <<EOF
-[Unit]
-Description=Monitor NHentai Scraper
-After=nhentai-scraper.service
-Requires=nhentai-scraper.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'systemctl is-active --quiet nhentai-scraper || systemctl restart nhentai-scraper'
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Timer for reruns
+    # nhentai timer
     cat >/etc/systemd/system/nhentai-scraper.timer <<EOF
 [Unit]
-Description=Run NHentai Scraper periodically
+Description=Run nhentai-scraper every hour
 
 [Timer]
 OnBootSec=5m
-OnUnitActiveSec=6h
-Persistent=true
+OnUnitActiveSec=1h
+Unit=nhentai-scraper.service
 
 [Install]
 WantedBy=timers.target
 EOF
 
+    # nhentai monitor
+    cat >/etc/systemd/system/nhentai-monitor.service <<EOF
+[Unit]
+Description=NHentai Scraper Monitor
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$NHENTAI_DIR
+ExecStart=$NHENTAI_DIR/venv/bin/python3 -m http.server 8081
+Restart=always
+RestartSec=5
+User=root
+StandardOutput=append:$LOGS_DIR/nhentai-monitor.log
+StandardError=append:$LOGS_DIR/nhentai-monitor.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
     systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
-    systemctl start suwayomi filebrowser nhentai-scraper nhentai-scraper.timer nhentai-monitor tor
+    systemctl enable nhentai-scraper nhentai-scraper.timer nhentai-monitor suwayomi filebrowser tor
+    systemctl start nhentai-scraper.timer nhentai-monitor suwayomi filebrowser tor
 }
 
 # ===============================
