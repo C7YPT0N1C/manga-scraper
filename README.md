@@ -50,8 +50,9 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
 - **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
 
 ### Installation Commands
-One Line Install: `wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
+One Line Install: `wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && nhscraper-install.sh --install`
 
+Alternative Install: Clone Repository.
 ```bash
 # Clone the repository
 git clone https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git
@@ -63,10 +64,10 @@ chmod +x nhscraper-install.sh
 
 ```
 
-- Install: `sudo bash ./nhscraper-install.sh --install`
-- Update Environment Variables: `sudo bash ./nhscraper-install.sh --update`
-- Update: `sudo bash ./nhscraper-install.sh --update`
-- Uninstall: `sudo bash ./nhscraper-install.sh --uninstall`
+- Install: `nhscraper-install.sh (--install is optional)`
+- Update Environment Variables: `nhscraper-install.sh --update-env`
+- Update: `nhscraper-install.sh --update`
+- Uninstall: `nhscraper-install.sh --uninstall (or --remove)`
 
 ## Post Install
 - Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
@@ -74,6 +75,7 @@ chmod +x nhscraper-install.sh
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
   - User: `admin`
   - Password created on install.
+    - You can change the password at any time using `filebrowser users update admin --password "PASSWORD"` 
 
 ## Usage
 ### Cookies and User Agents

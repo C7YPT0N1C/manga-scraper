@@ -329,7 +329,7 @@ elif [[ "$1" == "--update" ]]; then
     update_all
     print_links
     exit 0
-elif [[ "$1" == "--uninstall" ]]; then
+elif [[ "$1" == "--uninstall" || "$1" == "--remove" ]]; then
     uninstall_all
     exit 0
 fi
