@@ -50,7 +50,9 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
 - **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
 
 ### Installation Commands
-One Line Install: `wget -O - https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh | bash`
+One Line Install (does not give warning): `wget -O - https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh | bash -s -- --install -y`
+
+`wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
 
 ```bash
 # Clone the repository
