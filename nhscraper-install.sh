@@ -149,7 +149,7 @@ function create_env_file() { # Updatable, update as needed.
     echo -e "\n[*] Updating nhentai-scraper Environment File..."
     echo "[*] This will overwrite current settings. CTRL + C now to cancel."
     read -p "Enter your NHentai session cookie: " COOKIE
-    cat >"$ENV_FILE" <<EOF
+    sudo tee "$ENV_FILE" <<EOF
 NHENTAI_START_ID=500000
 NHENTAI_END_ID=600000
 EXCLUDE_TAGS=
@@ -169,7 +169,7 @@ function create_systemd_services() { # Updatable, update as needed.
 
     # Suwayomi
     if [ ! -f /etc/systemd/system/suwayomi.service ]; then
-        cat >/etc/systemd/system/suwayomi.service <<EOF
+        sudo tee /etc/systemd/system/suwayomi.service <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
@@ -188,7 +188,7 @@ EOF
 
     # FileBrowser
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
-        cat >/etc/systemd/system/filebrowser.service <<EOF
+        sudo tee /etc/systemd/system/filebrowser.service <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
@@ -208,7 +208,7 @@ EOF
     echo "[*] Creating nhentai-api.service..."
 
     if [ ! -f /etc/systemd/system/nhentai-api.service ]; then
-        cat >/etc/systemd/system/nhentai-api.service <<EOF
+        sudo tee /etc/systemd/system/nhentai-api.service <<EOF
 [Unit]
 Description=NHentai Scraper API.
 After=network.target
