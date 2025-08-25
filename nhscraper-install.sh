@@ -315,12 +315,23 @@ echo "- C7YPT0N1C/nhentai-scraper"
 echo "- Suwayomi Server"
 echo "- FileBrowser"
 echo ""
-read -p "Do you want to proceed? [y/N]: " consent
 
-case "$consent" in
-    [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
-    *) echo "[!] Operation cancelled by user."; exit 0 ;;
-esac
+AUTO_YES=false
+for arg in "$@"; do
+    if [[ "$arg" == "-y" || "$arg" == "--yes" ]]; then
+        AUTO_YES=true
+    fi
+done
+
+if [ "$AUTO_YES" = true ]; then
+    echo "[*] Auto-consent given via -y flag."
+else
+    read -p "Do you want to proceed? [y/N]: " consent
+    case "$consent" in
+        [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
+        *) echo "[!] Operation cancelled by user."; exit 0 ;;
+    esac
+fi
 
 if [[ "$1" == "--install" ]]; then
     start_install
@@ -332,7 +343,6 @@ elif [[ "$1" == "--update" ]]; then
     update_all
     print_links
     exit 0
-
 elif [[ "$1" == "--uninstall" ]]; then
     uninstall_all
     exit 0
