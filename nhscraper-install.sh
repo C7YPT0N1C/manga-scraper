@@ -322,8 +322,8 @@ echo "===================================================="
 echo ""
 echo "This installer will install, update, or uninstall the following components:"
 echo "- C7YPT0N1C/nhentai-scraper"
-echo "- Suwayomi Server"
-echo "- FileBrowser"
+echo "- Suwayomi/Suwayomi-Server"
+echo "- fileBrowser/fileBrowser"
 echo ""
 
 read -p "Do you want to proceed? [y/N]: " consent
