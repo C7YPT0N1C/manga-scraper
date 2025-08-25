@@ -56,7 +56,7 @@ function install_scraper() { # Updatable, update as needed.
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
-    read -p "Install Beta Version instead of Stable? [y/N]: " beta
+    read -p "Install Beta Version instead of Stable? There is no guarantee it will be compatible. [y/N]: " beta
     branch="main"
     [[ "$beta" =~ ^[yY] ]] && branch="dev"
 
