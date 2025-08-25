@@ -13,6 +13,13 @@ import requests
 from dotenv import load_dotenv, set_key
 
 # ===============================
+# KEY
+# ===============================
+# [*] = Process / In Progress
+# [+] = Success
+# [!] = Warning/Error
+
+# ===============================
 # CONFIGURATION
 # ===============================
 NHENTAI_DIR = "/opt/nhentai-scraper"

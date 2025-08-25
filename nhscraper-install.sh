@@ -2,6 +2,13 @@
 set -e
 
 # ===============================
+# KEY
+# ===============================
+# [*] = Process / In Progress
+# [+] = Success
+# [!] = Warning/Error
+
+# ===============================
 # ROOT CHECK
 # ===============================
 if [[ $EUID -ne 0 ]]; then
@@ -56,8 +63,8 @@ function install_scraper() { # Updatable, update as needed.
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
-    echo ""
-    read -p "Install Beta Version instead of Stable? There is no guarantee it will be compatible. [y/N]: " beta
+    echo -e "\n[!] Install Beta Version instead of Stable? This is NOT recommended, are there is no guarantee it will be compatible."
+    read -p "Procceed anyway? [y/N]: " beta
     branch="main"
     [[ "$beta" =~ ^[yY] ]] && branch="dev"
 
@@ -149,7 +156,7 @@ function create_env_file() { # Updatable, update as needed.
     echo -e "\n[*] Updating nhentai-scraper Environment File..."
     echo "[!] This will overwrite current settings. CTRL + C now to cancel."
     read -p "Enter your NHentai session cookie: " COOKIE
-    sudo tee "$ENV_FILE" <<EOF
+    sudo tee "$ENV_FILE" > /dev/null <<EOF
 NHENTAI_START_ID=500000
 NHENTAI_END_ID=600000
 EXCLUDE_TAGS=
@@ -164,12 +171,25 @@ EOF
     echo "[+] Environment file created/updated at $ENV_FILE"
 }
 
+function reload_systemd_services() { # Updatable, update as needed.
+    systemctl daemon-reload
+    systemctl restart filebrowser # Just in case FileBrowser's installer started it already  
+    for svc in suwayomi filebrowser nhentai-api tor; do
+        if systemctl list-unit-files | grep -qw "${svc}.service"; then
+            systemctl enable "$svc"
+            systemctl start "$svc"
+            echo "[+] $svc enabled and started."
+        else
+            echo "[!] $svc.service not found, skipping."
+        fi
+    done
+
 function create_systemd_services() { # Updatable, update as needed.
     echo -e "\n[*] Creating systemd services..."
 
     # Suwayomi
     if [ ! -f /etc/systemd/system/suwayomi.service ]; then
-        sudo tee /etc/systemd/system/suwayomi.service <<EOF
+        sudo tee /etc/systemd/system/suwayomi.service > /dev/null <<EOF
 [Unit]
 Description=Suwayomi Server
 After=network.target
@@ -187,13 +207,13 @@ EOF
 
     # FileBrowser
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
-        sudo tee /etc/systemd/system/filebrowser.service <<EOF
+        sudo tee /etc/systemd/system/filebrowser.service > /dev/null <<EOF
 [Unit]
 Description=FileBrowser
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/filebrowser -d /etc/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
+ExecStart=/usr/local/bin/filebrowser -r / --address 0.0.0.0 --port 8080
 Restart=on-failure
 User=root
 
@@ -206,7 +226,7 @@ EOF
     echo "[*] Creating nhentai-api.service..."
 
     if [ ! -f /etc/systemd/system/nhentai-api.service ]; then
-        sudo tee /etc/systemd/system/nhentai-api.service <<EOF
+        sudo tee /etc/systemd/system/nhentai-api.service > /dev/null <<EOF
 [Unit]
 Description=NHentai Scraper API.
 After=network.target
@@ -224,7 +244,7 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    if /etc/systemd/system/nhentai-api.service; then
+    if [ -f /etc/systemd/system/nhentai-api.service ]; then
         echo "[+] nhentai-api.service created."
     else
         echo "[!] Failed to create nhentai-api.service."
@@ -232,10 +252,7 @@ EOF
         exit 1
     fi
 
-    systemctl daemon-reload
-    systemctl enable suwayomi filebrowser nhentai-api tor
-    systemctl restart filebrowser # Just in case FileBrowser's installer started it already
-    systemctl start suwayomi filebrowser nhentai-api tor
+    reload_systemd_services
     echo "[+] systemd services created and started."
 }
 
@@ -283,13 +300,14 @@ function update_all() {
     ln -sf "$NHENTAI_DIR/venv/bin/nh-scraper" /usr/local/bin/nh-scraper # refresh symlink
 
     echo -e "\n[*] Restarting services..."
-    systemctl restart suwayomi filebrowser nhentai-api
+    reload_systemd_services
     echo -e "\n[+] Update complete!"
 }
 
 function update_env() {
     echo -e "\n[*] Updating Environment File!"
     create_env_file
+    reload_systemd_services
 }
 
 function uninstall_all() {
