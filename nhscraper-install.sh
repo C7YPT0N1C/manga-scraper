@@ -211,7 +211,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper/nhentai-scraper
-EnvironmentFile=/opt/nhentai-scraper/nhentai-api.env
+EnvironmentFile=/opt/nhentai-scraper/nhentai-scraper.env
 ExecStart=/opt/nhentai-scraper/venv/bin/python /opt/nhentai-scraper/nhentai-scraper/nhentai-api.py
 Restart=on-failure
 User=root
@@ -319,7 +319,7 @@ case "$consent" in
     *) echo "[!] Operation cancelled by user."; exit 0 ;;
 esac
 
-if [[ "$1" == "--install" ]]; then
+if [[ -z "$1" || "$1" == "--install" ]]; then
     start_install
     exit 0
 elif [[ "$1" == "--update-env" ]]; then

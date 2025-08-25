@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "0.2.4" # Version Description: Updated readme and removed auto-yes from install script.
+version = "0.2.4" # Version Description: Patched install script.
 description = "NHentai scraper with Suwayomi integration"
 readme = "README.md"
 license = { text = "MIT" }
