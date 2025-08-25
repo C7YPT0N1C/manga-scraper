@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "0.2.4"
+version = "0.2.4" # Put the cause of the version change here.
 description = "NHentai scraper with Suwayomi integration"
 readme = "README.md"
 license = { text = "MIT" }

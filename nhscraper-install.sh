@@ -16,13 +16,7 @@ NHENTAI_DIR="/opt/nhentai-scraper"
 SUWAYOMI_DIR="/opt/suwayomi"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
-
-# ===============================
-# Updatable Variables
-# ===============================
-REQUIRED_PYTHON_VERSION="3.9" # Minimum required Python version
-REQUIRED_SYSTEM_PACKAGES=(python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks)
-
+REQUIRED_PYTHON_VERSION="3.9" # Minimum required Python version # Updatable, update as needed.
 
 # ===============================
 # INSTALL FUNCTIONS
@@ -42,14 +36,14 @@ function install_system_packages() {
     echo "[*] Upgrading and Installing system packages..."
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get update
-    apt-get install -y REQUIRED_SYSTEM_PACKAGES
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks # Updatable, update as needed.
     echo "[+] System packages installed."
 }    
 
 function install_python_packages() {
     echo "[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
-    pip install --upgrade pip setuptools wheel
+    pip install --upgrade pip setuptools wheel # Updatable, update as needed.
     pip install .
     echo "[+] Python requirements installed."
 }
@@ -57,7 +51,7 @@ function install_python_packages() {
 # ----------------------------
 # Install Programs
 # ----------------------------
-function install_scraper() {
+function install_scraper() { # Updatable, update as needed.
     echo "[*] Installing nhentai-scraper..."
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
@@ -100,7 +94,7 @@ function install_scraper() {
     echo "[+] Global command 'nh-scraper' installed."
 }
 
-function install_suwayomi() {
+function install_suwayomi() { # Updatable, update as needed.
     echo "[*] Installing Suwayomi via tar.gz..."
     mkdir -p "$SUWAYOMI_DIR"
     cd "$SUWAYOMI_DIR"
@@ -114,7 +108,7 @@ function install_suwayomi() {
     chmod 755 "$SUWAYOMI_DIR/local"
 }
 
-function install_filebrowser() {
+function install_filebrowser() { # Updatable, update as needed.
     echo "[*] Installing FileBrowser..."
 
     # Download installer script instead of piping directly to bash
@@ -150,7 +144,7 @@ function install_filebrowser() {
     echo "[+] FileBrowser installed. Access it at http://<SERVER-IP>:8080 with username 'admin'."
 }
 
-function create_env_file() {
+function create_env_file() { # Updatable, update as needed.
     echo "[*] Updating nhentai-scraper Environment File..."
     echo "[*] This will overwrite current settings. CTRL + C now to cancel."
     read -p "Enter your NHentai session cookie: " COOKIE
@@ -169,7 +163,7 @@ EOF
     echo "[+] Environment file created/updated at $ENV_FILE"
 }
 
-function create_systemd_services() {
+function create_systemd_services() { # Updatable, update as needed.
     echo "[*] Creating systemd services..."
 
     # Suwayomi
