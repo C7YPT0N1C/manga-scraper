@@ -48,17 +48,19 @@ def update_env(key, value):
 # ===============================
 # ARGUMENTS
 # ===============================
-parser = argparse.ArgumentParser(description="NHentai Scraper (Python-native)")
+parser = argparse.ArgumentParser(description="NHentai scraper with Suwayomi integration")
 
-parser.add_argument("--start", type=int, help="Start gallery ID")
-parser.add_argument("--end", type=int, help="End gallery ID")
-parser.add_argument("--threads-galleries", type=int, help="Concurrent galleries")
-parser.add_argument("--threads-images", type=int, help="Threads per gallery")
-parser.add_argument("--cookie", type=str, help="nhentai cookie string")
-parser.add_argument("--user-agent", type=str, help="browser User-Agent")
-parser.add_argument("--use-tor", action="store_true", help="route requests via Tor (socks5h://127.0.0.1:9050)")
-parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
-parser.add_argument("--dry-run", action="store_true", help="Simulate downloads and GraphQL")
+parser.add_argument("--start", type=int, help="Starting gallery ID (Default: 500000)")
+parser.add_argument("--end", type=int, help="Ending gallery ID (Default: 600000)")
+parser.add_argument("--excluded-tags", type=str, help="Comma-separated list of tags to exclude galleries (e.g: video game, yaoi, cosplay) (Default: none)")
+parser.add_argument("--language", type=str, help="Comma-separated list of languages to include (e.g: english, japanese) (Default: english)")
+parser.add_argument("--cookie", type=str, help="nhentai cookie string (REQUIRED AS A FLAG OR IN ENVIRONMENT FILE: (/opt/nhentai-scraper/config.env) )")
+parser.add_argument("--user-agent", type=str, help="Browser User-Agent")
+parser.add_argument("--threads-galleries", type=int, help="Number of concurrent galleries to be downloaded (Default: 3)")
+parser.add_argument("--threads-images", type=int, help="Threads per gallery (Default: 5)")
+parser.add_argument("--dry-run", action="store_true", help="Simulate downloads and GraphQL without downloading anything.")
+parser.add_argument("--use-tor", action="store_true", help="Route requests via Tor. Requires Tor to be running on localhost:9050")
+parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
 
 args = parser.parse_args()
 

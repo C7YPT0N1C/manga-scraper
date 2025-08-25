@@ -41,6 +41,9 @@ def check_ip():
     check_tor()
     return jsonify({"tor_ip": status["tor_ip"]})
 
+# ------------------------
+# RUN FLASK
+# ------------------------
 def run_flask():
     app.run(host="0.0.0.0", port=5000)
 

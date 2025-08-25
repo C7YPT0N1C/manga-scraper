@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nhentai-scraper"
+version = "0.2.0"
+description = "NHentai scraper with Suwayomi integration"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "C7YPT0N1C"}]
+dependencies = [
+    "cloudscraper",
+    "requests>=2.31.0",
+    "flask>=2.3.3",
+    "beautifulsoup4>=4.12.2",
+    "tqdm>=4.66.1",
+    "aiohttp>=3.9.2",
+    "gql[all]>=3.5.0",
+    "python-dotenv>=1.0",
+]
+requires-python = ">=3.9"
+
+[project.scripts]
+nh-scraper = "nhscraper.cli:main"
