@@ -167,7 +167,7 @@ THREADS_GALLERIES=3
 THREADS_IMAGES=5
 USE_TOR=false
 EOF
-    fi
+    echo "[+] Environment file created/updated at $ENV_FILE"
 }
 
 function create_systemd_services() {
