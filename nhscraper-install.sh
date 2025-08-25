@@ -184,7 +184,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 EOF
     fi
-    systemctl enable suwayomi
 
     # FileBrowser
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
@@ -202,7 +201,6 @@ User=root
 WantedBy=multi-user.target
 EOF
     fi
-    systemctl enable filebrowser
 
     # API service
     echo "[*] Creating nhentai-api.service..."
@@ -233,9 +231,9 @@ EOF
 
         exit 1
     fi
-    systemctl enable nhentai-api tor
 
     systemctl daemon-reload
+    systemctl enable suwayomi filebrowser nhentai-api tor
     systemctl start suwayomi filebrowser nhentai-api tor
     echo "[+] systemd services created and started."
 }
