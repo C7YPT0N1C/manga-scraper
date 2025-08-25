@@ -28,7 +28,7 @@ function check_python_version() {
         echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
-        echo -e "\n[*] Python version OK: $PYTHON_VERSION"
+        echo -e "\n[!] Python version OK: $PYTHON_VERSION"
     fi
 }
 
@@ -107,6 +107,7 @@ function install_suwayomi() { # Updatable, update as needed.
 
     mkdir -p "$SUWAYOMI_DIR/local"
     chmod 755 "$SUWAYOMI_DIR/local"
+    echo "[+] Suwayomi installed."
 }
 
 function install_filebrowser() { # Updatable, update as needed.
@@ -147,7 +148,7 @@ function install_filebrowser() { # Updatable, update as needed.
 
 function create_env_file() { # Updatable, update as needed.
     echo -e "\n[*] Updating nhentai-scraper Environment File..."
-    echo "[*] This will overwrite current settings. CTRL + C now to cancel."
+    echo "[!] This will overwrite current settings. CTRL + C now to cancel."
     read -p "Enter your NHentai session cookie: " COOKIE
     sudo tee "$ENV_FILE" <<EOF
 NHENTAI_START_ID=500000
@@ -225,7 +226,7 @@ EOF
     fi
 
     if /etc/systemd/system/nhentai-api.service; then
-        echo "[*] nhentai-api.service created."
+        echo "[+] nhentai-api.service created."
     else
         echo "[!] Failed to create nhentai-api.service."
 
@@ -242,13 +243,13 @@ function print_links() {
     IP=$(hostname -I | awk '{print $1}')
     HOSTNAME=$(hostname)
 
-    echo -e "\n[*] Access Links:"
+    echo -e "\n[+] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
     echo "FileBrowser: http://$IP:8080/ (User: admin, Password: $FILEBROWSER_PASS)"
     echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
-        echo -e "\n[*] DNS Hostname Links:"
+        echo -e "\n[+] DNS Hostname Links:"
         echo "Suwayomi Web: http://$HOSTNAME:4567/"
         echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
         echo "FileBrowser: http://$HOSTNAME:8080/"
@@ -261,9 +262,8 @@ function print_links() {
 # ===============================
 function start_install() {
     check_python_version
-    echo ""
     echo -e "\n[*] Starting installation..."
-    echo "[*] This may take a while depending on your internet speed and system performance."
+    echo "[!] This may take a while depending on your internet speed and system performance."
 
     install_system_packages
     install_scraper
@@ -273,7 +273,7 @@ function start_install() {
     create_systemd_services
     print_links
 
-    echo -e "\n[*] Installation complete!"
+    echo -e "\n[+] Installation complete!"
 }
 
 function update_all() {
@@ -284,11 +284,11 @@ function update_all() {
 
     echo -e "\n[*] Restarting services..."
     systemctl restart suwayomi filebrowser nhentai-api
-    echo -e "\n[*] Update complete!"
+    echo -e "\n[+] Update complete!"
 }
 
 function update_env() {
-    echo -e "\n[*] Testing 'UPDATE ENV'!"
+    echo -e "\n[*] Updating Environment File!"
     create_env_file
 }
 
@@ -309,7 +309,7 @@ function uninstall_all() {
     rm -rf "$SUWAYOMI_DIR"
     rm -rf /etc/filebrowser/filebrowser.db
 
-    echo -e "\n[*] Uninstallation complete!"
+    echo -e "\n[+] Uninstallation complete!"
 }
 
 # ===============================
