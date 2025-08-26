@@ -19,7 +19,7 @@ from dotenv import load_dotenv, set_key
 # KEY
 # ===============================
 # [*] = Process / In Progress
-# [+] = Success
+# [+] = Success / Confirmation
 # [!] = Warning/Error
 
 # ===============================
@@ -157,7 +157,7 @@ def get_mirrors():
     return mirrors
 
 MIRRORS = get_mirrors()
-logger.debug(f"[*] Mirrors set: {MIRRORS}")
+logger.debug(f"[+] Mirrors set: {MIRRORS}")
 
 # ===============================
 # HTTP SESSION
@@ -173,9 +173,9 @@ def build_session():
     if config["use_tor"]:
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies.update({"http": proxy, "https": proxy})
-        logger.info(f"[*] Using Tor proxy: {proxy}")
+        logger.info(f"[+] Using Tor proxy: {proxy}")
     else:
-        logger.info("[*] Not using Tor proxy")
+        logger.info("[+] Not using Tor proxy")
     return s
 
 session = build_session()
@@ -247,13 +247,43 @@ def write_details_json(folder, meta):
 # ===============================
 # NHENTAI API
 # ===============================
+def dynamic_sleep(stage):
+    # Sleeps for a random time based on scraper load.
+    num_threads = config.get('threads_galleries', 1)
+    num_galleries = max(1, config.get('end', 1) - config.get('start', 0) + 1)
+    
+    # Base ranges (seconds)
+    if stage == "metadata":
+        base_min, base_max = 0.3, 0.5  # Metadata fetches are lighter
+    elif stage == "gallery":
+        base_min, base_max = 0.5, 1 # Gallery fetches are heavier
+    else:
+        base_min, base_max = 0.5, 0.5 # Default to moderate wait
+
+    # Calculate a scale factor to adjust sleep time based on load.
+    # 1. num_threads * min(num_galleries, 1000) → approximate "workload" but cap galleries at 1000 for sanity.
+    # 2. Divide by 10 → normalizes the workload so that sleep times aren’t too extreme.
+    # 3. max(1, ...) → ensures the scale is never less than 1, so sleep doesn't shrink too much.
+    # 4. min(..., 5) → caps the scale at 5 to prevent extremely long sleeps for huge workloads.
+    scale = min(max(1, (num_threads * min(num_galleries, 1000)) / 10), 5)
+    
+    if stage == "metadata":
+        logger.debug(f"[!] Metadata Gatherer: API rate limit hit, sleeping for {scale:.1f}s before retry")
+    elif stage == "gallery":
+        logger.debug(f"[!] Gallery Downloader: API rate limit hit, sleeping for {scale:.1f}s before retry")
+    else:
+        logger.debug(f"[!] API rate limit hit, sleeping for {scale:.1f}s before retry")
+    
+    sleep_time = random.uniform(base_min * scale, base_max * scale)
+    time.sleep(sleep_time)
+    
 def get_gallery_metadata(gallery_id: int, retries=3, delay=2):
     url = urljoin(NHENTAI_API_BASE, f"gallery/{gallery_id}")
     for attempt in range(1, retries + 1):
         try:
             r = session.get(url, timeout=30)
             if r.status_code == 429:
-                wait = delay * attempt + random.uniform(0, 1)
+                dynamic_sleep("metadata") # Wait as to not get rate limited.
                 logger.warning(f"[!] API {gallery_id} HTTP 429: waiting {wait:.1f}s before retry")
                 time.sleep(wait)
                 continue
@@ -382,7 +412,7 @@ def create_or_update_gallery(meta, folder):
 # MAIN LOOP (multi-threaded)
 # ===============================
 def process_gallery(gallery_id):
-    time.sleep(random.uniform(1, 3)) # Wait as to not get rate limited.
+    dynamic_sleep("gallery") # Wait as to not get rate limited.
     logger.info(f"[*] Starting gallery {gallery_id}")
     meta = get_gallery_metadata(gallery_id)
     if not meta:

@@ -209,7 +209,7 @@ EOF
 function reload_systemd_services() { # Updatable, update as needed.
     systemctl daemon-reload
     systemctl restart filebrowser # Just in case FileBrowser's installer started it already  
-    for svc in suwayomi filebrowser nhentai-api tor; do
+    for svc in suwayomi filebrowser nhscraper-api tor; do
         if systemctl list-unit-files | grep -qw "${svc}.service"; then
             systemctl enable "$svc"
             systemctl start "$svc"
@@ -259,10 +259,10 @@ EOF
     fi
 
     # API service
-    echo "[*] Creating nhentai-api.service..."
+    echo "[*] Creating nhscraper-api.service..."
 
-    if [ ! -f /etc/systemd/system/nhentai-api.service ]; then
-        sudo tee /etc/systemd/system/nhentai-api.service > /dev/null <<EOF
+    if [ ! -f /etc/systemd/system/nhscraper-api.service ]; then
+        sudo tee /etc/systemd/system/nhscraper-api.service > /dev/null <<EOF
 [Unit]
 Description=NHentai Scraper API.
 After=network.target
@@ -271,7 +271,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/nhentai-scraper/nhscraper
 EnvironmentFile=/opt/nhentai-scraper/nhentai-scraper.env
-ExecStart=/opt/nhentai-scraper/venv/bin/python /opt/nhentai-scraper/nhscraper/nhentai-api.py
+ExecStart=/opt/nhentai-scraper/venv/bin/python /opt/nhentai-scraper/nhscraper/nhscraper-api.py
 Restart=on-failure
 User=root
 
@@ -280,10 +280,10 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    if [ -f /etc/systemd/system/nhentai-api.service ]; then
-        echo "[+] nhentai-api.service created."
+    if [ -f /etc/systemd/system/nhscraper-api.service ]; then
+        echo "[+] nhscraper-api.service created."
     else
-        echo "[!] Failed to create nhentai-api.service."
+        echo "[!] Failed to create nhscraper-api.service."
 
         exit 1
     fi
@@ -366,13 +366,13 @@ function update_env() {
 
 function uninstall_all() {
     echo -e "\n[*] Stopping and disabling services..."
-    systemctl stop suwayomi filebrowser nhentai-api || true
-    systemctl disable suwayomi filebrowser nhentai-api || true
+    systemctl stop suwayomi filebrowser nhscraper-api || true
+    systemctl disable suwayomi filebrowser nhscraper-api || true
 
     echo -e "\n[*] Removing systemd service files..."
     rm -f /etc/systemd/system/suwayomi.service # Remove suwayomi service
     rm -f /etc/systemd/system/filebrowser.service # Remove filebrowser service
-    rm -f /etc/systemd/system/nhentai-api.service # Remove nhentai-api service
+    rm -f /etc/systemd/system/nhscraper-api.service # Remove nhscraper-api service
     rm -f /usr/local/bin/nhentai-scraper # Remove global CLI symlink
     
     systemctl daemon-reload
