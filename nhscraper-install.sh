@@ -51,9 +51,10 @@ function install_system_packages() {
 function install_python_packages() {
     echo -e "\n[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
-    pip install --upgrade pip setuptools wheel # Updatable, update as needed.
-    pip install .
-    echo "[+] Python requirements installed."
+    "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR"
+    export PATH="$NHENTAI_DIR/venv/bin:$PATH"
+    echo "[+] Python requirements installed and nhentai-scraper CLI ready."
 }
 
 # ----------------------------
