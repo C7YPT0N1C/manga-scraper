@@ -335,7 +335,7 @@ function uninstall_all() {
     rm -f /etc/systemd/system/suwayomi.service # Remove suwayomi service
     rm -f /etc/systemd/system/filebrowser.service # Remove filebrowser service
     rm -f /etc/systemd/system/nhentai-api.service # Remove nhentai-api service
-    rm -f /usr/local/bin/nh-scraper # Remove global CLI symlink
+    rm -f /usr/local/bin/nhentai-scraper # Remove global CLI symlink
     
     systemctl daemon-reload
 
