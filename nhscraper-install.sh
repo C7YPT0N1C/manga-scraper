@@ -129,6 +129,12 @@ function install_filebrowser() { # Updatable, update as needed.
     bash get.sh
     rm -f get.sh
 
+    # Remove old database if it exists
+    if [ -f "$FB_DB" ]; then
+        echo "[*] Removing old FileBrowser database..."
+        rm -f "$FB_DB"
+    fi
+    
     # Initialize default config in current user's home (~/.filebrowser)
     filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
 
