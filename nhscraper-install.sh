@@ -332,9 +332,10 @@ function uninstall_all() {
     systemctl disable suwayomi filebrowser nhentai-api || true
 
     echo -e "\n[*] Removing systemd service files..."
-    rm -f /etc/systemd/system/suwayomi.service
-    rm -f /etc/systemd/system/filebrowser.service
-    rm -f /etc/systemd/system/nhentai-api.service
+    rm -f /etc/systemd/system/suwayomi.service # Remove suwayomi service
+    rm -f /etc/systemd/system/filebrowser.service # Remove filebrowser service
+    rm -f /etc/systemd/system/nhentai-api.service # Remove nhentai-api service
+    rm -f /usr/local/bin/nh-scraper # Remove global CLI symlink
     
     systemctl daemon-reload
 
