@@ -341,7 +341,7 @@ function uninstall_all() {
     echo -e "\n[*] Removing installed directories..."
     rm -rf "$NHENTAI_DIR"
     rm -rf "$SUWAYOMI_DIR"
-    rm -rf /etc/filebrowser/filebrowser.db
+    rm -f /opt/filebrowser/filebrowser.db
 
     echo -e "\n[+] Uninstallation complete!"
 }
