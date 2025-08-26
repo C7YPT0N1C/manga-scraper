@@ -104,7 +104,7 @@ function install_scraper() { # Updatable, update as needed.
     install_python_packages
 
     # Create/refresh global symlink
-    ln -sf "$NHENTAI_DIR/venv/bin/nh-scraper" /usr/local/bin/nh-scraper
+    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
     echo "[+] Global command 'nh-scraper' installed."
 }
 
