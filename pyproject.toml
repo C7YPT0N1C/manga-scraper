@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "0.2.4-dev.1" # Version Description: Switched to dev versioning for pre-release.
+version = "0.2.4-dev.1"
 description = "NHentai scraper with Suwayomi integration"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "C7YPT0N1C"}]
+authors = [{ name = "C7YPT0N1C" }]
 dependencies = [
     "cloudscraper",
     "requests>=2.31.0",
@@ -24,5 +24,5 @@ requires-python = ">=3.9"
 [project.scripts]
 nhentai-scraper = "nhscraper.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["nhscraper"]  # Explicitly define nhscraper folder as the only package to be included.   
+[tool.setuptools]
+packages = ["nhscraper"]  # Explicitly include nhscraper package

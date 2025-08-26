@@ -72,7 +72,8 @@ function install_scraper() { # Updatable, update as needed.
     mkdir -p "$NHENTAI_DIR"
     cd "$NHENTAI_DIR"
 
-    echo -e "\n[!] Install Beta Version instead of Stable? This is NOT recommended, are there is no guarantee it will be compatible."
+    echo -e "\n[!] Install Beta Version instead of Stable?"
+    echo "This is NOT recommended, as there is no guarantee THIS installer (main/nhscraper-install.sh) will be compatible with the dev branch, and bugs may be present."
     read -p "Procceed anyway? [y/N]: " beta
     branch="main"
     [[ "$beta" =~ ^[yY] ]] && branch="dev"
@@ -105,7 +106,7 @@ function install_scraper() { # Updatable, update as needed.
 
     # Create/refresh global symlink
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
-    echo "[+] Global command 'nh-scraper' installed."
+    echo "[+] Global command 'nhentai-scraper' installed."
 }
 
 function install_suwayomi() { # Updatable, update as needed.
@@ -313,7 +314,7 @@ function update_all() {
     echo -e "\n[*] Updating nhentai-scraper and Suwayomi..."
     install_scraper
     install_suwayomi
-    ln -sf "$NHENTAI_DIR/venv/bin/nh-scraper" /usr/local/bin/nh-scraper # refresh symlink
+    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper # refresh symlink
 
     echo -e "\n[*] Restarting services..."
     reload_systemd_services

@@ -257,21 +257,26 @@ def create_or_update_gallery(meta, folder):
 # MAIN LOOP
 # ===============================
 def main():
-    logger.info(f"Starting galleries {config['start']} -> {config['end']}")
-    for gallery_id in range(config['start'], config['end']+1):
-        logger.info(f"[*] Starting gallery {gallery_id}")
-        meta = get_gallery_metadata(gallery_id)
-        if not meta:
-            logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
-            continue
+    try:
+        logger.info(f"Starting galleries {config['start']} -> {config['end']}")
+        for gallery_id in range(config['start'], config['end']+1):
+            logger.info(f"[*] Starting gallery {gallery_id}")
+            meta = get_gallery_metadata(gallery_id)
+            if not meta:
+                logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
+                continue
 
-        for artist in meta.get("artists", ["Unknown"]):
-            folder = suwayomi_folder_name(meta, artist)
-            write_details_json(folder, meta)
-            create_or_update_gallery(meta, folder)
-            download_gallery_images(meta, folder)
+            for artist in meta.get("artists", ["Unknown"]):
+                folder = suwayomi_folder_name(meta, artist)
+                write_details_json(folder, meta)
+                create_or_update_gallery(meta, folder)
+                download_gallery_images(meta, folder)
 
-    logger.info("[*] All galleries processed.")
+        logger.info("[*] All galleries processed.")
+        return 0
+    except Exception as e:
+        logger.exception(e)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
