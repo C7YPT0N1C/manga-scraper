@@ -55,8 +55,8 @@ function install_python_packages() {
     # Upgrade pip/setuptools/wheel first
     "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
     
-    # Install the package in editable mode from the nhscraper subfolder
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR/nhscraper"
+    # Install the package in editable mode from the project root
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR"
     
     # Ensure CLI is available globally
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
