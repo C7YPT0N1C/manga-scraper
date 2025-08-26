@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "0.2.4-dev.1"
+version = "0.3.0-dev.1" # Version Description: Finally got it working.
 description = "NHentai scraper with Suwayomi integration"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "C7YPT0N1C" }]
 dependencies = [
     "cloudscraper",
-    "requests>=2.31.0",
+    "requests[socks]>=2.31.0",
     "flask>=2.3.3",
     "beautifulsoup4>=4.12.2",
     "tqdm>=4.66.1",

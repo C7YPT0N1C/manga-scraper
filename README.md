@@ -8,8 +8,7 @@
   - [Installation Commands](#installation-commands)
 - [**Post Install**](#post-install)
 - [**Usage**](#usage)
-  - [Cookies and User Agents](#cookies-and-user-agents)
-  - [CLI Arguments](#cli-arguments)
+  a- [CLI Arguments](#cli-arguments)
   - [Examples](#examples)
 - [**Documentation**](#documentation)
   - [Directory Layout](#directory-layout)
@@ -78,41 +77,32 @@ chmod +x nhscraper-install.sh
     - You can change the password at any time using `filebrowser users update admin --password "PASSWORD"` --database /opt/filebrowser/filebrowser.db --perm.admin
 
 ## Usage
-### Cookies and User Agents
-**⚠️IMPORTANT⚠️**: To bypass the nhentai frequency limit, you should use the `--cookie` option to store your `cookie` in `nhentai-scraper's environment file`.
-
-You can also use the `--user-agent` option to store your `user-agent` in `nhentai-scraper's environment file`, however, there's is one already being used by default (`"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36"`).
-
-    nhentai-scraper --useragent "USER AGENT of YOUR BROWSER"
-    nhentai-scraper --cookie "YOUR COOKIE FROM nhentai.net"
-
-**NOTE:**
-
-- The format of the cookie is `"csrftoken=TOKEN; sessionid=ID; cf_clearance=CLOUDFLARE"`
-- `cf_clearance` cookie and useragent must be set if you encounter "blocked by cloudflare captcha" error. Make sure you use the same IP and useragent as when you got it.
-
-Please refer to [RicterZ/nhentai's README](https://github.com/RicterZ/nhentai/blob/master/README.rst) to learn how to acquire both your cookie and your user-agent.
-
 ### CLI Arguments
 - An environemt file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/nhentai-scraper/config.env`.
-- Some CLI arguments used (like `--cookie` or `--user-agent`) will be saved in `config.env`.
 ```bash
-USAGE:
---help START_ID                           Display Usage Help
+usage: nhentai-scraper [-h] [--start START] [--end END] [--excluded-tags EXCLUDED_TAGS] [--language LANGUAGE]
+                       [--title-type {english,japanese,pretty}] [--threads-galleries THREADS_GALLERIES]
+                       [--threads-images THREADS_IMAGES] [--use-tor] [--dry-run] [--verbose]
 
---start START_ID                          Starting gallery ID (Default: 500000)
---end  END_ID                             Ending gallery ID (Default: 600000)
---excluded-tags TAG1, TAG2, TAG3          Comma-separated list of tags to exclude galleries (e.g: video game, yaoi, cosplay) (Default: none)
---language LANG1, LANG2                   Comma-separated list of languages to include (e.g: english, japanese) (Default: english)
---cookie COOKIE                           nhentai cookie string (REQUIRED AS A FLAG OR IN ENVIRONMENT FILE: (/opt/nhentai-scraper/config.env) )
---user-agent USER_AGENT                   Browser User-Agent
---threads-galleries NUM_OF_GALLERIES      Number of concurrent galleries to be downloaded (Default: 3)
---threads-images THREADS_PER_GALLERY      Threads per gallery (Default: 5)
+NHentai scraper with Suwayomi integration
 
-OPTIONAL:
---dry-run                                 Simulate downloads and GraphQL without downloading anything.
---use-tor                                 Route requests via Tor. Requires Tor to be running on (localhost:9050)
---verbose                                 Enable debug logging.
+options:
+  -h, --help            show this help message and exit
+  
+  --start START         Starting gallery ID (Default: 592000)
+  --end END             Ending gallery ID (Default: 600000
+  --excluded-tags EXCLUDED_TAGS
+                        Comma-separated list of tags to exclude galleries (Default: empty)
+  --language LANGUAGE   Comma-separated list of languages to include (Default: english)
+  --title-type {english,japanese,pretty}
+                        Gallery title type for folder names (Default: pretty)
+  --threads-galleries THREADS_GALLERIES
+                        Number of concurrent galleries (Default: 1)
+  --threads-images THREADS_IMAGES
+                        Threads per gallery (Default: 4)
+  --use-tor             Route requests via Tor (Default: false)
+  --dry-run             Simulate downloads and GraphQL without saving (Default: false)
+  --verbose             Enable debug logging (Default: false)
 ```
 
 ### Examples

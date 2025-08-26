@@ -55,8 +55,8 @@ function install_python_packages() {
     # Upgrade pip/setuptools/wheel first
     "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
     
-    # Install the package in editable mode from the project root
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR"
+    # Install the package in editable mode plus SOCKS support
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "pysocks" "tqdm" # Updatable, update as needed. Required external pip packages go here. Remember to reflect in pyproject.toml if changed.
     
     # Ensure CLI is available globally
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
@@ -171,18 +171,37 @@ function install_filebrowser() { # Updatable, update as needed.
 function create_env_file() { # Updatable, update as needed.
     echo -e "\n[*] Updating nhentai-scraper Environment File..."
     echo "[!] This will overwrite current settings. CTRL + C now to cancel."
-    read -p "Enter your NHentai session cookie: " COOKIE
     sudo tee "$ENV_FILE" > /dev/null <<EOF
-NHENTAI_START_ID=500000
+# NHentai Scraper Configuration
+
+# NHentai Gallery Range
+NHENTAI_START_ID=592000
 NHENTAI_END_ID=600000
+
+# Tags to exclude (comma-separated)
 EXCLUDE_TAGS=
+
+# Language Filters
 LANGUAGE=english
-SUWAYOMI_IGNORED_CATEGORIES=Favourites, Favs
-NHENTAI_COOKIE=$COOKIE
-NHENTAI_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.171 Safari/537.36"
-THREADS_GALLERIES=3
-THREADS_IMAGES=5
+
+# Folder title type: english, japanese, pretty
+TITLE_TYPE=pretty
+
+# Concurrency
+THREADS_GALLERIES=1
+THREADS_IMAGES=4
+
+# Route requests via Tor? (true/false)
 USE_TOR=false
+
+# Dry-run mode? (true/false)
+NHENTAI_DRY_RUN=false
+
+# Verbose logging? (true/false)
+NHENTAI_VERBOSE=false
+
+# Optional mirrors (comma-separated), i.nhentai.net will always be appended
+NHENTAI_MIRRORS=https://nhentai.net
 EOF
     echo "[+] Environment file created/updated at $ENV_FILE"
 }
@@ -280,13 +299,13 @@ function print_links() {
     echo -e "\n[+] Access Links:"
     echo "Suwayomi Web: http://$IP:4567/"
     echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
-    echo "FileBrowser: http://$IP:8080/ (User: admin, Password: $FILEBROWSER_PASS)"
+    echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
     echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
         echo -e "\n[+] DNS Hostname Links:"
         echo "Suwayomi Web: http://$HOSTNAME:4567/"
         echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
-        echo "FileBrowser: http://$HOSTNAME:8080/"
+        echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
         echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
     fi
 }
@@ -312,12 +331,30 @@ function start_install() {
 
 function update_all() {
     echo -e "\n[*] Updating nhentai-scraper and Suwayomi..."
+
+    # Pull latest code / rebuild
     install_scraper
     install_suwayomi
-    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper # refresh symlink
+
+    # Activate venv and upgrade Python deps
+    if [ -d "$NHENTAI_DIR/venv" ]; then
+        source "$NHENTAI_DIR/venv/bin/activate"
+        pip install --upgrade pip setuptools wheel
+        pip install --editable "$NHENTAI_DIR"
+    else
+        echo "[!] Virtualenv not found at $NHENTAI_DIR/venv, reinstalling..."
+        python3 -m venv "$NHENTAI_DIR/venv"
+        source "$NHENTAI_DIR/venv/bin/activate"
+        pip install --upgrade pip setuptools wheel
+        pip install --editable "$NHENTAI_DIR"
+    fi
+
+    # Ensure CLI symlink is refreshed
+    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
     echo -e "\n[*] Restarting services..."
     reload_systemd_services
+
     echo -e "\n[+] Update complete!"
 }
 

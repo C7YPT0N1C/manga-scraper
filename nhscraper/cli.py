@@ -4,9 +4,12 @@ import sys
 import json
 import logging
 import argparse
+import time
 from datetime import datetime
+import random
 from urllib.parse import urljoin
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
+from tqdm import tqdm
 
 import cloudscraper
 import requests
@@ -30,6 +33,7 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 NHENTAI_API_BASE = "https://nhentai.net/api/"
+
 
 # ===============================
 # LOGGING
@@ -57,17 +61,16 @@ def update_env(key, value):
 # ===============================
 parser = argparse.ArgumentParser(description="NHentai scraper with Suwayomi integration")
 
-parser.add_argument("--start", type=int, help="Starting gallery ID (Default: 500000)")
-parser.add_argument("--end", type=int, help="Ending gallery ID (Default: 600000)")
-parser.add_argument("--excluded-tags", type=str, help="Comma-separated list of tags to exclude galleries (e.g: video game, yaoi, cosplay) (Default: none)")
-parser.add_argument("--language", type=str, help="Comma-separated list of languages to include (e.g: english, japanese) (Default: english)")
-parser.add_argument("--cookie", type=str, help="nhentai cookie string (REQUIRED AS A FLAG OR IN ENVIRONMENT FILE: (/opt/nhentai-scraper/config.env) )")
-parser.add_argument("--user-agent", type=str, help="Browser User-Agent")
-parser.add_argument("--threads-galleries", type=int, help="Number of concurrent galleries to be downloaded (Default: 3)")
-parser.add_argument("--threads-images", type=int, help="Threads per gallery (Default: 5)")
-parser.add_argument("--dry-run", action="store_true", help="Simulate downloads and GraphQL without downloading anything.")
-parser.add_argument("--use-tor", action="store_true", help="Route requests via Tor. Requires Tor to be running on localhost:9050")
-parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
+parser.add_argument("--start", type=int, help="Starting gallery ID (Default: 592000)")
+parser.add_argument("--end", type=int, help="Ending gallery ID (Default: 600000")
+parser.add_argument("--excluded-tags", type=str, help="Comma-separated list of tags to exclude galleries (Default: empty)")
+parser.add_argument("--language", type=str, help="Comma-separated list of languages to include (Default: english)")
+parser.add_argument("--title-type", type=str, choices=["english", "japanese", "pretty"], help="Gallery title type for folder names (Default: pretty)")
+parser.add_argument("--threads-galleries", type=int, help="Number of concurrent galleries (Default: 1)")
+parser.add_argument("--threads-images", type=int, help="Threads per gallery (Default: 4)")
+parser.add_argument("--use-tor", action="store_true", help="Route requests via Tor (Default: false)")
+parser.add_argument("--dry-run", action="store_true", help="Simulate downloads and GraphQL without saving (Default: false)")
+parser.add_argument("--verbose", action="store_true", help="Enable debug logging (Default: false)")
 
 args = parser.parse_args()
 
@@ -92,19 +95,69 @@ def get_config(name, default=None, is_bool=False):
     return default
 
 config = {
-    "start": get_config("NHENTAI_START_ID", 0),
-    "end": get_config("NHENTAI_END_ID", 0),
-    "threads_galleries": get_config("THREADS_GALLERIES", 3),
-    "threads_images": get_config("THREADS_IMAGES", 5),
-    "cookie": get_config("NHENTAI_COOKIE", ""),
-    "user_agent": get_config("NHENTAI_USER_AGENT", ""),
+    "start": get_config("NHENTAI_START_ID", 500000),
+    "end": get_config("NHENTAI_END_ID", 600000),
+    "excluded_tags": get_config("EXCLUDE_TAGS", ""),
+    "language": get_config("LANGUAGE", "english"),
+    "title_type": get_config("TITLE_TYPE", "pretty"),
+    "threads_galleries": get_config("THREADS_GALLERIES", 1),
+    "threads_images": get_config("THREADS_IMAGES", 4),
     "use_tor": get_config("USE_TOR", False, True),
-    "verbose": get_config("NHENTAI_VERBOSE", False, True),
     "dry_run": get_config("NHENTAI_DRY_RUN", False, True),
+    "verbose": get_config("NHENTAI_VERBOSE", False, True),
 }
 
-if config["verbose"]:
+# ===============================
+# CLI OVERRIDES
+# ===============================
+if args.start is not None:
+    config["start"] = args.start
+
+if args.end is not None:
+    config["end"] = args.end
+    
+if args.excluded_tags:
+    config["excluded_tags"] = args.excluded_tags
+
+if args.language:
+    config["language"] = args.language
+
+if args.title_type:
+    config["title_type"] = args.title_type
+
+if args.threads_galleries is not None:
+    config["threads_galleries"] = args.threads_galleries
+
+if args.threads_images is not None:
+    config["threads_images"] = args.threads_images
+
+if args.use_tor:
+    config["use_tor"] = True
+
+if args.dry_run:
+    config["dry_run"] = True
+
+if args.verbose:
+    config["verbose"] = True
     logger.setLevel(logging.DEBUG)
+
+# ===============================
+# MIRRORS
+# ===============================
+def get_mirrors():
+    env_mirrors = os.getenv("NHENTAI_MIRRORS") # Check env
+    mirrors = []
+
+    if env_mirrors:
+        mirrors = [m.strip() for m in env_mirrors.split(",") if m.strip()]
+
+    # Always start with i.nhentai.net
+    mirrors = ["https://i.nhentai.net"] + [m for m in mirrors if m != "https://i.nhentai.net"]
+
+    return mirrors
+
+MIRRORS = get_mirrors()
+logger.debug(f"[*] Mirrors set: {MIRRORS}")
 
 # ===============================
 # HTTP SESSION
@@ -112,11 +165,10 @@ if config["verbose"]:
 def build_session():
     s = cloudscraper.create_scraper()
     s.headers.update({
-        "User-Agent": config["user_agent"],
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://nhentai.net/",
-        "Cookie": config["cookie"],
     })
     if config["use_tor"]:
         proxy = "socks5h://127.0.0.1:9050"
@@ -131,19 +183,63 @@ session = build_session()
 # ===============================
 # UTILITIES
 # ===============================
+def clean_gallery_title(meta):
+    # Extract a clean, readable title from NHentai metadata.
+    
+    title_obj = meta.get("title", {}) or {}
+    title_type = config.get("title_type", "pretty").lower()
+    
+    # Prefer the requested title type
+    if title_type == "english":
+        raw_title = title_obj.get("english") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
+    elif title_type == "japanese":
+        raw_title = title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
+    else:
+        raw_title = title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
+
+    # Split on | and take the last part (main work title)
+    if "|" in raw_title:
+        raw_title = raw_title.split("|")[-1].strip()
+    
+    return safe_name(raw_title)
+    
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
 def suwayomi_folder_name(meta, artist):
-    title = meta.get("title", f"Gallery_{meta.get('id', '000000')}")
-    return os.path.join(SUWAYOMI_DIR, safe_name(artist), safe_name(title))
+    # Returns the folder path for Suwayomi galleries.
+    
+    title = get_gallery_title(meta)
+    folder_name = f"{safe_name(artist)} - {title}"
+    return os.path.join(SUWAYOMI_DIR, folder_name)
 
 def write_details_json(folder, meta):
+    # Writes a Suwayomi-compatible details.json file instead of raw NHentai metadata.
+    
     try:
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "details.json")
+        
+        # Pick the first artist as main author/artist
+        main_artist = meta.get("artists", ["Unknown Artist"])[0]
+        # Use pretty title or fallback
+        title = meta.get("title", {}).get("pretty") or f"Gallery_{meta.get('id')}"
+        # NHentai tags go into genre
+        tags = meta.get("tags", [])
+
+        suwayomi_meta = {
+            "title": title,
+            "author": main_artist,
+            "artist": main_artist,
+            "description": f"An archive of {title}.",
+            "genre": tags,
+            "status": "1",  # default ongoing
+            "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+        }
+
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            json.dump(suwayomi_meta, f, ensure_ascii=False, indent=2)
+        
         logger.debug(f"[+] Wrote {path}")
     except Exception as e:
         logger.error(f"[!] Failed to write details.json in {folder}: {e}")
@@ -151,81 +247,110 @@ def write_details_json(folder, meta):
 # ===============================
 # NHENTAI API
 # ===============================
-def get_gallery_metadata(gallery_id: int):
+def get_gallery_metadata(gallery_id: int, retries=3, delay=2):
     url = urljoin(NHENTAI_API_BASE, f"gallery/{gallery_id}")
-    try:
-        r = session.get(url, timeout=30)
-        if r.status_code != 200:
-            logger.error(f"[!] API {gallery_id} HTTP {r.status_code}")
-            return None
-        data = r.json()
-        title_obj = data.get("title", {}) or {}
-        title = title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{gallery_id}"
-        tags = data.get("tags", [])
-        artists = [t["name"] for t in tags if t.get("type") == "artist"] or ["Unknown"]
-        meta = {
-            "id": data.get("id", gallery_id),
-            "title": title,
-            "tags": [t.get("name") for t in tags if "name" in t],
-            "artists": artists,
-            "num_pages": data.get("num_pages"),
-            "images": data.get("images", {}),
-            "url": f"https://nhentai.net/g/{gallery_id}/",
-        }
-        return meta
-    except Exception as e:
-        logger.error(f"[!] Failed to fetch metadata for {gallery_id}: {e}")
-        return None
+    for attempt in range(1, retries + 1):
+        try:
+            r = session.get(url, timeout=30)
+            if r.status_code == 429:
+                wait = delay * attempt + random.uniform(0, 1)
+                logger.warning(f"[!] API {gallery_id} HTTP 429: waiting {wait:.1f}s before retry")
+                time.sleep(wait)
+                continue
+            if r.status_code != 200:
+                logger.error(f"[!] API {gallery_id} HTTP {r.status_code}")
+                return None
+            data = r.json()
+            title_obj = data.get("title", {}) or {}
+            tags = data.get("tags", [])
+            artists = [t["name"] for t in tags if t.get("type") == "artist"] or ["Unknown Artist"]
+            meta = {
+                "id": data.get("id", gallery_id),
+                "media_id": data.get("media_id"),
+                "title": title_obj,
+                "tags": [t.get("name") for t in tags if "name" in t],
+                "artists": artists,
+                "num_pages": data.get("num_pages"),
+                "images": data.get("images", {}),
+                "url": f"https://nhentai.net/g/{gallery_id}/",
+            }
+            return meta
+        except Exception as e:
+            logger.error(f"[!] Attempt {attempt} failed for {gallery_id}: {e}")
+            time.sleep(delay)
+    logger.error(f"[!] All retries failed for gallery {gallery_id}")
+    return None
+
+def get_gallery_title(meta):
+    # Returns the gallery title based on --title-type flag,
+    # falling back to 'pretty' if the requested type is unavailable.
+    title_obj = meta.get("title", {}) or {}
+    title_type = config.get("title_type", "pretty").lower()
+
+    # Try requested type first
+    title = title_obj.get(title_type)
+
+    # Fallback chain
+    if not title:
+        if title_type != "english":
+            title = title_obj.get("english")
+        if not title and title_type != "japanese":
+            title = title_obj.get("japanese")
+        if not title:
+            title = title_obj.get("pretty")
+
+    return safe_name(title or f"Gallery_{meta.get('id')}")
 
 # ===============================
 # IMAGE DOWNLOAD
 # ===============================
-def download_image(url, path):
-    if config["dry_run"]:
-        logger.info(f"[DRY-RUN] Would download: {url} -> {path}")
-        return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def get_image_url(meta: dict, page: int, mirror_index=0) -> str:
+    # Build the URL for a specific image page using the mirror list.
     try:
-        resp = session.get(url, stream=True, timeout=30)
-        resp.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in resp.iter_content(1024*8):
-                f.write(chunk)
-        logger.info(f"[+] Downloaded: {path}")
-    except Exception as e:
-        logger.error(f"[!] Failed to download {url}: {e}")
+        media_id = meta["media_id"]
+        file_info = meta["images"]["pages"][page - 1]
+        file_type = file_info["t"]
+        ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
+        ext = ext_map.get(file_type, "jpg")
 
-def download_gallery_images(meta, folder):
-    # Construct image URLs
-    base = "https://i.nhentai.net/galleries/"
-    media_id = str(meta.get("media_id", meta.get("id")))
-    images_info = meta.get("images", {})
-    if not images_info:
-        logger.warning(f"[!] No image info for gallery {meta.get('id')}")
+        base_url = MIRRORS[mirror_index % len(MIRRORS)]
+        return f"{base_url}/galleries/{media_id}/{page}.{ext}"
+    except Exception as e:
+        logger.error(f"[!] Failed to build image URL for page {page}: {e}")
+        return None
+
+def download_image(url, path, retries=3, delay=2):
+    # Downloads an image from the URL, trying all mirrors in order.
+    if config["dry_run"]:
+        logger.info(f"[*] [DRY-RUN] Would download: {url} -> {path}")
         return
 
-    ext_map = {"j": "jpg", "p": "png", "g": "gif"}
-    pages = images_info.get("pages") or []
-    if not pages:
-        pages = [images_info.get("cover")]  # fallback
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    def download_page(i, p):
-        ext_type = p.get("t")
-        ext = ext_map.get(ext_type, "jpg")
-        url = f"{base}{media_id}/{i+1}.{ext}"
-        path = os.path.join(folder, f"{i+1}.{ext}")
-        download_image(url, path)
+    for attempt in range(1, retries + 1):
+        for mirror_index, mirror in enumerate(MIRRORS):
+            mirror_url = url.replace("https://i.nhentai.net", mirror)
+            try:
+                resp = session.get(mirror_url, stream=True, timeout=30)
+                resp.raise_for_status()
+                with open(path, "wb") as f:
+                    for chunk in resp.iter_content(1024*8):
+                        f.write(chunk)
+                logger.info(f"[+] Downloaded: {path}")
+                time.sleep(0.5)
+                return  # Success
+            except Exception as e:
+                logger.warning(f"[!] Attempt {attempt}, mirror {mirror} failed: {e}")
+                time.sleep(delay)
 
-    with ThreadPoolExecutor(max_workers=config["threads_images"]) as exe:
-        for i, page in enumerate(pages):
-            exe.submit(download_page, i, page)
+    logger.error(f"[!] All retries failed for {url}")
 
 # ===============================
 # GRAPHQL
 # ===============================
 def graphql_request(query, variables):
     if config["dry_run"]:
-        logger.info("[DRY-RUN] Skipping GraphQL request")
+        logger.info("[*] [DRY-RUN] Skipping GraphQL request")
         return None
     try:
         resp = requests.post(GRAPHQL_URL, json={"query": query, "variables": variables}, timeout=30)
@@ -254,25 +379,75 @@ def create_or_update_gallery(meta, folder):
     graphql_request(query, variables)
 
 # ===============================
-# MAIN LOOP
+# MAIN LOOP (multi-threaded)
 # ===============================
+def process_gallery(gallery_id):
+    time.sleep(random.uniform(1, 3)) # Wait as to not get rate limited.
+    logger.info(f"[*] Starting gallery {gallery_id}")
+    meta = get_gallery_metadata(gallery_id)
+    if not meta:
+        logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
+        return
+
+    # --- Language filter ---
+    gallery_tags = [t.lower() for t in meta.get("tags", [])]
+    gallery_langs = set(["english", "japanese", "chinese"]) & set(gallery_tags)
+    if not set(config["language"]) & gallery_langs:
+        logger.info(f"[!] Skipping gallery {gallery_id}: language not in {config['language']}")
+        return
+
+    # --- Process per artist ---
+    for artist in meta.get("artists", ["Unknown Artist"]):
+        # Folder style: /artist - doujin/
+        title = get_gallery_title(meta)
+        folder = os.path.join(SUWAYOMI_DIR, f"{safe_name(artist)} - {title}")
+        num_pages = meta.get("num_pages", 0)
+
+        # Skip if all pages already exist
+        all_exist = all(
+            os.path.exists(os.path.join(folder, f"{i+1}.jpg")) or
+            os.path.exists(os.path.join(folder, f"{i+1}.png")) or
+            os.path.exists(os.path.join(folder, f"{i+1}.gif"))
+            for i in range(num_pages)
+        )
+        if all_exist and num_pages > 0:
+            logger.info(f"[+] Skipping {gallery_id} ({folder}), already complete.")
+            continue
+
+        # Write details.json
+        write_details_json(folder, meta)
+        create_or_update_gallery(meta, folder)
+
+        # Download images
+        if num_pages > 0:
+            if config['dry_run']:
+                for i in range(num_pages):
+                    url = get_image_url(meta, i + 1)
+                    path = os.path.join(folder, f"{i+1}.{url.split('.')[-1]}")
+                    logger.info(f"[*] [DRY-RUN] Would download: {url} -> {path}")
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=config['threads_images']) as img_executor:
+                    futures = []
+                    for i in range(num_pages):
+                        url = get_image_url(meta, i + 1)
+                        path = os.path.join(folder, f"{i+1}.{url.split('.')[-1]}")
+                        futures.append(img_executor.submit(download_image, url, path))
+
+                    for _ in tqdm(concurrent.futures.as_completed(futures), total=num_pages,
+                                  desc=f"Gallery {gallery_id} ({safe_name(artist)})", unit="img"):
+                        pass
+
 def main():
     try:
-        logger.info(f"Starting galleries {config['start']} -> {config['end']}")
-        for gallery_id in range(config['start'], config['end']+1):
-            logger.info(f"[*] Starting gallery {gallery_id}")
-            meta = get_gallery_metadata(gallery_id)
-            if not meta:
-                logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
-                continue
+        start, end = int(config['start']), int(config['end'])
+        gallery_ids = list(range(start, end + 1))
+        logger.info(f"\n[*] Galleries to process: {start} -> {end}")
 
-            for artist in meta.get("artists", ["Unknown"]):
-                folder = suwayomi_folder_name(meta, artist)
-                write_details_json(folder, meta)
-                create_or_update_gallery(meta, folder)
-                download_gallery_images(meta, folder)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=config['threads_galleries']) as gallery_executor:
+            gallery_futures = [gallery_executor.submit(process_gallery, gid) for gid in gallery_ids]
+            concurrent.futures.wait(gallery_futures)
 
-        logger.info("[*] All galleries processed.")
+        logger.info("\n[*] All galleries processed.")
         return 0
     except Exception as e:
         logger.exception(e)
