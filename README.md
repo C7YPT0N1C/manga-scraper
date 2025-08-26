@@ -174,25 +174,24 @@ Run `sudo systemctl daemon-reload` if service files have been manually changed.
 
 - [ ] Look over / rewrite code
 - [ ] Make sure tags with multiple words (e.g. big ass) parse properly
-- [ ] Ensure variables are formatted correctly (env file and the use of quotes around variables, "cookie" vs cookie)
-- [ ] Add gallery download with language/tag filters
+- [x] Ensure variables are formatted correctly (env file and the use of quotes around variables, "cookie" vs cookie)
+- [x] Add gallery download with language/tag filters
 - [ ] Sort downloads by artists and groups
-- [ ] Add multi-threaded download support
-- [ ] Implement automatic retry of failed/skipped galleries
-- [ ] Add Flask monitoring endpoint
-- [ ] Create systemd service & timer
+- [x] Add multi-threaded download support
+- [x] Implement automatic retry of failed/skipped galleries
+- [x] Add Flask monitoring endpoint
 
 Suwayomi:
 - [ ] Use GraphQL to automatically change Suwayomi settings on install
 - [ ] Sort downloaded galleries into Suwayomi categories by tags)
-- [ ] Generate Suwayomi metadata automatically
+- [x] Generate Suwayomi metadata automatically
 - [ ] Automatically create a category in Suwayomi for each gallery tag/genre if it doesn't already exist
 - [ ] Assign galleries to corresponding categories based on their tags
 - [ ] Allow manual reordering of categories or extend logic to sort by number of galleries per category
 - [ ] Exclude tags listed in `SUWAYOMI_IGNORED_CATEGORIES` (default: `Favourites, Favs`) from automated categories
 
 Other Tasks:
-- [ ] Implement automatic cookie updates?
+- [x] Implement automatic cookie updates?
 - [ ] Allow users to select specific VPN server (via launch argument)?
 - [ ] Add more launch arguments / API endpoints
 - [ ] Improve documentation

@@ -181,6 +181,39 @@ def build_session():
 session = build_session()
 
 # ===============================
+# GRAPHQL
+# ===============================
+def graphql_request(query, variables):
+    if config["dry_run"]:
+        logger.info("[*] [DRY-RUN] Skipping GraphQL request")
+        return None
+    try:
+        resp = requests.post(GRAPHQL_URL, json={"query": query, "variables": variables}, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.error(f"[!] GraphQL request failed: {e}")
+        return None
+
+def create_or_update_gallery(meta, folder):
+    query = """
+    mutation addGallery($input: GalleryInput!) {
+      addGallery(input: $input) { id title }
+    }
+    """
+    variables = {
+        "input": {
+            "id": meta.get("id"),
+            "title": meta.get("title"),
+            "artists": meta.get("artists"),
+            "tags": meta.get("tags", []),
+            "url": meta.get("url"),
+            "local_path": folder
+        }
+    }
+    graphql_request(query, variables)
+
+# ===============================
 # UTILITIES
 # ===============================
 def clean_gallery_title(meta):
@@ -245,38 +278,40 @@ def write_details_json(folder, meta):
         logger.error(f"[!] Failed to write details.json in {folder}: {e}")
 
 # ===============================
-# NHENTAI API
+# GALLERY + IMAGE DOWNLOAD
 # ===============================
 def dynamic_sleep(stage):
     # Sleeps for a random time based on scraper load.
-    num_threads = config.get('threads_galleries', 1)
-    num_galleries = max(1, config.get('end', 1) - config.get('start', 0) + 1)
-    
+    num_galleries = max(1, config.get('end', 1) - config.get('start', 0) + 1) # Total galleries to process
+    num_gallery_threads = config.get('threads_galleries', 1) # Concurrent gallery threads
+    num_image_threads = config.get('threads_images', 1) # Threads per gallery
+
+    total_load = num_gallery_threads * num_image_threads # Total concurrent threads (affecting load)
+
     # Base ranges (seconds)
     if stage == "metadata":
-        base_min, base_max = 0.3, 0.5  # Metadata fetches are lighter
+        base_min, base_max = 0.3, 0.5
     elif stage == "gallery":
-        base_min, base_max = 0.5, 1 # Gallery fetches are heavier
+        base_min, base_max = 0.5, 1
     else:
-        base_min, base_max = 0.5, 0.5 # Default to moderate wait
+        base_min, base_max = 0.5, 0.5
 
-    # Calculate a scale factor to adjust sleep time based on load.
-    # 1. num_threads * min(num_galleries, 1000) → approximate "workload" but cap galleries at 1000 for sanity.
-    # 2. Divide by 10 → normalizes the workload so that sleep times aren’t too extreme.
-    # 3. max(1, ...) → ensures the scale is never less than 1, so sleep doesn't shrink too much.
-    # 4. min(..., 5) → caps the scale at 5 to prevent extremely long sleeps for huge workloads.
-    scale = min(max(1, (num_threads * min(num_galleries, 1000)) / 10), 5)
-    
-    if stage == "metadata":
-        logger.debug(f"[!] Metadata Gatherer: API rate limit hit, sleeping for {scale:.1f}s before retry")
-    elif stage == "gallery":
-        logger.debug(f"[!] Gallery Downloader: API rate limit hit, sleeping for {scale:.1f}s before retry")
-    else:
-        logger.debug(f"[!] API rate limit hit, sleeping for {scale:.1f}s before retry")
-    
+    # Scale sleep based on load and number of galleries
+    # Explanation:
+    #   gallery_factor = min(num_galleries, 1000)/1000 ensures very large ranges don't blow up sleep
+    #   scale = total_load * gallery_factor, capped between 1 and 5
+    #   total_load = concurrent threads (galleries * images)
+    gallery_factor = min(num_galleries, 1000) / 1000
+    scale = min(max(1, total_load * gallery_factor), 5)
+
     sleep_time = random.uniform(base_min * scale, base_max * scale)
+
+    # Logging for debug
+    stage_name = {"metadata": "Metadata Gatherer", "gallery": "Gallery Downloader"}.get(stage, "API")
+    logger.debug(f"[!] {stage_name}: sleeping for {sleep_time:.2f}s (scale {scale:.1f}) due to current load.")
+
     time.sleep(sleep_time)
-    
+
 def get_gallery_metadata(gallery_id: int, retries=3, delay=2):
     url = urljoin(NHENTAI_API_BASE, f"gallery/{gallery_id}")
     for attempt in range(1, retries + 1):
@@ -331,9 +366,6 @@ def get_gallery_title(meta):
 
     return safe_name(title or f"Gallery_{meta.get('id')}")
 
-# ===============================
-# IMAGE DOWNLOAD
-# ===============================
 def get_image_url(meta: dict, page: int, mirror_index=0) -> str:
     # Build the URL for a specific image page using the mirror list.
     try:
@@ -376,39 +408,6 @@ def download_image(url, path, retries=3, delay=2):
     logger.error(f"[!] All retries failed for {url}")
 
 # ===============================
-# GRAPHQL
-# ===============================
-def graphql_request(query, variables):
-    if config["dry_run"]:
-        logger.info("[*] [DRY-RUN] Skipping GraphQL request")
-        return None
-    try:
-        resp = requests.post(GRAPHQL_URL, json={"query": query, "variables": variables}, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.error(f"[!] GraphQL request failed: {e}")
-        return None
-
-def create_or_update_gallery(meta, folder):
-    query = """
-    mutation addGallery($input: GalleryInput!) {
-      addGallery(input: $input) { id title }
-    }
-    """
-    variables = {
-        "input": {
-            "id": meta.get("id"),
-            "title": meta.get("title"),
-            "artists": meta.get("artists"),
-            "tags": meta.get("tags", []),
-            "url": meta.get("url"),
-            "local_path": folder
-        }
-    }
-    graphql_request(query, variables)
-
-# ===============================
 # MAIN LOOP (multi-threaded)
 # ===============================
 def process_gallery(gallery_id):
@@ -419,11 +418,30 @@ def process_gallery(gallery_id):
         logger.error(f"[!] Failed to fetch metadata for {gallery_id}")
         return
 
-    # --- Language filter ---
+    # --- Language & Excluded Tags Filter ---
+    allowed_langs = set(l.strip().lower() for l in config["language"].split(","))
+
+    # Get gallery tags
     gallery_tags = [t.lower() for t in meta.get("tags", [])]
-    gallery_langs = set(["english", "japanese", "chinese"]) & set(gallery_tags)
-    if not set(config["language"]) & gallery_langs:
+
+    # Determine gallery languages, ignoring "translated"
+    gallery_langs = set(t for t in gallery_tags if t in ["english", "japanese", "chinese"])
+
+    # If gallery has "translated" but also another language, that language counts
+    if "translated" in gallery_tags and not gallery_langs:
+        logger.info(f"[!] Skipping gallery {gallery_id}: only 'translated' found, no target language")
+        return
+
+    # Skip gallery if none of the allowed languages match
+    if not allowed_langs & gallery_langs:
         logger.info(f"[!] Skipping gallery {gallery_id}: language not in {config['language']}")
+        return
+
+    # Excluded tags filter
+    excluded_tags = set(t.strip().lower() for t in config["excluded_tags"].split(",") if t.strip())
+    if excluded_tags & set(gallery_tags):
+        matched = excluded_tags & set(gallery_tags)
+        logger.info(f"[!] Skipping gallery {gallery_id}: contains excluded tags {', '.join(matched)}")
         return
 
     # --- Process per artist ---
