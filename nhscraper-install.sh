@@ -51,9 +51,16 @@ function install_system_packages() {
 function install_python_packages() {
     echo -e "\n[*] Installing Python requirements in venv..."
     source "$NHENTAI_DIR/venv/bin/activate"
+    
+    # Upgrade pip/setuptools/wheel first
     "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR"
+    
+    # Install the package in editable mode from the nhscraper subfolder
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR/nhscraper"
+    
+    # Ensure CLI is available globally
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
+
     echo "[+] Python requirements installed and nhentai-scraper CLI ready."
 }
 
@@ -93,9 +100,6 @@ function install_scraper() { # Updatable, update as needed.
     else
         source "$NHENTAI_DIR/venv/bin/activate"
     fi
-
-    # Install via pyproject.toml (editable mode)
-    pip install -e .
 
     install_python_packages
 
@@ -245,9 +249,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/nhentai-scraper/nhentai-scraper
+WorkingDirectory=/opt/nhentai-scraper/nhscraper
 EnvironmentFile=/opt/nhentai-scraper/nhentai-scraper.env
-ExecStart=/opt/nhentai-scraper/venv/bin/python /opt/nhentai-scraper/nhentai-scraper/nhentai-api.py
+ExecStart=/opt/nhentai-scraper/venv/bin/python /opt/nhentai-scraper/nhscraper/nhentai-api.py
 Restart=on-failure
 User=root
 

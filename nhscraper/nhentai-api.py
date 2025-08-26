@@ -53,4 +53,3 @@ if __name__ == "__main__":
     while True:
         status["last_checked"] = time.strftime("%Y-%m-%d %H:%M:%S")
         time.sleep(10)
-        
