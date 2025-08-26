@@ -21,6 +21,7 @@ fi
 # ===============================
 NHENTAI_DIR="/opt/nhentai-scraper"
 SUWAYOMI_DIR="/opt/suwayomi"
+FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9" # Minimum required Python version # Updatable, update as needed.
@@ -120,13 +121,16 @@ function install_suwayomi() { # Updatable, update as needed.
 function install_filebrowser() { # Updatable, update as needed.
     echo -e "\n[*] Installing FileBrowser..."
 
+    mkdir -p $FILEBROWSER_DIR
+
     # Download installer
     curl -fsSLO https://raw.githubusercontent.com/filebrowser/get/master/get.sh
     bash get.sh
     rm -f get.sh
 
     # Initialize default config in current user's home (~/.filebrowser)
-    filebrowser config init -a 0.0.0.0
+    filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
+
 
     # Prompt for password
     echo -n "[?] Enter FileBrowser admin password: "
@@ -142,10 +146,10 @@ function install_filebrowser() { # Updatable, update as needed.
 
     # Create or update admin user in default database
     if filebrowser users list | grep -qw admin; then
-        filebrowser users update admin --password "$FILEBROWSER_PASS" --perm.admin
+        filebrowser users update admin --password "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
         echo "[*] Admin user password updated."
     else
-        filebrowser users add admin "$FILEBROWSER_PASS" --perm.admin
+        filebrowser users add admin "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
         echo "[*] Admin user created."
     fi
 
@@ -178,9 +182,9 @@ function reload_systemd_services() { # Updatable, update as needed.
         if systemctl list-unit-files | grep -qw "${svc}.service"; then
             systemctl enable "$svc"
             systemctl start "$svc"
-            echo "[+] $svc enabled and started."
+            echo -e "\n[+] $svc enabled and started."
         else
-            echo "[!] $svc.service not found, skipping."
+            echo -e "\n[!] $svc.service not found, skipping."
         fi
     done
 }
@@ -214,7 +218,7 @@ Description=FileBrowser
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/filebrowser -r / --address 0.0.0.0 --port 8080
+ExecStart=/usr/local/bin/filebrowser -d /opt/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
 Restart=on-failure
 User=root
 

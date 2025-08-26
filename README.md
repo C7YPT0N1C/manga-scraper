@@ -50,7 +50,7 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
 - **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
 
 ### Installation Commands
-One Line Install: `wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && nhscraper-install.sh --install`
+One Line Install: `rm ./nhscraper-install.sh && wget https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/dev/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
 
 Alternative Install: Clone Repository.
 ```bash
@@ -75,7 +75,7 @@ chmod +x nhscraper-install.sh
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
   - User: `admin`
   - Password created on install.
-    - You can change the password at any time using `filebrowser users update admin --password "PASSWORD"` 
+    - You can change the password at any time using `filebrowser users update admin --password "PASSWORD"` --database /opt/filebrowser/filebrowser.db --perm.admin
 
 ## Usage
 ### Cookies and User Agents
