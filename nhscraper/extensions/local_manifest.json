@@ -3,16 +3,18 @@
     {
       "name": "skeleton",
       "version": "0.1.0",
-      "description": "Skeleton extension for testing hooks",
-      "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
-      "installed": false
+      "description": "Skeleton extension with dummy hooks",
+      "repo_url": "",
+      "installed": true,
+      "entry_point": "skeleton__nhsext.py"
     },
     {
       "name": "suwayomi",
-      "version": "0.1.0",
-      "description": "Suwayomi integration extension (GraphQL + details.json)",
+      "version": "1.0.0",
+      "description": "Suwayomi extension",
       "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
-      "installed": false
+      "installed": false,
+      "entry_point": "suwayomi__nhsext.py"
     }
   ]
 }

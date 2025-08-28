@@ -8,7 +8,8 @@ from extensions.extension_loader import (
     install_extension,
     uninstall_extension,
     EXTENSION_MANIFEST_URL,
-    update_local_manifest
+    update_local_manifest_from_remote,
+    get_selected_extension
 )
 from core.logger import logger
 
@@ -103,18 +104,6 @@ def main():
     args = parse_args()
 
     # ------------------------------
-    # Handle extension installation/uninstallation
-    # ------------------------------
-    if args.install_extension:
-        update_local_manifest(EXTENSION_MANIFEST_URL)  # pull remote manifest first
-        install_extension(args.install_extension)
-        return
-
-    if args.uninstall_extension:
-        uninstall_extension(args.uninstall_extension)
-        return
-
-    # ------------------------------
     # Update config
     # ------------------------------
     config["dry_run"] = args.dry_run
@@ -129,19 +118,22 @@ def main():
     config["extension_name"] = args.extension.lower()
 
     # ------------------------------
-    # Select extension
+    # Handle extension installation/uninstallation
     # ------------------------------
-    selected_extension = None
-    for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith(f"{args.extension.lower()}__nhsext"):
-            selected_extension = ext
-            break
+    if args.install_extension:
+        update_local_manifest_from_remote()  # just call it without argument
+        install_extension(args.install_extension)
+        return
 
-    if selected_extension:
-        logger.info(f"[+] Using extension: {args.extension}")
-    else:
-        if args.extension.lower() != "none":
-            logger.warning(f"[!] Extension {args.extension} not found, proceeding without it")
+    if args.uninstall_extension:
+        uninstall_extension(args.uninstall_extension)
+        return
+    
+    # ------------------------------
+    # Select extension (skeleton fallback)
+    # ------------------------------
+    selected_extension = get_selected_extension(args.extension.lower())
+    logger.info(f"[+] Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
     # Build gallery list

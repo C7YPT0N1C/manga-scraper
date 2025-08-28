@@ -13,7 +13,7 @@ from core.logger import logger
 # ------------------------------
 EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
-EXTENSION_MANIFEST_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+REMOTE_MANIFEST_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
 
 INSTALLED_EXTENSIONS = []
 
@@ -24,7 +24,7 @@ def load_local_manifest():
     """Load the local manifest, create it from remote if it doesn't exist."""
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         logger.info("[*] Local manifest not found. Creating from remote...")
-        update_local_manifest()
+        update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -36,13 +36,13 @@ def save_local_manifest(manifest: dict):
 def fetch_remote_manifest():
     """Fetch remote manifest.json."""
     try:
-        with urlopen(EXTENSION_MANIFEST_URL) as response:
+        with urlopen(REMOTE_MANIFEST_URL) as response:
             return json.load(response)
     except Exception as e:
         logger.error(f"[!] Failed to fetch remote manifest: {e}")
         return {"extensions": []}
 
-def update_local_manifest():
+def update_local_manifest_from_remote():
     """Merge remote manifest into local manifest, keeping installed flags intact."""
     remote_manifest = fetch_remote_manifest()
     local_manifest = {"extensions": []}
@@ -87,7 +87,7 @@ def load_installed_extensions():
 # ------------------------------
 def install_extension(extension_name: str):
     """Install an extension if not already installed."""
-    manifest = update_local_manifest()
+    manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
         logger.error(f"[!] Extension '{extension_name}' not found in remote manifest")
@@ -136,6 +136,30 @@ def uninstall_extension(extension_name: str):
     # Update manifest
     ext_entry["installed"] = False
     save_local_manifest(manifest)
+
+# ------------------------------
+# Get selected extension (with skeleton fallback)
+# ------------------------------
+def get_selected_extension(name: str = "skeleton"):
+    """
+    Returns the selected extension module.
+    Defaults to 'skeleton' if none specified or if requested extension not installed.
+    """
+    update_local_manifest_from_remote()
+    load_installed_extensions()
+
+    # Try requested extension first
+    for ext in INSTALLED_EXTENSIONS:
+        if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
+            return ext
+
+    # Fallback to skeleton
+    for ext in INSTALLED_EXTENSIONS:
+        if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
+            return ext
+
+    logger.error("[!] Skeleton extension not found! This should never happen.")
+    return None
 
 # ------------------------------
 # Run on import
