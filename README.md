@@ -2,17 +2,15 @@
 
 - [**Overview and Disclaimer**](#overview-and-disclaimer)
 - [**Features**](#features)
-  - [Important Notes and Known Pitfalls](#important-notes-and-known-pitfalls)
   - [**TO-DO LIST**](#to-do-list)
 - [**Installation**](#installation)
   - [System Requirements](#system-requirements)
   - [Installation Commands](#installation-commands)
 - [**Post Install**](#post-install)
 - [**Usage**](#usage)
-  - [CLI Arguments](#cli-arguments)
+  a- [CLI Arguments](#cli-arguments)
   - [Examples](#examples)
 - [**Documentation**](#documentation)
-  - [High Level Flow](#high-level-flow)
   - [Directory Layout](#directory-layout)
   - [Systemd Services](#systemd-services)
   - [GraphQL API Queries](#graphql-api-queries)
@@ -40,12 +38,6 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
   - Tags listed in `SUWAYOMI_IGNORED_CATEGORIES` (default: `Favs`) are not created as automated categories.
 - `COMING SOON` Automatic Suwayomi metadata generation
 - Flask monitoring endpoint (Systemd service)
-
-## Important Notes and Known Pitfalls
-- Downloads are skipped if a gallery folder exists and **every page has at least one valid image file**. (Bug fix required: see below.)
-- When running with `threads_galleries>1`, terminal progress bars (`tqdm`) can interfere. The code can switch off progress bars automatically for multi-galley concurrency.
-- Logging is verbose by default (DEBUG). `--verbose` currently sets the log level as an override; code checks `config["dry_run"]` before network or write actions.
-- GraphQL calls are verified: success is detected by checking `data` returned and `errors` entries.
 
 ## Installation
 ### System Requirements
@@ -129,35 +121,14 @@ nhentai-scraper --exclude-tags yaoi, shotacon --use-tor
 ```
 
 ## Documentation
-### High level flow
-1. `cli.py` is the user entrypoint.
-2. `config.py` parses CLI flags + `.env`, sets `config` and builds the gallery list.
-3. `downloader.py` runs `main()` — iterates gallery IDs and calls `process_gallery()`.
-4. `nhscraper_api.py` contains shared network utilities, indexing state and the Flask status API.
-5. `graphql_api.py` contains calls to Suwayomi via GraphQL.
-
-Possible alternative integration?:
-- Suwayomi extension → POST to `nhscraper_api` endpoint (e.g. `/import`) → triggers `downloader`/`graphql_api` flows to import galleries and update the Suwayomi library.
-
-
-### Folder Structure
+### Directory Layout
+Galleries (Suwayomi compatible) saved as:
 ```
-nhentai-scraper/
-├─ core/
-│  ├─ __init__.py
-│  ├─ config.py
-│  ├─ logger.py
-│  ├─ db.py
-│  ├─ downloader.py
-│  └─ fetchers.py
-├─ extensions/
-│  ├─ __init__.py
-│  ├─ extension_loader.py
-│  └─ skeleton/
-│     └─ skeleton__nhsext.py
-├─ api.py
-└─ cli.py
-
+ARTIST_FOLDER/
+└─ DOUJIN_FOLDER/
+   ├─ 1.jpg
+   ├─ 2.jpg
+   └─ details.json
 ```
 Suwayomi metadata format:
 ```json
@@ -202,11 +173,10 @@ Run `sudo systemctl daemon-reload` if service files have been manually changed.
 (Basically just me looking at features / everything in the readme and make sure it's accurate lol)
 
 - [ ] Look over / rewrite code
-- [x] Make sure tags with multiple words (e.g. big ass) parse properly
+- [ ] Make sure tags with multiple words (e.g. big ass) parse properly
 - [x] Ensure variables are formatted correctly (env file and the use of quotes around variables, "cookie" vs cookie)
-- [ ] Add gallery download with language/tag filters
-- [ ] Clean gallery download output folder (artist - doujin title)
-- [ ] Sort downloads by artists **and** groups if there are no artists.
+- [x] Add gallery download with language/tag filters
+- [ ] Sort downloads by artists and groups
 - [x] Add multi-threaded download support
 - [x] Implement automatic retry of failed/skipped galleries
 - [x] Add Flask monitoring endpoint
@@ -226,4 +196,4 @@ Other Tasks:
 - [ ] Add more launch arguments / API endpoints
 - [ ] Improve documentation
 - [ ] Add better debugging (e.g., reasons for gallery skip)
-- [ ] New workflow?: Suwayomi extension → `nhscraper_api.py` request → `config.py` / `downloader.py` / `graphql_api.py` functions → Import to Suwayomi Library?
+- [ ] New workflow?: suwayomi extension → API request → scraper → downloader → import to Suwayomi
