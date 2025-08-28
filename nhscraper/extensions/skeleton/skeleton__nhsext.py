@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # extensions/skeleton/skeleton__nhsext.py
+# This is a skeleton/example extension for nhentai-scraper. It is also use as the default extension if none is specified.
+# ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, subprocess, json
 from core.logger import logger
