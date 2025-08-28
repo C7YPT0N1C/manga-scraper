@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nhentai-scraper"
 version = "4.0.0"
-description = "NHentai scraper with Suwayomi integration"
+description = "NHentai scraper with extensions for the integration into other services."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "C7YPT0N1C" }]
@@ -17,12 +17,12 @@ dependencies = [
     "tqdm>=4.66.1",
     "aiohttp>=3.9.2",
     "gql[all]>=3.5.0",
-    "python-dotenv>=1.0",
+    "python-dotenv>=1.0"
 ]
 requires-python = ">=3.9"
 
 [project.scripts]
-nhentai-scraper = "nhscraper.cli:main"
+nhentai-scraper = "cli:main"
 
 [tool.setuptools]
-packages = ["nhscraper"]  # Explicitly include nhscraper package
+packages = ["core", "extensions"]

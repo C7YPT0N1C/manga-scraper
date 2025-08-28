@@ -140,26 +140,24 @@ Possible alternative integration?:
 - Suwayomi extension → POST to `nhscraper_api` endpoint (e.g. `/import`) → triggers `downloader`/`graphql_api` flows to import galleries and update the Suwayomi library.
 
 
-### Directory Layout
-Galleries (Suwayomi compatible) saved as:
+### Folder Structure
 ```
-local/
-  ARTIST FOLDER/
-    details.json
-    
-    [DOUJIN 1 FOLDER]/
-      IMGAGE 1.jpg
-      IMGAGE 2.jpg
-      IMGAGE 3.jpg
-      ...
-    
-    [DOUJIN 2 FOLDER]]/
-      IMGAGE 1.webp
-      IMGAGE 2.webp
-      IMGAGE 3.webp
-      ...
-   
-    ...
+nhentai-scraper/
+├─ core/
+│  ├─ __init__.py
+│  ├─ config.py
+│  ├─ logger.py
+│  ├─ db.py
+│  ├─ downloader.py
+│  └─ fetchers.py
+├─ extensions/
+│  ├─ __init__.py
+│  ├─ extension_loader.py
+│  └─ skeleton/
+│     └─ skeleton__nhsext.py
+├─ api.py
+└─ cli.py
+
 ```
 Suwayomi metadata format:
 ```json
