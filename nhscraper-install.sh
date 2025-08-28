@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # nhscraper-install.sh
-# Installer for nhentai-scraper, Suwayomi, and FileBrowser with extension support
+# Installer for nhentai-scraper and FileBrowser with extension support
 
 set -e
 
@@ -113,32 +113,6 @@ EOF
     echo "[+] Environment file created at $ENV_FILE"
 }
 
-install_extension() {
-    EXT_NAME="$1"
-    source "$ENV_FILE"
-    python3 - <<PYTHON
-from nhscraper.extensions import extension_loader
-ext = extension_loader.load_extension("$EXT_NAME")
-if ext:
-    ext.install_extension()
-else:
-    print("[!] Extension $EXT_NAME not found")
-PYTHON
-}
-
-uninstall_extension() {
-    EXT_NAME="$1"
-    source "$ENV_FILE"
-    python3 - <<PYTHON
-from nhscraper.extensions import extension_loader
-ext = extension_loader.load_extension("$EXT_NAME")
-if ext:
-    ext.uninstall_extension()
-else:
-    print("[!] Extension $EXT_NAME not found")
-PYTHON
-}
-
 start_install() {
     check_python_version
     install_system_packages
@@ -158,12 +132,6 @@ echo "===================================================="
 case "$1" in
     --install)
         start_install
-        ;;
-    --install-extension)
-        install_extension "$2"
-        ;;
-    --uninstall-extension)
-        uninstall_extension "$2"
         ;;
     --update-env)
         echo "[*] Updating environment variables..."

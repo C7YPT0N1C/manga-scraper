@@ -3,13 +3,24 @@
 import argparse
 from core.config import config
 from core.downloader import download_batch
-from extensions.extension_loader import INSTALLED_EXTENSIONS
+from extensions.extension_loader import (
+    INSTALLED_EXTENSIONS,
+    install_extension,
+    uninstall_extension,
+    EXTENSION_MANIFEST_URL,
+    update_local_manifest
+)
 from core.logger import logger
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper with Suwayomi integration"
     )
+
+    # Extension installation/uninstallation
+    parser.add_argument("--install-extension", type=str, help="Install an extension by name")
+    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Extension selection
     parser.add_argument(
@@ -84,8 +95,6 @@ def build_gallery_list(args):
         gallery_ids.update(ids)
 
     # TODO: implement artist/group/tag/parody fetching using nhentai API
-    # For now, placeholder: assume IDs fetched per each filter
-    # Merge all IDs
     gallery_list = sorted(gallery_ids)
     return gallery_list
 
@@ -93,7 +102,21 @@ def build_gallery_list(args):
 def main():
     args = parse_args()
 
+    # ------------------------------
+    # Handle extension installation/uninstallation
+    # ------------------------------
+    if args.install_extension:
+        update_local_manifest(EXTENSION_MANIFEST_URL)  # pull remote manifest first
+        install_extension(args.install_extension)
+        return
+
+    if args.uninstall_extension:
+        uninstall_extension(args.uninstall_extension)
+        return
+
+    # ------------------------------
     # Update config
+    # ------------------------------
     config["dry_run"] = args.dry_run
     config["use_tor"] = args.use_tor
     config["verbose"] = args.verbose
@@ -105,7 +128,9 @@ def main():
     config["title_sanitise"] = args.title_sanitise
     config["extension_name"] = args.extension.lower()
 
+    # ------------------------------
     # Select extension
+    # ------------------------------
     selected_extension = None
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{args.extension.lower()}__nhsext"):
@@ -118,19 +143,28 @@ def main():
         if args.extension.lower() != "none":
             logger.warning(f"[!] Extension {args.extension} not found, proceeding without it")
 
+    # ------------------------------
+    # Build gallery list
+    # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
         logger.warning("[!] No galleries to download. Exiting.")
         return
 
+    # ------------------------------
     # Pre-download hook
+    # ------------------------------
     if selected_extension and hasattr(selected_extension, "pre_download_hook"):
         gallery_list = selected_extension.pre_download_hook(config, gallery_list)
 
+    # ------------------------------
     # Download galleries
+    # ------------------------------
     download_batch(gallery_list)
 
+    # ------------------------------
     # Post-download hook
+    # ------------------------------
     if selected_extension and hasattr(selected_extension, "post_download_hook"):
         selected_extension.post_download_hook(config, gallery_list)
 

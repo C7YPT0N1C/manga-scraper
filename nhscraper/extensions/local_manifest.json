@@ -4,13 +4,15 @@
       "name": "skeleton",
       "version": "0.1.0",
       "description": "Skeleton extension for testing hooks",
-      "repo_url": ""
+      "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
+      "installed": false
     },
     {
       "name": "suwayomi",
       "version": "0.1.0",
       "description": "Suwayomi integration extension (GraphQL + details.json)",
-      "repo_url": ""
+      "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
+      "installed": false
     }
   ]
 }
