@@ -10,7 +10,7 @@ from nhscraper.extensions.extension_loader import (
     update_local_manifest_from_remote,
     get_selected_extension
 )
-from nhscraper.core.logger import logger
+from nhscraper.logger import logger
 
 
 def parse_args():
@@ -132,14 +132,14 @@ def main():
     # Select extension (skeleton fallback)
     # ------------------------------
     selected_extension = get_selected_extension(args.extension.lower())
-    logger.info(f"[+] Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
+    logger.info(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
     # Build gallery list
     # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        logger.warning("[!] No galleries to download. Exiting.")
+        logger.warning("No galleries to download. Exiting.")
         return
 
     # ------------------------------

@@ -14,7 +14,14 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
 
 # Logger setup
 logger = logging.getLogger("nhscraper")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
+# LOGGING LEVELS:
+# logging.debug("This is a debug message")    # Not shown because level is INFO
+# logging.info("This is info")               # Shown
+# logging.warning("This is a warning")       # Shown
+# logging.error("This is an error")          # Shown
+# logging.critical("This is critical")       # Shown
 
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
 

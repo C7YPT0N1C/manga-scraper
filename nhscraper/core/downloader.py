@@ -6,7 +6,7 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
-from nhscraper.core.logger import logger
+from nhscraper.logger import logger
 from nhscraper.core.config import config, get_download_path
 from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
@@ -70,14 +70,14 @@ def process_gallery(gallery_id: int):
         if not config.get("dry_run"):
             os.makedirs(gallery_folder, exist_ok=True)
         else:
-            logger.info(f"[+] Dry-run: Would create folder {gallery_folder}")
+            logger.info(f"Dry-run: Would create folder {gallery_folder}")
 
         # Download images
         def download_worker(img_url):
             filename = os.path.basename(img_url)
             target_path = os.path.join(gallery_folder, filename)
             if config.get("dry_run"):
-                logger.info(f"[+] Dry-run: Would download {img_url} -> {target_path}")
+                logger.info(f"Dry-run: Would download {img_url} -> {target_path}")
             else:
                 download_image(img_url, target_path, use_tor=config.get("use_tor"))
 
@@ -92,12 +92,12 @@ def process_gallery(gallery_id: int):
 
         return meta
     except Exception as e:
-        logger.error(f"[!] Error processing gallery {gallery_id}: {e}")
+        logger.error(f"Error processing gallery {gallery_id}: {e}")
         return None
 
 def download_galleries(gallery_list: list):
     """Process a list of gallery IDs concurrently using threads."""
-    logger.info(f"[*] Starting download of {len(gallery_list)} galleries")
+    logger.info(f"Starting download of {len(gallery_list)} galleries")
     # Pre-download extension hooks
     for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "pre_download_hook"):
@@ -121,5 +121,5 @@ def download_galleries(gallery_list: list):
         if hasattr(ext, "post_download_hook"):
             ext.post_download_hook(config, all_meta)
 
-    logger.info(f"[+] Completed download of {len(all_meta)} galleries")
+    logger.info(f"Completed download of {len(all_meta)} galleries")
     return all_meta
