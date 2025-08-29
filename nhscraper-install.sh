@@ -73,16 +73,52 @@ install_scraper() {
 }
 
 install_filebrowser() {
-    echo "[*] Installing FileBrowser..."
+        echo -e "\n[*] Installing FileBrowser..."
+
     mkdir -p $FILEBROWSER_DIR
+
+    # Download installer
     curl -fsSLO https://raw.githubusercontent.com/filebrowser/get/master/get.sh
     bash get.sh
     rm -f get.sh
+
+    # Remove old database if it exists
+    if [ -f "$FB_DB" ]; then
+        echo "[*] Removing old FileBrowser database..."
+        rm -f "$FB_DB"
+    fi
+    
+    # Initialize default config in current user's home (~/.filebrowser)
     filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
-    echo "[+] FileBrowser installed."
+
+
+    # Prompt for password
+    echo -n "[?] Enter FileBrowser admin password: "
+    read -s FILEBROWSER_PASS
+    echo
+
+    # Generate random password if empty
+    if [ -z "$FILEBROWSER_PASS" ]; then
+        FILEBROWSER_PASS=$(openssl rand -base64 16)
+        echo "[!] No password entered. Generated random password: $FILEBROWSER_PASS"
+        echo "[!] Please save this password!"
+    fi
+
+    # Create or update admin user in default database
+    if filebrowser users list | grep -qw admin; then
+        filebrowser users update admin --password "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
+        echo "[*] Admin user password updated."
+    else
+        filebrowser users add admin "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
+        echo "[*] Admin user created."
+    fi
+
+    echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
+    echo "[!] Please save this password: $FILEBROWSER_PASS"
 }
 
 create_env_file() {
+    echo "[*] Updating environment variables..."
     echo "[*] Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
@@ -111,15 +147,52 @@ TITLE_SANITISE=true
 VERBOSE=false
 EOF
     echo "[+] Environment file created at $ENV_FILE"
+    echo "[+] Environment updated."
+}
+
+create_systemd() {
+    echo "[*] Creating systemd service for nhscraper-api..."
+    cat > /etc/systemd/system/nhscraper-api.service <<EOF
+[Unit]
+Description=NHentai Scraper API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$NHENTAI_DIR
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/api.py
+Restart=always
+EnvironmentFile=$ENV_FILE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reexec
+    systemctl enable nhscraper-api
+    systemctl restart nhscraper-api
+    echo "[+] Systemd service 'nhscraper-api' created and started."
 }
 
 start_install() {
-    check_python_version
-    install_system_packages
-    install_scraper
-    install_filebrowser
-    create_env_file
-    echo "[+] Installation complete!"
+    echo "[*] This will install nhentai-scraper, FileBrowser, and set up the API as a service."
+    read -p "    Do you want to continue? (y/n): " choice
+    case "$choice" in
+        y|Y)
+            echo "[*] Starting installation..."
+            check_python_version
+            install_system_packages
+            install_scraper
+            install_filebrowser
+            create_env_file
+            create_systemd
+            echo "[+] Installation complete!"
+            ;;
+        *)
+            echo "[!] Installation aborted."
+            exit 1
+            ;;
+    esac
 }
 
 # ===============================
@@ -134,9 +207,7 @@ case "$1" in
         start_install
         ;;
     --update-env)
-        echo "[*] Updating environment variables..."
         create_env_file
-        echo "[+] Environment updated"
         ;;
     --update)
         echo "[*] Updating repository and Python packages..."
