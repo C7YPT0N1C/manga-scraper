@@ -230,20 +230,27 @@ start_uninstall() {
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
         y|Y)
-            echo "[*] Uninstalling scraper..."
+            echo "[*] Uninstalling..."
             # Remove Directories and files
             rm -rf /opt/filebrowser/
             rm -rf "$NHENTAI_DIR"
+            
             # Remove symlinks
             rm -f /usr/local/bin/filebrowser
             rm -f /usr/local/bin/nhentai-scraper
+            
             # Reload systemd and stop services
-            systemctl stop filebrowser nhscraper-api || true
             systemctl disable filebrowser nhscraper-api|| true
+            systemctl stop filebrowser nhscraper-api || true
+            
             # Remove systemd services
             rm -f /etc/systemd/system/filebrowser.service
             rm -f /etc/systemd/system/nhscraper-api.service
-            echo "[+] nhentai-scraper uninstalled"
+            
+            # Reload systemd
+            systemctl daemon-reload
+            echo "[+] Uninstallation complete."
+            exit 0
             ;;
         *)
             echo "[!] Uninstallation aborted."
@@ -276,6 +283,7 @@ start_install() {
             create_systemd_services
             print_links
             echo "[+] Installation complete!"
+            exit 0
             ;;
         *)
             echo "[!] Installation aborted."
