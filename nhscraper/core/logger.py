@@ -8,10 +8,18 @@ LOG_DIR = "./logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Master log
-MASTER_LOG_FILE = os.path.join(LOG_DIR, "master.log")
+#MASTER_LOG_FILE = os.path.join(LOG_DIR, "master.log")
 # Runtime log with timestamp
+#timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
+
+# Master log # TEST
+MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
+
+# Runtime log
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
+RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
+
 
 # Logger setup
 logger = logging.getLogger("nhscraper")
@@ -21,7 +29,7 @@ else: # Default to INFO
     logger.setLevel(logging.INFO)
 
 # LOGGING LEVELS - IN OTHER MODULES USE:
-# logger.info("") # Print Blank Line (make sure logging level is the same)
+# log_clarification() # Print Blank Line (make sure logging level is the same)
 
 # logger.debug("This is a debug message")    # Not shown because level is INFO
 # logger.info("This is info")               # Shown
@@ -47,3 +55,7 @@ fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
 fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
+
+def log_clarification():
+    print("")
+    logger.info("")

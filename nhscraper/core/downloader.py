@@ -6,7 +6,7 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
-from nhscraper.core.logger import logger
+from nhscraper.core.logger import *
 from nhscraper.core.config import config, get_download_path
 from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
@@ -92,7 +92,7 @@ def process_gallery(gallery_id: int):
 
         return meta
     except Exception as e:
-        logger.error("")
+        log_clarification()
         logger.error(f"Error processing Gallery {gallery_id}: {e}")
         return None
 

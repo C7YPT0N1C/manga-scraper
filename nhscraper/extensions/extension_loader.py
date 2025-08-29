@@ -6,7 +6,7 @@ import json
 import importlib
 import subprocess
 from urllib.request import urlopen
-from nhscraper.core.logger import logger
+from nhscraper.core.logger import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------
@@ -55,14 +55,14 @@ def fetch_remote_manifest():
         with urlopen(REMOTE_MANIFEST_URL) as response:
             return json.load(response)
     except Exception as e:
-        logger.warning("")
+        log_clarification()
         logger.warning(f"Failed to fetch primary remote manifest: {e}")
         try:
             with urlopen(REMOTE_MANIFEST_BACKUP_URL) as response:
                 logger.info("Using backup remote manifest URL")
                 return json.load(response)
         except Exception as e2:
-            logger.error("")
+            log_clarification()
             logger.error(f"Failed to fetch backup manifest: {e2}")
             return {"extensions": []}
 
@@ -80,7 +80,7 @@ def update_local_manifest_from_remote():
         if remote_ext["name"] not in local_names:
             remote_ext["installed"] = False  # new extension default
             local_manifest["extensions"].append(remote_ext)
-            logger.debug("")
+            log_clarification()
             logger.debug(f"Added new extension to local manifest: {remote_ext['name']}")
 
     save_local_manifest(local_manifest)
@@ -102,13 +102,13 @@ def load_installed_extensions():
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
-                    logger.debug("")
+                    log_clarification()
                     logger.debug(f"Loaded installed extension: {ext['name']}")
                 except Exception as e:
-                    logger.warning("")
+                    log_clarification()
                     logger.warning(f"Failed to load extension: {ext['name']}: {e}")
             else:
-                logger.warning("")
+                log_clarification()
                 logger.warning(f"Entry point not found for extension: {ext['name']}")
 
 # ------------------------------
@@ -119,12 +119,12 @@ def install_extension(extension_name: str):
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
-        logger.error("")
+        log_clarification()
         logger.error(f"Extension '{extension_name}' not found in remote manifest")
         return
 
     if ext_entry.get("installed", False):
-        logger.info("")
+        log_clarification()
         logger.info(f"Extension '{extension_name}' is already installed")
         return
 
@@ -133,20 +133,20 @@ def install_extension(extension_name: str):
     if not os.path.exists(ext_folder):
         repo_url = ext_entry.get("repo_url", "")
         try:
-            logger.debug("")
+            log_clarification()
             logger.debug(f"Cloning {extension_name} from {repo_url}...")
             subprocess.run(["git", "clone", repo_url, ext_folder], check=True)
         except Exception as e:
-            logger.warning("")
+            log_clarification()
             logger.warning(f"Failed to clone from primary repo: {e}")
             if BASE_REPO_BACKUP_URL:
                 backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
                 try:
-                    logger.debug("")
+                    log_clarification()
                     logger.debug(f"Retrying with backup repo: {backup_url}")
                     subprocess.run(["git", "clone", backup_url, ext_folder], check=True)
                 except Exception as e2:
-                    logger.error("")
+                    log_clarification()
                     logger.error(f"Failed to clone from backup repo: {e2}")
                     return
 
@@ -156,7 +156,7 @@ def install_extension(extension_name: str):
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()
-        logger.info("")
+        log_clarification()
         logger.info(f"Extension '{extension_name}' installed successfully")
 
     # Update manifest
@@ -168,7 +168,7 @@ def uninstall_extension(extension_name: str):
     manifest = load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
-        logger.warning("")
+        log_clarification()
         logger.warning(f"Extension '{extension_name}' is not installed")
         return
 
@@ -179,7 +179,7 @@ def uninstall_extension(extension_name: str):
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
         module.uninstall_extension()
-        logger.info("")
+        log_clarification()
         logger.info(f"Extension '{extension_name}' uninstalled successfully")
 
     # Update manifest
@@ -207,7 +207,7 @@ def get_selected_extension(name: str = "skeleton"):
         if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
             return ext
 
-    logger.error("")
+    log_clarification()
     logger.error("Skeleton extension not found! This should never happen.")
     return None
 

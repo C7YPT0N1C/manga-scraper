@@ -2,7 +2,7 @@
 # extensions/suwayomi/suwayomi__nhsext.py
 
 import os, subprocess, json
-from nhscraper.core.logger import logger
+from nhscraper.core.logger import *
 from nhscraper.core.config import update_env, config
 
 # Global variable for download path, leave empty initially
@@ -122,12 +122,12 @@ def uninstall_extension():
         if os.path.exists(service_file):
             os.remove(service_file)
             subprocess.run(["systemctl", "daemon-reload"], check=True)
-            logger.info("")
+            log_clarification()
             logger.info("Suwayomi systemd service removed")
-        logger.info("")
+        log_clarification()
         logger.info("Suwayomi extension uninstalled")
     except Exception as e:
-        logger.error("")
+        log_clarification()
         logger.error(f"Failed to uninstall Suwayomi extension: {e}")
 
 # ===============================
@@ -145,11 +145,11 @@ def graphql_query(query, variables=None):
         resp.raise_for_status()
         data = resp.json()
         if "errors" in data:
-            logger.warning("")
+            log_clarification()
             logger.warning(f"GraphQL query returned errors: {data['errors']}")
         return data.get("data")
     except Exception as e:
-        logger.error("")
+        log_clarification()
         logger.error(f"GraphQL request failed: {e}")
         return None
 

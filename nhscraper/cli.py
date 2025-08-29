@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 import argparse
-from nhscraper.core.logger import logger
+from nhscraper.core.logger import *
 from nhscraper.core.config import config
 from nhscraper.core.downloader import download_galleries
 from nhscraper.extensions.extension_loader import *
@@ -125,7 +125,7 @@ def main():
     # Select extension (skeleton fallback)
     # ------------------------------
     selected_extension = get_selected_extension(args.extension.lower())
-    logger.debug("")
+    log_clarification()
     logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
@@ -133,7 +133,7 @@ def main():
     # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        logger.warning("")
+        log_clarification()
         logger.warning("No galleries to download. Exiting.")
         return
 

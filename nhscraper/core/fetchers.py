@@ -1,6 +1,6 @@
 # core/fetchers.py
 import requests
-from nhscraper.core.logger import logger
+from nhscraper.core.logger import *
 
 session = requests.Session()
 
@@ -12,7 +12,7 @@ def fetch_gallery_metadata(gallery_id: int):
         data = resp.json()
         return data
     except Exception as e:
-        logger.warning("")
+        log_clarification()
         logger.warning(f"Failed to fetch metadata for gallery {gallery_id}: {e}")
         return None
 
@@ -23,6 +23,6 @@ def fetch_image_url(meta: dict, page: int):
         url = f"https://i.nhentai.net/galleries/{meta['media_id']}/{filename}"
         return url
     except Exception as e:
-        logger.warning("")
+        log_clarification()
         logger.warning(f"Failed to build image URL for gallery {meta['id']} page {page}: {e}")
         return None
