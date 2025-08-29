@@ -13,7 +13,20 @@ from core.logger import logger
 # ------------------------------
 EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
-REMOTE_MANIFEST_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+
+# Primary + backup manifest locations
+REMOTE_MANIFEST_URL = (
+    "https://code.zenithnetwork.online/C7YPT0N1C/"
+    "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+)
+REMOTE_MANIFEST_BACKUP_URL = (
+    "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+    "raw/main/master_manifest.json"
+)
+
+# If the base repo URLs can also fail
+BASE_REPO_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+BASE_REPO_BACKUP_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
 
 INSTALLED_EXTENSIONS = []
 
@@ -34,13 +47,19 @@ def save_local_manifest(manifest: dict):
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 def fetch_remote_manifest():
-    """Fetch remote manifest.json."""
+    """Fetch remote manifest.json with backup fallback."""
     try:
         with urlopen(REMOTE_MANIFEST_URL) as response:
             return json.load(response)
     except Exception as e:
-        logger.error(f"[!] Failed to fetch remote manifest: {e}")
-        return {"extensions": []}
+        logger.warning(f"[!] Failed to fetch primary remote manifest: {e}")
+        try:
+            with urlopen(REMOTE_MANIFEST_BACKUP_URL) as response:
+                logger.info("[*] Using backup remote manifest URL")
+                return json.load(response)
+        except Exception as e2:
+            logger.error(f"[!] Failed to fetch backup manifest: {e2}")
+            return {"extensions": []}
 
 def update_local_manifest_from_remote():
     """Merge remote manifest into local manifest, keeping installed flags intact."""
@@ -97,12 +116,23 @@ def install_extension(extension_name: str):
         logger.info(f"[*] Extension '{extension_name}' is already installed")
         return
 
-    # Clone/download extension if needed
+    # Clone/download extension if needed (with repo backup)
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
     if not os.path.exists(ext_folder):
-        repo_url = ext_entry["repo_url"]
-        logger.info(f"[*] Cloning {extension_name} from {repo_url}...")
-        subprocess.run(["git", "clone", repo_url, ext_folder], check=True)
+        repo_url = ext_entry.get("repo_url", "")
+        try:
+            logger.info(f"[*] Cloning {extension_name} from {repo_url}...")
+            subprocess.run(["git", "clone", repo_url, ext_folder], check=True)
+        except Exception as e:
+            logger.warning(f"[!] Failed to clone from primary repo: {e}")
+            if BASE_REPO_BACKUP_URL:
+                backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+                try:
+                    logger.info(f"[*] Retrying with backup repo: {backup_url}")
+                    subprocess.run(["git", "clone", backup_url, ext_folder], check=True)
+                except Exception as e2:
+                    logger.error(f"[!] Failed to clone from backup repo: {e2}")
+                    return
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
