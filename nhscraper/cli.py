@@ -4,6 +4,7 @@ import argparse
 from nhscraper.core.logger import *
 from nhscraper.core.config import config
 from nhscraper.core.downloader import download_galleries
+from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
 from nhscraper.extensions.extension_loader import *
 
 
@@ -74,7 +75,6 @@ def parse_args():
 
     return parser.parse_args()
 
-
 def build_gallery_list(args):
     gallery_ids = set()
 
@@ -88,8 +88,30 @@ def build_gallery_list(args):
         ids = [int(x.strip()) for x in args.galleries.split(",") if x.strip().isdigit()]
         gallery_ids.update(ids)
 
-    # TODO: implement artist/group/tag/parody fetching using nhentai API
+    # Artist
+    if args.artist:
+        artist, start, end = args.artist
+        gallery_ids.update(fetch_galleries_by_artist(artist, int(start), int(end)))
+
+    # Group
+    if args.group:
+        group, start, end = args.group
+        gallery_ids.update(fetch_galleries_by_group(group, int(start), int(end)))
+
+    # Tag
+    if args.tag:
+        tag, start, end = args.tag
+        gallery_ids.update(fetch_galleries_by_tag(tag, int(start), int(end)))
+
+    # Parody
+    if args.parody:
+        parody, start, end = args.parody
+        gallery_ids.update(fetch_galleries_by_parody(parody, int(start), int(end)))
+
+    # Final sorted list
     gallery_list = sorted(gallery_ids)
+    log_clarification("debug")
+    logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
 

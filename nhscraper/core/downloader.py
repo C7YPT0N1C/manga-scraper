@@ -2,14 +2,14 @@
 # core/downloader.py
 
 import os
-import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from time import sleep
+#import json
+#import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from nhscraper.core.logger import *
 from nhscraper.core.config import config, get_download_path
-from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url
+from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url, session
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
+
 # ------------------------------
 # Helper Functions
 # ------------------------------
@@ -73,17 +73,32 @@ def process_gallery(gallery_id: int):
             logger.info(f"Dry-run: Would create folder {gallery_folder}")
 
         # Download images
-        def download_worker(img_url):
+        def download_worker(page_num: int):
+            img_url = fetch_image_url(meta, page_num)
+            if not img_url:
+                return
+
             filename = os.path.basename(img_url)
             target_path = os.path.join(gallery_folder, filename)
+
             if config.get("dry_run"):
                 logger.info(f"Dry-run: Would download {img_url} -> {target_path}")
             else:
-                download_image(img_url, target_path, use_tor=config.get("use_tor"))
+                try:
+                    resp = session.get(img_url, timeout=60, stream=True)
+                    resp.raise_for_status()
+                    with open(target_path, "wb") as f:
+                        for chunk in resp.iter_content(8192):
+                            f.write(chunk)
+                    log_clarification("debug")
+                    logger.debug(f"Downloaded {img_url} -> {target_path}")
+                except Exception as e:
+                    log_clarification("warning")
+                    logger.warning(f"Failed to download {img_url}: {e}")
 
         with ThreadPoolExecutor(max_workers=config.get("threads_images", 4)) as executor:
-            for img_url in meta.get("images", []):
-                executor.submit(download_worker, img_url)
+            for page in range(1, meta.get("num_pages", 0) + 1):
+                executor.submit(download_worker, page)
 
         # Post-download hooks per gallery
         for ext in INSTALLED_EXTENSIONS:
@@ -107,7 +122,7 @@ def download_galleries(gallery_list: list):
     all_meta = []
     with ThreadPoolExecutor(max_workers=config.get("threads_galleries", 1)) as executor:
         futures = {executor.submit(process_gallery, gid): gid for gid in gallery_list}
-        for future in futures:
+        for future in as_completed(futures):
             result = future.result()
             if result:
                 all_meta.append(result)
