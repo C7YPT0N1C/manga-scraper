@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
 # core/fetchers.py
+
 import cloudscraper, requests
+
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
 

@@ -4,6 +4,8 @@
 import os
 from dotenv import load_dotenv
 
+from nhscraper.core.logger import *
+
 ENV_FILE = "/opt/nhentai-scraper/nhentai-scraper.env"
 
 # Load the environment file
@@ -78,4 +80,6 @@ def get_download_path():
     ext_path = config.get("EXTENSION_DOWNLOAD_PATH", "").strip()
     if ext_path and os.path.isdir(ext_path):
         return ext_path
+    log_clarification("info")
+    logger.info(f"DOWNLOAD PATH = {ext_path}")
     return config.get("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")

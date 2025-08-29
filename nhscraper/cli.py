@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
+
 import argparse
+
 from nhscraper.core.logger import *
 from nhscraper.core.config import config
 from nhscraper.core.downloader import download_galleries

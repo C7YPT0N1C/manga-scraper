@@ -5,11 +5,12 @@
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, subprocess, json
+
 from nhscraper.core.logger import *
 from nhscraper.core.config import update_env
 
 # Global variable for download path, leave empty initially
-extension_download_path = ""
+extension_download_path = "/opt/nhentai-scraper/downloads"
 
 def update_extension_download_path(PATH):
     global extension_download_path

@@ -2,11 +2,12 @@
 # extensions/suwayomi/suwayomi__nhsext.py
 
 import os, subprocess, json
+
 from nhscraper.core.logger import *
 from nhscraper.core.config import update_env, config
 
 # Global variable for download path, leave empty initially
-extension_download_path = ""
+extension_download_path = "/opt/suwayomi/downloads"
 
 """
 Suwayomi metadata (details.json)format:

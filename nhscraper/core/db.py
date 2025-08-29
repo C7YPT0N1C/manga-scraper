@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
 # core/db.py
+
 import os
 import json
+
 from nhscraper.core.logger import *
 
 CACHE_DIR = "./cache"

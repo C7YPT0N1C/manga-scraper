@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
+
 import os
 import sys
 import time
 import json
 from datetime import datetime
 from flask import Flask, jsonify, request
+
 from nhscraper.core.logger import *
 from nhscraper.core.config import config
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS

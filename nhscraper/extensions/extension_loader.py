@@ -6,6 +6,7 @@ import json
 import importlib
 import subprocess
 from urllib.request import urlopen
+
 from nhscraper.core.logger import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
