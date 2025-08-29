@@ -42,7 +42,6 @@ install_system_packages() {
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
-    echo ""
 }
 
 install_python_packages() {
