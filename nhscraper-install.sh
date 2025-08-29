@@ -32,6 +32,7 @@ check_python_version() {
         exit 1
     else
         echo "[+] Python version OK: $PYTHON_VERSION"
+        echo ""
     fi
 }
 
@@ -40,6 +41,7 @@ install_system_packages() {
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
+    echo ""
 }
 
 install_python_packages() {
@@ -49,6 +51,7 @@ install_python_packages() {
     "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "pysocks" "tqdm"
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
     echo "[+] Python packages installed."
+    echo ""
 }
 
 install_scraper() {
@@ -70,6 +73,7 @@ install_scraper() {
     install_python_packages
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
     echo "[+] nhentai-scraper installed."
+    echo ""
 }
 
 install_filebrowser() {
@@ -115,6 +119,7 @@ install_filebrowser() {
 
     echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
     echo "[!] Please save this password: $FILEBROWSER_PASS"
+    echo ""
 }
 
 create_env_file() {
@@ -148,11 +153,32 @@ VERBOSE=false
 EOF
     echo "[+] Environment file created at $ENV_FILE"
     echo "[+] Environment updated."
+    echo ""
 }
 
-create_systemd() {
+create_systemd_services() {
+        # FileBrowser
+    echo "[*] Creating systemd service for FileBrowser..."
+    if [ ! -f /etc/systemd/system/filebrowser.service ]; then
+        sudo tee /etc/systemd/system/filebrowser.service > /dev/null <<EOF
+[Unit]
+Description=FileBrowser
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/filebrowser -d /opt/filebrowser/filebrowser.db -r / --address 0.0.0.0 --port 8080
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
+
+    # nhscraper-api
     echo "[*] Creating systemd service for nhscraper-api..."
-    cat > /etc/systemd/system/nhscraper-api.service <<EOF
+    if [ ! -f /etc/systemd/system/nhscraper-api.service ]; then
+        sudo tee /etc/systemd/system/nhscraper-api.service > /dev/null <<EOF
 [Unit]
 Description=NHentai Scraper API
 After=network.target
@@ -172,7 +198,27 @@ EOF
     systemctl enable filebrowser nhscraper-api
     systemctl restart filebrowser nhscraper-api
     echo "[+] Systemd services 'filebrowser', 'nhscraper-api' created and started."
+    echo ""
 }
+
+function print_links() {
+    IP=$(hostname -I | awk '{print $1}')
+    HOSTNAME=$(hostname)
+
+    echo -e "\n[+] Access Links:"
+    echo "Suwayomi Web: http://$IP:4567/"
+    echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
+    echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+    echo "Scraper API Endpoint: http://$IP:5000/status"
+    if [ ! -z "$HOSTNAME" ]; then
+        echo -e "\n[+] DNS Hostname Links:"
+        echo "Suwayomi Web: http://$HOSTNAME:4567/"
+        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
+        echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+        echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
+    fi
+}
+
 
 start_install() {
     echo "[*] This will install nhentai-scraper, FileBrowser, and set up the API as a service."
@@ -185,7 +231,8 @@ start_install() {
             install_scraper
             install_filebrowser
             create_env_file
-            create_systemd
+            create_systemd_services
+            print_links
             echo "[+] Installation complete!"
             ;;
         *)
