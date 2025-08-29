@@ -58,4 +58,4 @@ logger.addHandler(fh_runtime)
 
 def log_clarification():
     print("")
-    logger.info("")
+    logger.debug("") # Adds blank lines in log files
