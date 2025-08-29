@@ -54,28 +54,6 @@ install_python_packages() {
     echo ""
 }
 
-install_scraper() {
-    echo "[*] Installing nhentai-scraper..."
-    mkdir -p "$NHENTAI_DIR"
-    cd "$NHENTAI_DIR"
-    branch="main"
-    if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
-        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"
-    else
-        git pull || echo "[!] Could not update scraper repo"
-    fi
-
-    if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        python3 -m venv "$NHENTAI_DIR/venv"
-    fi
-    source "$NHENTAI_DIR/venv/bin/activate"
-    install_python_packages
-    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
-    echo "[+] nhentai-scraper installed."
-    echo ""
-}
-
 install_filebrowser() {
         echo -e "\n[*] Installing FileBrowser..."
 
@@ -119,6 +97,46 @@ install_filebrowser() {
 
     echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
     echo "[!] Please save this password: $FILEBROWSER_PASS"
+    echo ""
+}
+
+install_scraper() {
+    echo "[*] Installing nhentai-scraper..."
+
+    # Ask if user wants dev branch
+    read -rp "Do you want to install the dev branch instead of main? [y/N]: " use_dev
+    if [[ "$use_dev" =~ ^[Yy]$ ]]; then
+        branch="dev"
+    else
+        branch="main"
+    fi
+
+    if [ ! -d "$NHENTAI_DIR/.git" ]; then
+        echo "[*] Cloning nhentai-scraper repo (branch: $branch)..."
+        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
+        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || {
+            echo "[!] Failed to clone nhentai-scraper repo."
+            exit 1
+        }
+    else
+        echo "[*] Updating existing repo (branch: $branch)..."
+        git -C "$NHENTAI_DIR" fetch origin "$branch" && git -C "$NHENTAI_DIR" checkout "$branch" && git -C "$NHENTAI_DIR" pull || {
+            echo "[!] Could not update repo on branch $branch"
+        }
+    fi
+
+    # Setup Python venv
+    if [ ! -d "$NHENTAI_DIR/venv" ]; then
+        python3 -m venv "$NHENTAI_DIR/venv"
+    fi
+    source "$NHENTAI_DIR/venv/bin/activate"
+
+    install_python_packages
+
+    # Symlink CLI
+    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
+
+    echo "[+] nhentai-scraper installed (branch: $branch)."
     echo ""
 }
 
@@ -199,7 +217,7 @@ EOF
     systemctl enable filebrowser nhscraper-api
     systemctl restart filebrowser nhscraper-api
     echo "[+] Systemd services 'filebrowser', 'nhscraper-api' created and started."
-    #echo ""
+    echo ""
 }
 
 print_links() {
@@ -218,6 +236,23 @@ print_links() {
     fi
 }
 
+start_uninstall() {
+    echo "[*] Uninstalling scraper..."
+    systemctl stop filebrowser nhscraper-api || true
+    systemctl disable filebrowser nhscraper-api || true
+    rm -rf "$NHENTAI_DIR"
+    echo "[+] nhentai-scraper uninstalled"
+}
+
+start_update() {
+    echo "[*] Updating repository and Python packages..."
+    cd "$NHENTAI_DIR"
+    git pull
+    source "$NHENTAI_DIR/venv/bin/activate"
+    pip install --upgrade pip setuptools wheel
+    pip install --editable "$NHENTAI_DIR"
+    echo "[+] Update complete"
+}
 
 start_install() {
     echo "[*] This will install nhentai-scraper, FileBrowser, and set up the API as a service."
@@ -227,8 +262,8 @@ start_install() {
             echo "[*] Starting installation..."
             check_python_version
             install_system_packages
-            install_scraper
             install_filebrowser
+            install_scraper
             create_env_file
             create_systemd_services
             print_links
@@ -256,20 +291,10 @@ case "$1" in
         create_env_file
         ;;
     --update)
-        echo "[*] Updating repository and Python packages..."
-        cd "$NHENTAI_DIR"
-        git pull
-        source "$NHENTAI_DIR/venv/bin/activate"
-        pip install --upgrade pip setuptools wheel
-        pip install --editable "$NHENTAI_DIR"
-        echo "[+] Update complete"
+        start_update
         ;;
     --uninstall|--remove)
-        echo "[*] Uninstalling scraper..."
-        systemctl stop filebrowser nhscraper-api || true
-        systemctl disable filebrowser nhscraper-api || true
-        rm -rf "$NHENTAI_DIR"
-        echo "[+] nhentai-scraper uninstalled"
+        start_uninstall
         ;;
     *)
         echo "[!] Invalid or missing argument. Options:"
