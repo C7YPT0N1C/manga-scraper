@@ -23,5 +23,6 @@ requires-python = ">=3.9"
 [project.scripts]
 nhentai-scraper = "cli:main"
 
-[tool.setuptools]
-packages = ["core", "extensions"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nhentai_scraper*"]

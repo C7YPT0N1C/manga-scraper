@@ -31,14 +31,12 @@ check_python_version() {
         echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
-        echo ""
-        echo "[+] Python version OK: $PYTHON_VERSION"
-        echo ""
+        echo -e"[+] Python version OK: $PYTHON_VERSION"
     fi
 }
 
 install_system_packages() {
-    echo "[*] Installing system packages..."
+    echo -e "\n[*] Installing system packages..."
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "[+] System packages installed."
@@ -51,7 +49,6 @@ install_python_packages() {
     "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "pysocks" "tqdm"
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
     echo "[+] Python packages installed."
-    echo ""
 }
 
 install_filebrowser() {
@@ -97,11 +94,10 @@ install_filebrowser() {
 
     echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
     echo "[!] Please save this password: $FILEBROWSER_PASS"
-    echo ""
 }
 
 install_scraper() {
-    echo "[*] Installing nhentai-scraper..."
+    echo -e "\n[*] Installing nhentai-scraper..."
     #branch="main"
     branch="dev"  # Change to 'dev' for testing latest features
 
@@ -131,11 +127,10 @@ install_scraper() {
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
     echo "[+] nhentai-scraper installed (branch: $branch)."
-    echo ""
 }
 
 create_env_file() {
-    echo "[*] Updating environment variables..."
+    echo -e "\n[*] Updating environment variables..."
     echo "[*] Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
@@ -165,10 +160,10 @@ VERBOSE=false
 EOF
     echo "[+] Environment file created at $ENV_FILE"
     echo "[+] Environment updated."
-    echo ""
 }
 
 create_systemd_services() {
+    echo -e "\n[*] Setting up systemd services..."
         # FileBrowser
     echo "[*] Creating systemd service for FileBrowser..."
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
@@ -211,7 +206,6 @@ EOF
     systemctl enable filebrowser nhscraper-api tor
     systemctl restart filebrowser nhscraper-api tor
     echo "[+] Systemd services 'filebrowser', 'nhscraper-api' 'tor' created and started."
-    echo ""
 }
 
 print_links() {
@@ -236,7 +230,6 @@ start_uninstall() {
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
         y|Y)
-            echo ""
             echo "[*] Uninstalling scraper..."
             # Remove Directories and files
             rm -rf /opt/filebrowser/
@@ -274,8 +267,7 @@ start_install() {
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
         y|Y)
-            echo ""
-            echo "[*] Starting installation..."
+            echo -e "\n[*] Starting installation..."
             check_python_version
             install_system_packages
             install_filebrowser
