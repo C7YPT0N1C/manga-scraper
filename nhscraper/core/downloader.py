@@ -41,12 +41,12 @@ def should_download_gallery(meta: dict) -> bool:
     """Determine whether the gallery passes the language/tags filters."""
     # Language filter
     if config.get("language") and meta.get("language") not in config["language"]:
-        logger.info(f"[-] Skipping gallery {meta['id']} due to language filter")
+        logger.info(f"Skipping gallery {meta['id']} due to language filter")
         return False
     # Excluded tags
     if config.get("excluded_tags"):
         if any(tag in config["excluded_tags"] for tag in meta.get("tags", [])):
-            logger.info(f"[-] Skipping gallery {meta['id']} due to excluded tags")
+            logger.info(f"Skipping gallery {meta['id']} due to excluded tags")
             return False
     return True
 
@@ -92,7 +92,7 @@ def process_gallery(gallery_id: int):
 
         return meta
     except Exception as e:
-        logger.error(f"Error processing gallery {gallery_id}: {e}")
+        logger.error(f"\nError processing gallery {gallery_id}: {e}")
         return None
 
 def download_galleries(gallery_list: list):

@@ -105,16 +105,15 @@ def main():
     # ------------------------------
     # Update config
     # ------------------------------
-    config["DRY_RUN"] = args.dry_run
-    config["USE_TOR"] = args.use_tor
-    config["VERBOSE"] = args.verbose
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["TITLE_TYPE"] = args.title_type
     config["TITLE_SANITISE"] = args.title_sanitise
-    config["EXTENSION"] = args.extension.lower()
+    config["DRY_RUN"] = args.dry_run
+    config["USE_TOR"] = args.use_tor
+    config["VERBOSE"] = args.verbose
 
     # ------------------------------
     # Handle extension installation/uninstallation
@@ -132,14 +131,14 @@ def main():
     # Select extension (skeleton fallback)
     # ------------------------------
     selected_extension = get_selected_extension(args.extension.lower())
-    logger.info(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
+    logger.debug(f"\nUsing extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
     # Build gallery list
     # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        logger.warning("No galleries to download. Exiting.")
+        logger.warning("\nNo galleries to download. Exiting.")
         return
 
     # ------------------------------

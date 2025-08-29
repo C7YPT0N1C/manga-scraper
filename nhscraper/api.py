@@ -30,9 +30,9 @@ def run_pre_download_hooks(gallery_list):
         if hasattr(ext, "pre_download_hook"):
             try:
                 gallery_list = ext.pre_download_hook(config, gallery_list)
-                logger.info(f"Pre-download hook executed for {getattr(ext, '__name__', 'unknown')}")
+                logger.info(f"\nPre-download hook executed for {getattr(ext, '__name__', 'unknown')}")
             except Exception as e:
-                logger.error(f"Pre-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
+                logger.error(f"\nPre-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
     return gallery_list
 
 def run_post_download_hooks(completed_galleries):
@@ -40,9 +40,9 @@ def run_post_download_hooks(completed_galleries):
         if hasattr(ext, "post_download_hook"):
             try:
                 ext.post_download_hook(config, completed_galleries)
-                logger.info(f"Post-download hook executed for {getattr(ext, '__name__', 'unknown')}")
+                logger.info(f"\nPost-download hook executed for {getattr(ext, '__name__', 'unknown')}")
             except Exception as e:
-                logger.error(f"Post-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
+                logger.error(f"\nPost-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
 
 # ===============================
 # Flask Endpoints
