@@ -4,7 +4,7 @@ from nhscraper.core.logger import logger
 
 session = requests.Session()
 
-def get_gallery_metadata(gallery_id: int):
+def fetch_gallery_metadata(gallery_id: int):
     url = f"https://nhentai.net/api/gallery/{gallery_id}"
     try:
         resp = session.get(url, timeout=30)
@@ -15,7 +15,7 @@ def get_gallery_metadata(gallery_id: int):
         logger.warning(f"[!] Failed to fetch metadata for gallery {gallery_id}: {e}")
         return None
 
-def get_image_url(meta: dict, page: int):
+def fetch_image_url(meta: dict, page: int):
     try:
         ext = meta["images"]["pages"][page-1]["t"]
         filename = f"{page}.{ext}"
