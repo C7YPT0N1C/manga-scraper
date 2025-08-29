@@ -40,7 +40,9 @@ def load_local_manifest():
         logger.info("[*] Local manifest not found. Creating from remote...")
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        json_load = json.load(f)
+        print("Local Manifest:\n", json_load) # TEST
+        return json_load
 
 def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
