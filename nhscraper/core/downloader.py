@@ -9,7 +9,7 @@ from time import sleep
 from nhscraper.core.logger import logger
 from nhscraper.core.config import config, get_download_path
 from nhscraper.core.fetchers import fetch_gallery_metadata, download_image
-from nhscraper.core.extension_loader import loaded_extensions
+from nhscraper.extensions.extension_loader import loaded_extensions
 
 # ------------------------------
 # Helper Functions
