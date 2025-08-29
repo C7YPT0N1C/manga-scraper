@@ -104,7 +104,6 @@ install_scraper() {
     echo "[*] Installing nhentai-scraper..."
     #branch="main"
     branch="dev"  # Change to 'dev' for testing latest features
-    fi
 
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
         echo "[*] Cloning nhentai-scraper repo (branch: $branch)..."
