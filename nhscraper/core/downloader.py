@@ -67,6 +67,8 @@ def process_gallery(gallery_id: int):
     """Download a single gallery and trigger extension hooks."""
     try:
         meta = fetch_gallery_metadata(gallery_id)
+        log_clarification("info")
+        logger.info("Galler Folder = {gallery_id}") # TEST
         if not should_download_gallery(meta):
             return None
 
@@ -76,6 +78,8 @@ def process_gallery(gallery_id: int):
                 ext.during_download_hook(config, gallery_id, meta)
 
         gallery_folder = resolve_gallery_folder(meta)
+        log_clarification("info")
+        logger.info("Galler Folder = {gallery_folder}") # TEST
         if not config.get("dry_run"):
             os.makedirs(gallery_folder, exist_ok=True)
         else:
