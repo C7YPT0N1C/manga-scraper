@@ -56,23 +56,16 @@ fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
 
-def log_clarification(LEVEL): # Adds blank lines in terminal and log files
-    if logger.getEffectiveLevel >= 10 and LEVEL == "debug":
+def log_clarification(LEVEL):
+    """Adds blank lines in terminal and log files at the requested log level."""
+    level_map = {
+        "debug": logger.debug,
+        "info": logger.info,
+        "warning": logger.warning,
+        "error": logger.error,
+        "critical": logger.critical,
+    }
+    func = level_map.get(LEVEL.lower())
+    if func:
         print("")
-        logger.debug("")
-    
-    if logger.getEffectiveLevel >= 20 and LEVEL == "info":
-        print("")
-        logger.info("")
-    
-    if logger.getEffectiveLevel >= 30 and LEVEL == "warning":
-        print("")
-        logger.warning("")
-    
-    if logger.getEffectiveLevel >= 40 and LEVEL == "error":
-        print("")
-        logger.error("")
-    
-    if logger.getEffectiveLevel >= 50 and LEVEL == "critical":
-        print("")
-        logger.critical("")
+        func("")
