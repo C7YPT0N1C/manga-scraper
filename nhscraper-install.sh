@@ -231,34 +231,45 @@ start_uninstall() {
     case "$choice" in
         y|Y)
             echo "[*] Uninstalling..."
-            
-            # Remove Directories and files
-            rm -rf /opt/filebrowser/
-            rm -rf "$NHENTAI_DIR"
-            # Remove symlinks
-            rm -f /usr/local/bin/filebrowser
-            rm -f /usr/local/bin/nhentai-scraper
-            
-            echo -e "\n[*] Removed:"
-            echo "    /opt/filebrowser/"
-            echo "    $NHENTAI_DIR"
-            echo "    /usr/local/bin/filebrowser"
-            echo "    /usr/local/bin/nhentai-scraper"
-            
+
+            # Remove Directories and files with status reporting
+            for target in /opt/filebrowser/ "$NHENTAI_DIR"; do
+                if [ -e "$target" ]; then
+                    rm -rf "$target" && echo "[+] Removed: $target" || echo "[!] Failed to remove: $target"
+                else
+                    echo "[!] Not found (skipped): $target"
+                fi
+            done
+
+            # Remove symlinks with status reporting
+            for link in /usr/local/bin/filebrowser /usr/local/bin/nhentai-scraper; do
+                if [ -L "$link" ] || [ -e "$link" ]; then
+                    rm -f "$link" && echo "[+] Removed: $link" || echo "[!] Failed to remove: $link"
+                else
+                    echo "[!] Not found (skipped): $link"
+                fi
+            done
+
             # Reload systemd and stop services
-            systemctl disable filebrowser nhscraper-api|| true
-            systemctl stop filebrowser nhscraper-api || true            
-            # Remove systemd services
-            rm -f /etc/systemd/system/filebrowser.service
-            rm -f /etc/systemd/system/nhscraper-api.service
-            
+            systemctl disable filebrowser nhscraper-api || true
+            systemctl stop filebrowser nhscraper-api || true
+
+            # Remove systemd services with status reporting
+            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/nhscraper-api.service; do
+                if [ -e "$svc" ]; then
+                    rm -f "$svc" && echo "[+] Removed: $svc" || echo "[!] Failed to remove: $svc"
+                else
+                    echo "[!] Not found (skipped): $svc"
+                fi
+            done
+
             echo -e "\n[*] Stopped and disabled services:"
             echo "    filebrowser"
             echo "    nhscraper-api"
-            
+
             # Reload systemd
             systemctl daemon-reload
-            
+
             echo "[+] Uninstallation complete."
             exit 0
             ;;
