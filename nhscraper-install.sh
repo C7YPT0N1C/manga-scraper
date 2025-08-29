@@ -145,22 +145,31 @@ EXTENSION_DOWNLOAD_PATH=
 # Mirrors
 NHENTAI_MIRRORS=https://i.nhentai.net
 
-# CLI default flags
+# Gallery ID selection
 RANGE_START=592000
 RANGE_END=600000
 GALLERIES=
+
+# Artist/Group/Tag/Parody
 ARTIST=
 GROUP=
 TAG=
 PARODY=
+
+# Filters
 EXCLUDED_TAGS=
 LANGUAGE=english
+
+# Titles
 TITLE_TYPE=english
 TITLE_SANITISE=true
 
-# Threads and options
+# Threads
 THREADS_GALLERIES=1
 THREADS_IMAGES=4
+MAX_RETRIES=3
+
+# Download Options
 USE_TOR=false
 DRY_RUN=false
 VERBOSE=false

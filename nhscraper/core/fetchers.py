@@ -43,6 +43,30 @@ session = build_session() # cloudscraper session, default.
 #session = requests.Session() # requests session, fallback.
 
 # ===============================
+# RETRY REQUESTS
+# ===============================
+def retry_request(func, *args, max_attempts=3, **kwargs):
+    """Retry a function up to max_attempts if it fails or receives 429."""
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            return func(*args, **kwargs)
+        except HTTPError as e:
+            if e.response.status_code == 429:
+                retry_after = int(e.response.headers.get("Retry-After", 2))
+                logger.warning(f"Rate limited. Waiting {retry_after}s before retrying...")
+                time.sleep(retry_after)
+            else:
+                logger.warning(f"HTTP error: {e}. Retrying...")
+                time.sleep(2 ** attempt + random.random())
+        except RequestException as e:
+            logger.warning(f"Request failed: {e}. Retrying...")
+            time.sleep(2 ** attempt + random.random())
+        attempt += 1
+    logger.error(f"Failed after {max_attempts} attempts.")
+    return None
+
+# ===============================
 # FETCH IDs
 # ===============================
 API_BASE = "https://nhentai.net/api/galleries/search"

@@ -68,8 +68,15 @@ def parse_args():
     # Threads
     parser.add_argument("--threads-galleries", type=int, default=4)
     parser.add_argument("--threads-images", type=int, default=1)
+    
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=int(os.getenv("MAX_RETRIES", 3)),
+        help="Maximum number of retry attempts for failed downloads (default: 3)"
+    )   
 
-    # Tor / dry-run / verbose
+    # Download Options
     parser.add_argument("--use-tor", action="store_true", default=False)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("--verbose", action="store_true", default=False)
@@ -121,12 +128,13 @@ def main():
     # ------------------------------
     # Update config
     # ------------------------------
-    config["THREADS_GALLERIES"] = args.threads_galleries
-    config["THREADS_IMAGES"] = args.threads_images
-    config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
+    config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
     config["TITLE_SANITISE"] = args.title_sanitise
+    config["THREADS_GALLERIES"] = args.threads_galleries
+    config["THREADS_IMAGES"] = args.threads_images
+    config["MAX_RETRIES"] = args.max_retries
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
