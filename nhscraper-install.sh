@@ -201,20 +201,18 @@ EOF
     echo ""
 }
 
-function print_links() {
+print_links() {
     IP=$(hostname -I | awk '{print $1}')
     HOSTNAME=$(hostname)
 
     echo -e "\n[+] Access Links:"
-    echo "Suwayomi Web: http://$IP:4567/"
-    echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
     echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+    echo "Scraper API Dashboard: http://$IP:5000/dashboard"
     echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
         echo -e "\n[+] DNS Hostname Links:"
-        echo "Suwayomi Web: http://$HOSTNAME:4567/"
-        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
         echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+        echo "Scraper API Dashboard: http://$HOSTNAME:5000/dashboard"
         echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
     fi
 }
