@@ -9,7 +9,6 @@ from nhscraper.core.downloader import download_galleries
 from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
 from nhscraper.extensions.extension_loader import *
 
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper with Suwayomi integration"
@@ -116,7 +115,6 @@ def build_gallery_list(args):
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
-
 def main():
     args = parse_args()
 
@@ -177,7 +175,6 @@ def main():
     # ------------------------------
     if selected_extension and hasattr(selected_extension, "post_download_hook"):
         selected_extension.post_download_hook(config, gallery_list)
-
 
 if __name__ == "__main__":
     main()

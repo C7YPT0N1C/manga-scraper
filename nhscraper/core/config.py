@@ -35,7 +35,6 @@ config = {
     "VERBOSE": os.getenv("VERBOSE", "false").lower() == "true",
 }
 
-
 # ------------------------------
 # Helper function to update .env
 # ------------------------------
@@ -65,7 +64,6 @@ def update_env(key, value):
     # Update the runtime config dict
     if key in config:
         config[key] = value
-
 
 # ------------------------------
 # Get dynamic download path

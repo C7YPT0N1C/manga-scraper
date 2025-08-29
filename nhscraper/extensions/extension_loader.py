@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # extensions/extension_loader.py
 
-import os
-import json
-import importlib
-import subprocess
+import os, json, importlib, subprocess
 from urllib.request import urlopen
 
 from nhscraper.core.logger import *

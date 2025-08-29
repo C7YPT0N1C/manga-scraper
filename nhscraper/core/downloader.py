@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 # core/downloader.py
 
-import os
-#import json
-#import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os, json, time, random, threading, requests
 from tqdm import tqdm
+from requests.exceptions import HTTPError
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from nhscraper.core.logger import *
 from nhscraper.core.config import config, get_download_path
-from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url, session
+from nhscraper.core.fetchers import max_retries, fetch_gallery_metadata, fetch_image_url, session
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
 
 # ------------------------------
 # Helper Functions
 # ------------------------------
-
 def sanitize_filename(name: str) -> str:
     """Sanitize folder/file names to remove invalid filesystem characters."""
     return "".join(c for c in name if c.isalnum() or c in " ._-").strip()
@@ -62,77 +60,90 @@ def should_download_gallery(meta: dict) -> bool:
 # ------------------------------
 # Core Download Functions
 # ------------------------------
+class tqdm_logger_suppress:
+    def __enter__(self):
+        self._level = logger.level
+        logger.setLevel(100)  # suppress logs temporarily
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.setLevel(self._level)
 
 def process_gallery(gallery_id: int):
     """Download a single gallery and trigger extension hooks."""
     try:
         meta = fetch_gallery_metadata(gallery_id)
-        log_clarification("info")
-        logger.info("Galler Folder = {gallery_id}") # TEST
-        if not should_download_gallery(meta):
+        if not meta or not should_download_gallery(meta):
             return None
 
-        # Pre-download extension hooks
-        for ext in INSTALLED_EXTENSIONS:
-            if hasattr(ext, "during_download_hook"):
-                ext.during_download_hook(config, gallery_id, meta)
-
         gallery_folder = resolve_gallery_folder(meta)
-        log_clarification("info")
-        logger.info("Galler Folder = {gallery_folder}") # TEST
         if not config.get("dry_run"):
             os.makedirs(gallery_folder, exist_ok=True)
-        else:
-            logger.info(f"Dry-run: Would create folder {gallery_folder}")
 
         images = meta.get("images", [])
         if not images:
             logger.warning(f"No images found for gallery {gallery_id}")
             return None
 
-        # Progress bar for the whole gallery
-        with tqdm(total=len(images), desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
+        # Image progress bar inside gallery
+        with tqdm(total=len(images),
+                  desc=f"Gallery {gallery_id}",
+                  unit="img",
+                  position=1,
+                  leave=False,
+                  dynamic_ncols=True,
+                  colour="cyan") as pbar:
 
-            # Download worker with per-image progress
             def download_worker(img_url):
                 filename = os.path.basename(img_url)
                 target_path = os.path.join(gallery_folder, filename)
-                if config.get("dry_run"):
-                    logger.info(f"Dry-run: Would download {img_url} -> {target_path}")
+                retries = 0
+                max_retries = 3
+
+                while retries < max_retries:
+                    try:
+                        if config.get("dry_run"):
+                            logger.info(f"Dry-run: Would download {img_url} -> {target_path}")
+                        else:
+                            fetch_image_url(img_url, target_path)
+                        break
+                    except requests.HTTPError as e:
+                        if e.response.status_code == 429:
+                            wait = (2 ** retries) + random.uniform(0, 1)
+                            logger.warning(f"429 for image {filename}, retrying in {wait:.1f}s (attempt {retries+1})")
+                            time.sleep(wait)
+                            retries += 1
+                        else:
+                            logger.error(f"HTTPError downloading {img_url}: {e}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Failed to download {img_url}: {e}")
+                        break
                 else:
-                    fetch_image_url(img_url, target_path)  # session handles tor
+                    logger.error(f"Max retries reached for {img_url}, skipping.")
+                
                 pbar.update(1)
 
-            # Thread pool for concurrent image downloads
             with ThreadPoolExecutor(max_workers=config.get("threads_images", 4)) as executor:
                 for img_url in images:
                     executor.submit(download_worker, img_url)
 
-        # Post-download hooks per gallery
-        for ext in INSTALLED_EXTENSIONS:
-            if hasattr(ext, "after_gallery_download"):
-                ext.after_gallery_download(meta)
-
         return meta
+
     except Exception as e:
-        log_clarification("error")
         logger.error(f"Error processing Gallery {gallery_id}: {e}")
         return None
 
+
 def download_galleries(gallery_list: list):
-    """Process a list of gallery IDs concurrently using threads."""
-    log_clarification("info")
-    logger.info(f"Starting download of {len(gallery_list)} galleries")
-
-    # Pre-download extension hooks
-    for ext in INSTALLED_EXTENSIONS:
-        if hasattr(ext, "pre_download_hook"):
-            log_clarification("debug")
-            logger.debug(f"Running pre_download_hook for {ext.__class__.__name__}")
-            gallery_list = ext.pre_download_hook(config, gallery_list)
-
+    """Download multiple galleries with a clean nested progress bar."""
     all_meta = []
-    with tqdm(total=len(gallery_list), desc="All galleries", unit="gallery", leave=True) as overall_pbar:
+    with tqdm(total=len(gallery_list),
+              desc="All galleries",
+              unit="gallery",
+              position=0,
+              leave=True,
+              dynamic_ncols=True,
+              colour="green") as overall_pbar:
+
         with ThreadPoolExecutor(max_workers=config.get("threads_galleries", 1)) as executor:
             futures = {executor.submit(process_gallery, gid): gid for gid in gallery_list}
             for future in as_completed(futures):
@@ -142,25 +153,8 @@ def download_galleries(gallery_list: list):
                     if result:
                         all_meta.append(result)
                 except Exception as e:
-                    log_clarification("error")
                     logger.error(f"Exception in gallery {gid}: {e}")
                 finally:
                     overall_pbar.update(1)
 
-    # After all downloads
-    for ext in INSTALLED_EXTENSIONS:
-        if hasattr(ext, "after_all_downloads"):
-            log_clarification("debug")
-            logger.debug(f"Running after_all_downloads for {ext.__class__.__name__}")
-            ext.after_all_downloads(all_meta)
-
-    # Reset extension download paths
-    for ext in INSTALLED_EXTENSIONS:
-        if hasattr(ext, "post_download_hook"):
-            log_clarification("debug")
-            logger.debug(f"Running post_download_hook for {ext.__class__.__name__}")
-            ext.post_download_hook(config, all_meta)
-
-    log_clarification("info")
-    logger.info(f"Completed download of {len(all_meta)} galleries")
     return all_meta

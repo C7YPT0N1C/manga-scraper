@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # core/db.py
 
-import os
-import json
+import os, json
 
 from nhscraper.core.logger import *
 

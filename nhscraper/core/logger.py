@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # core/logger.py
 
-import logging
-import os
+import os, logging
 from datetime import datetime
 
 from nhscraper.core.config import config
