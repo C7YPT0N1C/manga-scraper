@@ -31,6 +31,7 @@ check_python_version() {
         echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
+        echo ""
         echo "[+] Python version OK: $PYTHON_VERSION"
         echo ""
     fi
