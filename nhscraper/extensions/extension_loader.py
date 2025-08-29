@@ -6,7 +6,7 @@ import json
 import importlib
 import subprocess
 from urllib.request import urlopen
-from core.logger import logger
+from nhscraper.core.logger import logger
 
 # ------------------------------
 # Constants / Paths

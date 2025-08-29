@@ -6,10 +6,10 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
-from core.logger import logger
-from core.config import config, get_download_path
-from core.fetchers import fetch_gallery_metadata, download_image
-from core.extension_loader import loaded_extensions
+from nhscraper.core.logger import logger
+from nhscraper.core.config import config, get_download_path
+from nhscraper.core.fetchers import fetch_gallery_metadata, download_image
+from nhscraper.core.extension_loader import loaded_extensions
 
 # ------------------------------
 # Helper Functions

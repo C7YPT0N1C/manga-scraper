@@ -6,9 +6,9 @@ import time
 import json
 from datetime import datetime
 from flask import Flask, jsonify, request
-from core.logger import logger
-from core.config import config
-from extensions.extension_loader import INSTALLED_EXTENSIONS
+from nhscraper.core.logger import logger
+from nhscraper.core.config import config
+from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
 
 # ===============================
 # Runtime log setup
@@ -45,49 +45,9 @@ def run_post_download_hooks(completed_galleries):
                 logger.error(f"[!] Post-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
 
 # ===============================
-# GraphQL / Suwayomi
-# ===============================
-import requests
-
-def graphql_query(query, variables=None):
-    url = config.get("graphql_url", "http://127.0.0.1:4567/api/graphql")
-    payload = {"query": query}
-    if variables:
-        payload["variables"] = variables
-    try:
-        resp = requests.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if "errors" in data:
-            logger.warning(f"[!] GraphQL query returned errors: {data['errors']}")
-        return data.get("data")
-    except Exception as e:
-        logger.error(f"[!] GraphQL request failed: {e}")
-        return None
-
-def create_suwayomi_category(name):
-    query = """
-    mutation($name: String!) {
-        createCategory(input: { name: $name }) {
-            id
-            name
-        }
-    }
-    """
-    return graphql_query(query, {"name": name})
-
-def assign_gallery_to_category(gallery_id, category_id):
-    query = """
-    mutation($galleryId: Int!, $categoryId: Int!) {
-        assignGalleryToCategory(galleryId: $galleryId, categoryId: $categoryId)
-    }
-    """
-    return graphql_query(query, {"galleryId": gallery_id, "categoryId": category_id})
-
-# ===============================
 # Flask Endpoints
 # ===============================
-@app.route("/scraper_status", methods=["GET"])
+@app.route("/status", methods=["GET"])
 def scraper_status():
     runtime_log = {
         "last_run": datetime.now().isoformat(),

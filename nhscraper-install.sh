@@ -31,7 +31,7 @@ check_python_version() {
         echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
-        echo -e"[+] Python version OK: $PYTHON_VERSION"
+        echo -e "\n[+] Python version OK: $PYTHON_VERSION"
     fi
 }
 
@@ -92,7 +92,7 @@ install_filebrowser() {
         echo "[*] Admin user created."
     fi
 
-    echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
+    echo -e "\n[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
     echo "[!] Please save this password: $FILEBROWSER_PASS"
 }
 
@@ -126,7 +126,7 @@ install_scraper() {
     # Symlink CLI
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
-    echo "[+] nhentai-scraper installed (branch: $branch)."
+    echo -e "\n[+] nhentai-scraper (branch: $branch) installed at $NHENTAI_DIR"
 }
 
 create_env_file() {
@@ -193,7 +193,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$NHENTAI_DIR
-ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/api.py
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhscraper/api.py
 Restart=always
 EnvironmentFile=$ENV_FILE
 

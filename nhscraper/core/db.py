@@ -1,7 +1,7 @@
 # core/db.py
 import os
 import json
-from core.logger import logger
+from nhscraper.core.logger import logger
 
 CACHE_DIR = "./cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
