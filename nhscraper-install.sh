@@ -232,6 +232,7 @@ start_uninstall() {
         y|Y)
             echo "[*] Uninstalling..."
 
+            echo ""
             # Remove Directories and files with status reporting
             for target in /opt/filebrowser/ "$NHENTAI_DIR"; do
                 if [ -e "$target" ]; then
@@ -241,6 +242,7 @@ start_uninstall() {
                 fi
             done
 
+            echo ""
             # Remove symlinks with status reporting
             for link in /usr/local/bin/filebrowser /usr/local/bin/nhentai-scraper; do
                 if [ -L "$link" ] || [ -e "$link" ]; then
@@ -270,11 +272,11 @@ start_uninstall() {
             # Reload systemd
             systemctl daemon-reload
 
-            echo "[+] Uninstallation complete."
+            echo -e "\n[+] Uninstallation complete."
             exit 0
             ;;
         *)
-            echo "[!] Uninstallation aborted."
+            echo -e "\n[!] Uninstallation aborted."
             exit 1
             ;;
     esac
@@ -303,11 +305,11 @@ start_install() {
             create_env_file
             create_systemd_services
             print_links
-            echo "[+] Installation complete!"
+            echo -e "\n[+] Installation complete!"
             exit 0
             ;;
         *)
-            echo "[!] Installation aborted."
+            echo -e "\n[!] Installation aborted."
             exit 1
             ;;
     esac
