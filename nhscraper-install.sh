@@ -198,7 +198,7 @@ EOF
     systemctl enable filebrowser nhscraper-api
     systemctl restart filebrowser nhscraper-api
     echo "[+] Systemd services 'filebrowser', 'nhscraper-api' created and started."
-    echo ""
+    #echo ""
 }
 
 print_links() {
