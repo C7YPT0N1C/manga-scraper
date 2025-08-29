@@ -88,6 +88,7 @@ def update_local_manifest_from_remote():
 # ------------------------------
 def load_installed_extensions():
     """Load installed extensions dynamically."""
+    INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     for ext in manifest.get("extensions", []):
         if ext.get("installed", False):
