@@ -267,8 +267,8 @@ case "$1" in
         ;;
     --uninstall|--remove)
         echo "[*] Uninstalling scraper..."
-        systemctl stop nhscraper-api || true
-        systemctl disable nhscraper-api || true
+        systemctl stop filebrowser nhscraper-api || true
+        systemctl disable filebrowser nhscraper-api || true
         rm -rf "$NHENTAI_DIR"
         echo "[+] nhentai-scraper uninstalled"
         ;;
