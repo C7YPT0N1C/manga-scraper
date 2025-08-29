@@ -7,6 +7,7 @@ import importlib
 import subprocess
 from urllib.request import urlopen
 from nhscraper.core.logger import logger
+from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------
 # Constants / Paths
