@@ -59,13 +59,24 @@ logger.addHandler(fh_runtime)
 def log_clarification(LEVEL):
     """Adds blank lines in terminal and log files at the requested log level."""
     level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }
+    log_func_map = {
         "debug": logger.debug,
         "info": logger.info,
         "warning": logger.warning,
         "error": logger.error,
         "critical": logger.critical,
     }
-    func = level_map.get(LEVEL.lower())
-    if func:
-        print("")
-        func("")
+
+    level = level_map.get(LEVEL.lower())
+    log_func = log_func_map.get(LEVEL.lower())
+
+    if level is not None and log_func is not None:
+        if logger.getEffectiveLevel() <= level:  # Only log if the level is enabled
+            print("")
+            log_func("")
