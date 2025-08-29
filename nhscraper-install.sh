@@ -193,6 +193,7 @@ EnvironmentFile=$ENV_FILE
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
     systemctl daemon-reexec
     systemctl enable filebrowser nhscraper-api
