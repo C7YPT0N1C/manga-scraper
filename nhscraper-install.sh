@@ -232,6 +232,10 @@ print_links() {
 }
 
 start_uninstall() {
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper UNINSTALLER              "
+    echo "===================================================="
     echo "This will REMOVE nhentai-scraper, FileBrowser, and related services."
     echo "TOR WILL NOT BE STOPPED OR REMOVED FOR SECURITY REASONS. IF YOU DO NOT WANT TOR, YOU MUST REMOVE IT MANUALLY."
     read -p "    Do you want to continue? (y/n): " choice
@@ -290,16 +294,55 @@ start_uninstall() {
 }
 
 start_update() {
-    echo "Updating repository and Python packages..."
-    cd "$NHENTAI_DIR"
-    git pull
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper UPDATER                  "
+    echo "===================================================="
+    read -p "Are you sure you want to update? (y/N): " confirm
+    confirm=${confirm,,}  # lowercase input
+
+    if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+        echo "Update cancelled."
+        return
+    fi
+
+    echo "Which branch would you like to update to? (default: main)"
+    read -p "Enter branch name: " branch
+    branch=${branch:-main}  # default to main if empty
+
+    echo "Updating repository to branch '$branch'..."
+    cd "$NHENTAI_DIR" || { echo "Error: could not cd into $NHENTAI_DIR"; return 1; }
+
+    # Reset and fetch branch (force overwrite local changes)
+    git fetch origin
+    git reset --hard "origin/$branch" || { echo "Branch '$branch' not found!"; return 1; }
+
+    # Update Python environment
     source "$NHENTAI_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel
     pip install --editable "$NHENTAI_DIR"
-    echo "Update complete"
+
+    echo "Update complete ✅ (branch: $branch)"
+}
+
+update_env_file() {
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper .ENV UPDATER             "
+    echo "===================================================="
+    read -p "Are you sure you want to update the .env file? (y/N): " confirm
+    confirm=${confirm,,}  # lowercase input
+
+    if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+        echo ".env update cancelled."
+        return
+    fi
+
+    create_env_file
 }
 
 start_install() {
+    echo ""
     echo "This will install nhentai-scraper, FileBrowser, and set up the API as a service."
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
@@ -334,7 +377,7 @@ case "$1" in
         start_install
         ;;
     --update-env)
-        create_env_file
+        update_env_file
         ;;
     --update)
         start_update
