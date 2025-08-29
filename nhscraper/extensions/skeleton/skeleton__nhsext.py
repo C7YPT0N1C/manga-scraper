@@ -5,7 +5,7 @@
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, subprocess, json
-from nhscraper.logger import logger
+from nhscraper.core.logger import logger
 from nhscraper.core.config import update_env
 
 # Global variable for download path, leave empty initially

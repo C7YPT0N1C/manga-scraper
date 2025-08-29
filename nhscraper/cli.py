@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 import argparse
+from nhscraper.core.logger import logger
 from nhscraper.core.config import config
 from nhscraper.core.downloader import download_galleries
-from nhscraper.extensions.extension_loader import (
-    INSTALLED_EXTENSIONS,
-    install_extension,
-    uninstall_extension,
-    update_local_manifest_from_remote,
-    get_selected_extension
-)
-from nhscraper.logger import logger
+from nhscraper.extensions.extension_loader import *
 
 
 def parse_args():

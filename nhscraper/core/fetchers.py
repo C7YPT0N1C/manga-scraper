@@ -1,6 +1,6 @@
 # core/fetchers.py
 import requests
-from nhscraper.logger import logger
+from nhscraper.core.logger import logger
 
 session = requests.Session()
 

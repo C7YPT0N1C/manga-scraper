@@ -6,7 +6,7 @@ import json
 import importlib
 import subprocess
 from urllib.request import urlopen
-from nhscraper.logger import logger
+from nhscraper.core.logger import logger
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------
@@ -101,9 +101,9 @@ def load_installed_extensions():
                     INSTALLED_EXTENSIONS.append(module)
                     logger.debug(f"\nLoaded installed extension: {ext['name']}")
                 except Exception as e:
-                    logger.warning(f"\nFailed to load extension {ext['name']}: {e}")
+                    logger.warning(f"\nFailed to load extension: {ext['name']}: {e}")
             else:
-                logger.warning(f"\nEntry point not found for extension {ext['name']}")
+                logger.warning(f"\nEntry point not found for extension: {ext['name']}")
 
 # ------------------------------
 # Install / Uninstall Extension

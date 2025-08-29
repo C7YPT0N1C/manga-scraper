@@ -6,7 +6,7 @@ import time
 import json
 from datetime import datetime
 from flask import Flask, jsonify, request
-from nhscraper.logger import logger
+from nhscraper.core.logger import logger
 from nhscraper.core.config import config
 from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
 

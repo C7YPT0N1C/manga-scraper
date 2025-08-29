@@ -2,8 +2,8 @@
 # extensions/suwayomi/suwayomi__nhsext.py
 
 import os, subprocess, json
-from core.logger import logger
-from core.config import update_env, config
+from nhscraper.core.logger import logger
+from nhscraper.core.config import update_env, config
 
 # Global variable for download path, leave empty initially
 extension_download_path = ""
