@@ -78,5 +78,5 @@ def log_clarification(LEVEL):
 
     if level is not None and log_func is not None:
         if logger.getEffectiveLevel() <= level:  # Only log if the level is enabled
-            print("")
+            #print("")
             log_func("")
