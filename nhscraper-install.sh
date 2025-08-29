@@ -169,9 +169,9 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reexec
-    systemctl enable nhscraper-api
-    systemctl restart nhscraper-api
-    echo "[+] Systemd service 'nhscraper-api' created and started."
+    systemctl enable filebrowser nhscraper-api
+    systemctl restart filebrowser nhscraper-api
+    echo "[+] Systemd services 'filebrowser', 'nhscraper-api' created and started."
 }
 
 start_install() {
