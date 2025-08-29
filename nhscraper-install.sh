@@ -232,11 +232,32 @@ print_links() {
 }
 
 start_uninstall() {
-    echo "[*] Uninstalling scraper..."
-    systemctl stop filebrowser nhscraper-api || true
-    systemctl disable filebrowser nhscraper-api || true
-    rm -rf "$NHENTAI_DIR"
-    echo "[+] nhentai-scraper uninstalled"
+    echo "[*] This will REMOVE nhentai-scraper, FileBrowser, and related services."
+    echo "[!] TOR WILL NOT BE STOPPED OR REMOVED FOR SECURITY REASONS. IF YOU DO NOT WANT TOR, YOU MUST REMOVE IT MANUALLY."
+    read -p "    Do you want to continue? (y/n): " choice
+    case "$choice" in
+        y|Y)
+            echo ""
+            echo "[*] Uninstalling scraper..."
+            # Remove Directories and files
+            rm -rf /opt/filebrowser/
+            rm -rf "$NHENTAI_DIR"
+            # Remove symlinks
+            rm -f /usr/local/bin/filebrowser
+            rm -f /usr/local/bin/nhentai-scraper
+            # Reload systemd and stop services
+            systemctl stop filebrowser nhscraper-api || true
+            systemctl disable filebrowser nhscraper-api|| true
+            # Remove systemd services
+            rm -f /etc/systemd/system/filebrowser.service
+            rm -f /etc/systemd/system/nhscraper-api.service
+            echo "[+] nhentai-scraper uninstalled"
+            ;;
+        *)
+            echo "[!] Uninstallation aborted."
+            exit 1
+            ;;
+    esac
 }
 
 start_update() {
@@ -254,6 +275,7 @@ start_install() {
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
         y|Y)
+            echo ""
             echo "[*] Starting installation..."
             check_python_version
             install_system_packages
