@@ -95,7 +95,7 @@ def load_installed_extensions():
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
             entry_point = os.path.join(ext_folder, ext["entry_point"])
             if os.path.exists(entry_point):
-                module_name = f"extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
+                module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
