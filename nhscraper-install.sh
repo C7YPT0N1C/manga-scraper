@@ -102,13 +102,8 @@ install_filebrowser() {
 
 install_scraper() {
     echo "[*] Installing nhentai-scraper..."
-
-    # Ask if user wants dev branch
-    read -rp "Do you want to install the dev branch instead of main? [y/N]: " use_dev
-    if [[ "$use_dev" =~ ^[Yy]$ ]]; then
-        branch="dev"
-    else
-        branch="main"
+    #branch="main"
+    branch="dev"  # Change to 'dev' for testing latest features
     fi
 
     if [ ! -d "$NHENTAI_DIR/.git" ]; then
@@ -214,9 +209,9 @@ EOF
     fi
 
     systemctl daemon-reexec
-    systemctl enable filebrowser nhscraper-api
-    systemctl restart filebrowser nhscraper-api
-    echo "[+] Systemd services 'filebrowser', 'nhscraper-api' created and started."
+    systemctl enable filebrowser nhscraper-api tor
+    systemctl restart filebrowser nhscraper-api tor
+    echo "[+] Systemd services 'filebrowser', 'nhscraper-api' 'tor' created and started."
     echo ""
 }
 
