@@ -35,26 +35,19 @@ def resolve_gallery_folder(meta: dict) -> str:
     
     artist_part = meta["artists"][0] if meta.get("artists") else "Unknown"
     gallery_folder = os.path.join(base_path, artist_part, folder_name)
-
-    log_clarification("debug")
-    logger.debug(f"Resolved gallery folder for {meta['id']}: {gallery_folder}")
     return gallery_folder
 
 def should_download_gallery(meta: dict) -> bool:
     """Determine whether the gallery passes the language/tags filters."""
     # Language filter
     if config.get("language") and meta.get("language") not in config["language"]:
-        log_clarification("info")
         logger.info(f"Skipping gallery {meta['id']} due to language filter")
         return False
     # Excluded tags
     if config.get("excluded_tags"):
         if any(tag in config["excluded_tags"] for tag in meta.get("tags", [])):
-            log_clarification("info")
             logger.info(f"Skipping gallery {meta['id']} due to excluded tags")
             return False
-    log_clarification("debug")
-    logger.debug(f"Gallery {meta['id']} passed filters")
     return True
 
 # ------------------------------
@@ -64,47 +57,31 @@ def should_download_gallery(meta: dict) -> bool:
 def process_gallery(gallery_id: int):
     """Download a single gallery and trigger extension hooks."""
     try:
-        log_clarification("info")
-        logger.info(f"Processing gallery {gallery_id}")
-
         meta = fetch_gallery_metadata(gallery_id)
-        if not meta:
-            log_clarification("warning")
-            logger.warning(f"No metadata returned for {gallery_id}")
-            return None
-
         if not should_download_gallery(meta):
             return None
 
         # Pre-download extension hooks
         for ext in INSTALLED_EXTENSIONS:
             if hasattr(ext, "during_download_hook"):
-                log_clarification("debug")
-                logger.debug(f"Running during_download_hook for {ext.__class__.__name__}")
                 ext.during_download_hook(config, gallery_id, meta)
 
         gallery_folder = resolve_gallery_folder(meta)
         if not config.get("dry_run"):
             os.makedirs(gallery_folder, exist_ok=True)
-            log_clarification("debug")
-            logger.debug(f"Created gallery folder {gallery_folder}")
         else:
-            log_clarification("info")
             logger.info(f"Dry-run: Would create folder {gallery_folder}")
 
         # Download images
         def download_worker(page_num: int):
             img_url = fetch_image_url(meta, page_num)
             if not img_url:
-                log_clarification("warning")
-                logger.warning(f"Skipping page {page_num}, could not build URL")
                 return
 
             filename = os.path.basename(img_url)
             target_path = os.path.join(gallery_folder, filename)
 
             if config.get("dry_run"):
-                log_clarification("info")
                 logger.info(f"Dry-run: Would download {img_url} -> {target_path}")
             else:
                 try:
@@ -119,23 +96,15 @@ def process_gallery(gallery_id: int):
                     log_clarification("warning")
                     logger.warning(f"Failed to download {img_url}: {e}")
 
-        log_clarification("info")
-        logger.info(f"Downloading {meta.get('num_pages', 0)} images for gallery {gallery_id}")
-
         with ThreadPoolExecutor(max_workers=config.get("threads_images", 4)) as executor:
-            futures = [executor.submit(download_worker, page) for page in range(1, meta.get("num_pages", 0) + 1)]
-            for future in as_completed(futures):
-                _ = future.result()
+            for page in range(1, meta.get("num_pages", 0) + 1):
+                executor.submit(download_worker, page)
 
         # Post-download hooks per gallery
         for ext in INSTALLED_EXTENSIONS:
             if hasattr(ext, "after_gallery_download"):
-                log_clarification("debug")
-                logger.debug(f"Running after_gallery_download for {ext.__class__.__name__}")
                 ext.after_gallery_download(meta)
 
-        log_clarification("info")
-        logger.info(f"Finished gallery {gallery_id}")
         return meta
     except Exception as e:
         log_clarification("error")
@@ -144,43 +113,29 @@ def process_gallery(gallery_id: int):
 
 def download_galleries(gallery_list: list):
     """Process a list of gallery IDs concurrently using threads."""
-    log_clarification("info")
     logger.info(f"Starting download of {len(gallery_list)} galleries")
-
     # Pre-download extension hooks
     for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "pre_download_hook"):
-            log_clarification("debug")
-            logger.debug(f"Running pre_download_hook for {ext.__class__.__name__}")
             gallery_list = ext.pre_download_hook(config, gallery_list)
 
     all_meta = []
     with ThreadPoolExecutor(max_workers=config.get("threads_galleries", 1)) as executor:
         futures = {executor.submit(process_gallery, gid): gid for gid in gallery_list}
         for future in as_completed(futures):
-            gid = futures[future]
-            try:
-                result = future.result()
-                if result:
-                    all_meta.append(result)
-            except Exception as e:
-                log_clarification("error")
-                logger.error(f"Exception in gallery {gid}: {e}")
+            result = future.result()
+            if result:
+                all_meta.append(result)
 
     # After all downloads
     for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "after_all_downloads"):
-            log_clarification("debug")
-            logger.debug(f"Running after_all_downloads for {ext.__class__.__name__}")
             ext.after_all_downloads(all_meta)
 
     # Reset extension download paths
     for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "post_download_hook"):
-            log_clarification("debug")
-            logger.debug(f"Running post_download_hook for {ext.__class__.__name__}")
             ext.post_download_hook(config, all_meta)
 
-    log_clarification("info")
     logger.info(f"Completed download of {len(all_meta)} galleries")
     return all_meta

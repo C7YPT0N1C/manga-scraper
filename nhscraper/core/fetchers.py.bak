@@ -8,9 +8,6 @@ from nhscraper.core.config import *
 # ===============================
 
 def build_session():
-    log_clarification("debug")
-    logger.debug("Building HTTP session with cloudscraper")
-
     s = cloudscraper.create_scraper()
     s.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -58,31 +55,20 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int):
     """
     ids = []
     try:
-        log_clarification("info")
-        logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page}-{end_page})")
-
         for page in range(start_page, end_page + 1):
             url = f"{API_BASE}?query={query}&sort=popular&page={page}"
-            log_clarification("debug")
-            logger.debug(f"Requesting {url}")
-
             resp = session.get(url, timeout=30)
             resp.raise_for_status()
             data = resp.json()
 
             batch = [g["id"] for g in data.get("result", [])]
-            log_clarification("debug")
-            logger.debug(f"Page {page}: fetched {len(batch)} gallery IDs")
-
             if not batch:  # stop if page is empty
-                log_clarification("info")
-                logger.info(f"No results on page {page}, stopping early")
                 break
 
             ids.extend(batch)
 
         log_clarification("debug")
-        logger.debug(f"Fetched total {len(ids)} galleries for query '{query}'")
+        logger.debug(f"Fetched {len(ids)} galleries for query '{query}' (pages {start_page}-{end_page})")
         return ids
 
     except Exception as e:
@@ -96,15 +82,9 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int):
 def fetch_gallery_metadata(gallery_id: int):
     url = f"https://nhentai.net/api/gallery/{gallery_id}"
     try:
-        log_clarification("debug")
-        logger.debug(f"Fetching metadata for gallery {gallery_id} from {url}")
-
         resp = session.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-
-        log_clarification("debug")
-        logger.debug(f"Fetched metadata for gallery {gallery_id}")
         return data
     except Exception as e:
         log_clarification("warning")
@@ -114,9 +94,6 @@ def fetch_gallery_metadata(gallery_id: int):
 
 def fetch_image_url(meta: dict, page: int):
     try:
-        log_clarification("debug")
-        logger.debug(f"Building image URL for gallery {meta['id']} page {page}")
-
         ext_map = {
             "j": "jpg",
             "p": "png",
@@ -126,11 +103,8 @@ def fetch_image_url(meta: dict, page: int):
         ext = ext_map.get(meta["images"]["pages"][page - 1]["t"], "jpg")
         filename = f"{page}.{ext}"
         url = f"https://i.nhentai.net/galleries/{meta['media_id']}/{filename}"
-
-        log_clarification("debug")
-        logger.debug(f"Built image URL: {url}")
         return url
     except Exception as e:
         log_clarification("warning")
-        logger.warning(f"Failed to build image URL for gallery {meta.get('id','?')} page {page}: {e}")
+        logger.warning(f"Failed to build image URL for gallery {meta['id']} page {page}: {e}")
         return None

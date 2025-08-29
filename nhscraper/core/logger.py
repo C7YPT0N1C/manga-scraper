@@ -24,6 +24,7 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 # Logger setup
 logger = logging.getLogger("nhscraper")
 if config["VERBOSE"]: # Set to DEBUG if verbose mode is on
+    print("VERBOSEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE") # TEST
     logger.setLevel(logging.DEBUG)
 else: # Default to INFO
     logger.setLevel(logging.INFO)
