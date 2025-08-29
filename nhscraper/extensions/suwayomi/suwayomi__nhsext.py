@@ -122,12 +122,12 @@ def uninstall_extension():
         if os.path.exists(service_file):
             os.remove(service_file)
             subprocess.run(["systemctl", "daemon-reload"], check=True)
-            log_clarification()
+            log_clarification("info")
             logger.info("Suwayomi systemd service removed")
-        log_clarification()
+        log_clarification("info")
         logger.info("Suwayomi extension uninstalled")
     except Exception as e:
-        log_clarification()
+        log_clarification("error")
         logger.error(f"Failed to uninstall Suwayomi extension: {e}")
 
 # ===============================
@@ -145,11 +145,11 @@ def graphql_query(query, variables=None):
         resp.raise_for_status()
         data = resp.json()
         if "errors" in data:
-            log_clarification()
+            log_clarification("warning")
             logger.warning(f"GraphQL query returned errors: {data['errors']}")
         return data.get("data")
     except Exception as e:
-        log_clarification()
+        log_clarification("error")
         logger.error(f"GraphQL request failed: {e}")
         return None
 

@@ -92,7 +92,7 @@ def process_gallery(gallery_id: int):
 
         return meta
     except Exception as e:
-        log_clarification()
+        log_clarification("error")
         logger.error(f"Error processing Gallery {gallery_id}: {e}")
         return None
 

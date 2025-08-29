@@ -29,13 +29,13 @@ else: # Default to INFO
     logger.setLevel(logging.INFO)
 
 # LOGGING LEVELS - IN OTHER MODULES USE:
-# log_clarification() # Print Blank Line (make sure logging level is the same)
+# log_clarification("LOG LEVEL") # Print Blank Line (make sure logging level is the same)
 
-# logger.debug("This is a debug message")    # Not shown because level is INFO
-# logger.info("This is info")               # Shown
-# logger.warning("This is a warning")       # Shown
-# logger.error("This is an error")          # Shown
-# logger.critical("This is critical")       # Shown
+# logger.debug("This is a debug message")   # Not shown because level is INFO (logger.getEffectiveLevel = 10)
+# logger.info("This is info")               # Shown (logger.getEffectiveLevel = 20)
+# logger.warning("This is a warning")       # Shown (logger.getEffectiveLevel = 30)
+# logger.error("This is an error")          # Shown (logger.getEffectiveLevel = 40)
+# logger.critical("This is critical")       # Shown (logger.getEffectiveLevel = 50)
 
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
@@ -56,6 +56,23 @@ fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
 
-def log_clarification():
-    print("")
-    logger.debug("") # Adds blank lines in log files
+def log_clarification(LEVEL): # Adds blank lines in terminal and log files
+    if logger.getEffectiveLevel >= 10 and LEVEL == "debug":
+        print("")
+        logger.debug("")
+    
+    if logger.getEffectiveLevel >= 20 and LEVEL == "info":
+        print("")
+        logger.info("")
+    
+    if logger.getEffectiveLevel >= 30 and LEVEL == "warning":
+        print("")
+        logger.warning("")
+    
+    if logger.getEffectiveLevel >= 40 and LEVEL == "error":
+        print("")
+        logger.error("")
+    
+    if logger.getEffectiveLevel >= 50 and LEVEL == "critical":
+        print("")
+        logger.critical("")

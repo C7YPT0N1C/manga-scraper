@@ -30,10 +30,10 @@ def run_pre_download_hooks(gallery_list):
         if hasattr(ext, "pre_download_hook"):
             try:
                 gallery_list = ext.pre_download_hook(config, gallery_list)
-                log_clarification()
+                log_clarification("info")
                 logger.info(f"Pre-download hook executed for {getattr(ext, '__name__', 'unknown')}")
             except Exception as e:
-                log_clarification()
+                log_clarification("error")
                 logger.error(f"Pre-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
     return gallery_list
 
@@ -42,10 +42,10 @@ def run_post_download_hooks(completed_galleries):
         if hasattr(ext, "post_download_hook"):
             try:
                 ext.post_download_hook(config, completed_galleries)
-                log_clarification()
+                log_clarification("info")
                 logger.info(f"Post-download hook executed for {getattr(ext, '__name__', 'unknown')}")
             except Exception as e:
-                log_clarification()
+                log_clarification("error")
                 logger.error(f"Post-download hook failed in {getattr(ext, '__name__', 'unknown')}: {e}")
 
 # ===============================
@@ -72,7 +72,7 @@ def trigger_download():
         run_post_download_hooks(gallery_list)
         return jsonify({"status": "success", "galleries": len(gallery_list)})
     except Exception as e:
-        log_clarification()
+        log_clarification("error")
         logger.error(f"Failed to trigger download: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -81,7 +81,6 @@ def trigger_download():
 # ===============================
 def main():
     app.run(host="0.0.0.0", port=5000)
-
 
 if __name__ == "__main__":
     main()

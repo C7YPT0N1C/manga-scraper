@@ -14,7 +14,7 @@ def get_cached_meta(gallery_id: int):
                 logger.info(f"Loaded cached metadata for gallery {gallery_id}")
                 return json.load(f)
         except Exception as e:
-            log_clarification()
+            log_clarification("warning")
             logger.warning(f"Failed to read cache for {gallery_id}: {e}")
     return None
 
@@ -25,5 +25,5 @@ def cache_gallery_meta(meta: dict):
             json.dump(meta, f, ensure_ascii=False, indent=2)
         logger.info(f"Metadata cached for gallery {meta['id']}")
     except Exception as e:
-        log_clarification()
+        log_clarification("error")
         logger.error(f"Failed to cache metadata for {meta['id']}: {e}")
