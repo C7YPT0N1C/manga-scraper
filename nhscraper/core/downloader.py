@@ -57,7 +57,7 @@ def should_download_gallery(meta: dict) -> bool:
 def process_gallery(gallery_id: int):
     """Download a single gallery and trigger extension hooks."""
     try:
-        meta = fetch_gallery_metadata(gallery_id, use_tor=config.get("use_tor"))
+        meta = fetch_gallery_metadata(gallery_id)
         if not should_download_gallery(meta):
             return None
 

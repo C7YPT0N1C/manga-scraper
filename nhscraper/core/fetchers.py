@@ -18,8 +18,10 @@ def build_session():
     if config.get("use_tor", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies.update({"http": proxy, "https": proxy})
+        log_clarification("info")
         logger.info(f"[+] Using Tor proxy: {proxy}")
     else:
+        log_clarification("info")
         logger.info("[+] Not using Tor proxy")
 
     return s
