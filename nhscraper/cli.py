@@ -2,12 +2,11 @@
 # nhscraper/cli.py
 import argparse
 from nhscraper.core.config import config
-from nhscraper.core.downloader import download_batch
+from nhscraper.core.downloader import download_galleries
 from nhscraper.extensions.extension_loader import (
     INSTALLED_EXTENSIONS,
     install_extension,
     uninstall_extension,
-    EXTENSION_MANIFEST_URL,
     update_local_manifest_from_remote,
     get_selected_extension
 )
@@ -106,16 +105,16 @@ def main():
     # ------------------------------
     # Update config
     # ------------------------------
-    config["dry_run"] = args.dry_run
-    config["use_tor"] = args.use_tor
-    config["verbose"] = args.verbose
-    config["threads_galleries"] = args.threads_galleries
-    config["threads_images"] = args.threads_images
-    config["language"] = [lang.strip().lower() for lang in args.language.split(",")]
-    config["excluded_tags"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
-    config["title_type"] = args.title_type
-    config["title_sanitise"] = args.title_sanitise
-    config["extension_name"] = args.extension.lower()
+    config["DRY_RUN"] = args.dry_run
+    config["USE_TOR"] = args.use_tor
+    config["VERBOSE"] = args.verbose
+    config["THREADS_GALLERIES"] = args.threads_galleries
+    config["THREADS_IMAGES"] = args.threads_images
+    config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
+    config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
+    config["TITLE_TYPE"] = args.title_type
+    config["TITLE_SANITISE"] = args.title_sanitise
+    config["EXTENSION"] = args.extension.lower()
 
     # ------------------------------
     # Handle extension installation/uninstallation
@@ -152,7 +151,7 @@ def main():
     # ------------------------------
     # Download galleries
     # ------------------------------
-    download_batch(gallery_list)
+    download_galleries(gallery_list)
 
     # ------------------------------
     # Post-download hook

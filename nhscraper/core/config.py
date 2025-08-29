@@ -14,11 +14,7 @@ if os.path.exists(ENV_FILE):
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),
-    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 1)),
-    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 4)),
-    "USE_TOR": os.getenv("USE_TOR", "false").lower() == "true",
-    "DRY_RUN": os.getenv("DRY_RUN", "false").lower() == "true",
-    "VERBOSE": os.getenv("VERBOSE", "false").lower() == "true",
+    "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", "https://i.nhentai.net"),
     "RANGE_START": int(os.getenv("RANGE_START", 592000)),
     "RANGE_END": int(os.getenv("RANGE_END", 600000)),
     "GALLERIES": os.getenv("GALLERIES", ""),
@@ -30,7 +26,11 @@ config = {
     "LANGUAGE": os.getenv("LANGUAGE", "english"),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", "english"),
     "TITLE_SANITISE": os.getenv("TITLE_SANITISE", "false").lower() == "true",
-    "EXTENSION": os.getenv("EXTENSION", "none"),
+    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 1)),
+    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 4)),
+    "USE_TOR": os.getenv("USE_TOR", "false").lower() == "true",
+    "DRY_RUN": os.getenv("DRY_RUN", "false").lower() == "true",
+    "VERBOSE": os.getenv("VERBOSE", "false").lower() == "true",
 }
 
 

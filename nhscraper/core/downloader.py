@@ -8,9 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from time import sleep
 from nhscraper.core.logger import logger
 from nhscraper.core.config import config, get_download_path
-from nhscraper.core.fetchers import fetch_gallery_metadata, download_image
-from nhscraper.extensions.extension_loader import loaded_extensions
-
+from nhscraper.core.fetchers import fetch_gallery_metadata, fetch_image_url
+from nhscraper.extensions.extension_loader import INSTALLED_EXTENSIONS
 # ------------------------------
 # Helper Functions
 # ------------------------------
@@ -63,7 +62,7 @@ def process_gallery(gallery_id: int):
             return None
 
         # Pre-download extension hooks
-        for ext in loaded_extensions:
+        for ext in INSTALLED_EXTENSIONS:
             if hasattr(ext, "during_download_hook"):
                 ext.during_download_hook(config, gallery_id, meta)
 
@@ -87,7 +86,7 @@ def process_gallery(gallery_id: int):
                 executor.submit(download_worker, img_url)
 
         # Post-download hooks per gallery
-        for ext in loaded_extensions:
+        for ext in INSTALLED_EXTENSIONS:
             if hasattr(ext, "after_gallery_download"):
                 ext.after_gallery_download(meta)
 
@@ -100,7 +99,7 @@ def download_galleries(gallery_list: list):
     """Process a list of gallery IDs concurrently using threads."""
     logger.info(f"[*] Starting download of {len(gallery_list)} galleries")
     # Pre-download extension hooks
-    for ext in loaded_extensions:
+    for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "pre_download_hook"):
             gallery_list = ext.pre_download_hook(config, gallery_list)
 
@@ -113,12 +112,12 @@ def download_galleries(gallery_list: list):
                 all_meta.append(result)
 
     # After all downloads
-    for ext in loaded_extensions:
+    for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "after_all_downloads"):
             ext.after_all_downloads(all_meta)
 
     # Reset extension download paths
-    for ext in loaded_extensions:
+    for ext in INSTALLED_EXTENSIONS:
         if hasattr(ext, "post_download_hook"):
             ext.post_download_hook(config, all_meta)
 

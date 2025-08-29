@@ -134,14 +134,15 @@ create_env_file() {
     echo "[*] Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
+
+# Directories
 NHENTAI_DIR=/opt/nhentai-scraper
+
+# Download paths
 DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
 EXTENSION_DOWNLOAD_PATH=
-THREADS_GALLERIES=1
-THREADS_IMAGES=4
-USE_TOR=false
-NHENTAI_DRY_RUN=false
-GRAPHQL_URL=http://127.0.0.1:4567/api/graphql
+
+# Mirrors
 NHENTAI_MIRRORS=https://i.nhentai.net
 
 # CLI default flags
@@ -156,6 +157,12 @@ EXCLUDED_TAGS=
 LANGUAGE=english
 TITLE_TYPE=english
 TITLE_SANITISE=true
+
+# Threads and options
+THREADS_GALLERIES=1
+THREADS_IMAGES=4
+USE_TOR=false
+DRY_RUN=false
 VERBOSE=false
 EOF
     echo "[+] Environment file created at $ENV_FILE"
