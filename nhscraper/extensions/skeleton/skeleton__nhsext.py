@@ -20,27 +20,32 @@ def update_extension_download_path(PATH):
 def pre_download_hook(config, gallery_list):
     update_extension_download_path("./downloads_skeleton")
     
-    logger.info(f"\nSkeleton extension: Pre-download hook called.")
+    logger.debug("")
+    logger.debug(f"Skeleton extension: Pre-download hook called.")
     return gallery_list
 
 # Hook for functionality during download
 def during_download_hook(config, gallery_id, gallery_metadata):
-    logger.info(f"\nSkeleton extension: During-download hook called: {gallery_id}")
+    logger.debug("")
+    logger.debug(f"Skeleton extension: During-download hook called: {gallery_id}")
 
 # Hook for functionality after each gallery download
 def after_gallery_download(meta: dict):
-    logger.info(f"\nSkeleton extension: Post-Gallery Download hook called: Gallery {meta['id']} downloaded")
+    logger.debug("")
+    logger.debug(f"Skeleton extension: Post-Gallery Download hook called: Gallery {meta['id']} downloaded")
 
 # Hook for functionality after all downloads are complete
 def after_all_downloads(all_meta: list):
-    logger.info(f"\nSkeleton extension: Post-Batch hook called: Batch of {len(all_meta)} galleries downloaded")
+    logger.debug("")
+    logger.debug(f"Skeleton extension: Post-Batch hook called: Batch of {len(all_meta)} galleries downloaded")
 
 # Hook for post-download functionality. Reset download path.
 def post_download_hook(config, completed_galleries):
     global extension_download_path
     extension_download_path = ""  # Reset after downloads
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-    logger.info(f"\nSkeleton extension: Post-download hook called.")
+    logger.debug("")
+    logger.debug(f"Skeleton extension: Post-download hook called.")
 
 # ------------------------------
 # Install / Uninstall
@@ -50,7 +55,8 @@ def install_extension():
     extension_download_path = "./downloads_skeleton"
     os.makedirs(extension_download_path, exist_ok=True)
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
-    logger.info(f"\nSkeleton extension installed at {extension_download_path}")
+    logger.info("")
+    logger.info(f"Skeleton extension installed at {extension_download_path}")
 
 def uninstall_extension():
     global extension_download_path
@@ -59,6 +65,8 @@ def uninstall_extension():
             os.rmdir(extension_download_path)
         extension_download_path = ""
         update_env("EXTENSION_DOWNLOAD_PATH", "")
-        logger.info("\nSkeleton extension uninstalled")
+        logger.info("")
+        logger.info("Skeleton extension uninstalled")
     except Exception as e:
-        logger.error(f"\nFailed to uninstall skeleton extension: {e}")
+        logger.error("")
+        logger.error(f"Failed to uninstall skeleton extension: {e}")

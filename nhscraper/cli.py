@@ -125,14 +125,16 @@ def main():
     # Select extension (skeleton fallback)
     # ------------------------------
     selected_extension = get_selected_extension(args.extension.lower())
-    logger.debug(f"\nUsing extension: {getattr(selected_extension, '__name__', 'skeleton')}")
+    logger.debug("")
+    logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
     # Build gallery list
     # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        logger.warning("\nNo galleries to download. Exiting.")
+        logger.warning("")
+        logger.warning("No galleries to download. Exiting.")
         return
 
     # ------------------------------

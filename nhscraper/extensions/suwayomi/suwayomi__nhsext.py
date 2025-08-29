@@ -28,12 +28,12 @@ def pre_download_hook(config_dict, gallery_list):
     extension_download_path = "/opt/suwayomi/local"
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
     
-    logger.info(f"Suwayomi extension: Pre-download hook called")
+    logger.debug(f"Suwayomi extension: Pre-download hook called")
     return gallery_list
 
 # Hook for functionality during download
 def during_download_hook(config_dict, gallery_id, gallery_metadata):
-    logger.info(f"Suwayomi extension: During-download hook for gallery {gallery_id}")
+    logger.debug(f"Suwayomi extension: During-download hook for gallery {gallery_id}")
 
 # Hook for functionality after each gallery download
 def after_gallery_download(meta: dict):
@@ -55,22 +55,22 @@ def after_gallery_download(meta: dict):
     # Save details.json
     details_file = os.path.join(gallery_folder, "details.json")
     if config["DRY_RUN"]:
-        logger.info(f"Dry-run: Would save details.json to {details_file}")
+        logger.debug(f"Dry-run: Would save details.json to {details_file}")
     else:
         with open(details_file, "w", encoding="utf-8") as f:
             json.dump(details, f, ensure_ascii=False, indent=2)
-        logger.info(f"Suwayomi metadata saved for gallery {meta['id']}")
+        logger.debug(f"Suwayomi metadata saved for gallery {meta['id']}")
 
 # Hook for functionality after all downloads are complete
 def after_all_downloads(all_meta: list):
-    logger.info(f"Suwayomi extension: batch of {len(all_meta)} galleries downloaded")
+    logger.debug(f"Suwayomi extension: batch of {len(all_meta)} galleries downloaded")
 
 # Hook for post-download functionality. Reset download path.
 def post_download_hook(config_dict, completed_galleries):
     global extension_download_path
     extension_download_path = ""  # Reset after downloads
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-    logger.info(f"Suwayomi extension: Post-download hook called")
+    logger.debug(f"Suwayomi extension: Post-download hook called")
 
 # ------------------------------
 # Install / Uninstall
@@ -106,7 +106,7 @@ WantedBy=multi-user.target
         f.write(service_content)
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
-    logger.info("\nSuwayomi systemd service created and started")
+    logger.info("Suwayomi systemd service created and started")
     
     print("")
     print("Suwayomi Web: http://$IP:4567/")
@@ -122,10 +122,13 @@ def uninstall_extension():
         if os.path.exists(service_file):
             os.remove(service_file)
             subprocess.run(["systemctl", "daemon-reload"], check=True)
-            logger.info("\nSuwayomi systemd service removed")
-        logger.info("\nSuwayomi extension uninstalled")
+            logger.info("")
+            logger.info("Suwayomi systemd service removed")
+        logger.info("")
+        logger.info("Suwayomi extension uninstalled")
     except Exception as e:
-        logger.error(f"\nFailed to uninstall Suwayomi extension: {e}")
+        logger.error("")
+        logger.error(f"Failed to uninstall Suwayomi extension: {e}")
 
 # ===============================
 # GraphQL / Suwayomi
@@ -142,10 +145,12 @@ def graphql_query(query, variables=None):
         resp.raise_for_status()
         data = resp.json()
         if "errors" in data:
-            logger.warning(f"\nGraphQL query returned errors: {data['errors']}")
+            logger.warning("")
+            logger.warning(f"GraphQL query returned errors: {data['errors']}")
         return data.get("data")
     except Exception as e:
-        logger.error(f"\nGraphQL request failed: {e}")
+        logger.error("")
+        logger.error(f"GraphQL request failed: {e}")
         return None
 
 def create_suwayomi_category(name):

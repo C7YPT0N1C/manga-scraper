@@ -21,11 +21,13 @@ else: # Default to INFO
     logger.setLevel(logging.INFO)
 
 # LOGGING LEVELS - IN OTHER MODULES USE:
-# logger.debug("\nThis is a debug message")    # Not shown because level is INFO
+# logger.info("") # Print Blank Line (make sure logging level is the same)
+
+# logger.debug("This is a debug message")    # Not shown because level is INFO
 # logger.info("This is info")               # Shown
-# logger.warning("\nThis is a warning")       # Shown
-# logger.error("\nThis is an error")          # Shown
-# logger.critical("\nThis is critical")       # Shown
+# logger.warning("This is a warning")       # Shown
+# logger.error("This is an error")          # Shown
+# logger.critical("This is critical")       # Shown
 
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
 

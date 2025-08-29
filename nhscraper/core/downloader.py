@@ -92,7 +92,8 @@ def process_gallery(gallery_id: int):
 
         return meta
     except Exception as e:
-        logger.error(f"\nError processing Gallery {gallery_id}: {e}")
+        logger.error("")
+        logger.error(f"Error processing Gallery {gallery_id}: {e}")
         return None
 
 def download_galleries(gallery_list: list):
