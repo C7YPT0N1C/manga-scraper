@@ -116,11 +116,11 @@ def load_installed_extensions():
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
-                    logger.debug(f"Loaded installed extension: {ext['name']}")
+                    logger.debug(f"Extension: {ext['name']}: Loaded.")
                 except Exception as e:
-                    logger.warning(f"Failed to load extension: {ext['name']}: {e}")
+                    logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
             else:
-                logger.warning(f"Entry point not found for extension: {ext['name']}")
+                logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------
 # Install / Uninstall Extension

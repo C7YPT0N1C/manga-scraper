@@ -28,7 +28,7 @@ logger.debug("Downloader: Debugging Started.")
 # Select extension (skeleton fallback)
 # ------------------------------
 active_extension = get_selected_extension()
-#log_clarification()
+#log_clarification() # TEST
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
 if not config.get("DRY_RUN", False):

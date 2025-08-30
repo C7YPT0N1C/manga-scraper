@@ -185,22 +185,7 @@ def build_gallery_list(args):
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
-def main():
-    args = parse_args()
-    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Allow logger to set log level.
-
-    # ------------------------------
-    # Build gallery list
-    # ------------------------------
-    gallery_list = build_gallery_list(args)
-    if not gallery_list:
-        log_clarification()
-        logger.warning("No galleries to download. Exiting.")
-        return
-    
-    # ------------------------------
-    # Update config
-    # ------------------------------
+def update_config(args, gallery_list): # Update config
     config["GALLERIES"] = gallery_list # TEST
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
@@ -212,9 +197,25 @@ def main():
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
+
+def main():
+    args = parse_args()
+
+    # ------------------------------
+    # Build gallery list
+    # ------------------------------
+    gallery_list = build_gallery_list(args)
+    if not gallery_list:
+        log_clarification()
+        logger.warning("No galleries to download. Exiting.")
+        return
     
     log_clarification()
-    logger.debug(f"Config after CLI overrides: {config}")
+    logger.debug("Updating Config...")
+    update_config(args, gallery_list)
+    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Allow logger to set log level.
+    log_clarification()
+    logger.debug(f"Updated Config: {config}")
     
     build_session() # Call fetcher to build cloudscraper session.
 
