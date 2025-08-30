@@ -186,10 +186,6 @@ def update_config(args, gallery_list): # Update config
     config["VERBOSE"] = args.verbose
 
 def main():
-    log_clarification()
-    logger.info("CLI: Ready.")
-    logger.debug("CLI: Debugging Started.")
-    
     args = parse_args()
 
     # Overwrite placeholder logger with real one
@@ -197,6 +193,10 @@ def main():
         dry_run=args.dry_run,
         verbose=args.verbose,
     ) 
+    
+    log_clarification()
+    logger.info("CLI: Ready.")
+    logger.debug("CLI: Debugging Started.")
     
     # ------------------------------
     # Build gallery list
