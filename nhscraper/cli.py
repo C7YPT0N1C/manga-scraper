@@ -5,7 +5,7 @@ import argparse
 
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
-from nhscraper.core.downloader import download_galleries
+from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
 from nhscraper.extensions.extension_loader import *
 
@@ -178,6 +178,7 @@ def main():
     # ------------------------------
     # Update config
     # ------------------------------
+    config["GALLERIES"] = build_gallery_list(args) # TEST
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
@@ -211,11 +212,11 @@ def main():
     # ------------------------------
     # Build gallery list
     # ------------------------------
-    gallery_list = build_gallery_list(args)
-    if not gallery_list:
-        log_clarification()
-        logger.warning("No galleries to download. Exiting.")
-        return
+    #gallery_list = build_gallery_list(args)
+    #if not gallery_list:
+    #    log_clarification()
+    #    logger.warning("No galleries to download. Exiting.")
+    #    return
 
     # ------------------------------
     # Pre-download hook
@@ -227,6 +228,7 @@ def main():
     # Download galleries
     # ------------------------------
     download_galleries(gallery_list)
+    start_downloader()
 
     # ------------------------------
     # Post-download hook

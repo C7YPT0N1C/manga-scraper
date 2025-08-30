@@ -183,7 +183,7 @@ def process_gallery(gallery_id):
 ####################################################################################################
 # MAIN
 ####################################################################################################
-def main():
+def start_downloader():
     gallery_ids = config.get("galleries", [])
     active_extension.pre_download_hook(config, gallery_ids)
 
@@ -204,6 +204,3 @@ def main():
     
     active_extension.after_all_downloads(gallery_ids)
     active_extension.post_download_hook(config, gallery_ids)
-
-if __name__ == "__main__":
-    main()
