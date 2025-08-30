@@ -128,6 +128,7 @@ def process_gallery(gallery_id):
     while gallery_attempts < max_gallery_attempts:
         gallery_attempts += 1
         try:
+            log_clarification()
             logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
             dynamic_sleep("gallery")
 
@@ -162,7 +163,7 @@ def process_gallery(gallery_id):
 
                 # Threaded downloads with progress bar
                 futures = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["threads_images"]) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     for i in range(num_pages):
                         page = i + 1
                         img_url = fetch_image_url(meta, page)
@@ -186,12 +187,12 @@ def process_gallery(gallery_id):
             # Call after-gallery hook
             active_extension.after_gallery_download(meta)
             db.mark_gallery_completed(gallery_id)
-            logger.info(f"Completed gallery {gallery_id}")
+            logger.info(f"Completed Gallery {gallery_id}")
             break
 
         except Exception as e:
             log_clarification()
-            logger.error(f"Error processing gallery {gallery_id}: {e}")
+            logger.error(f"Error processing Gallery {gallery_id}: {e}")
             if gallery_attempts >= max_gallery_attempts:
                 db.mark_gallery_failed(gallery_id)
 
@@ -208,7 +209,7 @@ def start_downloader():
     
     log_clarification()
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
-                if len(gallery_ids) > 1 else f"Gallery to process: {gallery_ids[0]}")
+                if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("threads_galleries", 4)) as executor:
         futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
