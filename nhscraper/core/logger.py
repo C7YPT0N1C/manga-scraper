@@ -22,38 +22,31 @@ MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
-
 # Logger setup
 logger = logging.getLogger("nhscraper")
+
 if config["VERBOSE"]:
     logger.setLevel(logging.DEBUG)
-    logger.debug("Verbose Logging Enabled.")
-else: # Default to INFO
-    #logger.setLevel(logging.INFO)
-    logger.setLevel(logging.DEBUG)
-
-# LOGGING LEVELS - IN OTHER MODULES USE:
-# logger.debug("This is a debug message")   # Not shown because level is INFO (logger.getEffectiveLevel = 10)
-# logger.info("This is info")               # Shown (logger.getEffectiveLevel = 20)
-# logger.warning("This is a warning")       # Shown (logger.getEffectiveLevel = 30)
-# logger.error("This is an error")          # Shown (logger.getEffectiveLevel = 40)
-# logger.critical("This is critical")       # Shown (logger.getEffectiveLevel = 50)
+    log_console_level = logging.DEBUG
+else:
+    logger.setLevel(logging.INFO)
+    log_console_level = logging.INFO
 
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
 # Console handler
 ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
+ch.setLevel(log_console_level)   # Console now respects verbosity
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 # File handlers
 fh_master = logging.FileHandler(MASTER_LOG_FILE)
-fh_master.setLevel(logging.DEBUG) # Master log captures all levels
+fh_master.setLevel(logging.DEBUG)  # Always capture everything
 fh_master.setFormatter(formatter)
 logger.addHandler(fh_master)
 
 fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
-fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
+fh_runtime.setLevel(logging.DEBUG)  # Always capture everything
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
