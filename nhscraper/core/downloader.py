@@ -59,7 +59,7 @@ def dynamic_sleep(stage="gallery"):
     logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
     time.sleep(sleep_time)
 
-def should_download_gallery(meta, download_location):
+def should_download_gallery(meta):
     if not meta:
         return False
 
