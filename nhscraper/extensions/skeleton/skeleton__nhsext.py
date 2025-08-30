@@ -11,7 +11,8 @@ from nhscraper.core.fetchers import get_tag_names, safe_name, clean_title
 
 # Global variable for download path, update here.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
-SUBFOLDER_STRUCTURE = ["artist", "title"]
+#SUBFOLDER_STRUCTURE = ["artist", "title"]
+SUBFOLDER_STRUCTURE = ["title", "artist"]
 
 def update_extension_download_path():
     log_clarification()

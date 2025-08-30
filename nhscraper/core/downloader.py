@@ -187,7 +187,6 @@ def start_downloader():
     logger.debug("Downloader: Debugging Started.")
 
     gallery_ids = config.get("GALLERIES", [])
-    active_extension.test_hook(config, gallery_ids) # TEST
     active_extension.pre_run_hook(config, gallery_ids)
 
     if not gallery_ids:
