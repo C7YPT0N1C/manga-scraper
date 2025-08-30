@@ -5,7 +5,7 @@ import argparse
 
 from nhscraper.core.config import logger, config, log_clarification, setup_logger # TEST
 from nhscraper.core.downloader import *
-from nhscraper.core.fetchers import fetch_gallery_ids
+from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
 def parse_args():
