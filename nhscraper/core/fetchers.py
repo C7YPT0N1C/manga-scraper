@@ -225,6 +225,7 @@ def get_tag_names(meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
             
+    log_clarification()
     logger.debug(f"Tag Type '{tag_type}' Found: {names}") # TEST
 
     return names or ["Unknown"]

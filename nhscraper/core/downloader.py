@@ -119,6 +119,7 @@ def process_gallery(gallery_id):
 
             artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
+            log_clarification()
             logger.debug(f"Gallery title: '{gallery_title}'")
 
             # Prepare tasks grouped by artist
