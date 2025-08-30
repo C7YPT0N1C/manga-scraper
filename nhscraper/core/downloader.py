@@ -106,6 +106,7 @@ def process_gallery(gallery_id):
         gallery_attempts += 1
         try:
             log_clarification()
+            log_clarification()
             logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
             dynamic_sleep("gallery")
 
