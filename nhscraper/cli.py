@@ -18,8 +18,8 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("CLI ready.")
-logger.debug("CLI Debugging started.")
+logger.info("CLI: Ready.")
+logger.debug("CLI: Debugging Started.")
 
 def parse_args():
     parser = argparse.ArgumentParser(

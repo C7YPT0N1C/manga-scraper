@@ -22,8 +22,8 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("API ready.")
-logger.debug("API Debugging started.")
+logger.info("API: Ready.")
+logger.debug("API: Debugging Started.")
 
 ##################################################################################################################################
 # GLOBAL STATE
@@ -162,10 +162,6 @@ def all_galleries_status():
 # MAIN ENTRYPOINT
 ##################################################################################################################################
 if __name__ == "__main__":
-    log_clarification()
-    logger.info("API Server initialised.")
-    logger.debug("API Debugging started.")
-    
     app.run(
     host="0.0.0.0",
     port=5000,

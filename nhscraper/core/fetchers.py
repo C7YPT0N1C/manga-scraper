@@ -15,8 +15,8 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("Fetcher ready.")
-logger.debug("Fetcher Debugging started.")
+logger.info("Fetcher: Ready.")
+logger.debug("Fetcher: Debugging Started.")
 
 # ===============================
 # HTTP SESSION

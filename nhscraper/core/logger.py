@@ -53,3 +53,15 @@ fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
 fh_runtime.setLevel(logging.DEBUG)  # Always capture everything
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
+
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
+log_clarification()
+logger.info("Logger: Ready.")
+logger.debug("Logger: Debugging Started.")

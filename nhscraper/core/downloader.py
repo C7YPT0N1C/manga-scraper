@@ -21,8 +21,8 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("Downloader ready.")
-logger.debug("Downloader Debugging started.")
+logger.info("Downloader: Ready.")
+logger.debug("Downloader: Debugging Started.")
 
 # ------------------------------
 # Select extension (skeleton fallback)

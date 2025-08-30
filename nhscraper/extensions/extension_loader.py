@@ -17,8 +17,8 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("Extension Loader ready.")
-logger.debug("Extension Loader Debugging started.")
+logger.info("Extension Loader: Ready.")
+logger.debug("Extension Loader: Debugging Started.")
 
 # ------------------------------
 # Constants / Paths
