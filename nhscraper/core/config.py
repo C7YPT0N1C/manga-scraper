@@ -4,16 +4,6 @@
 import os
 from dotenv import load_dotenv, set_key
 
-from nhscraper.core.logger import logger
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
 # ------------------------------
 # Paths & Env
 # ------------------------------
@@ -86,9 +76,6 @@ def get_download_path():
     ext_path = config.get("EXTENSION_DOWNLOAD_PATH", "").strip()
     if ext_path and os.path.isdir(ext_path):
         return ext_path
-
-    log_clarification()
-    logger.info(f"DOWNLOAD PATH = {config.get('DOWNLOAD_PATH')}")
     return config.get("DOWNLOAD_PATH")
 
 # ------------------------------

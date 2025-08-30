@@ -118,7 +118,7 @@ def should_download_gallery(meta):
 def process_gallery(gallery_id):
     build_session() # Call fetcher to build cloudscraper session.
     
-    download_location = None
+    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", None)
     extension_name = getattr(active_extension, "__name__", "skeleton")
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
