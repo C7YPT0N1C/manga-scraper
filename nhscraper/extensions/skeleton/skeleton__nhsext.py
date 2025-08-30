@@ -9,10 +9,9 @@ import os, time, subprocess, json, requests
 from nhscraper.core.config import logger, config, log_clarification, update_env
 from nhscraper.core.fetchers import get_tag_names, safe_name, clean_title
 
-# Global variable for download path, update here.
+# Global variables for download path and subfolder strucutre.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
-#SUBFOLDER_STRUCTURE = ["artist", "title"]
-SUBFOLDER_STRUCTURE = ["title", "artist"]
+SUBFOLDER_STRUCTURE = ["artist", "title"]
 
 def update_extension_download_path():
     log_clarification()
