@@ -9,6 +9,14 @@ from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
 from nhscraper.extensions.extension_loader import *
 
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper with Suwayomi integration"

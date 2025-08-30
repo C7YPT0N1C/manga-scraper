@@ -9,6 +9,14 @@ from nhscraper.core.config import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
+# ------------------------------
 # Constants / Paths
 # ------------------------------
 EXTENSIONS_DIR = os.path.dirname(__file__)

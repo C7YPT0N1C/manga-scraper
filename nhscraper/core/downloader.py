@@ -14,6 +14,14 @@ from nhscraper.extensions.extension_loader import *
 
 active_extension = get_selected_extension()
 
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
 log_clarification()
 logger.info("Downloader ready.")
 logger.debug("Downloader Debugging started.")

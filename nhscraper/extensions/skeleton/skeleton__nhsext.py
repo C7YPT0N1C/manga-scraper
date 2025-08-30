@@ -9,6 +9,14 @@ import os, subprocess, json
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
 
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
 # Global variable for download path, leave empty initially
 extension_download_path = "/opt/nhentai-scraper/downloads"
 

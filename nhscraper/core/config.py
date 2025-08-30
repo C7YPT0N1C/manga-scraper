@@ -7,6 +7,14 @@ from dotenv import load_dotenv, set_key
 from nhscraper.core.logger import *
 
 # ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
+# ------------------------------
 # Paths & Env
 # ------------------------------
 NHENTAI_DIR = "/opt/nhentai-scraper"

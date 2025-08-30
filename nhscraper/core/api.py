@@ -13,13 +13,13 @@ from nhscraper.core.config import *
 
 app = Flask(__name__)
 
-# ===============================
-# KEY
-# ===============================
-# = Process / In Progress (Prefer logger.info)
-# = Success / Confirmation (Prefer logger.info)
-# = Warning/Error (Prefer logger.warning on soft errors, logger.error on critical errors)
-# (Use logger.debug for debugging)
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
 
 ##################################################################################################################################
 # GLOBAL STATE

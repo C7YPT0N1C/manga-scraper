@@ -6,6 +6,14 @@ import time, random, cloudscraper, requests
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
 
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
 # ===============================
 # HTTP SESSION
 # ===============================

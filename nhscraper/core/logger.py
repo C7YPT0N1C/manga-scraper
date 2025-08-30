@@ -32,8 +32,6 @@ else: # Default to INFO
     logger.setLevel(logging.INFO)
 
 # LOGGING LEVELS - IN OTHER MODULES USE:
-# log_clarification("LOG LEVEL") # Print Blank Line (make sure logging level is the same)
-
 # logger.debug("This is a debug message")   # Not shown because level is INFO (logger.getEffectiveLevel = 10)
 # logger.info("This is info")               # Shown (logger.getEffectiveLevel = 20)
 # logger.warning("This is a warning")       # Shown (logger.getEffectiveLevel = 30)
@@ -58,7 +56,3 @@ fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
 fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
-
-def log_clarification():  
-    print()
-    logger.debug("")
