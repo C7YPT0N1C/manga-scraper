@@ -3,7 +3,9 @@
 
 import os, time, random, concurrent.futures
 from tqdm import tqdm
-from nhscraper.core.config import logger, config, SUWAYOMI_DIR
+
+from nhscraper.core.logger import *
+from nhscraper.core.config import config
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
 
