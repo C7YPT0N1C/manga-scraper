@@ -5,7 +5,7 @@ import sqlite3
 import threading
 import os
 from datetime import datetime
-from nhscraper.config import config, SUWAYOMI_DIR
+from nhscraper.core.config import config, SUWAYOMI_DIR
 
 DB_PATH = os.path.join(SUWAYOMI_DIR, "nhscraper.db")
 lock = threading.Lock()

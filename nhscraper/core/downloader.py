@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 # nhscraper/downloader.py
 
-import os
-import time
-import random
-import concurrent.futures
+import os, time, random, concurrent.futures
 from tqdm import tqdm
-from nhscraper.config import logger, config, SUWAYOMI_DIR
-import nhscraper.nhscraper_api as api
+from nhscraper.core.config import logger, config, SUWAYOMI_DIR
 from nhscraper.core import db
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
 
 # Import active extension
 from nhscraper.extensions import active_extension
@@ -122,7 +119,7 @@ def process_gallery(gallery_id):
             dynamic_sleep("gallery")
             logger.info(f"[*] Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
 
-            meta = api.get_gallery_metadata(gallery_id)
+            meta = fetch_gallery_metadata(gallery_id)
             if not meta:
                 logger.warning(f"[!] Failed to fetch metadata for Gallery {gallery_id}")
                 if gallery_attempts >= max_gallery_attempts:
@@ -156,13 +153,13 @@ def process_gallery(gallery_id):
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["threads_images"]) as executor:
                     for i in range(num_pages):
                         page = i + 1
-                        img_url = api.get_image_url(meta, page)
+                        img_url = fetch_image_url(meta, page)
                         if not img_url:
                             logger.warning(f"[!] Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue
                         img_path = os.path.join(doujin_folder, f"{page}.{img_url.split('.')[-1]}")
-                        futures.append(executor.submit(download_image, img_url, img_path, api.session))
+                        futures.append(executor.submit(download_image, img_url, img_path, session))
 
                     for _ in tqdm(concurrent.futures.as_completed(futures),
                                   total=len(futures),

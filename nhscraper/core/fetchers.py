@@ -38,7 +38,7 @@ session = build_session()  # cloudscraper session, default.
 # ===============================
 # FETCH IDs
 # ===============================
-API_BASE = "https://nhentai.net/api/galleries/search"
+API_BASE = config["NHENTAI_API_BASE"]
 
 def fetch_galleries_by_artist(artist: str, start_page: int = 1, end_page: int | None = None):
     return _fetch_gallery_ids(f'artist:"{artist}"', start_page, end_page)

@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 # nhscraper/nhscraper_api.py
 
-import os, json, time, random, requests, cloudscraper, concurrent.futures, re
+import os, json, time, random, re
 from flask import Flask, jsonify, request
 from datetime import datetime
 from urllib.parse import urljoin
 from tqdm import tqdm
 from threading import Thread, Lock
 
-from nhscraper.config import (
-    logger,
-    config,
-    NHENTAI_DIR,
-    SUWAYOMI_DIR,
-    GRAPHQL_URL,
-    NHENTAI_API_BASE,
-    MIRRORS
-)
-import nhscraper.graphql_api as gql
+from nhscraper.core.logger import *
+from nhscraper.core.config import config
 
 app = Flask(__name__)
 
@@ -79,109 +71,6 @@ def clean_title(meta):
     if "|" in title: title = title.split("|")[-1].strip()
     title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
     return safe_name(title)
-
-##################################################################################################################################
-# GALLERY / IMAGE HANDLERS
-##################################################################################################################################
-def get_gallery_metadata(gallery_id: int, retries=3, delay=2): # Fetch gallery metadata and update global state safely.
-    url = urljoin(NHENTAI_API_BASE, f"gallery/{gallery_id}")
-
-    for attempt in range(1, retries + 1):
-        try:
-            logger.debug(f"[+] Gallery {gallery_id}: Fetching metadata, attempt {attempt}")
-
-            r = session.get(url, timeout=30)
-            if r.status_code == 429:
-                wait = random.uniform(1, 3)
-                logger.warning(f"[!] HTTP 429 for Gallery {gallery_id}, sleeping {wait:.1f}s")
-                time.sleep(wait)
-                continue
-
-            r.raise_for_status()
-            data = r.json()
-
-            tags = data.get("tags", [])
-            artists = [t.get("name") for t in tags if t.get("type") == "artist"] or ["Unknown Artist"]
-
-            meta = {
-                "id": data.get("id"),
-                "media_id": data.get("media_id"),
-                "title": data.get("title", {}),
-                "tags": [t.get("name") for t in tags if "name" in t],
-                "artists": artists,
-                "num_pages": data.get("num_pages"),
-                "images": data.get("images", {}),
-                "url": f"https://nhentai.net/g/{gallery_id}/",
-            }
-
-            logger.debug(f"[+] Gallery {gallery_id}: Fetched metadata.")
-            log_clarification()
-
-            # Update shared state atomically
-            with state_lock:
-                global last_gallery_id
-                last_gallery_id = gallery_id
-
-                if gallery_id not in running_galleries:
-                    running_galleries.append(gallery_id)
-
-                # Preserve status if set; refresh meta + last_checked every time
-                prev = gallery_metadata.get(gallery_id, {})
-                gallery_metadata[gallery_id] = {
-                    "meta": meta,
-                    "status": prev.get("status", "incomplete"),
-                    "last_checked": datetime.now().isoformat(),
-                }
-
-            return meta
-
-        except Exception as e:
-            logger.warning(f"[!] Attempt {attempt} failed for {gallery_id}: {e}")
-            time.sleep(delay)
-
-    # All retries exhausted: mark failed, log clearly
-    with state_lock:
-        gallery_metadata[gallery_id] = {
-            "meta": None,
-            "status": "failed",
-            "last_checked": datetime.now().isoformat(),
-        }
-    logger.error(f"[!] Failed to fetch metadata for {gallery_id} after {retries} attempts")
-    return None
-
-def get_image_url(meta, page, mirror_index=0): # Generate the full image URL for a gallery page with robust checks.
-    try:
-        gallery_id = meta.get("id")
-        images = meta.get("images") or {}
-        pages = images.get("pages")
-
-        if not pages or not isinstance(pages, list):
-            logger.error(f"[!] Gallery {gallery_id}: No page list in metadata")
-            return None
-
-        if page < 1 or page > len(pages):
-            logger.error(f"[!] Gallery {gallery_id}: Page {page} out of range (1..{len(pages)})")
-            return None
-
-        file_info = pages[page - 1]
-        ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
-        ext = ext_map.get(file_info.get("t"), "jpg")
-
-        media_id = meta.get("media_id")
-        if not media_id:
-            logger.error(f"[!] Gallery {gallery_id}: Missing media_id in metadata")
-            return None
-
-        base = MIRRORS[mirror_index % len(MIRRORS)]
-        url = f"{base}/galleries/{media_id}/{page}.{ext}"
-
-        logger.debug(f"[+] Page {page} of Gallery {gallery_id} - GET URL: Using mirror {base.split('/')[2]} -> {url}")
-        log_clarification()
-
-        return url
-
-    except Exception as e:
-        logger.error(f"[!] Failed to get image URL (Gallery {meta.get('id')}, page {page}): {e}")
 
 ##################################################################################################################################
 # STATE HELPERS

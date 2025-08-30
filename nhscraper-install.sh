@@ -142,7 +142,8 @@ NHENTAI_DIR=/opt/nhentai-scraper
 DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
 EXTENSION_DOWNLOAD_PATH=
 
-# Mirrors
+# APIs and Mirrors
+NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
 NHENTAI_MIRRORS=https://i.nhentai.net
 
 # Gallery ID selection
