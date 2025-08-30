@@ -12,7 +12,9 @@ from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image
 # Import active extension
 from nhscraper.extensions.extension_loader import *
 
-active_extension = selected_extension
+active_extension = get_selected_extension()
+log_clarification()
+logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
 # ------------------------------
 # LOG CLARIFICATION
