@@ -94,11 +94,12 @@ def process_gallery(gallery_id):
             dynamic_sleep("gallery")
 
             meta = fetch_gallery_metadata(gallery_id)
-            if not meta:
+            if not meta or not isinstance(meta, dict):
                 logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
                 if gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
                 continue
+                #return # TEST
 
             num_pages = len(meta.get("images", {}).get("pages", []))
             if num_pages == 0:

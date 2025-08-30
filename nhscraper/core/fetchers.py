@@ -122,7 +122,13 @@ def fetch_gallery_metadata(gallery_id: int):
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
+            logger.debug(f"Raw API response for Gallery {gallery_id}: {resp.text}")
             data = resp.json()
+
+            # Validate the response # TEST
+            if not isinstance(data, dict):
+                logger.error(f"Unexpected response type for Gallery {gallery_id}: {type(data)}")
+                return None
 
             logger.debug(f"Fetched metadata for Gallery {gallery_id}: {data}")
             return data
