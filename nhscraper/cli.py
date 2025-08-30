@@ -4,7 +4,7 @@
 import argparse
 
 from nhscraper.core.logger import *
-from nhscraper.core.config import config
+from nhscraper.core.config import *
 from nhscraper.core.downloader import download_galleries
 from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
 from nhscraper.extensions.extension_loader import *
@@ -168,7 +168,7 @@ def build_gallery_list(args):
     # Final sorted list
     # ------------------------------
     gallery_list = sorted(gallery_ids)
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
@@ -205,7 +205,7 @@ def main():
     # Select extension (skeleton fallback)
     # ------------------------------
     selected_extension = get_selected_extension(args.extension.lower())
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
 
     # ------------------------------
@@ -213,7 +213,7 @@ def main():
     # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        log_clarification("warning")
+        log_clarification()
         logger.warning("No galleries to download. Exiting.")
         return
 

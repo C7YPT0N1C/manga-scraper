@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # extensions/suwayomi/suwayomi__nhsext.py
 
-import os
-import json
-import subprocess
-import requests
-import logging
-from nhscraper.core.logger import logger
-from nhscraper.core.config import update_env, config
+import os, json, subprocess, requests
+
+from nhscraper.core.logger import *
+from nhscraper.core.config import *
 
 # ===============================
 # GLOBALS
@@ -18,24 +15,17 @@ GRAPHQL_URL = config.get("GRAPHQL_URL", "http://127.0.0.1:4567/api/graphql")
 STUB_ONLY = False  # If True, no real GraphQL calls are made, only stubs
 
 # ===============================
-# LOGGING UTIL
-# ===============================
-def log_clarification():
-    print()
-    logger.debug("")
-
-# ===============================
 # GRAPHQL REQUEST
 # ===============================
 def graphql_request(query, variables=None, USE_STUB=False):
     if STUB_ONLY or USE_STUB:
         log_clarification()
-        logger.info(f"[*] [STUB] Skipping GraphQL call. Query: {query}, Variables: {variables}")
+        logger.info(f"[STUB] Skipping GraphQL call. Query: {query}, Variables: {variables}")
         return {"data": "stub"}
 
     if config.get("dry_run", False):
         log_clarification()
-        logger.info("[+] [DRY-RUN] Skipping GraphQL request")
+        logger.info("[DRY-RUN] Skipping GraphQL request")
         return None
 
     try:
@@ -51,7 +41,7 @@ def graphql_request(query, variables=None, USE_STUB=False):
         return data.get("data")
     except Exception as e:
         log_clarification()
-        logger.error(f"[!] GraphQL request failed: {e}")
+        logger.error(f"GraphQL request failed: {e}")
         return None
 
 # ===============================

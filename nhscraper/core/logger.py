@@ -4,7 +4,7 @@
 import os, logging
 from datetime import datetime
 
-from nhscraper.core.config import config
+from nhscraper.core.config import *
 
 LOG_DIR = "./logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -59,27 +59,6 @@ fh_runtime.setLevel(logging.DEBUG) # Runtime log captures all levels
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
 
-def log_clarification(LEVEL):
-    """Adds blank lines in terminal and log files at the requested log level."""
-    level_map = {
-        "debug": logging.DEBUG,
-        "info": logging.INFO,
-        "warning": logging.WARNING,
-        "error": logging.ERROR,
-        "critical": logging.CRITICAL,
-    }
-    log_func_map = {
-        "debug": logger.debug,
-        "info": logger.info,
-        "warning": logger.warning,
-        "error": logger.error,
-        "critical": logger.critical,
-    }
-
-    level = level_map.get(LEVEL.lower())
-    log_func = log_func_map.get(LEVEL.lower())
-
-    if level is not None and log_func is not None:
-        if logger.getEffectiveLevel() <= level:  # Only log if the level is enabled
-            #print("")
-            log_func("")
+def log_clarification():  
+    print()
+    logger.debug("")

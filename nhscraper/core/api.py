@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/nhscraper_api.py
 
-import os, json, time, random, re
+import os, json, time, random, re, requests
 from flask import Flask, jsonify, request
 from datetime import datetime
 from urllib.parse import urljoin
@@ -9,16 +9,16 @@ from tqdm import tqdm
 from threading import Thread, Lock
 
 from nhscraper.core.logger import *
-from nhscraper.core.config import config
+from nhscraper.core.config import *
 
 app = Flask(__name__)
 
 # ===============================
 # KEY
 # ===============================
-# [*] = Process / In Progress (Prefer logger.info)
-# [+] = Success / Confirmation (Prefer logger.info)
-# [!] = Warning/Error (Prefer logger.warning on soft errors, logger.error on critical errors)
+# = Process / In Progress (Prefer logger.info)
+# = Success / Confirmation (Prefer logger.info)
+# = Warning/Error (Prefer logger.warning on soft errors, logger.error on critical errors)
 # (Use logger.debug for debugging)
 
 ##################################################################################################################################
@@ -28,35 +28,6 @@ last_gallery_id = None
 running_galleries = []
 gallery_metadata = {}  # global state for /status/galleries, key=gallery_id, value={'meta': {...}, 'status': ..., 'last_checked': ...}
 state_lock = Lock()
-
-##################################################################################################################################
-# LOGGING
-##################################################################################################################################
-def log_clarification(): # Print new line for readability.
-    print()
-    logger.debug("")
-
-##################################################################################################################################
-# HTTP session
-##################################################################################################################################
-def build_session(): # Tor Lives Here.
-    s = cloudscraper.create_scraper()
-    s.headers.update({"User-Agent":"Mozilla/5.0","Accept":"application/json, text/plain, */*"})
-    if config.get("use_tor", False):
-        proxy = "socks5h://127.0.0.1:9050"
-        s.proxies.update({"http": proxy, "https": proxy})
-        logger.info(f"[+] Using Tor proxy: {proxy}")
-    else:
-        logger.warning("[+] Not using Tor proxy")
-    return s
-
-session = build_session()
-
-def set_local_directory(): # Call GraphQL to update Suwayomi's local directory to match SUWAYOMI_DIR.
-    gql.set_local_directory()
-
-def update_library(): # Call GraphQL to update the library after galleries are downloaded.
-    gql.update_library()
 
 ##################################################################################################################################
 # UTILITIES
@@ -101,7 +72,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
                 entry["download_attempts"] += 1
                 entry["download_status"] = "failed"
                 if entry["download_attempts"] >= max_attempts:
-                    logger.error(f"[!] Gallery {gallery_id} download failed after {max_attempts} attempts")
+                    logger.error(f"Gallery {gallery_id} download failed after {max_attempts} attempts")
         elif stage == "graphql":
             if success:
                 entry["graphql_status"] = "completed"
@@ -109,10 +80,10 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
                 entry["graphql_attempts"] += 1
                 entry["graphql_status"] = "failed"
                 if entry["graphql_attempts"] >= max_attempts:
-                    logger.error(f"[!] Gallery {gallery_id} GraphQL update failed after {max_attempts} attempts")
+                    logger.error(f"Gallery {gallery_id} GraphQL update failed after {max_attempts} attempts")
 
         entry["last_checked"] = datetime.now().isoformat()
-        logger.info(f"[+] Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
+        logger.info(f"Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
 
 def get_tor_ip():
     """Fetch current IP, through Tor if enabled."""
@@ -139,13 +110,13 @@ def skeleton_endpoint():
     if request.method == "GET":
         return jsonify({
             "timestamp": datetime.now().isoformat(),
-            "message": "[+] Skeleton GET live response"
+            "message": "Skeleton GET live response"
         })
     elif request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
         return jsonify({
             "timestamp": datetime.now().isoformat(),
-            "message": "[+] Skeleton POST live response",
+            "message": "Skeleton POST live response",
             "received_data": data
         })
 
@@ -188,8 +159,8 @@ def all_galleries_status():
 ##################################################################################################################################
 if __name__ == "__main__":
     log_clarification()
-    logger.info("[+] API Server initialised.")
-    logger.debug("[*] API Debugging started.")
+    logger.info("API Server initialised.")
+    logger.debug("API Debugging started.")
     
     app.run(
     host="0.0.0.0",

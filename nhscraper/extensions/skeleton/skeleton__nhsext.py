@@ -7,7 +7,7 @@
 import os, subprocess, json
 
 from nhscraper.core.logger import *
-from nhscraper.core.config import update_env
+from nhscraper.core.config import *
 
 # Global variable for download path, leave empty initially
 extension_download_path = "/opt/nhentai-scraper/downloads"
@@ -21,23 +21,23 @@ def update_extension_download_path(PATH):
 def pre_download_hook(config, gallery_list):
     update_extension_download_path("./downloads_skeleton")
     
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Skeleton extension: Pre-download hook called.")
     return gallery_list
 
 # Hook for functionality during download
 def during_download_hook(config, gallery_id, gallery_metadata):
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Skeleton extension: During-download hook called: {gallery_id}")
 
 # Hook for functionality after each gallery download
 def after_gallery_download(meta: dict):
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Skeleton extension: Post-Gallery Download hook called: Gallery {meta['id']} downloaded")
 
 # Hook for functionality after all downloads are complete
 def after_all_downloads(all_meta: list):
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Skeleton extension: Post-Batch hook called: Batch of {len(all_meta)} galleries downloaded")
 
 # Hook for post-download functionality. Reset download path.
@@ -45,7 +45,7 @@ def post_download_hook(config, completed_galleries):
     global extension_download_path
     extension_download_path = ""  # Reset after downloads
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-    log_clarification("debug")
+    log_clarification()
     logger.debug(f"Skeleton extension: Post-download hook called.")
 
 # ------------------------------
@@ -56,7 +56,7 @@ def install_extension():
     extension_download_path = "./downloads_skeleton"
     os.makedirs(extension_download_path, exist_ok=True)
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
-    log_clarification("info")
+    log_clarification()
     logger.info(f"Skeleton extension installed at {extension_download_path}")
 
 def uninstall_extension():
@@ -66,8 +66,8 @@ def uninstall_extension():
             os.rmdir(extension_download_path)
         extension_download_path = ""
         update_env("EXTENSION_DOWNLOAD_PATH", "")
-        log_clarification("info")
+        log_clarification()
         logger.info("Skeleton extension uninstalled")
     except Exception as e:
-        log_clarification("error")
+        log_clarification()
         logger.error(f"Failed to uninstall skeleton extension: {e}")

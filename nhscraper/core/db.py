@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # nhscraper/core/db.py
 
-import sqlite3
-import threading
-import os
+import os, sqlite3, threading
 from datetime import datetime
-from nhscraper.core.config import config, SUWAYOMI_DIR
 
-DB_PATH = os.path.join(SUWAYOMI_DIR, "nhscraper.db")
+from nhscraper.core.logger import *
+from nhscraper.core.config import *
+
+DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
 # DB INITIALIZATION
 # ===============================
 def init_db():
-    os.makedirs(SUWAYOMI_DIR, exist_ok=True)
+    os.makedirs(NHENTAI_DIR, exist_ok=True)
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""

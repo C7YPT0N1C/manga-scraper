@@ -11,7 +11,7 @@ from nhscraper.core.config import *
 # ===============================
 
 def build_session():
-    log_clarification("debug")
+    log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper()
@@ -25,11 +25,11 @@ def build_session():
     if config.get("use_tor", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies.update({"http": proxy, "https": proxy})
-        log_clarification("info")
-        logger.info(f"[+] Using Tor proxy: {proxy}")
+        log_clarification()
+        logger.info(f"Using Tor proxy: {proxy}")
     else:
-        log_clarification("info")
-        logger.info("[+] Not using Tor proxy")
+        log_clarification()
+        logger.info("Not using Tor proxy")
 
     return s
 
@@ -56,7 +56,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
     ids = []
     page = start_page
     try:
-        log_clarification("info")
+        log_clarification()
         logger.info(f"Fetching gallery IDs for query '{query}' (starting page {start_page})")
 
         while True:
@@ -64,7 +64,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
                 break
 
             url = f"{API_BASE}?query={query}&sort=popular&page={page}"
-            log_clarification("debug")
+            log_clarification()
             logger.debug(f"Requesting {url}")
 
             for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
@@ -90,7 +90,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log_clarification("debug")
+            log_clarification()
             logger.debug(f"Page {page}: fetched {len(batch)} gallery IDs")
 
             if not batch:
@@ -114,7 +114,7 @@ def fetch_gallery_metadata(gallery_id: int):
     url = f"https://nhentai.net/api/gallery/{gallery_id}"
     for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
         try:
-            log_clarification("debug")
+            log_clarification()
             logger.debug(f"Fetching metadata for gallery {gallery_id} from {url}")
 
             resp = session.get(url, timeout=30)
@@ -126,12 +126,12 @@ def fetch_gallery_metadata(gallery_id: int):
             resp.raise_for_status()
             data = resp.json()
 
-            log_clarification("debug")
+            log_clarification()
             logger.debug(f"Fetched metadata for gallery {gallery_id}")
             return data
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", 3):
-                log_clarification("warning")
+                log_clarification()
                 logger.warning(f"Failed to fetch metadata for gallery {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
@@ -140,7 +140,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
 def fetch_image_url(meta: dict, page: int):
     try:
-        log_clarification("debug")
+        log_clarification()
         logger.debug(f"Building image URL for gallery {meta['id']} page {page}")
 
         ext_map = {
@@ -153,10 +153,10 @@ def fetch_image_url(meta: dict, page: int):
         filename = f"{page}.{ext}"
         url = f"https://i.nhentai.net/galleries/{meta['media_id']}/{filename}"
 
-        log_clarification("debug")
+        log_clarification()
         logger.debug(f"Built image URL: {url}")
         return url
     except Exception as e:
-        log_clarification("warning")
+        log_clarification()
         logger.warning(f"Failed to build image URL for gallery {meta.get('id','?')} page {page}: {e}")
         return None
