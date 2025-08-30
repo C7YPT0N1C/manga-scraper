@@ -1,0 +1,20 @@
+{
+  "extensions": [
+    {
+      "name": "skeleton",
+      "version": "0.1.0",
+      "description": "Skeleton extension with dummy hooks",
+      "repo_url": "",
+      "installed": true,
+      "entry_point": "skeleton__nhsext.py"
+    },
+    {
+      "name": "suwayomi",
+      "version": "1.0.0",
+      "description": "Suwayomi extension",
+      "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
+      "installed": true,
+      "entry_point": "suwayomi__nhsext.py"
+    }
+  ]
+}

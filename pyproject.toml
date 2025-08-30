@@ -4,10 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "0.3.0-dev.2"
-description = "NHentai scraper with Suwayomi integration"
+version = "5.0.0"
+description = "NHentai scraper with extensions for the integration into other services."
 readme = "README.md"
-license = { text = "MIT" }
 authors = [{ name = "C7YPT0N1C" }]
 dependencies = [
     "cloudscraper",
@@ -24,5 +23,6 @@ requires-python = ">=3.9"
 [project.scripts]
 nhentai-scraper = "nhscraper.cli:main"
 
-[tool.setuptools]
-packages = ["nhscraper"]  # Explicitly include nhscraper package
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nhscraper*", "nhscraper.core*", "nhscraper.extensions*"]

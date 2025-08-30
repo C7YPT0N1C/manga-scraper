@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# nhscraper-install.sh
+# Installer for nhentai-scraper and FileBrowser with extension support
+
 set -e
 
 # ===============================
@@ -12,7 +15,7 @@ set -e
 # ROOT CHECK
 # ===============================
 if [[ $EUID -ne 0 ]]; then
-    echo "[!] Please run as root: sudo ./nhscraper-install.sh --install"
+    echo "Please run as root: sudo ./nhscraper-install.sh --install"
     exit 1
 fi
 
@@ -33,99 +36,33 @@ function check_python_version() {
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
 
     if [[ $(printf '%s\n' "$REQUIRED_PYTHON_VERSION" "$PYTHON_VERSION" | sort -V | head -n1) != "$REQUIRED_PYTHON_VERSION" ]]; then
-        echo "[!] Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
+        echo "Python $REQUIRED_PYTHON_VERSION+ required. Detected: $PYTHON_VERSION"
         exit 1
     else
-        echo -e "\n[!] Python version OK: $PYTHON_VERSION"
+        echo -e "\nPython version OK: $PYTHON_VERSION"
     fi
 }
 
-function install_system_packages() {
-    echo -e "\n[*] Upgrading and Installing system packages..."
+install_system_packages() {
+    echo -e "\nInstalling system packages..."
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
-    apt-get update
-    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks # Updatable, update as needed.
-    echo "[+] System packages installed."
-}    
+    apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
+    echo "System packages installed."
+}
 
-function install_python_packages() {
-    echo -e "\n[*] Installing Python requirements in venv..."
+install_python_packages() {
+    echo "Installing Python requirements..."
     source "$NHENTAI_DIR/venv/bin/activate"
     
     # Upgrade pip/setuptools/wheel first
     "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    
-    # Install the package in editable mode plus SOCKS support
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "pysocks" "tqdm" # Updatable, update as needed. Required external pip packages go here. Remember to reflect in pyproject.toml if changed.
-    
-    # Ensure CLI is available globally
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "tqdm"
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
-
-    echo "[+] Python requirements installed and nhentai-scraper CLI ready."
+    echo "Python packages installed."
 }
 
-# ----------------------------
-# Install Programs
-# ----------------------------
-function install_scraper() { # Updatable, update as needed.
-    echo -e "\n[*] Installing nhentai-scraper..."
-    mkdir -p "$NHENTAI_DIR"
-    cd "$NHENTAI_DIR"
-
-    echo -e "\n[!] Install Beta Version instead of Stable?"
-    echo "This is NOT recommended, as there is no guarantee THIS installer (main/nhscraper-install.sh) will be compatible with the dev branch, and bugs may be present."
-    read -p "Procceed anyway? [y/N]: " beta
-    branch="main"
-    [[ "$beta" =~ ^[yY] ]] && branch="dev"
-
-    if [ ! -d "$NHENTAI_DIR/.git" ]; then
-        echo "[*] Cloning nhentai-scraper..."
-        if git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-            echo "[+] Cloned from Gitea."
-        else
-            echo "[!] Gitea clone failed, trying GitHub..."
-            if ! git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR"; then
-                echo "[!] Both clone attempts failed. Please check your network connection."
-                exit 1
-            fi
-        fi
-    else
-        git pull || echo "[!] Could not update scraper repo. Please check your network connection."
-    fi
-
-    if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        echo "[*] Creating venv..."
-        python3 -m venv "$NHENTAI_DIR/venv"
-        source "$NHENTAI_DIR/venv/bin/activate"
-        "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    else
-        source "$NHENTAI_DIR/venv/bin/activate"
-    fi
-
-    install_python_packages
-
-    # Create/refresh global symlink
-    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
-    echo "[+] Global command 'nhentai-scraper' installed."
-}
-
-function install_suwayomi() { # Updatable, update as needed.
-    echo -e "\n[*] Installing Suwayomi..."
-    mkdir -p "$SUWAYOMI_DIR"
-    cd "$SUWAYOMI_DIR"
-
-    TARA_URL="https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
-    wget -O suwayomi-server.tar.gz "$TARA_URL"
-    tar -xzf suwayomi-server.tar.gz --strip-components=1
-    rm suwayomi-server.tar.gz
-
-    mkdir -p "$SUWAYOMI_DIR/local"
-    chmod 755 "$SUWAYOMI_DIR/local"
-    echo "[+] Suwayomi installed."
-}
-
-function install_filebrowser() { # Updatable, update as needed.
-    echo -e "\n[*] Installing FileBrowser..."
+install_filebrowser() {
+        echo -e "\nInstalling FileBrowser..."
 
     mkdir -p $FILEBROWSER_DIR
 
@@ -136,7 +73,7 @@ function install_filebrowser() { # Updatable, update as needed.
 
     # Remove old database if it exists
     if [ -f "$FB_DB" ]; then
-        echo "[*] Removing old FileBrowser database..."
+        echo "Removing old FileBrowser database..."
         rm -f "$FB_DB"
     fi
     
@@ -152,101 +89,109 @@ function install_filebrowser() { # Updatable, update as needed.
     # Generate random password if empty
     if [ -z "$FILEBROWSER_PASS" ]; then
         FILEBROWSER_PASS=$(openssl rand -base64 16)
-        echo "[!] No password entered. Generated random password: $FILEBROWSER_PASS"
-        echo "[!] Please save this password!"
+        echo "No password entered. Generated random password: $FILEBROWSER_PASS"
+        echo "Please save this password!"
     fi
 
     # Create or update admin user in default database
     if filebrowser users list | grep -qw admin; then
         filebrowser users update admin --password "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
-        echo "[*] Admin user password updated."
+        echo "Admin user password updated."
     else
         filebrowser users add admin "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
-        echo "[*] Admin user created."
+        echo "Admin user created."
     fi
 
-    echo "[+] FileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
+    echo -e "\nFileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
+    echo "Please save this password: $FILEBROWSER_PASS"
 }
 
-function create_env_file() { # Updatable, update as needed.
-    echo -e "\n[*] Updating nhentai-scraper Environment File..."
-    echo "[!] This will overwrite current settings. CTRL + C now to cancel."
+install_scraper() {
+    echo -e "\nInstalling nhentai-scraper..."
+    #branch="main"
+    branch="dev"  # Change to 'dev' for testing latest features
+
+    if [ ! -d "$NHENTAI_DIR/.git" ]; then
+        echo "Cloning nhentai-scraper repo (branch: $branch)..."
+        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
+        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || {
+            echo "Failed to clone nhentai-scraper repo."
+            exit 1
+        }
+    else
+        echo "Updating existing repo (branch: $branch)..."
+        git -C "$NHENTAI_DIR" fetch origin "$branch" && git -C "$NHENTAI_DIR" checkout "$branch" && git -C "$NHENTAI_DIR" pull || {
+            echo "Could not update repo on branch $branch"
+        }
+    fi
+
+    # Setup Python venv
+    if [ ! -d "$NHENTAI_DIR/venv" ]; then
+        echo "[*] Creating venv..."
+        python3 -m venv "$NHENTAI_DIR/venv"
+        source "$NHENTAI_DIR/venv/bin/activate"
+        "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
+    else
+        source "$NHENTAI_DIR/venv/bin/activate"
+    fi
+    source "$NHENTAI_DIR/venv/bin/activate"
+
+    install_python_packages
+
+    # Symlink CLI
+    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
+
+    echo -e "\nnhentai-scraper (branch: $branch) installed at $NHENTAI_DIR"
+}
+
+create_env_file() {
+    echo -e "\nUpdating environment variables..."
+    echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
 
-# Galleries (comma-separated list) or leave empty
+# Directories
+NHENTAI_DIR=/opt/nhentai-scraper
+
+# Download paths
+DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
+EXTENSION_DOWNLOAD_PATH=
+
+# APIs and Mirrors
+NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
+NHENTAI_MIRRORS=https://i.nhentai.net
+
+# Gallery ID selection
+RANGE_START=592000
+RANGE_END=600000
 GALLERIES=
 
-# Gallery range (start end)
-GALLERY_RANGE=592000 600000
-
-# Paths
-NHENTAI_DIR=/opt/nhentai-scraper
-SUWAYOMI_DIR=/opt/suwayomi/local
-
-# Tags to exclude
-EXCLUDE_TAGS=
-
-# Language filter
+# Filters
+EXCLUDED_TAGS=
 LANGUAGE=english
 
-# Title type
-TITLE_TYPE=pretty
+# Titles
+TITLE_TYPE=english
+TITLE_SANITISE=true
 
-# Download Concurrency
+# Threads
 THREADS_GALLERIES=1
 THREADS_IMAGES=4
+MAX_RETRIES=3
 
-# Tor / Dry Run / Verbose Logging
-USE_TOR=false
-NHENTAI_DRY_RUN=false
-NHENTAI_VERBOSE=false
-
-# GraphQL
-GRAPHQL_URL=http://127.0.0.1:4567/api/graphql
-
-# Mirrors (no quotes)
-NHENTAI_MIRRORS=https://i.nhentai.net
+# Download Options
+USE_TOR=true
+DRY_RUN=false
+VERBOSE=false
 EOF
-    echo "[+] Environment file created/updated at $ENV_FILE"
+    echo "Environment file created at $ENV_FILE"
+    echo "Environment updated."
 }
 
-function reload_systemd_services() { # Updatable, update as needed.
-    systemctl daemon-reload
-    systemctl restart filebrowser # Just in case FileBrowser's installer started it already  
-    for svc in suwayomi filebrowser nhscraper-api tor; do
-        if systemctl list-unit-files | grep -qw "${svc}.service"; then
-            systemctl enable "$svc"
-            systemctl start "$svc"
-            echo -e "\n[+] $svc enabled and started."
-        else
-            echo -e "\n[!] $svc.service not found, skipping."
-        fi
-    done
-}
-
-function create_systemd_services() { # Updatable, update as needed.
-    echo -e "\n[*] Creating systemd services..."
-
-    # Suwayomi
-    if [ ! -f /etc/systemd/system/suwayomi.service ]; then
-        sudo tee /etc/systemd/system/suwayomi.service > /dev/null <<EOF
-[Unit]
-Description=Suwayomi Server
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/suwayomi
-ExecStart=/bin/bash ./suwayomi-server.sh
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    fi
-
-    # FileBrowser
+create_systemd_services() {
+    echo -e "\nSetting up systemd services..."
+        # FileBrowser
+    echo "Creating systemd service for FileBrowser..."
     if [ ! -f /etc/systemd/system/filebrowser.service ]; then
         sudo tee /etc/systemd/system/filebrowser.service > /dev/null <<EOF
 [Unit]
@@ -263,9 +208,8 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # API service
-    echo "[*] Creating nhscraper-api.service..."
-
+    # nhscraper-api
+    echo "Creating systemd service for nhscraper-api..."
     if [ ! -f /etc/systemd/system/nhscraper-api.service ]; then
         sudo tee /etc/systemd/system/nhscraper-api.service > /dev/null <<EOF
 [Unit]
@@ -274,122 +218,170 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/opt/nhentai-scraper/nhscraper
-ExecStart=/opt/nhentai-scraper/venv/bin/python -m nhscraper_api
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+WorkingDirectory=$NHENTAI_DIR
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhscraper/api.py
+Restart=always
+EnvironmentFile=$ENV_FILE
 
 [Install]
 WantedBy=multi-user.target
 EOF
     fi
 
-    if [ -f /etc/systemd/system/nhscraper-api.service ]; then
-        echo "[+] nhscraper-api.service created."
-    else
-        echo "[!] Failed to create nhscraper-api.service."
-
-        exit 1
-    fi
-
-    reload_systemd_services
-    echo "[+] systemd services created and started."
+    systemctl daemon-reexec
+    systemctl enable filebrowser nhscraper-api tor
+    systemctl restart filebrowser nhscraper-api tor
+    echo "Systemd services 'filebrowser', 'nhscraper-api' 'tor' created and started."
 }
 
-function print_links() {
+print_links() {
     IP=$(hostname -I | awk '{print $1}')
     HOSTNAME=$(hostname)
 
-    echo -e "\n[+] Access Links:"
-    echo "Suwayomi Web: http://$IP:4567/"
-    echo "Suwayomi GraphQL: http://$IP:4567/api/graphql"
+    echo -e "\nAccess Links:"
     echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+    echo "Scraper API Dashboard: http://$IP:5000/dashboard"
     echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
-        echo -e "\n[+] DNS Hostname Links:"
-        echo "Suwayomi Web: http://$HOSTNAME:4567/"
-        echo "Suwayomi GraphQL: http://$HOSTNAME:4567/api/graphql"
+        echo -e "\nDNS Hostname Links:"
         echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
+        echo "Scraper API Dashboard: http://$HOSTNAME:5000/dashboard"
         echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
     fi
 }
 
-# ===============================
-# INSTALLER ARGUMENTS
-# ===============================
-function start_install() {
-    check_python_version
-    echo -e "\n[*] Starting installation..."
-    echo "[!] This may take a while depending on your internet speed and system performance."
+start_uninstall() {
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper UNINSTALLER              "
+    echo "===================================================="
+    echo "This will REMOVE nhentai-scraper, FileBrowser, and related services."
+    echo "TOR WILL NOT BE STOPPED OR REMOVED FOR SECURITY REASONS. IF YOU DO NOT WANT TOR, YOU MUST REMOVE IT MANUALLY."
+    read -p "    Do you want to continue? (y/n): " choice
+    case "$choice" in
+        y|Y)
+            echo "Uninstalling..."
 
-    install_system_packages
-    install_scraper
-    install_suwayomi
-    install_filebrowser
-    create_env_file
-    create_systemd_services
-    print_links
+            echo ""
+            # Remove Directories and files with status reporting
+            for target in /opt/filebrowser/ "$NHENTAI_DIR"; do
+                if [ -e "$target" ]; then
+                    rm -rf "$target" && echo "Removed: $target" || echo "Failed to remove: $target"
+                else
+                    echo "Not found (skipped): $target"
+                fi
+            done
 
-    echo -e "\n[+] Installation complete!"
+            echo ""
+            # Remove symlinks with status reporting
+            for link in /usr/local/bin/filebrowser /usr/local/bin/nhentai-scraper; do
+                if [ -L "$link" ] || [ -e "$link" ]; then
+                    rm -f "$link" && echo "Removed: $link" || echo "Failed to remove: $link"
+                else
+                    echo "Not found (skipped): $link"
+                fi
+            done
+
+            # Reload systemd and stop services
+            systemctl disable filebrowser nhscraper-api || true
+            systemctl stop filebrowser nhscraper-api || true
+
+            # Remove systemd services with status reporting
+            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/nhscraper-api.service; do
+                if [ -e "$svc" ]; then
+                    rm -f "$svc" && echo "Removed: $svc" || echo "Failed to remove: $svc"
+                else
+                    echo "Not found (skipped): $svc"
+                fi
+            done
+
+            echo -e "\nStopped and disabled services:"
+            echo "    filebrowser"
+            echo "    nhscraper-api"
+
+            # Reload systemd
+            systemctl daemon-reload
+
+            echo -e "\nUninstallation complete."
+            exit 0
+            ;;
+        *)
+            echo -e "\nUninstallation aborted."
+            exit 1
+            ;;
+    esac
 }
 
-function update_all() {
-    echo -e "\n[*] Updating nhentai-scraper and Suwayomi..."
+start_update() {
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper UPDATER                  "
+    echo "===================================================="
+    read -p "Are you sure you want to update? (y/N): " confirm
+    confirm=${confirm,,}  # lowercase input
 
-    # Pull latest code / rebuild
-    install_scraper
-    install_suwayomi
-
-    # Activate venv and upgrade Python deps
-    if [ -d "$NHENTAI_DIR/venv" ]; then
-        source "$NHENTAI_DIR/venv/bin/activate"
-        pip install --upgrade pip setuptools wheel
-        pip install --editable "$NHENTAI_DIR"
-    else
-        echo "[!] Virtualenv not found at $NHENTAI_DIR/venv, reinstalling..."
-        python3 -m venv "$NHENTAI_DIR/venv"
-        source "$NHENTAI_DIR/venv/bin/activate"
-        pip install --upgrade pip setuptools wheel
-        pip install --editable "$NHENTAI_DIR"
+    if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+        echo "Update cancelled."
+        return
     fi
 
-    # Ensure CLI symlink is refreshed
-    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
+    echo "Which branch would you like to update to? (default: main)"
+    read -p "Enter branch name: " branch
+    branch=${branch:-main}  # default to main if empty
 
-    echo -e "\n[*] Restarting services..."
-    reload_systemd_services
+    echo "Updating repository to branch '$branch'..."
+    cd "$NHENTAI_DIR" || { echo "Error: could not cd into $NHENTAI_DIR"; return 1; }
 
-    echo -e "\n[+] Update complete!"
+    # Reset and fetch branch (force overwrite local changes)
+    git fetch origin
+    git reset --hard "origin/$branch" || { echo "Branch '$branch' not found!"; return 1; }
+
+    # Update Python environment
+    source "$NHENTAI_DIR/venv/bin/activate"
+    pip install --upgrade pip setuptools wheel
+    pip install --editable "$NHENTAI_DIR"
+
+    echo "Update complete (branch: $branch)"
 }
 
-function update_env() {
-    echo -e "\n[*] Updating Environment File!"
+update_env_file() {
+    echo ""
+    echo "===================================================="
+    echo "           nhentai-scraper .ENV UPDATER             "
+    echo "===================================================="
+    read -p "Are you sure you want to update the .env file? (y/N): " confirm
+    confirm=${confirm,,}  # lowercase input
+
+    if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+        echo ".env update cancelled."
+        return
+    fi
+
     create_env_file
-    reload_systemd_services
 }
 
-function uninstall_all() {
-    echo -e "\n[*] Stopping and disabling services..."
-    systemctl stop suwayomi filebrowser nhscraper-api || true
-    systemctl disable suwayomi filebrowser nhscraper-api || true
-
-    echo -e "\n[*] Removing systemd service files..."
-    rm -f /etc/systemd/system/suwayomi.service # Remove suwayomi service
-    rm -f /etc/systemd/system/filebrowser.service # Remove filebrowser service
-    rm -f /etc/systemd/system/nhscraper-api.service # Remove nhscraper-api service
-    rm -f /usr/local/bin/nhentai-scraper # Remove global CLI symlink
-    
-    systemctl daemon-reload
-
-    echo -e "\n[*] Removing installed directories..."
-    rm -rf "$NHENTAI_DIR"
-    rm -rf "$SUWAYOMI_DIR"
-    rm -f /opt/filebrowser/filebrowser.db
-
-    echo -e "\n[+] Uninstallation complete!"
+start_install() {
+    echo ""
+    echo "This will install nhentai-scraper, FileBrowser, and set up the API as a service."
+    read -p "    Do you want to continue? (y/n): " choice
+    case "$choice" in
+        y|Y)
+            echo -e "\nStarting installation..."
+            check_python_version
+            install_system_packages
+            install_filebrowser
+            install_scraper
+            create_env_file
+            create_systemd_services
+            print_links
+            echo -e "\nInstallation complete!"
+            exit 0
+            ;;
+        *)
+            echo -e "\nInstallation aborted."
+            exit 1
+            ;;
+    esac
 }
 
 # ===============================
@@ -398,30 +390,28 @@ function uninstall_all() {
 echo "===================================================="
 echo "           nhentai-scraper INSTALLER               "
 echo "===================================================="
-echo ""
-echo "This installer will install, update, or uninstall the following components:"
-echo "- C7YPT0N1C/nhentai-scraper"
-echo "- Suwayomi/Suwayomi-Server"
-echo "- fileBrowser/fileBrowser"
-echo ""
 
-read -p "Do you want to proceed? [y/N]: " consent
-case "$consent" in
-    [yY]|[yY][eE][sS]) echo "[*] Consent given. Continuing..." ;;
-    *) echo "[!] Operation cancelled by user."; exit 0 ;;
+case "$1" in
+    --install)
+        start_install
+        ;;
+    --update-env)
+        update_env_file
+        ;;
+    --update)
+        start_update
+        ;;
+    --uninstall|--remove)
+        start_uninstall
+        ;;
+    *)
+        echo "Invalid or missing argument. Options:"
+        echo "    --install"
+        echo "    --install-extension <name>"
+        echo "    --uninstall-extension <name>"
+        echo "    --update-env"
+        echo "    --update"
+        echo "    --uninstall / --remove"
+        exit 1
+        ;;
 esac
-
-if [[ -z "$1" || "$1" == "--install" ]]; then
-    start_install
-    exit 0
-elif [[ "$1" == "--update-env" ]]; then
-    update_env
-    exit 0
-elif [[ "$1" == "--update" ]]; then
-    update_all
-    print_links
-    exit 0
-elif [[ "$1" == "--uninstall" || "$1" == "--remove" ]]; then
-    uninstall_all
-    exit 0
-fi
