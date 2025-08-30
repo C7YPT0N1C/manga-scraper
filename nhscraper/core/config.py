@@ -52,20 +52,11 @@ logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
 
-
-def setup_logger(dry_run=False, verbose=False, log_file="nhscraper.log"):
+def setup_logger(dry_run=False, verbose=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
     """
-    # LOGGING LEVELS:
-    # logging.debug("This is a debug message")    # Not shown because level is INFO (log_level = 10)
-    # logging.info("This is info")               # Shown (log_level = 20)
-    # logging.warning("This is a warning")       # Shown (log_level = 30)
-    # logging.error("This is an error")          # Shown (log_level = 40)
-    # logging.critical("This is critical")       # Shown (log_level = 50)
-    
-    # Always get the same logger
     logger = logging.getLogger("nhscraper")
 
     # --- Clear existing handlers to prevent duplicates ---
@@ -86,18 +77,23 @@ def setup_logger(dry_run=False, verbose=False, log_file="nhscraper.log"):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # --- File handler (always logs everything for debugging) ---
-    fh = logging.FileHandler(log_file, mode="a", encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    
+    # --- Master file handler (persistent across runs) ---
+    fh_master = logging.FileHandler(MASTER_LOG_FILE, mode="a", encoding="utf-8")
+    fh_master.setLevel(logging.DEBUG)  # capture everything
+    fh_master.setFormatter(formatter)
+    logger.addHandler(fh_master)
+
+    # --- Runtime file handler (new for each execution) ---
+    fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
+    fh_runtime.setLevel(logging.DEBUG)
+    fh_runtime.setFormatter(formatter)
+    logger.addHandler(fh_runtime)
+
+    # --- Initial log level banner ---
     if dry_run or verbose:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")
-
-    #return logger
 
 ##########################################################################################
 # LOGGER
