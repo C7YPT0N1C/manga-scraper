@@ -122,7 +122,10 @@ def fetch_gallery_metadata(gallery_id: int):
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
+            
+            log_clarification()
             logger.debug(f"Raw API response for Gallery {gallery_id}: {resp.text}")
+            
             data = resp.json()
 
             # Validate the response # TEST
@@ -130,6 +133,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.error(f"Unexpected response type for Gallery {gallery_id}: {type(data)}")
                 return None
 
+            log_clarification()
             logger.debug(f"Fetched metadata for Gallery {gallery_id}: {data}")
             return data
         except requests.HTTPError as e:
