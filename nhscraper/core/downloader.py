@@ -190,7 +190,7 @@ def process_gallery(gallery_id, image_threads):
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
             pbar.close()
-            time.sleep(0.05)  # tiny pause, just for terminal flush
+            time.sleep(0.1)  # tiny pause, just for terminal flush
             logger.info(f"Completed Gallery {gallery_id}")
             log_clarification()
             break
