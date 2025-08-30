@@ -40,18 +40,18 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(dry_run=False, verbose=False):
+def setup_logger(dry_run=False, verbose=False):    
     # LOGGING LEVELS:
     # logging.debug("This is a debug message")    # Not shown because level is INFO (log_level = 10)
     # logging.info("This is info")               # Shown (log_level = 20)
     # logging.warning("This is a warning")       # Shown (log_level = 30)
     # logging.error("This is an error")          # Shown (log_level = 40)
     # logging.critical("This is critical")       # Shown (log_level = 50)
+
+    global logger
     
     log_level = logging.DEBUG if dry_run or verbose else logging.INFO
-
-    # Manual Log Level Override
-    #log_level = logging.DEBUG
+    #log_level = logging.DEBUG # Manual Log Level Override
 
     logger.setLevel(log_level)
     
