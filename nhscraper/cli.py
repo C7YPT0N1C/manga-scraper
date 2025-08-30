@@ -48,47 +48,46 @@ def parse_args():
         help="Comma-separated gallery IDs to download"
     )
 
-    # Artist/Group/Tag/Parody arguments
+    # Artist/Group/Tag/Parody/Search arguments
     parser.add_argument(
         "--artist",
-        nargs='+',
-        metavar=("ARTIST", "START_PAGE", "END_PAGE"),
+        nargs="+",
+        metavar="ARGS",
         help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. "
-            "If START_PAGE is omitted, defaults to 1. If END_PAGE is omitted, all pages from START_PAGE onwards will be fetched."
+            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
 
     parser.add_argument(
         "--group",
-        nargs='+',
-        metavar=("GROUP", "START_PAGE", "END_PAGE"),
+        nargs="+",
+        metavar="ARGS",
         help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. "
             "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
 
     parser.add_argument(
         "--tag",
-        nargs='+',
-        metavar=("TAG", "START_PAGE", "END_PAGE"),
+        nargs="+",
+        metavar="ARGS",
         help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. "
             "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
 
     parser.add_argument(
         "--parody",
-        nargs='+',
-        metavar=("PARODY", "START_PAGE", "END_PAGE"),
+        nargs="+",
+        metavar="ARGS",
         help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. "
             "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
-    
+
     parser.add_argument(
         "--search",
-        nargs='+',
-        metavar=("search", "START_PAGE", "END_PAGE"),
+        nargs="+",
+        metavar="ARGS",
         help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. "
             "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
-
 
     # Filters
     parser.add_argument(
