@@ -84,7 +84,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
                     break
                 except requests.RequestException as e:
                     if attempt >= config.get("MAX_RETRIES", 3):
-                        logger.warning(f"Page {page} skipped after {attempt} retries: {e}")
+                        logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         break
                     wait = 2 ** attempt
@@ -98,10 +98,10 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
             log_clarification()
-            logger.debug(f"Page {page}: fetched {len(batch)} gallery IDs")
+            logger.debug(f"Page {page}: Fetched {len(batch)} gallery IDs")
 
             if not batch:
-                logger.info(f"No results on page {page}, stopping early")
+                logger.info(f"Page {page}: No results, stopping early")
                 break
 
             ids.update(batch)
@@ -145,26 +145,39 @@ def fetch_gallery_metadata(gallery_id: int):
             time.sleep(wait)
 
 def fetch_image_url(meta: dict, page: int):
+    """
+    Returns the full image URL for a gallery page.
+    Handles missing metadata, unknown types, and defaulting to webp.
+    """
     try:
-        logger.debug(f"Building image URL for Gallery {meta['id']}: Page {page}")
-        
-        if not meta or "images" not in meta or "pages" not in meta["images"]:
+        logger.debug(f"Building image URL for Gallery {meta.get('id','?')}: Page {page}")
+
+        pages = meta.get("images", {}).get("pages", [])
+        if page - 1 >= len(pages):
+            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Not in metadata")
             return None
 
+        page_info = pages[page - 1]
+        if not page_info:
+            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Metadata is None")
+            return None
+
+        # Map type codes to extensions
         ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
-        page_info = meta["images"]["pages"][page - 1]
-        
-        type_code = page_info.get("t")
+        type_code = page_info.get("t", "w")  # default to webp
         if type_code not in ext_map:
             log_clarification()
-            logger.warning(f"Unknown image type '{type_code}' for Gallery: {meta.get('id','?')}: Page {page}, defaulting to webp")
+            logger.warning(
+                f"Unknown image type '{type_code}' for Gallery {meta.get('id','?')}: Page {page}: Defaulting to webp"
+            )
+
         ext = ext_map.get(type_code, "webp")
-        
         filename = f"{page}.{ext}"
-        url = f"https://i.nhentai.net/galleries/{meta.get('media_id','')}/{filename}"        
+        url = f"https://i.nhentai.net/galleries/{meta.get('media_id','')}/{filename}"
+
         logger.debug(f"Built image URL: {url}")
         return url
-    
+
     except Exception as e:
-        logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')} page {page}: {e}")
+        logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
         return None
