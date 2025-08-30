@@ -88,7 +88,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
 def get_tor_ip():
     """Fetch current IP, through Tor if enabled."""
     try:
-        if config.get("USE_TOR", False):
+        if config.get("USE_TOR", True):
             r = requests.get("https://httpbin.org/ip",
                              proxies={
                                  "http": "socks5h://127.0.0.1:9050",

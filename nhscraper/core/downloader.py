@@ -5,14 +5,14 @@ import os, time, random, concurrent.futures
 from tqdm import tqdm
 
 from nhscraper.core.logger import *
-from nhscraper.core.config import *
+from nhscraper.core.config import config, selected_extension
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
 
 # Import active extension
 from nhscraper.extensions.extension_loader import *
 
-active_extension = get_selected_extension()
+active_extension = selected_extension
 
 # ------------------------------
 # LOG CLARIFICATION

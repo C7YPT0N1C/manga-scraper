@@ -165,7 +165,7 @@ THREADS_IMAGES=4
 MAX_RETRIES=3
 
 # Download Options
-USE_TOR=false
+USE_TOR=true
 DRY_RUN=false
 VERBOSE=false
 EOF

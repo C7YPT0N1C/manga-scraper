@@ -19,15 +19,10 @@ def log_clarification():
 # ===============================
 
 def build_session():
-    log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'mobile': False,
-            'platform': 'windows'
-        }
+        browser={'browser': 'chrome', 'mobile': False, 'platform': 'windows'}
     )
 
     s.headers.update({
@@ -37,17 +32,11 @@ def build_session():
         "Referer": "https://nhentai.net/",
     })
 
-    if config.get("USE_TOR", True):
-        # Ensure socks5h so DNS resolution is via Tor
+    if config.get("USE_TOR", False):
         proxy = "socks5h://127.0.0.1:9050"
-        s.proxies = {
-            "http": proxy,
-            "https": proxy,
-        }
-        log_clarification()
+        s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
     else:
-        log_clarification()
         logger.info("Not using Tor proxy")
 
     return s

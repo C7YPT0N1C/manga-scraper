@@ -207,6 +207,9 @@ def main():
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
+    
+    log_clarification()
+    logger.debug(f"Config after CLI overrides: {config}")
 
     # ------------------------------
     # Handle extension installation/uninstallation
