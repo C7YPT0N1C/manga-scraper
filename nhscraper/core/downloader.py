@@ -181,6 +181,7 @@ def process_gallery(gallery_id):
 
             artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
+            logger.debug(f"Gallery title: '{gallery_title}'")
 
             for artist in artists:
                 artist_folder = os.path.join(download_location, safe_name(artist))
@@ -211,6 +212,8 @@ def process_gallery(gallery_id):
                         # Correct path: always [ARTIST]/[TITLE]/image
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
+                        logger.debug(f"Downloading to: {img_path}")
+                        os.makedirs(os.path.dirname(img_path), exist_ok=True)
 
                         futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
 
