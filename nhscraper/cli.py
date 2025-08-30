@@ -224,29 +224,10 @@ def main():
         return
     
     # ------------------------------
-    # Select extension (skeleton fallback)
-    # ------------------------------
-    selected_extension = get_selected_extension(args.extension.lower())
-    log_clarification()
-    logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
-
-    # ------------------------------
-    # Pre-download hook
-    # ------------------------------
-    if selected_extension and hasattr(selected_extension, "pre_download_hook"):
-        gallery_list = selected_extension.pre_download_hook(config, gallery_list)
-
-    # ------------------------------
     # Download galleries
     # ------------------------------
     #download_galleries(gallery_list)
     start_downloader() # TEST
-
-    # ------------------------------
-    # Post-download hook
-    # ------------------------------
-    if selected_extension and hasattr(selected_extension, "post_download_hook"):
-        selected_extension.post_download_hook(config, gallery_list)
 
 if __name__ == "__main__":
     main()
