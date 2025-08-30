@@ -209,9 +209,7 @@ def process_gallery(gallery_id):
                         # Build the full path for the image
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
                         img_path = os.path.join(
-                            download_location,           # Download location specified by active extension
-                            safe_name(artist),           # Artist folder
-                            clean_title(meta),           # Gallery folder
+                            doujin_folder,               # Use the folder already created above
                             img_filename                 # Filename
                         )
                         futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
