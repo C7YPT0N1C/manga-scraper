@@ -25,7 +25,7 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 # Logger setup
 logger = logging.getLogger("nhscraper")
 
-log_level="info"
+log_level = logging.INFO # Default log level to 'info'
 
 def setup_logger(dry_run=False, verbose=False):
     global log_level
@@ -33,8 +33,8 @@ def setup_logger(dry_run=False, verbose=False):
     logger.setLevel(log_level)
 
 # Manual Log Level Override # TEST
-#logger.setLevel(logging.DEBUG)
-#log_console_level = logging.DEBUG
+#log_level = logging.INFO
+#logger.setLevel(log_level)
 
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
