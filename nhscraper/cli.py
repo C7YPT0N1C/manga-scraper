@@ -213,8 +213,7 @@ def main():
     
     log_clarification()
     logger.debug("Updating Config...")
-    update_config(args, gallery_list)
-    
+    update_config(args, gallery_list)    
     log_clarification()
     logger.debug(f"Updated Config: {config}")
     
