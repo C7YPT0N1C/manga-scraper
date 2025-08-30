@@ -226,10 +226,8 @@ def get_meta_tag_names(meta, tag_type):
             names.extend(parts)
 
     # Apply config-based filtering
-    excluded_str = config.get("EXCLUDED_TAGS", "")  # e.g., "chinese, translated"
-    if excluded_str:
-        excluded_lower = [e.strip().lower() for e in excluded_str.split(",")]
-        names = [n for n in names if n.lower() not in excluded_lower]
+    excluded_lower = config.get("EXCLUDED_TAGS", [])
+    names = [n for n in names if n.lower() not in excluded_lower]
     
     if tag_type.lower() == "language":
         allowed = config.get("LANGUAGE")  # e.g., ['english']
