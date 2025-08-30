@@ -182,9 +182,14 @@ def process_gallery(gallery_id):
                     log_clarification()
                     for i in range(num_pages):
                         page = i + 1
+                        
+                        if not meta or not meta.get("images"):
+                            logger.warning(f"Gallery {gallery_id} metadata incomplete, skipping page {page}")
+                            gallery_failed = True
+                            continue
+
                         img_url = fetch_image_url(meta, page)
                         if not img_url:
-                            log_clarification()
                             logger.warning(f"Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue

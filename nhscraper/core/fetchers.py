@@ -140,25 +140,31 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
+            log_clarification()
             logger.warning(f"Attempt {attempt} failed for Gallery {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
 def fetch_image_url(meta: dict, page: int):
     try:
         logger.debug(f"Building image URL for Gallery {meta['id']}: Page {page}")
+        
+        if not meta or "images" not in meta or "pages" not in meta["images"]:
+            return None
 
-        ext_map = {
-            "j": "jpg",
-            "p": "png",
-            "g": "gif",
-            "w": "webp"
-        }
-        ext = ext_map.get(meta["images"]["pages"][page - 1]["t"], "jpg")
+        ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
+        page_info = meta["images"]["pages"][page - 1]
+        
+        type_code = page_info.get("t")
+        if type_code not in ext_map:
+            log_clarification()
+            logger.warning(f"Unknown image type '{type_code}' for Gallery: {meta.get('id','?')}: Page {page}, defaulting to webp")
+        ext = ext_map.get(type_code, "webp")
+        
         filename = f"{page}.{ext}"
-        url = f"https://i.nhentai.net/galleries/{meta['media_id']}/{filename}"
-
+        url = f"https://i.nhentai.net/galleries/{meta.get('media_id','')}/{filename}"        
         logger.debug(f"Built image URL: {url}")
         return url
+    
     except Exception as e:
         logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')} page {page}: {e}")
         return None
