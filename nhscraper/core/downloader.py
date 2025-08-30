@@ -56,10 +56,25 @@ def dynamic_sleep(stage="gallery"):
     logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
     time.sleep(sleep_time)
 
-####################################################################################################
-# IMAGE DOWNLOAD
-####################################################################################################
-def download_image(url, path, session, retries=None):
+def should_download_gallery(meta):
+    if not meta:
+        return False
+    for artist in meta.get("artists", ["Unknown Artist"]):
+        artist_folder = os.path.join(NHENTAI_DIR, safe_name(artist))
+        doujin_folder = os.path.join(artist_folder, clean_title(meta))
+        if os.path.exists(doujin_folder):
+            num_pages = meta.get("num_pages", 0)
+            all_exist = all(
+                any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
+                    for ext in ("jpg","png","gif","webp"))
+                for i in range(num_pages)
+            )
+            if all_exist:
+                logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
+                return False
+    return True
+
+def download_image(gallery, page, url, path, session, retries=None):
     if retries is None:
         retries = config.get("MAX_RETRIES", 3)
 
@@ -85,7 +100,7 @@ def download_image(url, path, session, retries=None):
                 for chunk in r.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
-            logger.debug(f"Downloaded: {path}")
+            logger.debug(f"Downloaded Gallery {gallery}: Page {page} to {path}")
             return True
         except Exception as e:
             wait = 2 ** attempt
@@ -93,24 +108,6 @@ def download_image(url, path, session, retries=None):
             time.sleep(wait)
     logger.error(f"Failed to download after {retries} attempts: {url}")
     return False
-
-def should_download_gallery(meta):
-    if not meta:
-        return False
-    for artist in meta.get("artists", ["Unknown Artist"]):
-        artist_folder = os.path.join(NHENTAI_DIR, safe_name(artist))
-        doujin_folder = os.path.join(artist_folder, clean_title(meta))
-        if os.path.exists(doujin_folder):
-            num_pages = meta.get("num_pages", 0)
-            all_exist = all(
-                any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
-                    for ext in ("jpg","png","gif","webp"))
-                for i in range(num_pages)
-            )
-            if all_exist:
-                logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
-                return False
-    return True
 
 ####################################################################################################
 # GALLERY PROCESSING
@@ -174,8 +171,7 @@ def process_gallery(gallery_id):
                             logger.warning(f"Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue
-                        #img_path = os.path.join(doujin_folder, f"{page}.{img_url.split('.')[-1]}") # TEST
-                        futures.append(executor.submit(download_image, img_url, download_location, session))
+                        futures.append(executor.submit(download_image, gallery_id, page, img_url, download_location, session))
 
                     for _ in tqdm(concurrent.futures.as_completed(futures),
                                   total=len(futures),
