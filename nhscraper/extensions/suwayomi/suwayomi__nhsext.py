@@ -3,7 +3,7 @@
 
 import os, json, subprocess, requests
 
-from nhscraper.core.config import logger, update_env
+from nhscraper.core.config import logger, config, update_env
 
 # ------------------------------
 # LOG CLARIFICATION

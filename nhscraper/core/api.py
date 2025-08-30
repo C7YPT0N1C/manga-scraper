@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from tqdm import tqdm
 from threading import Thread, Lock
 
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, config
 
 app = Flask(__name__)
 

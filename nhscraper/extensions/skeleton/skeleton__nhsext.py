@@ -6,7 +6,7 @@
 
 import os, subprocess, json
 
-from nhscraper.core.config import logger, update_env
+from nhscraper.core.config import logger, config, update_env
 
 # ------------------------------
 # LOG CLARIFICATION
@@ -21,7 +21,7 @@ logger.info("Extension: Skeleton: Ready.")
 logger.debug("Extension: Skeleton: Debugging started.")
 
 # Global variable for download path, update here.
-extension_download_path = "/opt/nhentai-scraper/downloads"
+extension_download_path = "/opt/nhentai-scraper/downloads/default"
 
 def update_extension_download_path():
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)

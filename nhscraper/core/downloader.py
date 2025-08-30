@@ -4,7 +4,7 @@
 import os, time, random, concurrent.futures
 from tqdm import tqdm
 
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, config
 from nhscraper.core import db
 from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
 

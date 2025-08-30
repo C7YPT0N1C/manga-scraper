@@ -4,7 +4,7 @@
 import os, sqlite3, threading
 from datetime import datetime
 
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, config, NHENTAI_DIR
 
 DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
 lock = threading.Lock()

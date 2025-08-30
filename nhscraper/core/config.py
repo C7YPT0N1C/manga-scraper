@@ -11,7 +11,7 @@ from dotenv import load_dotenv, set_key
 import os, logging
 from datetime import datetime
 
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, config
 
 #####################################################################################################################
 
