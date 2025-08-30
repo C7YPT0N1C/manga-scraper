@@ -23,6 +23,8 @@ if not config.get("DRY_RUN", False):
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+gallery_threads = 2
+image_threads = 10
 
 def build_gallery_path(meta):
     # Ask extension for variables
@@ -41,15 +43,16 @@ def build_gallery_path(meta):
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage="gallery"):
-    num_galleries = max(1, len(config.get("GALLERIES", [])))
-    total_load = config.get("THREADS_GALLERIES", 2) * config.get("THREADS_IMAGES", 10)
-    base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
-    scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
-    sleep_time = random.uniform(base_min*scale, base_max*scale)
-    log_clarification()
-    logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
-    time.sleep(sleep_time)
+def dynamic_sleep(stage):
+    if stage=="gallery":
+        num_galleries = max(1, len(config.get("GALLERIES", [])))
+        total_load = config.get("THREADS_GALLERIES", 2) * config.get("THREADS_IMAGES", 10)
+        base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
+        scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
+        sleep_time = random.uniform(base_min*scale, base_max*scale)
+        log_clarification()
+        logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
+        time.sleep(sleep_time)
 
 def should_download_gallery(meta, num_pages):
     if not meta:
@@ -80,6 +83,9 @@ def process_galleries(gallery_list):
     """
     Processes multiple galleries with an overall progress bar.
     """
+    global gallery_threads
+    global image_threads
+    
     total_galleries = len(gallery_list)
     gallery_threads = config.get("THREADS_GALLERIES", 2)
     image_threads = config.get("THREADS_IMAGES", 10)
@@ -88,10 +94,10 @@ def process_galleries(gallery_list):
     # Outer progress bar for galleries
     with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={total_threads}]", unit="gallery") as overall_pbar:
         for gallery_id in gallery_list:
-            process_gallery(gallery_id)
+            process_gallery(gallery_id, image_threads)
             overall_pbar.update(1)
 
-def process_gallery(gallery_id):
+def process_gallery(gallery_id, image_threads):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
     #log_clarification()
@@ -183,6 +189,8 @@ def process_gallery(gallery_id):
 
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
+            pbar.close()
+            time.sleep(0.05)  # tiny pause, just for terminal flush
             logger.info(f"Completed Gallery {gallery_id}")
             log_clarification()
             break
