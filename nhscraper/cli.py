@@ -15,7 +15,7 @@ from nhscraper.extensions.extension_loader import *
 # ------------------------------
 def log_clarification():  
     print()
-    logger.debug("")
+    logger.info("")
 
 def parse_args():
     parser = argparse.ArgumentParser(

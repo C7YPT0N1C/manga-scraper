@@ -12,7 +12,7 @@ from nhscraper.core.config import *
 # ------------------------------
 def log_clarification():  
     print()
-    logger.debug("")
+    logger.info("")
 
 log_clarification()
 logger.info("Fetcher ready.")

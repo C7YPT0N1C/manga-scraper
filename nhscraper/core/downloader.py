@@ -25,7 +25,7 @@ logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton
 # ------------------------------
 def log_clarification():  
     print()
-    logger.debug("")
+    logger.info("")
 
 log_clarification()
 logger.info("Downloader ready.")

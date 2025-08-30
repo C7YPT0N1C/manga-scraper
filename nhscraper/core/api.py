@@ -19,7 +19,7 @@ app = Flask(__name__)
 # ------------------------------
 def log_clarification():  
     print()
-    logger.debug("")
+    logger.info("")
 
 log_clarification()
 logger.info("API ready.")

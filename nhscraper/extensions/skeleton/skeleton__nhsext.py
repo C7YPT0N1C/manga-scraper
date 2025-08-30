@@ -15,7 +15,7 @@ from nhscraper.core.config import *
 # ------------------------------
 def log_clarification():  
     print()
-    logger.debug("")
+    logger.info("")
 
 # Global variable for download path, leave empty initially
 extension_download_path = "/opt/nhentai-scraper/downloads"
