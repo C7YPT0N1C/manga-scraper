@@ -5,7 +5,7 @@ import os, time, random, concurrent.futures
 from tqdm import tqdm
 
 from nhscraper.core.logger import *
-from nhscraper.core.config import config, selected_extension
+from nhscraper.core.config import *
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
 
@@ -17,7 +17,7 @@ from nhscraper.extensions.extension_loader import *
 # ------------------------------
 active_extension = get_selected_extension()
 log_clarification()
-logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
+logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
 # ------------------------------
 # LOG CLARIFICATION
