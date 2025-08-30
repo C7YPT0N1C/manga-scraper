@@ -128,7 +128,7 @@ def fetch_gallery_metadata(gallery_id: int):
             
             data = resp.json()
 
-            # Validate the response # TEST
+            # Validate the response
             if not isinstance(data, dict):
                 logger.error(f"Unexpected response type for Gallery {gallery_id}: {type(data)}")
                 return None
@@ -197,7 +197,7 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_tag_names(meta, tag_type):
+def get_tag_namesssssssssssss(meta, tag_type):
     """
     Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
     Returns ['Unknown'] if none found.
@@ -205,6 +205,26 @@ def get_tag_names(meta, tag_type):
     if not meta or "tags" not in meta:
         return ["Unknown"]
     names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
+    return names or ["Unknown"]
+
+def get_tag_names(meta, tag_type):
+    """
+    Extract all tag names of a given type (artist, group, parody, etc.) 
+    from meta['tags'].
+
+    - Handles splitting cases like 'Artist A | Artist B'.
+    - Returns ['Unknown'] if none found.
+    """
+    if not meta or "tags" not in meta:
+        return ["Unknown"]
+
+    names = []
+    for tag in meta["tags"]:
+        if tag.get("type") == tag_type and tag.get("name"):
+            # Split on "|" and clean whitespace
+            parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
+            names.extend(parts)
+
     return names or ["Unknown"]
 
 def safe_name(s: str) -> str:
