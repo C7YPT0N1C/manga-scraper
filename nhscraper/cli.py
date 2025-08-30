@@ -200,7 +200,7 @@ def update_config(args, gallery_list): # Update config
 def main():
     args = parse_args()
     
-    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Allow logger to set log level.
+    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Set logger to correct log level.
 
     # ------------------------------
     # Build gallery list
@@ -238,5 +238,4 @@ def main():
     start_downloader() # TEST
 
 if __name__ == "__main__":
-    setup_logger(dry_run=False, verbose=False) # Set logger early to allow for Module Import Logging. TEST
     main()

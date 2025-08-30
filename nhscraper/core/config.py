@@ -27,7 +27,17 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
 # Logger setup
 logger = logging.getLogger("nhscraper")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)  # Capture everything; handlers decide visibility
+
+# Ensure no duplicate handlers
+if not logger.handlers:
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    # Console handler (default INFO until setup_logger runs)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 # ------------------------------
 # LOG CLARIFICATION
@@ -41,59 +51,53 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(dry_run=False, verbose=False):
+
+
+def setup_logger(dry_run=False, verbose=False, log_file="nhscraper.log"):
+    """
+    Configure the nhscraper logger.
+    Ensures no duplicate handlers and sets levels based on flags/config.
+    """
     # LOGGING LEVELS:
     # logging.debug("This is a debug message")    # Not shown because level is INFO (log_level = 10)
     # logging.info("This is info")               # Shown (log_level = 20)
     # logging.warning("This is a warning")       # Shown (log_level = 30)
     # logging.error("This is an error")          # Shown (log_level = 40)
     # logging.critical("This is critical")       # Shown (log_level = 50)
-
-    global logger
     
-    log_level = logging.DEBUG if dry_run or verbose else logging.INFO
-    #log_level = logging.DEBUG # Manual Log Level Override
+    # Always get the same logger
+    logger = logging.getLogger("nhscraper")
 
-    logger.setLevel(log_level)
-    
-    def print_log_level():
-        log_clarification()  
-        if log_level >= 10:
-            print("Log Level Set To DEBUG")
-            logger.info("Log Level Set To DEBUG")
-        if log_level >= 20:
-            print("Log Level Set To INFO")
-            logger.info("Log Level Set To INFO")
-        if log_level >= 30:
-            print("Log Level Set To WARNING")
-            logger.info("Log Level Set To WARNING")
-        if log_level >= 40:
-            print("Log Level Set To ERROR")
-            logger.info("Log Level Set To ERROR")
-        if log_level >= 50:
-            print("Log Level Set To CRITICAL")
-            logger.info("Log Level Set To CRITICAL")
-    
-    print_log_level()
+    # --- Clear existing handlers to prevent duplicates ---
+    if logger.handlers:
+        logger.handlers.clear()
 
+    # --- Formatter ---
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
-    # Console handler
+    # --- Console handler ---
     ch = logging.StreamHandler()
-    ch.setLevel(log_level)   # Console now respects verbosity
+    if dry_run or verbose:
+        logger.setLevel(logging.DEBUG)
+        ch.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+        ch.setLevel(logging.INFO)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # File handlers
-    fh_master = logging.FileHandler(MASTER_LOG_FILE)
-    fh_master.setLevel(logging.DEBUG)  # Always capture everything
-    fh_master.setFormatter(formatter)
-    logger.addHandler(fh_master)
+    # --- File handler (always logs everything for debugging) ---
+    fh = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    if dry_run or verbose:
+        logger.info("Log Level Set To DEBUG")
+    else:
+        logger.info("Log Level Set To INFO")
 
-    fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
-    fh_runtime.setLevel(logging.DEBUG)  # Always capture everything
-    fh_runtime.setFormatter(formatter)
-    logger.addHandler(fh_runtime)
+    #return logger
 
 ##########################################################################################
 # LOGGER
