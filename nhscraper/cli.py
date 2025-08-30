@@ -3,8 +3,7 @@
 
 import argparse
 
-from nhscraper.core.logger import logger, setup_logger
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, setup_logger # TEST
 from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *

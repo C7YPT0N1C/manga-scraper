@@ -3,8 +3,7 @@
 
 import time, random, cloudscraper, requests
 
-from nhscraper.core.logger import *
-from nhscraper.core.config import *
+from nhscraper.core.config import logger, config
 
 # ------------------------------
 # LOG CLARIFICATION
