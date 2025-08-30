@@ -36,7 +36,7 @@ def pre_download_hook(config, gallery_list):
 # Hook for functionality during download
 def during_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
-    logger.debug(f"Skeleton extension: During-download hook called: {gallery_id}")
+    logger.debug(f"Skeleton extension: During-download hook called: Gallery {gallery_id}")
 
 # Hook for functionality after each gallery download
 def after_gallery_download(meta: dict):

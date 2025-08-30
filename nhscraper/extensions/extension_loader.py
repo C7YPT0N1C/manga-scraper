@@ -16,6 +16,10 @@ def log_clarification():
     print()
     logger.debug("")
 
+log_clarification()
+logger.info("Extension Loader ready.")
+logger.debug("Extension Loader Debugging started.")
+
 # ------------------------------
 # Constants / Paths
 # ------------------------------
@@ -100,6 +104,8 @@ def load_installed_extensions():
     """Load installed extensions dynamically."""
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
+    
+    log_clarification()
     for ext in manifest.get("extensions", []):
         if ext.get("installed", False):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -110,13 +116,10 @@ def load_installed_extensions():
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
-                    log_clarification()
                     logger.debug(f"Loaded installed extension: {ext['name']}")
                 except Exception as e:
-                    log_clarification()
                     logger.warning(f"Failed to load extension: {ext['name']}: {e}")
             else:
-                log_clarification()
                 logger.warning(f"Entry point not found for extension: {ext['name']}")
 
 # ------------------------------

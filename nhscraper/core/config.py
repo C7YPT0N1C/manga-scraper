@@ -4,7 +4,7 @@
 import os
 from dotenv import load_dotenv, set_key
 
-from nhscraper.core.logger import *
+from nhscraper.core.logger import logger
 
 # ------------------------------
 # LOG CLARIFICATION

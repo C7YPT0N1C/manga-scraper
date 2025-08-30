@@ -16,7 +16,7 @@ from nhscraper.extensions.extension_loader import *
 # Select extension (skeleton fallback)
 # ------------------------------
 active_extension = get_selected_extension()
-log_clarification()
+#log_clarification()
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
 # ------------------------------
@@ -128,8 +128,8 @@ def process_gallery(gallery_id):
     while gallery_attempts < max_gallery_attempts:
         gallery_attempts += 1
         try:
-            dynamic_sleep("gallery")
             logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
+            dynamic_sleep("gallery")
 
             meta = fetch_gallery_metadata(gallery_id)
             if not meta:

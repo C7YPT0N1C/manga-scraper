@@ -14,12 +14,17 @@ def log_clarification():
     print()
     logger.debug("")
 
+log_clarification()
+logger.info("Fetcher ready.")
+logger.debug("Fetcher Debugging started.")
+
 # ===============================
 # HTTP SESSION
 # ===============================
 session = None
 
 def session_builder():
+    log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(
@@ -117,33 +122,31 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
         try:
             log_clarification()
-            logger.debug(f"Fetching metadata for gallery {gallery_id} from {url}")
+            logger.debug(f"Fetching metadata for Gallery {gallery_id} from {url}")
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
                 wait = 2 ** attempt
-                logger.warning(f"429 rate limit hit for gallery {gallery_id}, waiting {wait}s")
+                logger.warning(f"429 rate limit hit for Gallery {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             data = resp.json()
 
-            log_clarification()
-            logger.debug(f"Fetched metadata for gallery {gallery_id}")
+            logger.debug(f"Fetched metadata for Gallery {gallery_id}")
             return data
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", 3):
-                log_clarification()
-                logger.warning(f"Failed to fetch metadata for gallery {gallery_id} after max retries: {e}")
+                logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
-            logger.warning(f"Attempt {attempt} failed for gallery {gallery_id}: {e}, retrying in {wait}s")
+            logger.warning(f"Attempt {attempt} failed for Gallery {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
 def fetch_image_url(meta: dict, page: int):
     try:
         log_clarification()
-        logger.debug(f"Building image URL for gallery {meta['id']} page {page}")
+        logger.debug(f"Building image URL for Gallery {meta['id']} page {page}")
 
         ext_map = {
             "j": "jpg",
@@ -155,10 +158,8 @@ def fetch_image_url(meta: dict, page: int):
         filename = f"{page}.{ext}"
         url = f"https://i.nhentai.net/galleries/{meta['media_id']}/{filename}"
 
-        log_clarification()
         logger.debug(f"Built image URL: {url}")
         return url
     except Exception as e:
-        log_clarification()
-        logger.warning(f"Failed to build image URL for gallery {meta.get('id','?')} page {page}: {e}")
+        logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')} page {page}: {e}")
         return None
