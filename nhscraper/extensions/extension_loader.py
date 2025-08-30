@@ -201,14 +201,20 @@ def get_selected_extension(name: str = "skeleton"):
     update_local_manifest_from_remote()
     load_installed_extensions()
 
+    # Debug: Log installed extensions
+    log_clarification()
+    logger.debug(f"Installed extensions: {[getattr(ext, '__name__', 'unknown') for ext in INSTALLED_EXTENSIONS]}")
+
     # Try requested extension first
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
+            logger.info(f"Selected extension: {name}")
             return ext
 
     # Fallback to skeleton
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
+            logger.info("Fallback to skeleton extension")
             return ext
 
     log_clarification()
@@ -218,4 +224,4 @@ def get_selected_extension(name: str = "skeleton"):
 # ------------------------------
 # Run on import
 # ------------------------------
-#load_installed_extensions()
+load_installed_extensions()
