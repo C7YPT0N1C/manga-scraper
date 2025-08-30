@@ -25,6 +25,7 @@ if os.path.exists(ENV_FILE):
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),
+    "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", "https://nhentai.net/api/galleries/search"),
     "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", "https://i.nhentai.net"),
     "RANGE_START": int(os.getenv("RANGE_START", 592000)),
     "RANGE_END": int(os.getenv("RANGE_END", 600000)),
