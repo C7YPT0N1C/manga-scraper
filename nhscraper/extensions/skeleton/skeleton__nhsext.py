@@ -4,7 +4,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, subprocess, json
+import os, time, subprocess, json
 
 from nhscraper.core.config import logger, config, log_clarification, update_env
 
@@ -16,11 +16,70 @@ def update_extension_download_path():
     logger.info("Extension: Skeleton: Ready.")
     logger.debug("Extension: Skeleton: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
+
+def download_images_hook(gallery, page, url, path, session, retries=None):
+    """
+    Downloads an image from URL to the given path.
+    Respects DRY_RUN and retries up to config['MAX_RETRIES'].
+    """
+    import requests
+    from nhscraper.core.config import logger, config, log_clarification
+
+    if not url:
+        logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
+        return False
+
+    if retries is None:
+        retries = config.get("MAX_RETRIES", 3)
+
+    if os.path.exists(path):
+        logger.debug(f"Already exists, skipping: {path}")
+        return True
+
+    if config.get("DRY_RUN", False):
+        log_clarification()
+        logger.info(f"[DRY-RUN] Would download {url} -> {path}")
+        return True
+
+    if not isinstance(session, requests.Session):
+        session = requests.Session()
+
+    for attempt in range(1, retries + 1):
+        try:
+            r = session.get(url, timeout=30, stream=True)
+            if r.status_code == 429:
+                wait = 2 ** attempt
+                log_clarification()
+                logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            log_clarification()
+            logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+            return True
+
+        except Exception as e:
+            wait = 2 ** attempt
+            log_clarification()
+            logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
+            time.sleep(wait)
+
+    log_clarification()
+    logger.error(f"Gallery {gallery}: Page {page}: Failed to download after {retries} attempts: {url}")
+    return False
     
 # Hook for testing functionality. Use active_extension.test_hook(ARGS)
 def test_hook(config, gallery_list):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Test hook called.")
+    
+####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS)
 def pre_run_hook(config, gallery_list):
