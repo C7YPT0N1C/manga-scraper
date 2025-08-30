@@ -115,7 +115,7 @@ def download_image(gallery, page, url, path, session, retries=None):
 def process_gallery(gallery_id):
     build_session() # Call fetcher to build cloudscraper session.
     
-    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", None)
+    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
     extension_name = getattr(active_extension, "__name__", "skeleton")
     log_clarification()
     logger.info(f"Active Download Location: {download_location}")
@@ -171,7 +171,16 @@ def process_gallery(gallery_id):
                             logger.warning(f"Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue
-                        futures.append(executor.submit(download_image, gallery_id, page, img_url, download_location, session))
+                        
+                        # Build the full path for the image
+                        img_filename = f"{page}.{img_url.split('.')[-1]}"
+                        img_path = os.path.join(
+                            download_location,           # Download location specified by active extension
+                            safe_name(artist),           # Artist folder
+                            clean_title(meta),           # Gallery folder
+                            img_filename                 # Filename
+                        )
+                        futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
 
                     for _ in tqdm(concurrent.futures.as_completed(futures),
                                   total=len(futures),
