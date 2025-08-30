@@ -46,7 +46,7 @@ install_python_packages() {
     echo "Installing Python requirements..."
     source "$NHENTAI_DIR/venv/bin/activate"
     "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "pysocks" "tqdm"
+    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "tqdm"
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }

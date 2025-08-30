@@ -22,7 +22,14 @@ def build_session():
     log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
-    s = cloudscraper.create_scraper()
+    s = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'mobile': False,
+            'platform': 'windows'
+        }
+    )
+
     s.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json, text/plain, */*",
@@ -31,8 +38,12 @@ def build_session():
     })
 
     if config.get("USE_TOR", True):
+        # Ensure socks5h so DNS resolution is via Tor
         proxy = "socks5h://127.0.0.1:9050"
-        s.proxies.update({"http": proxy, "https": proxy})
+        s.proxies = {
+            "http": proxy,
+            "https": proxy,
+        }
         log_clarification()
         logger.info(f"Using Tor proxy: {proxy}")
     else:
