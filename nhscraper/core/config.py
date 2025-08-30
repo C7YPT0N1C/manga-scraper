@@ -13,7 +13,7 @@ LOG_DIR = "./logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Master log
-MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
+#MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 
 # Runtime log
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,10 +69,10 @@ def setup_logger(dry_run=False, verbose=False):
 
     # --- File handlers ---
     # Master log (always append)
-    fh_master = logging.FileHandler(MASTER_LOG_FILE, mode="a", encoding="utf-8")
-    fh_master.setLevel(logging.DEBUG)
-    fh_master.setFormatter(formatter)
-    logger.addHandler(fh_master)
+    #fh_master = logging.FileHandler(MASTER_LOG_FILE, mode="a", encoding="utf-8")
+    #fh_master.setLevel(logging.DEBUG)
+    #fh_master.setFormatter(formatter)
+    #logger.addHandler(fh_master)
 
     # Runtime log (new file per run, timestamped)
     fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
