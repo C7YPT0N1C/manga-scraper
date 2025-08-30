@@ -3,7 +3,7 @@
 
 import argparse
 
-from nhscraper.core.logger import *
+from nhscraper.core.logger import logger, setup_logger
 from nhscraper.core.config import *
 from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_gallery_ids
@@ -183,6 +183,7 @@ def build_gallery_list(args):
 
 def main():
     args = parse_args()
+    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Allow logger to set log level.
 
     # ------------------------------
     # Build gallery list

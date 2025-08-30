@@ -25,18 +25,12 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 # Logger setup
 logger = logging.getLogger("nhscraper")
 
-# Determine effective DRY_RUN / VERBOSE
-dry_run_enabled = getattr(args, "dry_run", False) or config.get("DRY_RUN", False)
-verbose_enabled = getattr(args, "verbose", False) or config.get("VERBOSE", False)
+log_level=None
 
-# Switch to debug log level if -dry-run or --verbose passed.
-if dry_run_enabled or verbose_enabled:
-    logger.setLevel(logging.DEBUG)
-    log_console_level = logging.DEBUG
-else:
-    logger.setLevel(logging.INFO)
-    log_console_level = logging.INFO
-
+def setup_logger(dry_run=False, verbose=False):
+    global log_level
+    log_level = logging.DEBUG if dry_run or verbose else logging.INFO
+    logger.setLevel(log_level)
 
 # Manual Log Level Override # TEST
 #logger.setLevel(logging.DEBUG)
@@ -46,7 +40,7 @@ formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
 # Console handler
 ch = logging.StreamHandler()
-ch.setLevel(log_console_level)   # Console now respects verbosity
+ch.setLevel(log_level)   # Console now respects verbosity
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
