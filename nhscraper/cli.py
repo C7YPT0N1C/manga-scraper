@@ -238,4 +238,5 @@ def main():
     start_downloader() # TEST
 
 if __name__ == "__main__":
+    setup_logger(dry_run=False, verbose=False) # Set logger early to allow for Module Import Logging. TEST
     main()
