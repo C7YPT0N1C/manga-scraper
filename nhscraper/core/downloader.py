@@ -120,8 +120,10 @@ def download_image(gallery, page, url, path, session, retries=None):
 def process_gallery(gallery_id):
     build_session() # Call fetcher to build cloudscraper session.
     
-    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
     extension_name = getattr(active_extension, "__name__", "skeleton")
+    
+    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
     log_clarification()
     logger.info(f"Active Download Location: {download_location}")
     db.mark_gallery_started(gallery_id, download_location, extension_name)
