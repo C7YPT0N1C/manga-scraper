@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_tag_names, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
@@ -117,7 +117,7 @@ def process_gallery(gallery_id):
             gallery_failed = False
             active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-            artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
+            artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
             log_clarification()
             logger.debug(f"Gallery title: '{gallery_title}'")

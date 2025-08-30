@@ -7,7 +7,7 @@
 import os, time, subprocess, json, requests
 
 from nhscraper.core.config import logger, config, log_clarification, update_env
-from nhscraper.core.fetchers import get_tag_names, safe_name, clean_title
+from nhscraper.core.fetchers import get_meta_tag_names, safe_name, clean_title
 
 # Global variables for download path and subfolder strucutre.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
@@ -22,10 +22,10 @@ def update_extension_download_path():
 def build_gallery_subfolders(meta):
     """Return a dict of possible variables to use in folder naming."""
     return {
-        "artist": (get_tag_names(meta, "artist") or ["Unknown Artist"])[0],
+        "artist": (get_meta_tag_names(meta, "artist") or ["Unknown Artist"])[0],
         "title": clean_title(meta),
         "id": str(meta.get("id", "unknown")),
-        "language": (get_tag_names(meta, "language") or ["Unknown"])[0],
+        "language": (get_meta_tag_names(meta, "language") or ["Unknown"])[0],
     }
 
 def download_images_hook(gallery, page, url, path, session, pbar=None, artist=None, retries=None):

@@ -40,7 +40,7 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(dry_run=False, verbose=False):
+def setup_logger(verbose=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -55,7 +55,7 @@ def setup_logger(dry_run=False, verbose=False):
 
     # --- Console handler ---
     ch = logging.StreamHandler()
-    if dry_run or verbose:
+    if  verbose:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     else:
@@ -71,7 +71,7 @@ def setup_logger(dry_run=False, verbose=False):
     logger.addHandler(fh_runtime)
 
     # Announce level
-    if dry_run or verbose:
+    if verbose:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")

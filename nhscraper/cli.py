@@ -189,10 +189,7 @@ def main():
     args = parse_args()
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    ) 
+    logger = setup_logger(verbose=args.verbose) 
     
     log_clarification()
     logger.info("CLI: Ready.")
