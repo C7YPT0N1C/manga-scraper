@@ -224,6 +224,8 @@ def get_tag_names(meta, tag_type):
             # Split on "|" and clean whitespace
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
+            
+    logger.debug(f"Artists Found: {names}") # TEST
 
     return names or ["Unknown"]
 
