@@ -37,11 +37,8 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    title_type = config.get("TITLE_TYPE", "pretty").lower()
-    title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
-    if "|" in title: title = title.split("|")[-1].strip()
-    import re
-    title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
+    # Prefer 'pretty', then 'english', then 'japanese', then fallback
+    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     return safe_name(title)
 
 def dynamic_sleep(stage="gallery"):
@@ -181,6 +178,7 @@ def process_gallery(gallery_id):
 
             artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
+            log_clarification()
             logger.debug(f"Gallery title: '{gallery_title}'")
 
             for artist in artists:
