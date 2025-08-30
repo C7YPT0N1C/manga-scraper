@@ -28,15 +28,14 @@ def build_gallery_subfolders(meta):
         "language": (get_tag_names(meta, "language") or ["Unknown"])[0],
     }
 
-def download_images_hook(gallery, page, url, path, session, pbar=None, artist=None, retries=None):
+def download_images_hook(gallery, page, url, path, session, retries=None):
     """
     Downloads an image from URL to the given path.
-    Updates tqdm progress bar with current artist.
+    Respects DRY_RUN and retries up to config['MAX_RETRIES'].
     """
+
     if not url:
         logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Skipped artist: {artist}")
         return False
 
     if retries is None:
@@ -44,15 +43,11 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
 
     if os.path.exists(path):
         logger.debug(f"Already exists, skipping: {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
         return True
 
     if config.get("DRY_RUN", False):
         log_clarification()
         logger.info(f"[DRY-RUN] Would download {url} -> {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
         return True
 
     if not isinstance(session, requests.Session):
@@ -76,8 +71,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
 
             log_clarification()
             logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
-            if pbar and artist:
-                pbar.set_postfix_str(f"Artist: {artist}")
             return True
 
         except Exception as e:
@@ -88,16 +81,14 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
 
     log_clarification()
     logger.error(f"Gallery {gallery}: Page {page}: Failed to download after {retries} attempts: {url}")
-    if pbar and artist:
-        pbar.set_postfix_str(f"Failed artist: {artist}")
     return False
     
+####################################################################################################################
+
 # Hook for testing functionality. Use active_extension.test_hook(ARGS)
 def test_hook(config, gallery_list):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Test hook called.")
-    
-####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS)
 def pre_run_hook(config, gallery_list):
