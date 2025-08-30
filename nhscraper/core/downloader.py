@@ -118,8 +118,6 @@ def download_image(gallery, page, url, path, session, retries=None):
 # GALLERY PROCESSING
 ####################################################################################################
 def process_gallery(gallery_id):
-    build_session() # Call fetcher to build cloudscraper session.
-    
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
     download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")

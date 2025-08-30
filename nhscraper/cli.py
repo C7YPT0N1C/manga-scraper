@@ -210,6 +210,8 @@ def main():
     
     log_clarification()
     logger.debug(f"Config after CLI overrides: {config}")
+    
+    build_session() # Call fetcher to build cloudscraper session.
 
     # ------------------------------
     # Handle extension installation/uninstallation
