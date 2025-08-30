@@ -85,46 +85,6 @@ def should_download_gallery(meta):
     return True
 
 def download_image(gallery, page, url, path, session, retries=None):
-    if retries is None:
-        retries = config.get("MAX_RETRIES", 3)
-
-    if os.path.exists(path):
-        logger.debug(f"Already exists, skipping: {path}")
-        return True
-
-    if config.get("DRY_RUN", False):
-        log_clarification()
-        logger.info(f"[DRY-RUN] Would download {url} -> {path}")
-        return True
-
-    for attempt in range(1, retries + 1):
-        try:
-            r = session.get(url, timeout=30, stream=True)
-            if r.status_code == 429:
-                wait = 2 ** attempt
-                log_clarification()
-                logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            log_clarification()
-            logger.debug(f"Downloaded Gallery {gallery}: Page {page} to {path}")
-            return True
-        except Exception as e:
-            wait = 2 ** attempt
-            log_clarification()
-            logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
-            time.sleep(wait)
-    log_clarification()
-    logger.error(f"Failed to download after {retries} attempts: {url}")
-    return False
-
-def download_image(gallery, page, url, path, session, retries=None):
     """
     Downloads an image from URL to the given path.
     Respects DRY_RUN and retries up to config['MAX_RETRIES'].
