@@ -10,7 +10,7 @@ from nhscraper.extensions.extension_loader import *
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="NHentai scraper with Suwayomi integration"
+        description="NHentai scraper"
     )
 
     # Extension installation/uninstallation

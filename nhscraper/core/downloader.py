@@ -7,9 +7,7 @@ from tqdm import tqdm
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
 from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
-
-# Import active extension
-from nhscraper.extensions.extension_loader import *
+from nhscraper.extensions.extension_loader import * # Import active extension
 
 # ------------------------------
 # Select extension (skeleton fallback)
@@ -19,7 +17,7 @@ log_clarification()
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
 if not config.get("DRY_RUN", False):
-    os.makedirs(download_location, exist_ok=True) # Ensure the folder existss
+    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
 
 ####################################################################################################
 # UTILITIES
@@ -76,6 +74,8 @@ def download_image(gallery, page, url, path, session, retries=None):
     Downloads an image from URL to the given path.
     Respects DRY_RUN and retries up to config['MAX_RETRIES'].
     """
+    import requests
+
     if not url:
         logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
         return False
@@ -91,6 +91,10 @@ def download_image(gallery, page, url, path, session, retries=None):
         log_clarification()
         logger.info(f"[DRY-RUN] Would download {url} -> {path}")
         return True
+
+    # Ensure session is a requests.Session
+    if not isinstance(session, requests.Session):
+        session = requests.Session()
 
     for attempt in range(1, retries + 1):
         try:
