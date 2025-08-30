@@ -13,13 +13,6 @@ from nhscraper.core.fetchers import build_session, session, fetch_gallery_metada
 from nhscraper.extensions.extension_loader import *
 
 # ------------------------------
-# Select extension (skeleton fallback)
-# ------------------------------
-active_extension = get_selected_extension()
-#log_clarification()
-logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
-
-# ------------------------------
 # LOG CLARIFICATION
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------
@@ -31,9 +24,19 @@ log_clarification()
 logger.info("Downloader ready.")
 logger.debug("Downloader Debugging started.")
 
+# ------------------------------
+# Select extension (skeleton fallback)
+# ------------------------------
+active_extension = get_selected_extension()
+#log_clarification()
+logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+os.makedirs(download_location, exist_ok=True) # Ensure the folder existss
+
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
@@ -60,7 +63,7 @@ def should_download_gallery(meta):
     if not meta:
         return False
     for artist in meta.get("artists", ["Unknown Artist"]):
-        artist_folder = os.path.join(NHENTAI_DIR, safe_name(artist))
+        artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
         doujin_folder = os.path.join(artist_folder, clean_title(meta))
         if os.path.exists(doujin_folder):
             num_pages = meta.get("num_pages", 0)
@@ -120,10 +123,9 @@ def download_image(gallery, page, url, path, session, retries=None):
 def process_gallery(gallery_id):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
-    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
-    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
     log_clarification()
     logger.info(f"Active Download Location: {download_location}")
+    
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
     gallery_attempts = 0
@@ -155,7 +157,7 @@ def process_gallery(gallery_id):
             active_extension.during_download_hook(config, gallery_id, meta)
 
             for artist in meta.get("artists", ["Unknown Artist"]):
-                artist_folder = os.path.join(NHENTAI_DIR, safe_name(artist))
+                artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
                 doujin_folder = os.path.join(artist_folder, clean_title(meta))
                 os.makedirs(doujin_folder, exist_ok=True)
 
