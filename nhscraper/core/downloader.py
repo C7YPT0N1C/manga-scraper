@@ -54,7 +54,7 @@ def dynamic_sleep(stage="gallery"):
 ####################################################################################################
 def download_image(url, path, session, retries=None):
     if retries is None:
-        retries = config.get("max_retries", 3)
+        retries = config.get("MAX_RETRIES", 3)
 
     if os.path.exists(path):
         logger.debug(f"[!] Already exists, skipping: {path}")
@@ -114,7 +114,7 @@ def process_gallery(gallery_id):
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
     gallery_attempts = 0
-    max_gallery_attempts = config.get("max_retries", 3)
+    max_gallery_attempts = config.get("MAX_RETRIES", 3)
 
     while gallery_attempts < max_gallery_attempts:
         gallery_attempts += 1

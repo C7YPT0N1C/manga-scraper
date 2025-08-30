@@ -67,7 +67,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
             log_clarification("debug")
             logger.debug(f"Requesting {url}")
 
-            for attempt in range(1, config.get("max_retries", 3) + 1):
+            for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
                 try:
                     resp = session.get(url, timeout=30)
                     if resp.status_code == 429:
@@ -78,7 +78,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= config.get("max_retries", 3):
+                    if attempt >= config.get("MAX_RETRIES", 3):
                         logger.warning(f"Max retries reached for page {page}: {e}")
                         break
                     wait = 2 ** attempt
@@ -112,7 +112,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
     url = f"https://nhentai.net/api/gallery/{gallery_id}"
-    for attempt in range(1, config.get("max_retries", 3) + 1):
+    for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
         try:
             log_clarification("debug")
             logger.debug(f"Fetching metadata for gallery {gallery_id} from {url}")
@@ -130,7 +130,7 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.debug(f"Fetched metadata for gallery {gallery_id}")
             return data
         except requests.RequestException as e:
-            if attempt >= config.get("max_retries", 3):
+            if attempt >= config.get("MAX_RETRIES", 3):
                 log_clarification("warning")
                 logger.warning(f"Failed to fetch metadata for gallery {gallery_id} after max retries: {e}")
                 return None
