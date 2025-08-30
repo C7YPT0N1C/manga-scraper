@@ -25,12 +25,18 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 # Logger setup
 logger = logging.getLogger("nhscraper")
 
-if config["DRY_RUN"] or config["VERBOSE"]: # Switch to debug log level if -dry-run or --verbose passed.
+# Determine effective DRY_RUN / VERBOSE
+dry_run_enabled = getattr(args, "dry_run", False) or config.get("DRY_RUN", False)
+verbose_enabled = getattr(args, "verbose", False) or config.get("VERBOSE", False)
+
+# Switch to debug log level if -dry-run or --verbose passed.
+if dry_run_enabled or verbose_enabled:
     logger.setLevel(logging.DEBUG)
     log_console_level = logging.DEBUG
 else:
     logger.setLevel(logging.INFO)
     log_console_level = logging.INFO
+
 
 # Manual Log Level Override # TEST
 #logger.setLevel(logging.DEBUG)
