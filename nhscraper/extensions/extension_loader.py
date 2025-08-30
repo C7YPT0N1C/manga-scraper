@@ -14,7 +14,7 @@ from nhscraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------
 def log_clarification():  
     print()
-    logger.info("")
+    logger.debug("")
 
 log_clarification()
 logger.info("Extension Loader ready.")
