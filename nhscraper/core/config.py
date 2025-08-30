@@ -3,15 +3,7 @@
 
 import os, logging
 from datetime import datetime
-from dotenv import load_dotenv, set_key
-
-#!/usr/bin/env python3
-# core/logger.py
-
-import os, logging
-from datetime import datetime
-
-from nhscraper.core.config import logger, config
+from dotenv import load_dotenv, set_ke
 
 #####################################################################################################################
 
