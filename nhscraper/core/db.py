@@ -1,31 +1,91 @@
 #!/usr/bin/env python3
-# core/db.py
+# nhscraper/core/db.py
 
-import os, json
+import sqlite3
+import threading
+import os
+from datetime import datetime
+from nhscraper.config import config, SUWAYOMI_DIR
 
-from nhscraper.core.logger import *
+DB_PATH = os.path.join(SUWAYOMI_DIR, "nhscraper.db")
+lock = threading.Lock()
 
-CACHE_DIR = "./cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
+# ===============================
+# DB INITIALIZATION
+# ===============================
+def init_db():
+    os.makedirs(SUWAYOMI_DIR, exist_ok=True)
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS galleries (
+            id INTEGER PRIMARY KEY,
+            status TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            download_location TEXT,
+            extension_used TEXT
+        )
+        """)
+        conn.commit()
 
-def get_cached_meta(gallery_id: int):
-    cache_file = os.path.join(CACHE_DIR, f"{gallery_id}.json")
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                logger.info(f"Loaded cached metadata for gallery {gallery_id}")
-                return json.load(f)
-        except Exception as e:
-            log_clarification("warning")
-            logger.warning(f"Failed to read cache for {gallery_id}: {e}")
-    return None
+# ===============================
+# UTILITY FUNCTIONS
+# ===============================
+def mark_gallery_started(gallery_id, download_location=None, extension_used=None):
+    init_db()
+    now = datetime.utcnow().isoformat()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO galleries (id, status, started_at, download_location, extension_used)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            status=excluded.status,
+            started_at=excluded.started_at,
+            download_location=excluded.download_location,
+            extension_used=excluded.extension_used
+        """, (gallery_id, "started", now, download_location, extension_used))
+        conn.commit()
 
-def cache_gallery_meta(meta: dict):
-    cache_file = os.path.join(CACHE_DIR, f"{meta['id']}.json")
-    try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        logger.info(f"Metadata cached for gallery {meta['id']}")
-    except Exception as e:
-        log_clarification("error")
-        logger.error(f"Failed to cache metadata for {meta['id']}: {e}")
+def mark_gallery_completed(gallery_id):
+    init_db()
+    now = datetime.utcnow().isoformat()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE galleries
+        SET status = ?, completed_at = ?
+        WHERE id = ?
+        """, ("completed", now, gallery_id))
+        conn.commit()
+
+def mark_gallery_failed(gallery_id):
+    init_db()
+    now = datetime.utcnow().isoformat()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE galleries
+        SET status = ?, completed_at = ?
+        WHERE id = ?
+        """, ("failed", now, gallery_id))
+        conn.commit()
+
+def get_gallery_status(gallery_id):
+    init_db()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+def list_galleries(status=None):
+    init_db()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        if status:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM galleries WHERE status=?", (status,))
+        else:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM galleries")
+        return cursor.fetchall()

@@ -40,11 +40,39 @@ def parse_args():
         help="Comma-separated gallery IDs to download"
     )
 
-    # Artist/Group/Tag/Parody
-    parser.add_argument("--artist", nargs=3, metavar=("ARTIST","START_PAGE","END_PAGE"))
-    parser.add_argument("--group", nargs=3, metavar=("GROUP","START_PAGE","END_PAGE"))
-    parser.add_argument("--tag", nargs=3, metavar=("TAG","START_PAGE","END_PAGE"))
-    parser.add_argument("--parody", nargs=3, metavar=("PARODY","START_PAGE","END_PAGE"))
+    # Artist/Group/Tag/Parody arguments
+    parser.add_argument(
+        "--artist",
+        nargs='+',
+        metavar=("ARTIST", "START_PAGE", "END_PAGE"),
+        help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. "
+            "If START_PAGE is omitted, defaults to 1. If END_PAGE is omitted, all pages from START_PAGE onwards will be fetched."
+    )
+
+    parser.add_argument(
+        "--group",
+        nargs='+',
+        metavar=("GROUP", "START_PAGE", "END_PAGE"),
+        help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. "
+            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
+    )
+
+    parser.add_argument(
+        "--tag",
+        nargs='+',
+        metavar=("TAG", "START_PAGE", "END_PAGE"),
+        help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. "
+            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
+    )
+
+    parser.add_argument(
+        "--parody",
+        nargs='+',
+        metavar=("PARODY", "START_PAGE", "END_PAGE"),
+        help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. "
+            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
+    )
+
 
     # Filters
     parser.add_argument(
@@ -86,37 +114,59 @@ def parse_args():
 def build_gallery_list(args):
     gallery_ids = set()
 
+    # ------------------------------
     # Range
+    # ------------------------------
     if args.range:
         start, end = args.range
-        gallery_ids.update(range(start, end+1))
+        gallery_ids.update(range(start, end + 1))
 
+    # ------------------------------
     # Explicit galleries
+    # ------------------------------
     if args.galleries:
         ids = [int(x.strip()) for x in args.galleries.split(",") if x.strip().isdigit()]
         gallery_ids.update(ids)
 
+    # ------------------------------
     # Artist
+    # ------------------------------
     if args.artist:
-        artist, start, end = args.artist
-        gallery_ids.update(fetch_galleries_by_artist(artist, int(start), int(end)))
+        artist_name = args.artist[0]
+        start_page = int(args.artist[1]) if len(args.artist) > 1 else 1
+        end_page = int(args.artist[2]) if len(args.artist) > 2 else None
+        gallery_ids.update(fetch_galleries_by_artist(artist_name, start_page, end_page))
 
+    # ------------------------------
     # Group
+    # ------------------------------
     if args.group:
-        group, start, end = args.group
-        gallery_ids.update(fetch_galleries_by_group(group, int(start), int(end)))
+        group_name = args.group[0]
+        start_page = int(args.group[1]) if len(args.group) > 1 else 1
+        end_page = int(args.group[2]) if len(args.group) > 2 else None
+        gallery_ids.update(fetch_galleries_by_group(group_name, start_page, end_page))
 
+    # ------------------------------
     # Tag
+    # ------------------------------
     if args.tag:
-        tag, start, end = args.tag
-        gallery_ids.update(fetch_galleries_by_tag(tag, int(start), int(end)))
+        tag_name = args.tag[0]
+        start_page = int(args.tag[1]) if len(args.tag) > 1 else 1
+        end_page = int(args.tag[2]) if len(args.tag) > 2 else None
+        gallery_ids.update(fetch_galleries_by_tag(tag_name, start_page, end_page))
 
+    # ------------------------------
     # Parody
+    # ------------------------------
     if args.parody:
-        parody, start, end = args.parody
-        gallery_ids.update(fetch_galleries_by_parody(parody, int(start), int(end)))
+        parody_name = args.parody[0]
+        start_page = int(args.parody[1]) if len(args.parody) > 1 else 1
+        end_page = int(args.parody[2]) if len(args.parody) > 2 else None
+        gallery_ids.update(fetch_galleries_by_parody(parody_name, start_page, end_page))
 
+    # ------------------------------
     # Final sorted list
+    # ------------------------------
     gallery_list = sorted(gallery_ids)
     log_clarification("debug")
     logger.debug(f"Gallery List: {gallery_list}")

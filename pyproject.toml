@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "4.0.0"
+version = "5.0.0"
 description = "NHentai scraper with extensions for the integration into other services."
 readme = "README.md"
 authors = [{ name = "C7YPT0N1C" }]
@@ -25,4 +25,4 @@ nhentai-scraper = "nhscraper.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["nhscraper*"]
+include = ["nhscraper*", "nhscraper.core*", "nhscraper.extensions*"]

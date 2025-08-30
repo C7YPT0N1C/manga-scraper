@@ -331,7 +331,7 @@ start_update() {
     pip install --upgrade pip setuptools wheel
     pip install --editable "$NHENTAI_DIR"
 
-    echo "Update complete ✅ (branch: $branch)"
+    echo "Update complete (branch: $branch)"
 }
 
 update_env_file() {

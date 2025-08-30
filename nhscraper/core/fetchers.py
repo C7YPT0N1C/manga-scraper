@@ -2,15 +2,9 @@
 # core/fetchers.py
 
 import time, random, cloudscraper, requests
-from requests.exceptions import HTTPError
 
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
-
-# Delay Settings
-min_delay = 1.0
-max_delay = 5.0
-max_retries = 3 # Max number of download retries.
 
 # ===============================
 # HTTP SESSION
@@ -39,86 +33,74 @@ def build_session():
 
     return s
 
-session = build_session() # cloudscraper session, default.
-#session = requests.Session() # requests session, fallback.
-
-# ===============================
-# RETRY REQUESTS
-# ===============================
-def retry_request(func, *args, max_attempts=3, **kwargs):
-    """Retry a function up to max_attempts if it fails or receives 429."""
-    attempt = 0
-    while attempt < max_attempts:
-        try:
-            return func(*args, **kwargs)
-        except HTTPError as e:
-            if e.response.status_code == 429:
-                retry_after = int(e.response.headers.get("Retry-After", 2))
-                logger.warning(f"Rate limited. Waiting {retry_after}s before retrying...")
-                time.sleep(retry_after)
-            else:
-                logger.warning(f"HTTP error: {e}. Retrying...")
-                time.sleep(2 ** attempt + random.random())
-        except RequestException as e:
-            logger.warning(f"Request failed: {e}. Retrying...")
-            time.sleep(2 ** attempt + random.random())
-        attempt += 1
-    logger.error(f"Failed after {max_attempts} attempts.")
-    return None
+session = build_session()  # cloudscraper session, default.
 
 # ===============================
 # FETCH IDs
 # ===============================
 API_BASE = "https://nhentai.net/api/galleries/search"
 
-def fetch_galleries_by_artist(artist: str, start_page: int = 1, end_page: int = 1):
+def fetch_galleries_by_artist(artist: str, start_page: int = 1, end_page: int | None = None):
     return _fetch_gallery_ids(f'artist:"{artist}"', start_page, end_page)
 
-def fetch_galleries_by_group(group: str, start_page: int = 1, end_page: int = 1):
+def fetch_galleries_by_group(group: str, start_page: int = 1, end_page: int | None = None):
     return _fetch_gallery_ids(f'group:"{group}"', start_page, end_page)
 
-def fetch_galleries_by_tag(tag: str, start_page: int = 1, end_page: int = 1):
+def fetch_galleries_by_tag(tag: str, start_page: int = 1, end_page: int | None = None):
     return _fetch_gallery_ids(f'tag:"{tag}"', start_page, end_page)
 
-def fetch_galleries_by_parody(parody: str, start_page: int = 1, end_page: int = 1):
+def fetch_galleries_by_parody(parody: str, start_page: int = 1, end_page: int | None = None):
     return _fetch_gallery_ids(f'parody:"{parody}"', start_page, end_page)
 
-def _fetch_gallery_ids(query: str, start_page: int, end_page: int):
+def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
     ids = []
+    page = start_page
     try:
-        logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page}-{end_page})")
+        log_clarification("info")
+        logger.info(f"Fetching gallery IDs for query '{query}' (starting page {start_page})")
 
-        for page in range(start_page, end_page + 1):
+        while True:
+            if end_page is not None and page > end_page:
+                break
+
             url = f"{API_BASE}?query={query}&sort=popular&page={page}"
-            retries = 0
+            log_clarification("debug")
+            logger.debug(f"Requesting {url}")
 
-            while retries < max_retries:
+            for attempt in range(1, config.get("max_retries", 3) + 1):
                 try:
                     resp = session.get(url, timeout=30)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    batch = [g["id"] for g in data.get("result", [])]
-                    logger.debug(f"Page {page}: fetched {len(batch)} gallery IDs")
-                    
-                    if not batch:
-                        logger.info(f"No results on page {page}, stopping early")
-                        break
-
-                    ids.extend(batch)
-                    break  # exit retry loop on success
-
-                except requests.HTTPError as e:
                     if resp.status_code == 429:
-                        wait = (2 ** retries) + random.uniform(0, 1)
-                        logger.warning(f"429 received, retrying in {wait:.1f}s (attempt {retries+1})")
+                        wait = 2 ** attempt
+                        logger.warning(f"429 rate limit hit, waiting {wait}s (attempt {attempt})")
                         time.sleep(wait)
-                        retries += 1
-                    else:
-                        raise
+                        continue
+                    resp.raise_for_status()
+                    break
+                except requests.RequestException as e:
+                    if attempt >= config.get("max_retries", 3):
+                        logger.warning(f"Max retries reached for page {page}: {e}")
+                        break
+                    wait = 2 ** attempt
+                    logger.warning(f"Request failed (attempt {attempt}): {e}, retrying in {wait}s")
+                    time.sleep(wait)
             else:
-                logger.warning(f"Max retries reached for page {page}, skipping.")
+                page += 1
+                continue  # skip page if all retries failed
 
-        logger.debug(f"Fetched total {len(ids)} galleries for query '{query}'")
+            data = resp.json()
+            batch = [g["id"] for g in data.get("result", [])]
+            log_clarification("debug")
+            logger.debug(f"Page {page}: fetched {len(batch)} gallery IDs")
+
+            if not batch:
+                logger.info(f"No results on page {page}, stopping early")
+                break
+
+            ids.extend(batch)
+            page += 1
+
+        logger.info(f"Fetched total {len(ids)} galleries for query '{query}'")
         return ids
 
     except Exception as e:
@@ -130,38 +112,31 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int):
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
     url = f"https://nhentai.net/api/gallery/{gallery_id}"
-    retries = 0
-
-    while retries <= max_retries:
+    for attempt in range(1, config.get("max_retries", 3) + 1):
         try:
-            start_time = time.time()
+            log_clarification("debug")
+            logger.debug(f"Fetching metadata for gallery {gallery_id} from {url}")
+
             resp = session.get(url, timeout=30)
-            elapsed = time.time() - start_time
-
             if resp.status_code == 429:
-                backoff = min(max_delay, 2 ** retries + random.uniform(0, 1))
-                logger.warning(f"429 received for gallery {gallery_id}. Backing off {backoff:.2f}s (retry {retries+1}/{max_retries})")
-                time.sleep(backoff)
-                retries += 1
+                wait = 2 ** attempt
+                logger.warning(f"429 rate limit hit for gallery {gallery_id}, waiting {wait}s")
+                time.sleep(wait)
                 continue
-
             resp.raise_for_status()
             data = resp.json()
-            # Dynamic delay after successful request
-            delay = min(max_delay, max(min_delay, elapsed * 1.5))
-            sleep_time = delay + random.uniform(0, 0.5)
-            logger.debug(f"Sleeping for {sleep_time:.2f}s after metadata fetch")
-            time.sleep(sleep_time)
+
+            log_clarification("debug")
+            logger.debug(f"Fetched metadata for gallery {gallery_id}")
             return data
-
         except requests.RequestException as e:
-            logger.warning(f"Failed to fetch metadata for gallery {gallery_id}: {e}. Retrying ({retries+1}/{max_retries})")
-            retries += 1
-            time.sleep(min(max_delay, 2 ** retries + random.uniform(0, 1)))
-
-    logger.warning(f"Max retries reached for gallery {gallery_id}, returning None")
-    return None
-
+            if attempt >= config.get("max_retries", 3):
+                log_clarification("warning")
+                logger.warning(f"Failed to fetch metadata for gallery {gallery_id} after max retries: {e}")
+                return None
+            wait = 2 ** attempt
+            logger.warning(f"Attempt {attempt} failed for gallery {gallery_id}: {e}, retrying in {wait}s")
+            time.sleep(wait)
 
 def fetch_image_url(meta: dict, page: int):
     try:
