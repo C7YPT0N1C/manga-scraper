@@ -29,7 +29,8 @@ if config["VERBOSE"]:
     logger.setLevel(logging.DEBUG)
     logger.debug("Verbose Logging Enabled.")
 else: # Default to INFO
-    logger.setLevel(logging.INFO)
+    #logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
 # LOGGING LEVELS - IN OTHER MODULES USE:
 # logger.debug("This is a debug message")   # Not shown because level is INFO (logger.getEffectiveLevel = 10)
