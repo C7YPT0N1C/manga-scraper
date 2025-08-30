@@ -185,9 +185,18 @@ def main():
     args = parse_args()
 
     # ------------------------------
+    # Build gallery list
+    # ------------------------------
+    gallery_list = build_gallery_list(args)
+    #if not gallery_list:
+    #    log_clarification()
+    #    logger.warning("No galleries to download. Exiting.")
+    #    return
+    
+    # ------------------------------
     # Update config
     # ------------------------------
-    config["GALLERIES"] = build_gallery_list(args) # TEST
+    config["GALLERIES"] = gallery_list # TEST
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
@@ -217,15 +226,6 @@ def main():
     selected_extension = get_selected_extension(args.extension.lower())
     log_clarification()
     logger.debug(f"Using extension: {getattr(selected_extension, '__name__', 'skeleton')}")
-
-    # ------------------------------
-    # Build gallery list
-    # ------------------------------
-    #gallery_list = build_gallery_list(args)
-    #if not gallery_list:
-    #    log_clarification()
-    #    logger.warning("No galleries to download. Exiting.")
-    #    return
 
     # ------------------------------
     # Pre-download hook
