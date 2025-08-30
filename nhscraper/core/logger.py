@@ -32,6 +32,10 @@ else:
     logger.setLevel(logging.INFO)
     log_console_level = logging.INFO
 
+# Manual Log Level Override # TEST
+logger.setLevel(logging.DEBUG)
+log_console_level = logging.DEBUG
+
 formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
 # Console handler
