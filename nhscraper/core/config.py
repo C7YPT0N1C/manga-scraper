@@ -55,17 +55,25 @@ def setup_logger(dry_run=False, verbose=False):
 
     logger.setLevel(log_level)
     
-    log_clarification()  
-    if log_level >= 10:
-        logger.info(f"Log Level Set To {log_level}")
-    if log_level >= 20:
-        logger.info(f"Log Level Set To {log_level}")
-    if log_level >= 30:
-        logger.info(f"Log Level Set To {log_level}")
-    if log_level >= 40:
-        logger.info(f"Log Level Set To {log_level}")
-    if log_level >= 50:
-        logger.info(f"Log Level Set To {log_level}")
+    def print_log_level():
+        log_clarification()  
+        if log_level >= 10:
+            print("Log Level Set To DEBUG")
+            logger.info("Log Level Set To DEBUG")
+        if log_level >= 20:
+            print("Log Level Set To INFO")
+            logger.info("Log Level Set To INFO")
+        if log_level >= 30:
+            print("Log Level Set To WARNING")
+            logger.info("Log Level Set To WARNING")
+        if log_level >= 40:
+            print("Log Level Set To ERROR")
+            logger.info("Log Level Set To ERROR")
+        if log_level >= 50:
+            print("Log Level Set To CRITICAL")
+            logger.info("Log Level Set To CRITICAL")
+    
+    print_log_level()
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
