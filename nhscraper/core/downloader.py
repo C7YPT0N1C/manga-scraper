@@ -31,7 +31,8 @@ active_extension = get_selected_extension()
 #log_clarification()
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
-os.makedirs(download_location, exist_ok=True) # Ensure the folder existss
+if not config.get("DRY_RUN", False):
+    os.makedirs(download_location, exist_ok=True) # Ensure the folder existss
 
 ####################################################################################################
 # UTILITIES
@@ -170,6 +171,7 @@ def process_gallery(gallery_id):
 
                 num_pages = meta.get("num_pages", 0)
                 if num_pages == 0:
+                    log_clarification()
                     logger.warning(f"Gallery {gallery_id} has no pages, skipping")
                     gallery_failed = True
                     break
@@ -182,6 +184,7 @@ def process_gallery(gallery_id):
                         page = i + 1
                         img_url = fetch_image_url(meta, page)
                         if not img_url:
+                            log_clarification()
                             logger.warning(f"Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue
@@ -203,12 +206,14 @@ def process_gallery(gallery_id):
                         pass
 
             if gallery_failed:
+                log_clarification()
                 logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
                 continue
 
             # Call after-gallery hook
             active_extension.after_gallery_download(meta)
             db.mark_gallery_completed(gallery_id)
+            log_clarification()
             logger.info(f"Completed Gallery {gallery_id}")
             break
 
