@@ -23,24 +23,24 @@ MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
+# ------------------------------
+# Logger setup
+# ------------------------------
+logger = logging.getLogger("nhscraper")
+
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
+log_clarification()
+logger.info("Logger: Ready.")
+logger.debug("Logger: Debugging Started.")
+
 def setup_logger(dry_run=False, verbose=False):
-    # ------------------------------
-    # Logger setup
-    # ------------------------------
-    logger = logging.getLogger("nhscraper")
-
-    # ------------------------------
-    # LOG CLARIFICATION
-    # Prints Blank Line To Make Logs Look Cleaner)
-    # ------------------------------
-    def log_clarification():  
-        print()
-        logger.debug("")
-
-    log_clarification()
-    logger.info("Logger: Ready.")
-    logger.debug("Logger: Debugging Started.")
-
     log_level = logging.DEBUG if dry_run or verbose else logging.INFO
 
     # Manual Log Level Override
