@@ -199,16 +199,13 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 def get_tag_names(meta, tag_type):
     """
-    Return a list of tag names for a given type (artist, group, etc).
-    Handles splitting cases like 'Artist A | Artist B'.
+    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
+    Returns ['Unknown'] if none found.
     """
-    tags = meta.get("tags", {}).get(tag_type, [])
-    normalised = []
-    for tag in tags:
-        # split on | if present, strip whitespace
-        parts = [t.strip() for t in tag.split("|") if t.strip()]
-        normalised.extend(parts)
-    return normalised or None
+    if not meta or "tags" not in meta:
+        return ["Unknown"]
+    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
+    return names or ["Unknown"]
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
