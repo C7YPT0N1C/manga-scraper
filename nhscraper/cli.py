@@ -8,12 +8,6 @@ from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
-# Overwrite placeholder logger with real one
-logger = setup_logger(
-    dry_run=False,
-    verbose=True,
-) 
-
 # ------------------------------
 # LOG CLARIFICATION
 # Prints Blank Line To Make Logs Look Cleaner)
@@ -207,10 +201,10 @@ def main():
     args = parse_args()
 
     # Overwrite placeholder logger with real one
-    #logger = setup_logger(
-    #    dry_run=args.dry_run,
-    #    verbose=args.verbose,
-    #) 
+    logger = setup_logger(
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+    ) 
     
     # ------------------------------
     # Build gallery list

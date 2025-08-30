@@ -13,31 +13,23 @@ LOG_DIR = "./logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Master log
-#MASTER_LOG_FILE = os.path.join(LOG_DIR, "master.log")
-# Runtime log with timestamp
-#timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
-
-# Master log # TEST
 MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 
 # Runtime log
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
-# Logger setup
+# --- Placeholder logger so imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
-logger.setLevel(logging.DEBUG)  # Capture everything; handlers decide visibility
+if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
+    placeholder_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    placeholder_console = logging.StreamHandler()
+    placeholder_console.setLevel(logging.INFO)   # Default to INFO
+    placeholder_console.setFormatter(placeholder_formatter)
+    logger.addHandler(placeholder_console)
 
-# Ensure no duplicate handlers
-if not logger.handlers:
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-
-    # Console handler (default INFO until setup_logger runs)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+    # Default logger level = INFO (so modules print their "Ready" messages)
+    logger.setLevel(logging.INFO)
 
 # ------------------------------
 # LOG CLARIFICATION
