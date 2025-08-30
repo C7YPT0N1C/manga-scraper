@@ -133,7 +133,7 @@ def fetch_gallery_metadata(gallery_id: int):
             resp.raise_for_status()
             data = resp.json()
 
-            logger.debug(f"Fetched metadata for Gallery {gallery_id}.")
+            logger.debug(f"Fetched metadata for Gallery {gallery_id}: {data}")
             return data
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", 3):

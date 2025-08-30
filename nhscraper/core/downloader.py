@@ -171,8 +171,8 @@ def process_gallery(gallery_id):
                             logger.warning(f"Skipping Page {page}, failed to get URL")
                             gallery_failed = True
                             continue
-                        img_path = os.path.join(doujin_folder, f"{page}.{img_url.split('.')[-1]}")
-                        futures.append(executor.submit(download_image, img_url, img_path, session))
+                        #img_path = os.path.join(doujin_folder, f"{page}.{img_url.split('.')[-1]}") # TEST
+                        futures.append(executor.submit(download_image, img_url, download_location, session))
 
                     for _ in tqdm(concurrent.futures.as_completed(futures),
                                   total=len(futures),
