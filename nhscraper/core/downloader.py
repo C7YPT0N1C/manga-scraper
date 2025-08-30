@@ -76,99 +76,117 @@ def should_download_gallery(meta, num_pages):
 
     return True
 
-def process_galleries(gallery_ids):
+def process_galleries(gallery_list):
     """
-    Process multiple galleries with retries, database logging, and a unified progress bar.
-    Downloads images into [DOWNLOAD_LOCATION]/[ARTIST]/[GALLERY_TITLE]/ folders.
+    Processes multiple galleries with an overall progress bar.
     """
+    total_galleries = len(gallery_list)
+    threads = config.get("THREADS_IMAGES", 4)
+
+    # Outer progress bar for galleries
+    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={threads}]", unit="gallery") as overall_pbar:
+        for gallery_id in gallery_list:
+            process_gallery(gallery_id)
+            overall_pbar.update(1)
+
+def process_gallery(gallery_id):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
     log_clarification()
     logger.info(f"Active Download Location: {download_location}")
+    
+    db.mark_gallery_started(gallery_id, download_location, extension_name)
 
-    gallery_attempts_dict = {gid: 0 for gid in gallery_ids}
+    gallery_attempts = 0
     max_gallery_attempts = config.get("MAX_RETRIES", 3)
 
-    # First pass: fetch metadata and compute total images
-    galleries_meta = {}
-    total_images = 0
-    for gallery_id in gallery_ids:
-        gallery_attempts_dict[gallery_id] += 1
+    while gallery_attempts < max_gallery_attempts:
+        gallery_attempts += 1
         try:
+            log_clarification()
+            logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
+            dynamic_sleep("gallery")
+
             meta = fetch_gallery_metadata(gallery_id)
             if not meta or not isinstance(meta, dict):
                 logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
+                if gallery_attempts >= max_gallery_attempts:
+                    db.mark_gallery_failed(gallery_id)
                 continue
 
             num_pages = len(meta.get("images", {}).get("pages", []))
             if num_pages == 0:
                 logger.warning(f"Gallery {gallery_id} has no pages, skipping")
                 db.mark_gallery_failed(gallery_id)
-                continue
+                return
+
+            if not should_download_gallery(meta, num_pages):
+                logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
+                db.mark_gallery_completed(gallery_id)
+                active_extension.after_gallery_download_hook(meta)
+                return
+
+            gallery_failed = False
+            active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
             artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
-            total_images += num_pages * len(artists)
-            galleries_meta[gallery_id] = meta
+            gallery_title = clean_title(meta)
+            log_clarification()
+            logger.debug(f"Gallery title: '{gallery_title}'")
 
-        except Exception as e:
-            logger.error(f"Error fetching metadata for Gallery {gallery_id}: {e}")
-            continue
+            # Prepare tasks grouped by artist
+            grouped_tasks = []
+            for artist in artists:
+                safe_artist = safe_name(artist)
+                doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
+                if not config.get("DRY_RUN", False):
+                    os.makedirs(doujin_folder, exist_ok=True)
 
-    if not galleries_meta:
-        logger.warning("No galleries to process.")
-        return
+                artist_tasks = []
+                for i in range(num_pages):
+                    page = i + 1
+                    img_url = fetch_image_url(meta, page)
+                    if not img_url:
+                        logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
+                        gallery_failed = True
+                        continue
 
-    logger.info(f"Total images to download across all galleries: {total_images}")
+                    img_filename = f"{page}.{img_url.split('.')[-1]}"
+                    img_path = os.path.join(doujin_folder, img_filename)
+                    artist_tasks.append((page, img_url, img_path, safe_artist))
 
-    # Unified progress bar
-    with tqdm(total=total_images, desc="All Galleries", unit="img", leave=True) as pbar:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-            futures = []
+                if artist_tasks:
+                    grouped_tasks.append((safe_artist, artist_tasks))
 
-            for gallery_id, meta in galleries_meta.items():
-                db.mark_gallery_started(gallery_id, download_location, extension_name)
-                active_extension.during_gallery_download_hook(config, gallery_id, meta)
-
-                gallery_failed = False
-                gallery_title = clean_title(meta)
-                artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
-                num_pages = len(meta.get("images", {}).get("pages", []))
-
-                for artist in artists:
-                    safe_artist = safe_name(artist)
-                    doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
-                    if not config.get("DRY_RUN", False):
-                        os.makedirs(doujin_folder, exist_ok=True)
-
-                    for i in range(num_pages):
-                        page = i + 1
-                        img_url = fetch_image_url(meta, page)
-                        if not img_url:
-                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
-                            gallery_failed = True
-                            continue
-
-                        img_filename = f"{page}.{img_url.split('.')[-1]}"
-                        img_path = os.path.join(doujin_folder, img_filename)
-
-                        futures.append(
+            # Inner progress bar for this gallery
+            total_images = sum(len(t[1]) for t in grouped_tasks)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
+                    for safe_artist, artist_tasks in grouped_tasks:
+                        pbar.set_postfix_str(f"Artist: {safe_artist}")
+                        futures = [
                             executor.submit(
                                 active_extension.download_images_hook,
-                                gallery_id, page, img_url, img_path, session, pbar, safe_artist
+                                gallery_id, page, url, path, session, pbar, safe_artist
                             )
-                        )
+                            for page, url, path, _ in artist_tasks
+                        ]
+                        for _ in concurrent.futures.as_completed(futures):
+                            pbar.update(1)
 
-                # Wait for images of this gallery to complete
-                for _ in concurrent.futures.as_completed(futures):
-                    pbar.update(1)
+            if gallery_failed:
+                logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
+                continue
 
-                if gallery_failed:
-                    logger.warning(f"Gallery {gallery_id} encountered download issues.")
-                    continue
+            active_extension.after_gallery_download_hook(meta)
+            db.mark_gallery_completed(gallery_id)
+            logger.info(f"Completed Gallery {gallery_id}")
+            break
 
-                active_extension.after_gallery_download_hook(meta)
-                db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery {gallery_id}")
+        except Exception as e:
+            logger.error(f"Error processing Gallery {gallery_id}: {e}")
+            if gallery_attempts >= max_gallery_attempts:
+                db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN
