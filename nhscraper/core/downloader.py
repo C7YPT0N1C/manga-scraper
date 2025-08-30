@@ -117,8 +117,8 @@ def download_image(gallery, page, url, path, session, retries=None):
                 time.sleep(wait)
                 continue
             r.raise_for_status()
-
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if not config.get("DRY_RUN", False):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     if chunk:
@@ -211,7 +211,8 @@ def process_gallery(gallery_id):
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
                         logger.debug(f"Downloading to: {img_path}")
-                        os.makedirs(os.path.dirname(img_path), exist_ok=True)
+                        if not config.get("DRY_RUN", False):
+                            os.makedirs(os.path.dirname(img_path), exist_ok=True)
 
                         futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
 
