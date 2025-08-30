@@ -81,10 +81,12 @@ def process_galleries(gallery_list):
     Processes multiple galleries with an overall progress bar.
     """
     total_galleries = len(gallery_list)
-    threads = config.get("THREADS_IMAGES", 4)
+    gallery_threads = config.get("THREADS_GALLERIES", 4)
+    image_threads = config.get("THREADS_IMAGES", 4)
+    total_threads = gallery_threads + image_threads
 
     # Outer progress bar for galleries
-    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={threads}]", unit="gallery") as overall_pbar:
+    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={total_threads}]", unit="gallery") as overall_pbar:
         for gallery_id in gallery_list:
             process_gallery(gallery_id)
             overall_pbar.update(1)
@@ -92,8 +94,8 @@ def process_galleries(gallery_list):
 def process_gallery(gallery_id):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
-    log_clarification()
-    logger.info(f"Active Download Location: {download_location}")
+    #log_clarification()
+    #logger.info(f"Active Download Location: {download_location}")
     
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
@@ -181,6 +183,7 @@ def process_gallery(gallery_id):
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
             logger.info(f"Completed Gallery {gallery_id}")
+            log_clarification()
             break
 
         except Exception as e:
