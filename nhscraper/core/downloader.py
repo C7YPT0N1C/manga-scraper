@@ -59,13 +59,18 @@ def dynamic_sleep(stage="gallery"):
     logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
     time.sleep(sleep_time)
 
-def should_download_gallery(meta):
+def should_download_gallery(meta, download_location):
     if not meta:
         return False
+
+    dry_run = config.get("DRY_RUN", False)
+
     for artist in meta.get("artists", ["Unknown Artist"]):
-        artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
+        artist_folder = os.path.join(download_location, safe_name(artist))
         doujin_folder = os.path.join(artist_folder, clean_title(meta))
-        if os.path.exists(doujin_folder):
+
+        # Skip existence check if dry-run
+        if not dry_run and os.path.exists(doujin_folder):
             num_pages = meta.get("num_pages", 0)
             all_exist = all(
                 any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -75,6 +80,7 @@ def should_download_gallery(meta):
             if all_exist:
                 logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
                 return False
+
     return True
 
 def download_image(gallery, page, url, path, session, retries=None):
@@ -159,7 +165,8 @@ def process_gallery(gallery_id):
             for artist in meta.get("artists", ["Unknown Artist"]):
                 artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
                 doujin_folder = os.path.join(artist_folder, clean_title(meta))
-                os.makedirs(doujin_folder, exist_ok=True)
+                if not config.get("DRY_RUN", False):
+                    os.makedirs(doujin_folder, exist_ok=True)
 
                 num_pages = meta.get("num_pages", 0)
                 if num_pages == 0:
