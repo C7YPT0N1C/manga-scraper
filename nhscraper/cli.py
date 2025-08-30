@@ -188,10 +188,10 @@ def main():
     # Build gallery list
     # ------------------------------
     gallery_list = build_gallery_list(args)
-    #if not gallery_list:
-    #    log_clarification()
-    #    logger.warning("No galleries to download. Exiting.")
-    #    return
+    if not gallery_list:
+        log_clarification()
+        logger.warning("No galleries to download. Exiting.")
+        return
     
     # ------------------------------
     # Update config
