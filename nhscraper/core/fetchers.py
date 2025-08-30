@@ -126,6 +126,17 @@ def fetch_gallery_metadata(gallery_id: int):
 
             logger.debug(f"Fetched metadata for Gallery {gallery_id}: {data}")
             return data
+        except requests.HTTPError as e:
+            if "404 Client Error: Not Found for url" in str(e):
+                logger.warning(f"Gallery {gallery_id} not found (404), skipping retries.")
+                return None
+            if attempt >= config.get("MAX_RETRIES", 3):
+                logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
+                return None
+            wait = 2 ** attempt
+            log_clarification()
+            logger.warning(f"Attempt {attempt} failed for Gallery {gallery_id}: {e}, retrying in {wait}s")
+            time.sleep(wait)
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", 3):
                 logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
