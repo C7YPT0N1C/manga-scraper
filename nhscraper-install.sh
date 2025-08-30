@@ -130,6 +130,7 @@ install_scraper() {
 }
 
 create_env_file() {
+    # Also change corresponding parser.add_argument in CLI
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF

@@ -102,6 +102,7 @@ if os.path.exists(ENV_FILE):
 # ------------------------------
 # Config dictionary
 # ------------------------------
+# Also change corresponding parser.add_argument in CLI
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),

@@ -42,7 +42,7 @@ def build_gallery_path(meta):
 
 def dynamic_sleep(stage="gallery"):
     num_galleries = max(1, len(config.get("GALLERIES", [])))
-    total_load = config.get("THREADS_GALLERIES", 1) * config.get("THREADS_IMAGES", 4)
+    total_load = config.get("THREADS_GALLERIES", 4) * config.get("THREADS_IMAGES", 4)
     base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
     scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
     sleep_time = random.uniform(base_min*scale, base_max*scale)
