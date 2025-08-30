@@ -5,7 +5,9 @@ import os, logging
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 
-#####################################################################################################################
+##########################################################################################
+# LOGGER
+##########################################################################################
 
 LOG_DIR = "./logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -23,9 +25,7 @@ MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
-# ------------------------------
 # Logger setup
-# ------------------------------
 logger = logging.getLogger("nhscraper")
 
 # ------------------------------
@@ -41,6 +41,13 @@ logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
 def setup_logger(dry_run=False, verbose=False):
+    # LOGGING LEVELS:
+    # logging.debug("This is a debug message")    # Not shown because level is INFO (log_level = 10)
+    # logging.info("This is info")               # Shown (log_level = 20)
+    # logging.warning("This is a warning")       # Shown (log_level = 30)
+    # logging.error("This is an error")          # Shown (log_level = 40)
+    # logging.critical("This is critical")       # Shown (log_level = 50)
+    
     log_level = logging.DEBUG if dry_run or verbose else logging.INFO
 
     # Manual Log Level Override
@@ -48,8 +55,17 @@ def setup_logger(dry_run=False, verbose=False):
 
     logger.setLevel(log_level)
     
-    log_clarification()
-    logger.debug(f"Log Level Set To {log_level}")
+    log_clarification()  
+    if log_level >= 10:
+        logger.info(f"Log Level Set To {log_level}")
+    if log_level >= 20:
+        logger.info(f"Log Level Set To {log_level}")
+    if log_level >= 30:
+        logger.info(f"Log Level Set To {log_level}")
+    if log_level >= 40:
+        logger.info(f"Log Level Set To {log_level}")
+    if log_level >= 50:
+        logger.info(f"Log Level Set To {log_level}")
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
@@ -70,6 +86,8 @@ def setup_logger(dry_run=False, verbose=False):
     fh_runtime.setFormatter(formatter)
     logger.addHandler(fh_runtime)
 
+##########################################################################################
+# LOGGER
 ##########################################################################################
 
 # ------------------------------
