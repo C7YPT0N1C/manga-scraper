@@ -17,8 +17,9 @@ def log_clarification():
 # ===============================
 # HTTP SESSION
 # ===============================
+session = None
 
-def build_session():
+def session_builder():
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(
@@ -41,7 +42,9 @@ def build_session():
 
     return s
 
-session = build_session()  # cloudscraper session, default.
+def build_session():
+    global session
+    session = session_builder() # cloudscraper session, default.
 
 # ===============================
 # FETCH IDs

@@ -7,7 +7,7 @@ from tqdm import tqdm
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
+from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
 
 # Import active extension
 from nhscraper.extensions.extension_loader import *
@@ -116,6 +116,8 @@ def should_download_gallery(meta):
 # GALLERY PROCESSING
 ####################################################################################################
 def process_gallery(gallery_id):
+    build_session() # Call fetcher to build cloudscraper session.
+    
     download_location = None
     extension_name = getattr(active_extension, "__name__", "skeleton")
     db.mark_gallery_started(gallery_id, download_location, extension_name)
