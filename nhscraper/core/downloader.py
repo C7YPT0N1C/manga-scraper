@@ -3,6 +3,7 @@
 
 import os, time, random, concurrent.futures
 from tqdm import tqdm
+from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
@@ -75,7 +76,18 @@ def should_download_gallery(meta, num_pages):
 
     return True
 
-from functools import partial
+def process_galleries(gallery_list):
+    """
+    Processes multiple galleries with an overall progress bar.
+    """
+    total_galleries = len(gallery_list)
+    threads = config.get("THREADS_IMAGES", 4)
+
+    # Outer progress bar for galleries
+    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={threads}]", unit="gallery") as overall_pbar:
+        for gallery_id in gallery_list:
+            process_gallery(gallery_id)
+            overall_pbar.update(1)
 
 def process_gallery(gallery_id):
     extension_name = getattr(active_extension, "__name__", "skeleton")
@@ -146,12 +158,11 @@ def process_gallery(gallery_id):
                 if artist_tasks:
                     grouped_tasks.append((safe_artist, artist_tasks))
 
-            # Download all images with a single progress bar
+            # Inner progress bar for this gallery
             total_images = sum(len(t[1]) for t in grouped_tasks)
             with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                 with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
                     for safe_artist, artist_tasks in grouped_tasks:
-                        # Update bar description once per artist
                         pbar.set_postfix_str(f"Artist: {safe_artist}")
                         futures = [
                             executor.submit(
@@ -160,7 +171,6 @@ def process_gallery(gallery_id):
                             )
                             for page, url, path, _ in artist_tasks
                         ]
-                        # Wait for completion of this artist
                         for _ in concurrent.futures.as_completed(futures):
                             pbar.update(1)
 
@@ -198,7 +208,8 @@ def start_downloader():
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("threads_galleries", 4)) as executor:
-        futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        #futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)
 
     log_clarification()
