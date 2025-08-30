@@ -25,7 +25,7 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 # Logger setup
 logger = logging.getLogger("nhscraper")
 
-log_level=None
+log_level="info"
 
 def setup_logger(dry_run=False, verbose=False):
     global log_level
