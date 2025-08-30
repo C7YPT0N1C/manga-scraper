@@ -92,12 +92,12 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
         pbar.set_postfix_str(f"Failed artist: {artist}")
     return False
     
+####################################################################################################################
+
 # Hook for testing functionality. Use active_extension.test_hook(ARGS)
 def test_hook(config, gallery_list):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Test hook called.")
-    
-####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS)
 def pre_run_hook(config, gallery_list):
