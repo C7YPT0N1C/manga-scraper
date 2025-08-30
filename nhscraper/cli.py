@@ -213,7 +213,11 @@ def main():
     log_clarification()
     logger.debug("Updating Config...")
     update_config(args, gallery_list)
+    
+    log_clarification()
+    logger.debug("Setting Log Level...")
     setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Allow logger to set log level.
+    
     log_clarification()
     logger.debug(f"Updated Config: {config}")
     

@@ -105,7 +105,6 @@ def load_installed_extensions():
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
-    log_clarification()
     for ext in manifest.get("extensions", []):
         if ext.get("installed", False):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -116,10 +115,13 @@ def load_installed_extensions():
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
+                    log_clarification()
                     logger.debug(f"Extension: {ext['name']}: Loaded.")
                 except Exception as e:
+                    log_clarification()
                     logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
             else:
+                log_clarification()
                 logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------

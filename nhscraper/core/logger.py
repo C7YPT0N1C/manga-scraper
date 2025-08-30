@@ -22,16 +22,33 @@ MASTER_LOG_FILE = os.path.join(LOG_DIR, "000_master.log")
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"100_runtime-{timestamp}.log")
 
+# ------------------------------
 # Logger setup
+# ------------------------------
 logger = logging.getLogger("nhscraper")
+
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():  
+    print()
+    logger.debug("")
+
+log_clarification()
+logger.info("Logger: Ready.")
+logger.debug("Logger: Debugging Started.")
 
 log_level = logging.INFO # Default log level to 'info'
 
 def setup_logger(dry_run=False, verbose=False):
     global log_level
     log_level = logging.DEBUG if dry_run or verbose else logging.INFO
+    log_clarification()
+    logger.debug(f"Log Level Set To {log_level}") # TEST
 
-log_level = logging.DEBUG # Manual Log Level Override
+# Manual Log Level Override
+setup_logger(dry_run=False, verbose=True)
 
 logger.setLevel(log_level)
 
@@ -53,15 +70,3 @@ fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE)
 fh_runtime.setLevel(logging.DEBUG)  # Always capture everything
 fh_runtime.setFormatter(formatter)
 logger.addHandler(fh_runtime)
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Logger: Ready.")
-logger.debug("Logger: Debugging Started.")
