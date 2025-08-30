@@ -4,12 +4,14 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, subprocess, json
+import os, time, subprocess, json, requests
 
 from nhscraper.core.config import logger, config, log_clarification, update_env
+from nhscraper.core.downloader import get_tag_names, clean_title
 
 # Global variable for download path, update here.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
+SUBFOLDER_STRUCTURE = ["artist", "title"]
 
 def update_extension_download_path():
     log_clarification()
@@ -17,13 +19,20 @@ def update_extension_download_path():
     logger.debug("Extension: Skeleton: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
 
+def build_gallery_subfolders(meta):
+    """Return a dict of possible variables to use in folder naming."""
+    return {
+        "artist": (get_tag_names(meta, "artist") or ["Unknown Artist"])[0],
+        "title": clean_title(meta),
+        "id": str(meta.get("id", "unknown")),
+        "language": (get_tag_names(meta, "language") or ["Unknown"])[0],
+    }
+
 def download_images_hook(gallery, page, url, path, session, retries=None):
     """
     Downloads an image from URL to the given path.
     Respects DRY_RUN and retries up to config['MAX_RETRIES'].
     """
-    import requests
-    from nhscraper.core.config import logger, config, log_clarification
 
     if not url:
         logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")

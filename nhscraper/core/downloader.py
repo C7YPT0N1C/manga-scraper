@@ -41,6 +41,23 @@ def clean_title(meta):
     title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     return safe_name(title)
 
+def build_gallery_path(meta):
+    # Ask extension for variables
+    subs = active_extension.build_gallery_subfolders(meta)
+
+    # Load template from extension (SUB1/SUB2/etc.)
+    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["artist", "title"])
+
+    # Start with download base
+    path_parts = [download_location]
+
+    # Append resolved variables
+    for key in template:
+        value = subs.get(key, "Unknown")
+        path_parts.append(safe_name(value))
+
+    return os.path.join(*path_parts)
+
 def dynamic_sleep(stage="gallery"):
     num_galleries = max(1, len(config.get("GALLERIES", [])))
     total_load = config.get("THREADS_GALLERIES", 1) * config.get("THREADS_IMAGES", 4)
@@ -51,32 +68,28 @@ def dynamic_sleep(stage="gallery"):
     logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
     time.sleep(sleep_time)
 
-def should_download_gallery(meta):
+def should_download_gallery(meta, num_pages):
     if not meta:
         return False
 
     dry_run = config.get("DRY_RUN", False)
-    gallery_title = clean_title(meta)
-    num_pages = len(meta.get("images", {}).get("pages", []))
 
     if num_pages == 0:
         logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
         return False
 
-    for artist in get_tag_names(meta, "artist") or ["Unknown Artist"]:
-        artist_folder = os.path.join(download_location, safe_name(artist))
-        doujin_folder = os.path.join(artist_folder, gallery_title)
+    doujin_folder = build_gallery_path(meta)
 
-        # Skip existence check if dry-run
-        if not dry_run and os.path.exists(doujin_folder):
-            all_exist = all(
-                any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
-                    for ext in ("jpg", "png", "gif", "webp"))
-                for i in range(num_pages)
-            )
-            if all_exist:
-                logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
-                return False
+    # Skip existence check if dry-run
+    if not dry_run and os.path.exists(doujin_folder):
+        all_exist = all(
+            any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
+                for ext in ("jpg", "png", "gif", "webp"))
+            for i in range(num_pages)
+        )
+        if all_exist:
+            logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
+            return False
 
     return True
 
@@ -105,7 +118,13 @@ def process_gallery(gallery_id):
                     db.mark_gallery_failed(gallery_id)
                 continue
 
-            if not should_download_gallery(meta):
+            num_pages = len(meta.get("images", {}).get("pages", []))
+            if num_pages == 0:
+                logger.warning(f"Gallery {gallery_id} has no pages, skipping")
+                db.mark_gallery_failed(gallery_id)
+                return
+
+            if not should_download_gallery(meta, num_pages):
                 logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
                 db.mark_gallery_completed(gallery_id)
                 active_extension.after_gallery_download_hook(meta)
@@ -121,17 +140,9 @@ def process_gallery(gallery_id):
             logger.debug(f"Gallery title: '{gallery_title}'")
 
             for artist in artists:
-                artist_folder = os.path.join(download_location, safe_name(artist))
-                doujin_folder = os.path.join(artist_folder, gallery_title)
+                doujin_folder = build_gallery_path(meta)
                 if not config.get("DRY_RUN", False):
                     os.makedirs(doujin_folder, exist_ok=True)
-
-                num_pages = len(meta.get("images", {}).get("pages", []))
-                if num_pages == 0:
-                    log_clarification()
-                    logger.warning(f"Gallery {gallery_id} has no pages, skipping")
-                    gallery_failed = True
-                    break
 
                 # Threaded downloads
                 futures = []
@@ -153,12 +164,19 @@ def process_gallery(gallery_id):
                         if not config.get("DRY_RUN", False):
                             os.makedirs(os.path.dirname(img_path), exist_ok=True)
 
-                        futures.append(executor.submit(active_extension.download_images_hook, gallery_id, page, img_url, img_path, session))
+                        futures.append(
+                            executor.submit(
+                                active_extension.download_images_hook,
+                                gallery_id, page, img_url, img_path, session
+                            )
+                        )
 
-                    for _ in tqdm(concurrent.futures.as_completed(futures),
-                                  total=len(futures),
-                                  desc=f"Gallery {gallery_id} ({safe_name(artist)})",
-                                  unit="img", leave=True):
+                    for _ in tqdm(
+                        concurrent.futures.as_completed(futures),
+                        total=len(futures),
+                        desc=f"Gallery {gallery_id} ({safe_name(artist)})",
+                        unit="img", leave=True
+                    ):
                         pass
 
             if gallery_failed:
