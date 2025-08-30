@@ -3,15 +3,16 @@
 
 import os, time, random, concurrent.futures
 from tqdm import tqdm
+from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
-# ------------------------------
+####################################################################################################
 # Select extension (skeleton fallback)
-# ------------------------------
+####################################################################################################
 active_extension = get_selected_extension()
 log_clarification()
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
@@ -22,28 +23,27 @@ if not config.get("DRY_RUN", False):
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
-def get_tag_names(meta, tag_type):
-    """
-    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
-    Returns ['Unknown'] if none found.
-    """
-    if not meta or "tags" not in meta:
-        return ["Unknown"]
-    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
-    return names or ["Unknown"]
 
-def safe_name(s: str) -> str:
-    return s.replace("/", "-").replace("\\", "-").strip()
+def build_gallery_path(meta):
+    # Ask extension for variables
+    subs = active_extension.build_gallery_subfolders(meta)
 
-def clean_title(meta):
-    title_obj = meta.get("title", {}) or {}
-    # Prefer 'pretty', then 'english', then 'japanese', then fallback
-    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
-    return safe_name(title)
+    # Load template from extension (SUB1/SUB2/etc.)
+    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["artist", "title"])
+
+    # Start with download base
+    path_parts = [download_location]
+
+    # Append resolved variables
+    for key in template:
+        value = subs.get(key, "Unknown")
+        path_parts.append(safe_name(value))
+
+    return os.path.join(*path_parts)
 
 def dynamic_sleep(stage="gallery"):
     num_galleries = max(1, len(config.get("GALLERIES", [])))
-    total_load = config.get("THREADS_GALLERIES", 1) * config.get("THREADS_IMAGES", 4)
+    total_load = config.get("THREADS_GALLERIES", 4) * config.get("THREADS_IMAGES", 4)
     base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
     scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
     sleep_time = random.uniform(base_min*scale, base_max*scale)
@@ -51,96 +51,44 @@ def dynamic_sleep(stage="gallery"):
     logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
     time.sleep(sleep_time)
 
-def should_download_gallery(meta):
+def should_download_gallery(meta, num_pages):
     if not meta:
         return False
 
     dry_run = config.get("DRY_RUN", False)
-    gallery_title = clean_title(meta)
-    num_pages = len(meta.get("images", {}).get("pages", []))
 
     if num_pages == 0:
         logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
         return False
 
-    for artist in get_tag_names(meta, "artist") or ["Unknown Artist"]:
-        artist_folder = os.path.join(download_location, safe_name(artist))
-        doujin_folder = os.path.join(artist_folder, gallery_title)
+    doujin_folder = build_gallery_path(meta)
 
-        # Skip existence check if dry-run
-        if not dry_run and os.path.exists(doujin_folder):
-            all_exist = all(
-                any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
-                    for ext in ("jpg", "png", "gif", "webp"))
-                for i in range(num_pages)
-            )
-            if all_exist:
-                logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
-                return False
+    # Skip existence check if dry-run
+    if not dry_run and os.path.exists(doujin_folder):
+        all_exist = all(
+            any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
+                for ext in ("jpg", "png", "gif", "webp"))
+            for i in range(num_pages)
+        )
+        if all_exist:
+            logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
+            return False
 
     return True
 
-def download_image(gallery, page, url, path, session, retries=None):
+def process_galleries(gallery_list):
     """
-    Downloads an image from URL to the given path.
-    Respects DRY_RUN and retries up to config['MAX_RETRIES'].
+    Processes multiple galleries with an overall progress bar.
     """
-    import requests
+    total_galleries = len(gallery_list)
+    threads = config.get("THREADS_IMAGES", 4)
 
-    if not url:
-        logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
-        return False
+    # Outer progress bar for galleries
+    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={threads}]", unit="gallery") as overall_pbar:
+        for gallery_id in gallery_list:
+            process_gallery(gallery_id)
+            overall_pbar.update(1)
 
-    if retries is None:
-        retries = config.get("MAX_RETRIES", 3)
-
-    if os.path.exists(path):
-        logger.debug(f"Already exists, skipping: {path}")
-        return True
-
-    if config.get("DRY_RUN", False):
-        log_clarification()
-        logger.info(f"[DRY-RUN] Would download {url} -> {path}")
-        return True
-
-    # Ensure session is a requests.Session
-    if not isinstance(session, requests.Session):
-        session = requests.Session()
-
-    for attempt in range(1, retries + 1):
-        try:
-            r = session.get(url, timeout=30, stream=True)
-            if r.status_code == 429:
-                wait = 2 ** attempt
-                log_clarification()
-                logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            if not config.get("DRY_RUN", False):
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-
-            log_clarification()
-            logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
-            return True
-
-        except Exception as e:
-            wait = 2 ** attempt
-            log_clarification()
-            logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
-            time.sleep(wait)
-
-    log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: Failed to download after {retries} attempts: {url}")
-    return False
-
-####################################################################################################
-# GALLERY PROCESSING
-####################################################################################################
 def process_gallery(gallery_id):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
@@ -160,81 +108,82 @@ def process_gallery(gallery_id):
             dynamic_sleep("gallery")
 
             meta = fetch_gallery_metadata(gallery_id)
-            if not meta:
+            if not meta or not isinstance(meta, dict):
                 logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
                 if gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
                 continue
 
-            if not should_download_gallery(meta):
+            num_pages = len(meta.get("images", {}).get("pages", []))
+            if num_pages == 0:
+                logger.warning(f"Gallery {gallery_id} has no pages, skipping")
+                db.mark_gallery_failed(gallery_id)
+                return
+
+            if not should_download_gallery(meta, num_pages):
                 logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
                 db.mark_gallery_completed(gallery_id)
                 active_extension.after_gallery_download_hook(meta)
                 return
 
             gallery_failed = False
-
             active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-            artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
+            artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
             log_clarification()
             logger.debug(f"Gallery title: '{gallery_title}'")
 
+            # Prepare tasks grouped by artist
+            grouped_tasks = []
             for artist in artists:
-                artist_folder = os.path.join(download_location, safe_name(artist))
-                doujin_folder = os.path.join(artist_folder, gallery_title)
+                safe_artist = safe_name(artist)
+                doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
                 if not config.get("DRY_RUN", False):
                     os.makedirs(doujin_folder, exist_ok=True)
 
-                num_pages = len(meta.get("images", {}).get("pages", []))
-                if num_pages == 0:
-                    log_clarification()
-                    logger.warning(f"Gallery {gallery_id} has no pages, skipping")
-                    gallery_failed = True
-                    break
+                artist_tasks = []
+                for i in range(num_pages):
+                    page = i + 1
+                    img_url = fetch_image_url(meta, page)
+                    if not img_url:
+                        logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
+                        gallery_failed = True
+                        continue
 
-                # Threaded downloads
-                futures = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    log_clarification()
-                    for i in range(num_pages):
-                        page = i + 1
+                    img_filename = f"{page}.{img_url.split('.')[-1]}"
+                    img_path = os.path.join(doujin_folder, img_filename)
+                    artist_tasks.append((page, img_url, img_path, safe_artist))
 
-                        img_url = fetch_image_url(meta, page)
-                        if not img_url:
-                            logger.warning(f"Skipping Page {page}: Failed to get URL")
-                            gallery_failed = True
-                            continue
-                        
-                        # Correct path: always [ARTIST]/[TITLE]/image
-                        img_filename = f"{page}.{img_url.split('.')[-1]}"
-                        img_path = os.path.join(doujin_folder, img_filename)
-                        logger.debug(f"Downloading to: {img_path}")
-                        if not config.get("DRY_RUN", False):
-                            os.makedirs(os.path.dirname(img_path), exist_ok=True)
+                if artist_tasks:
+                    grouped_tasks.append((safe_artist, artist_tasks))
 
-                        futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
-
-                    for _ in tqdm(concurrent.futures.as_completed(futures),
-                                  total=len(futures),
-                                  desc=f"Gallery {gallery_id} ({safe_name(artist)})",
-                                  unit="img", leave=True):
-                        pass
+            # Inner progress bar for this gallery
+            total_images = sum(len(t[1]) for t in grouped_tasks)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
+                    for safe_artist, artist_tasks in grouped_tasks:
+                        pbar.set_postfix_str(f"Artist: {safe_artist}")
+                        futures = [
+                            executor.submit(
+                                active_extension.download_images_hook,
+                                gallery_id, page, url, path, session, pbar, safe_artist
+                            )
+                            for page, url, path, _ in artist_tasks
+                        ]
+                        for _ in concurrent.futures.as_completed(futures):
+                            pbar.update(1)
 
             if gallery_failed:
-                log_clarification()
                 logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
                 continue
 
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
-            log_clarification()
             logger.info(f"Completed Gallery {gallery_id}")
             break
 
         except Exception as e:
-            log_clarification()
             logger.error(f"Error processing Gallery {gallery_id}: {e}")
             if gallery_attempts >= max_gallery_attempts:
                 db.mark_gallery_failed(gallery_id)
@@ -248,7 +197,6 @@ def start_downloader():
     logger.debug("Downloader: Debugging Started.")
 
     gallery_ids = config.get("GALLERIES", [])
-    active_extension.test_hook(config, gallery_ids) # TEST
     active_extension.pre_run_hook(config, gallery_ids)
 
     if not gallery_ids:
@@ -260,7 +208,8 @@ def start_downloader():
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("threads_galleries", 4)) as executor:
-        futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        #futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)
 
     log_clarification()

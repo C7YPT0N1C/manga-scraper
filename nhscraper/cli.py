@@ -5,7 +5,7 @@ import argparse
 
 from nhscraper.core.config import logger, config, log_clarification, setup_logger # TEST
 from nhscraper.core.downloader import *
-from nhscraper.core.fetchers import fetch_gallery_ids
+from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
 def parse_args():
@@ -101,7 +101,7 @@ def parse_args():
 
     # Threads
     parser.add_argument("--threads-galleries", type=int, default=4)
-    parser.add_argument("--threads-images", type=int, default=1)
+    parser.add_argument("--threads-images", type=int, default=4)
     
     parser.add_argument(
         "--max-retries",
@@ -189,10 +189,7 @@ def main():
     args = parse_args()
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    ) 
+    logger = setup_logger(verbose=args.verbose) 
     
     log_clarification()
     logger.info("CLI: Ready.")

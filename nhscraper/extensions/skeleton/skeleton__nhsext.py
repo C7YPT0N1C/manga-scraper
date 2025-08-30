@@ -4,19 +4,96 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, subprocess, json
+import os, time, subprocess, json, requests
 
 from nhscraper.core.config import logger, config, log_clarification, update_env
+from nhscraper.core.fetchers import get_meta_tag_names, safe_name, clean_title
 
-# Global variable for download path, update here.
+# Global variables for download path and subfolder strucutre.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
+SUBFOLDER_STRUCTURE = ["artist", "title"]
 
 def update_extension_download_path():
     log_clarification()
     logger.info("Extension: Skeleton: Ready.")
     logger.debug("Extension: Skeleton: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
+
+def build_gallery_subfolders(meta):
+    """Return a dict of possible variables to use in folder naming."""
+    return {
+        "artist": (get_meta_tag_names(meta, "artist") or ["Unknown Artist"])[0],
+        "title": clean_title(meta),
+        "id": str(meta.get("id", "unknown")),
+        "language": (get_meta_tag_names(meta, "language") or ["Unknown"])[0],
+    }
+
+def download_images_hook(gallery, page, url, path, session, pbar=None, artist=None, retries=None):
+    """
+    Downloads an image from URL to the given path.
+    Updates tqdm progress bar with current artist.
+    """
+    if not url:
+        logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
+        if pbar and artist:
+            pbar.set_postfix_str(f"Skipped artist: {artist}")
+        return False
+
+    if retries is None:
+        retries = config.get("MAX_RETRIES", 3)
+
+    if os.path.exists(path):
+        logger.debug(f"Already exists, skipping: {path}")
+        if pbar and artist:
+            pbar.set_postfix_str(f"Artist: {artist}")
+        return True
+
+    if config.get("DRY_RUN", False):
+        log_clarification()
+        logger.info(f"[DRY-RUN] Would download {url} -> {path}")
+        if pbar and artist:
+            pbar.set_postfix_str(f"Artist: {artist}")
+        return True
+
+    if not isinstance(session, requests.Session):
+        session = requests.Session()
+
+    for attempt in range(1, retries + 1):
+        try:
+            r = session.get(url, timeout=30, stream=True)
+            if r.status_code == 429:
+                wait = 2 ** attempt
+                log_clarification()
+                logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            log_clarification()
+            logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+            if pbar and artist:
+                pbar.set_postfix_str(f"Artist: {artist}")
+            return True
+
+        except Exception as e:
+            wait = 2 ** attempt
+            log_clarification()
+            logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
+            time.sleep(wait)
+
+    log_clarification()
+    logger.error(f"Gallery {gallery}: Page {page}: Failed to download after {retries} attempts: {url}")
+    if pbar and artist:
+        pbar.set_postfix_str(f"Failed artist: {artist}")
+    return False
     
+####################################################################################################################
+
 # Hook for testing functionality. Use active_extension.test_hook(ARGS)
 def test_hook(config, gallery_list):
     log_clarification()

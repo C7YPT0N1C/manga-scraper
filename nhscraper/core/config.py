@@ -40,7 +40,7 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(dry_run=False, verbose=False):
+def setup_logger(verbose=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -55,7 +55,7 @@ def setup_logger(dry_run=False, verbose=False):
 
     # --- Console handler ---
     ch = logging.StreamHandler()
-    if dry_run or verbose:
+    if  verbose:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     else:
@@ -71,7 +71,7 @@ def setup_logger(dry_run=False, verbose=False):
     logger.addHandler(fh_runtime)
 
     # Announce level
-    if dry_run or verbose:
+    if verbose:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")
@@ -102,12 +102,13 @@ if os.path.exists(ENV_FILE):
 # ------------------------------
 # Config dictionary
 # ------------------------------
+# Also change corresponding parser.add_argument in CLI
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", "https://nhentai.net/api/galleries/search"),
     "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", "https://i.nhentai.net"),
-    "RANGE_START": int(os.getenv("RANGE_START", 592000)),
+    "RANGE_START": int(os.getenv("RANGE_START", 500000)),
     "RANGE_END": int(os.getenv("RANGE_END", 600000)),
     "GALLERIES": os.getenv("GALLERIES", ""),
     "ARTIST": os.getenv("ARTIST", ""),
@@ -118,7 +119,7 @@ config = {
     "LANGUAGE": os.getenv("LANGUAGE", "english"),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", "english"),
     "TITLE_SANITISE": os.getenv("TITLE_SANITISE", "false").lower() == "true",
-    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 1)),
+    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 4)),
     "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 4)),
     "MAX_RETRIES": int(os.getenv("MAX_RETRIES", 3)),
     "USE_TOR": os.getenv("USE_TOR", "false").lower() == "true",

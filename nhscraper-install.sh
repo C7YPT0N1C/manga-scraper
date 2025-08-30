@@ -60,6 +60,7 @@ install_python_packages() {
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
+<<<<<<< HEAD
 
 install_filebrowser() {
         echo -e "\nInstalling FileBrowser..."
@@ -136,6 +137,79 @@ install_scraper() {
     fi
     source "$NHENTAI_DIR/venv/bin/activate"
 
+=======
+
+install_filebrowser() {
+        echo -e "\nInstalling FileBrowser..."
+
+    mkdir -p $FILEBROWSER_DIR
+
+    # Download installer
+    curl -fsSLO https://raw.githubusercontent.com/filebrowser/get/master/get.sh
+    bash get.sh
+    rm -f get.sh
+
+    # Remove old database if it exists
+    if [ -f "$FB_DB" ]; then
+        echo "Removing old FileBrowser database..."
+        rm -f "$FB_DB"
+    fi
+    
+    # Initialize default config in current user's home (~/.filebrowser)
+    filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
+
+
+    # Prompt for password
+    echo -n "[?] Enter FileBrowser admin password: "
+    read -s FILEBROWSER_PASS
+    echo
+
+    # Generate random password if empty
+    if [ -z "$FILEBROWSER_PASS" ]; then
+        FILEBROWSER_PASS=$(openssl rand -base64 16)
+        echo "No password entered. Generated random password: $FILEBROWSER_PASS"
+        echo "Please save this password!"
+    fi
+
+    # Create or update admin user in default database
+    if filebrowser users list | grep -qw admin; then
+        filebrowser users update admin --password "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
+        echo "Admin user password updated."
+    else
+        filebrowser users add admin "$FILEBROWSER_PASS" --database "$FILEBROWSER_DIR/filebrowser.db" --perm.admin
+        echo "Admin user created."
+    fi
+
+    echo -e "\nFileBrowser installed. Access at http://<SERVER-IP>:8080 with username 'admin'."
+    echo "Please save this password: $FILEBROWSER_PASS"
+}
+
+install_scraper() {
+    echo -e "\nInstalling nhentai-scraper..."
+    #branch="main"
+    branch="dev"  # Change to 'dev' for testing latest features
+
+    if [ ! -d "$NHENTAI_DIR/.git" ]; then
+        echo "Cloning nhentai-scraper repo (branch: $branch)..."
+        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
+        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || {
+            echo "Failed to clone nhentai-scraper repo."
+            exit 1
+        }
+    else
+        echo "Updating existing repo (branch: $branch)..."
+        git -C "$NHENTAI_DIR" fetch origin "$branch" && git -C "$NHENTAI_DIR" checkout "$branch" && git -C "$NHENTAI_DIR" pull || {
+            echo "Could not update repo on branch $branch"
+        }
+    fi
+
+    # Setup Python venv
+    if [ ! -d "$NHENTAI_DIR/venv" ]; then
+        python3 -m venv "$NHENTAI_DIR/venv"
+    fi
+    source "$NHENTAI_DIR/venv/bin/activate"
+
+>>>>>>> dev
     install_python_packages
 
     # Symlink CLI
@@ -145,6 +219,10 @@ install_scraper() {
 }
 
 create_env_file() {
+<<<<<<< HEAD
+=======
+    # Also change corresponding parser.add_argument in CLI
+>>>>>>> dev
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
@@ -162,7 +240,11 @@ NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
 NHENTAI_MIRRORS=https://i.nhentai.net
 
 # Gallery ID selection
+<<<<<<< HEAD
 RANGE_START=592000
+=======
+RANGE_START=500000
+>>>>>>> dev
 RANGE_END=600000
 GALLERIES=
 
@@ -175,7 +257,11 @@ TITLE_TYPE=english
 TITLE_SANITISE=true
 
 # Threads
+<<<<<<< HEAD
 THREADS_GALLERIES=1
+=======
+THREADS_GALLERIES=4
+>>>>>>> dev
 THREADS_IMAGES=4
 MAX_RETRIES=3
 
