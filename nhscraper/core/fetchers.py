@@ -3,19 +3,7 @@
 
 import time, random, cloudscraper, requests
 
-from nhscraper.core.config import logger, config
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Fetcher: Ready.")
-logger.debug("Fetcher: Debugging Started.")
+from nhscraper.core.config import logger, config, log_clarification
 
 # ===============================
 # HTTP SESSION
@@ -23,6 +11,10 @@ logger.debug("Fetcher: Debugging Started.")
 session = None
 
 def session_builder():
+    log_clarification()
+    logger.info("Fetcher: Ready.")
+    logger.debug("Fetcher: Debugging Started.")
+
     log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 

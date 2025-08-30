@@ -4,20 +4,8 @@
 import os, json, importlib, subprocess
 from urllib.request import urlopen
 
-from nhscraper.core.config import logger, config
+from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.extensions import * # Ensure extensions package is recognised
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Extension Loader: Ready.")
-logger.debug("Extension Loader: Debugging Started.")
 
 # ------------------------------
 # Constants / Paths
@@ -206,6 +194,10 @@ def get_selected_extension(name: str = "skeleton"):
     Returns the selected extension module.
     Defaults to 'skeleton' if none specified or if requested extension not installed.
     """
+    log_clarification()
+    logger.info("Extension Loader: Ready.")
+    logger.debug("Extension Loader: Debugging Started.")
+    
     update_local_manifest_from_remote()
     load_installed_extensions()
 

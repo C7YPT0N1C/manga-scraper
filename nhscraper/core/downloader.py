@@ -4,24 +4,12 @@
 import os, time, random, concurrent.futures
 from tqdm import tqdm
 
-from nhscraper.core.config import logger, config
+from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
 from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
 
 # Import active extension
 from nhscraper.extensions.extension_loader import *
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Downloader: Ready.")
-logger.debug("Downloader: Debugging Started.")
 
 # ------------------------------
 # Select extension (skeleton fallback)
@@ -243,6 +231,10 @@ def process_gallery(gallery_id):
 # MAIN
 ####################################################################################################
 def start_downloader():
+    log_clarification()
+    logger.info("Downloader: Ready.")
+    logger.debug("Downloader: Debugging Started.")
+
     gallery_ids = config.get("GALLERIES", [])
     active_extension.pre_download_hook(config, gallery_ids)
 

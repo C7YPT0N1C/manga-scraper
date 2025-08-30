@@ -3,19 +3,7 @@
 
 import os, json, subprocess, requests
 
-from nhscraper.core.config import logger, config, update_env
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Extension: Suwayomi: Ready.")
-logger.debug("Extension: Suwayomi: Debugging started.")
+from nhscraper.core.config import logger, config, log_clarification, update_env
 
 # ===============================
 # GLOBALS

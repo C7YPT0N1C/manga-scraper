@@ -3,22 +3,10 @@
 
 import argparse
 
-from nhscraper.core.config import logger, config, setup_logger # TEST
+from nhscraper.core.config import logger, config, log_clarification, setup_logger # TEST
 from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("CLI: Ready.")
-logger.debug("CLI: Debugging Started.")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -241,4 +229,7 @@ def main():
     start_downloader()
 
 if __name__ == "__main__":
+    log_clarification()
+    logger.info("CLI: Ready.")
+    logger.debug("CLI: Debugging Started.")
     main()

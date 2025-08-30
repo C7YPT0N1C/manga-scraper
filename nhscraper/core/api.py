@@ -8,21 +8,9 @@ from urllib.parse import urljoin
 from tqdm import tqdm
 from threading import Thread, Lock
 
-from nhscraper.core.config import logger, config
+from nhscraper.core.config import logger, config, log_clarification
 
 app = Flask(__name__)
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("API: Ready.")
-logger.debug("API: Debugging Started.")
 
 ##################################################################################################################################
 # GLOBAL STATE
@@ -161,6 +149,10 @@ def all_galleries_status():
 # MAIN ENTRYPOINT
 ##################################################################################################################################
 if __name__ == "__main__":
+    log_clarification()
+    logger.info("API: Ready.")
+    logger.debug("API: Debugging Started.")
+    
     app.run(
     host="0.0.0.0",
     port=5000,

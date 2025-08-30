@@ -6,27 +6,18 @@
 
 import os, subprocess, json
 
-from nhscraper.core.config import logger, config, update_env
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():  
-    print()
-    logger.debug("")
-
-log_clarification()
-logger.info("Extension: Skeleton: Ready.")
-logger.debug("Extension: Skeleton: Debugging started.")
+from nhscraper.core.config import logger, config, log_clarification, update_env
 
 # Global variable for download path, update here.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"
 
 def update_extension_download_path():
+    log_clarification()
+    logger.info("Extension: Skeleton: Ready.")
+    logger.debug("Extension: Skeleton: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
 
-# Hook for pre-download functionality. Set download path to extension's desired download path.
+# Hook for pre-download functionality.#
 def pre_download_hook(config, gallery_list):
     update_extension_download_path()
     
