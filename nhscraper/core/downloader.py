@@ -12,12 +12,7 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-active_extension = get_selected_extension()
-log_clarification()
-logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
-download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
-if not config.get("DRY_RUN", False):
-    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
+active_extension = "skeleton"
 
 ####################################################################################################
 # UTILITIES
@@ -203,6 +198,17 @@ def start_downloader():
     log_clarification()
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
+    
+    ####################################################################################################
+    # Select extension
+    ####################################################################################################
+    global active_extension
+    active_extension = get_selected_extension()
+    log_clarification()
+    logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+    if not config.get("DRY_RUN", False):
+        os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
 
     gallery_ids = config.get("GALLERIES", [])
     active_extension.test_hook(config, gallery_ids) # TEST
