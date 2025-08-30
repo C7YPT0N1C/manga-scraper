@@ -48,33 +48,22 @@ session = build_session()  # cloudscraper session, default.
 # ===============================
 API_BASE = config["NHENTAI_API_BASE"]
 
-def fetch_galleries_by_artist(artist: str, start_page: int = 1, end_page: int | None = None):
-    return _fetch_gallery_ids(f'artist:"{artist}"', start_page, end_page)
-
-def fetch_galleries_by_group(group: str, start_page: int = 1, end_page: int | None = None):
-    return _fetch_gallery_ids(f'group:"{group}"', start_page, end_page)
-
-def fetch_galleries_by_tag(tag: str, start_page: int = 1, end_page: int | None = None):
-    return _fetch_gallery_ids(f'tag:"{tag}"', start_page, end_page)
-
-def fetch_galleries_by_parody(parody: str, start_page: int = 1, end_page: int | None = None):
-    return _fetch_gallery_ids(f'parody:"{parody}"', start_page, end_page)
-
-def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
-    ids = []
+def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
+    ids: set[int] = set()
     page = start_page
     try:
         log_clarification()
-        logger.info(f"Fetching gallery IDs for query '{query}' (starting page {start_page})")
+        logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
             if end_page is not None and page > end_page:
                 break
 
-            url = f"{API_BASE}?query={query}&sort=popular&page={page}"
+            url = f"{API_BASE}?query={query}&sort=date&page={page}"
             log_clarification()
             logger.debug(f"Requesting {url}")
 
+            resp = None
             for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
                 try:
                     resp = session.get(url, timeout=30)
@@ -87,14 +76,16 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
                     break
                 except requests.RequestException as e:
                     if attempt >= config.get("MAX_RETRIES", 3):
-                        logger.warning(f"Max retries reached for page {page}: {e}")
+                        logger.warning(f"Page {page} skipped after {attempt} retries: {e}")
+                        resp = None
                         break
                     wait = 2 ** attempt
                     logger.warning(f"Request failed (attempt {attempt}): {e}, retrying in {wait}s")
                     time.sleep(wait)
-            else:
+
+            if resp is None:
                 page += 1
-                continue  # skip page if all retries failed
+                continue  # skip this page if no success
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
@@ -105,7 +96,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
                 logger.info(f"No results on page {page}, stopping early")
                 break
 
-            ids.extend(batch)
+            ids.update(batch)
             page += 1
 
         logger.info(f"Fetched total {len(ids)} galleries for query '{query}'")
@@ -113,7 +104,7 @@ def _fetch_gallery_ids(query: str, start_page: int, end_page: int | None):
 
     except Exception as e:
         logger.warning(f"Failed to fetch galleries for query '{query}': {e}")
-        return []
+        return set()
 
 # ===============================
 # FETCH METADATA

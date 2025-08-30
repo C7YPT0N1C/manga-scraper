@@ -6,7 +6,7 @@ import argparse
 from nhscraper.core.logger import *
 from nhscraper.core.config import *
 from nhscraper.core.downloader import *
-from nhscraper.core.fetchers import fetch_galleries_by_artist, fetch_galleries_by_group, fetch_galleries_by_tag, fetch_galleries_by_parody
+from nhscraper.core.fetchers import fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
 # ------------------------------
@@ -80,6 +80,14 @@ def parse_args():
         help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. "
             "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
     )
+    
+    parser.add_argument(
+        "--search",
+        nargs='+',
+        metavar=("search", "START_PAGE", "END_PAGE"),
+        help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. "
+            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
+    )
 
 
     # Filters
@@ -119,6 +127,18 @@ def parse_args():
 
     return parser.parse_args()
 
+def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]:
+    """Helper to parse CLI args and call fetch_gallery_ids."""
+    if not arg_list:
+        return set()
+
+    name = arg_list[0]
+    start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
+    end_page = int(arg_list[2]) if len(arg_list) > 2 else None
+
+    query = f'{query_type}:"{name}"'
+    return fetch_gallery_ids(query, start_page, end_page)
+
 def build_gallery_list(args):
     gallery_ids = set()
 
@@ -135,42 +155,24 @@ def build_gallery_list(args):
     if args.galleries:
         ids = [int(x.strip()) for x in args.galleries.split(",") if x.strip().isdigit()]
         gallery_ids.update(ids)
-
+    
     # ------------------------------
-    # Artist
+    # Artist / Group / Tag / Parody / Search
     # ------------------------------
     if args.artist:
-        artist_name = args.artist[0]
-        start_page = int(args.artist[1]) if len(args.artist) > 1 else 1
-        end_page = int(args.artist[2]) if len(args.artist) > 2 else None
-        gallery_ids.update(fetch_galleries_by_artist(artist_name, start_page, end_page))
+        gallery_ids.update(_handle_gallery_arg(args.artist, "artist"))
 
-    # ------------------------------
-    # Group
-    # ------------------------------
     if args.group:
-        group_name = args.group[0]
-        start_page = int(args.group[1]) if len(args.group) > 1 else 1
-        end_page = int(args.group[2]) if len(args.group) > 2 else None
-        gallery_ids.update(fetch_galleries_by_group(group_name, start_page, end_page))
+        gallery_ids.update(_handle_gallery_arg(args.group, "group"))
 
-    # ------------------------------
-    # Tag
-    # ------------------------------
     if args.tag:
-        tag_name = args.tag[0]
-        start_page = int(args.tag[1]) if len(args.tag) > 1 else 1
-        end_page = int(args.tag[2]) if len(args.tag) > 2 else None
-        gallery_ids.update(fetch_galleries_by_tag(tag_name, start_page, end_page))
+        gallery_ids.update(_handle_gallery_arg(args.tag, "tag"))
 
-    # ------------------------------
-    # Parody
-    # ------------------------------
     if args.parody:
-        parody_name = args.parody[0]
-        start_page = int(args.parody[1]) if len(args.parody) > 1 else 1
-        end_page = int(args.parody[2]) if len(args.parody) > 2 else None
-        gallery_ids.update(fetch_galleries_by_parody(parody_name, start_page, end_page))
+        gallery_ids.update(_handle_gallery_arg(args.parody, "parody"))
+    
+    if args.search:
+        gallery_ids.update(_handle_gallery_arg(args.search, "search"))
 
     # ------------------------------
     # Final sorted list
@@ -235,8 +237,8 @@ def main():
     # ------------------------------
     # Download galleries
     # ------------------------------
-    download_galleries(gallery_list)
-    start_downloader()
+    #download_galleries(gallery_list)
+    start_downloader() # TEST
 
     # ------------------------------
     # Post-download hook
