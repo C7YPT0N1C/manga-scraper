@@ -120,6 +120,8 @@ def process_gallery(gallery_id):
     
     download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", None)
     extension_name = getattr(active_extension, "__name__", "skeleton")
+    log_clarification()
+    logger.info(f"Active Download Location: {download_location}")
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
     gallery_attempts = 0
@@ -164,6 +166,7 @@ def process_gallery(gallery_id):
                 # Threaded downloads with progress bar
                 futures = []
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    log_clarification()
                     for i in range(num_pages):
                         page = i + 1
                         img_url = fetch_image_url(meta, page)

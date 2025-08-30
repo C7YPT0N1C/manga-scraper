@@ -146,7 +146,7 @@ def fetch_gallery_metadata(gallery_id: int):
 def fetch_image_url(meta: dict, page: int):
     try:
         log_clarification()
-        logger.debug(f"Building image URL for Gallery {meta['id']} page {page}")
+        logger.debug(f"Building image URL for Gallery {meta['id']}: Page {page}")
 
         ext_map = {
             "j": "jpg",
