@@ -17,6 +17,10 @@ def log_clarification():
     print()
     logger.debug("")
 
+log_clarification()
+logger.info("CLI ready.")
+logger.debug("CLI Debugging started.")
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper with Suwayomi integration"

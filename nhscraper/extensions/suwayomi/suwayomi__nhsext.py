@@ -14,6 +14,10 @@ def log_clarification():
     print()
     logger.debug("")
 
+log_clarification()
+logger.info("Extension: Suwayomi: Ready.")
+logger.debug("Extension: Suwayomi: Debugging started.")
+
 # ===============================
 # GLOBALS
 # ===============================

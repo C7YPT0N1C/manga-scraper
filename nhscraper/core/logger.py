@@ -30,11 +30,10 @@ log_level = logging.INFO # Default log level to 'info'
 def setup_logger(dry_run=False, verbose=False):
     global log_level
     log_level = logging.DEBUG if dry_run or verbose else logging.INFO
-    logger.setLevel(log_level)
 
-# Manual Log Level Override # TEST
-#log_level = logging.INFO
-#logger.setLevel(log_level)
+log_level = logging.DEBUG # Manual Log Level Override
+
+logger.setLevel(log_level)
 
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 

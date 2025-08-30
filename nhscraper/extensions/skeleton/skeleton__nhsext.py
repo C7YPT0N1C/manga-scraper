@@ -17,17 +17,19 @@ def log_clarification():
     print()
     logger.debug("")
 
-# Global variable for download path, leave empty initially
+log_clarification()
+logger.info("Extension: Skeleton: Ready.")
+logger.debug("Extension: Skeleton: Debugging started.")
+
+# Global variable for download path, update here.
 extension_download_path = "/opt/nhentai-scraper/downloads"
 
-def update_extension_download_path(PATH):
-    global extension_download_path
-    extension_download_path = PATH
+def update_extension_download_path():
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
 
 # Hook for pre-download functionality. Set download path to extension's desired download path.
 def pre_download_hook(config, gallery_list):
-    update_extension_download_path("./downloads_skeleton")
+    update_extension_download_path()
     
     log_clarification()
     logger.debug(f"Skeleton extension: Pre-download hook called.")
