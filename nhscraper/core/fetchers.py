@@ -30,7 +30,7 @@ def build_session():
         "Referer": "https://nhentai.net/",
     })
 
-    if config.get("use_tor", True):
+    if config.get("USE_TOR", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies.update({"http": proxy, "https": proxy})
         log_clarification()

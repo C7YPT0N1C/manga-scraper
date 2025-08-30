@@ -36,7 +36,7 @@ else:
 logger.setLevel(logging.DEBUG)
 log_console_level = logging.DEBUG
 
-formatter = logging.Formatter("[%(levelname)s] %(message)s")
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
 # Console handler
 ch = logging.StreamHandler()

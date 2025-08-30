@@ -222,4 +222,4 @@ def get_selected_extension(name: str = "skeleton"):
 # ------------------------------
 # Run on import
 # ------------------------------
-load_installed_extensions()
+#load_installed_extensions()

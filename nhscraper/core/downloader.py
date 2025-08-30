@@ -34,7 +34,7 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    title_type = config.get("title_type", "pretty").lower()
+    title_type = config.get("TITLE_TYPE", "pretty").lower()
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
     if "|" in title: title = title.split("|")[-1].strip()
     import re
@@ -42,8 +42,8 @@ def clean_title(meta):
     return safe_name(title)
 
 def dynamic_sleep(stage="gallery"):
-    num_galleries = max(1, len(config.get("galleries", [])))
-    total_load = config.get("threads_galleries", 1) * config.get("threads_images", 4)
+    num_galleries = max(1, len(config.get("GALLERIES", [])))
+    total_load = config.get("THREADS_GALLERIES", 1) * config.get("THREADS_IMAGES", 4)
     base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
     scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
     sleep_time = random.uniform(base_min*scale, base_max*scale)
@@ -62,7 +62,7 @@ def download_image(url, path, session, retries=None):
         logger.debug(f"Already exists, skipping: {path}")
         return True
 
-    if config.get("dry_run", False):
+    if config.get("DRY_RUN", False):
         logger.info(f"[DRY-RUN] Would download {url} -> {path}")
         return True
 

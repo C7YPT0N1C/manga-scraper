@@ -19,7 +19,7 @@ def log_clarification():
 # ===============================
 SUWAYOMI_DIR = "/opt/suwayomi/local"
 extension_download_path = SUWAYOMI_DIR
-GRAPHQL_URL = config.get("GRAPHQL_URL", "http://127.0.0.1:4567/api/graphql")
+GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 STUB_ONLY = False  # If True, no real GraphQL calls are made, only stubs
 
 # ===============================
@@ -31,7 +31,7 @@ def graphql_request(query, variables=None, USE_STUB=False):
         logger.info(f"[STUB] Skipping GraphQL call. Query: {query}, Variables: {variables}")
         return {"data": "stub"}
 
-    if config.get("dry_run", False):
+    if config.get("DRY_RUN", False):
         log_clarification()
         logger.info("[DRY-RUN] Skipping GraphQL request")
         return None
