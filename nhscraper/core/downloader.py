@@ -169,12 +169,12 @@ def process_gallery(gallery_id):
             if not should_download_gallery(meta):
                 logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
                 db.mark_gallery_completed(gallery_id)
-                active_extension.after_gallery_download(meta)
+                active_extension.after_gallery_download_hook(meta)
                 return
 
             gallery_failed = False
 
-            active_extension.during_download_hook(config, gallery_id, meta)
+            active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
             artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
@@ -227,7 +227,7 @@ def process_gallery(gallery_id):
                 logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
                 continue
 
-            active_extension.after_gallery_download(meta)
+            active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
             log_clarification()
             logger.info(f"Completed Gallery {gallery_id}")
@@ -248,7 +248,8 @@ def start_downloader():
     logger.debug("Downloader: Debugging Started.")
 
     gallery_ids = config.get("GALLERIES", [])
-    active_extension.pre_download_hook(config, gallery_ids)
+    active_extension.test_hook(config, gallery_ids) # TEST
+    active_extension.pre_run_hook(config, gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -265,5 +266,5 @@ def start_downloader():
     log_clarification()
     logger.info("All galleries processed")
     
-    active_extension.after_all_downloads(gallery_ids)
-    active_extension.post_download_hook(config, gallery_ids)
+    active_extension.after_all_galleries_download_hook(gallery_ids)
+    active_extension.post_run_hook(config, gallery_ids)

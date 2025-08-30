@@ -93,17 +93,17 @@ def uninstall_extension():
 # ===============================
 # DOWNLOAD HOOKS
 # ===============================
-def pre_download_hook(config_dict, gallery_list):
+def pre_run_hook(config_dict, gallery_list):
     global extension_download_path
     extension_download_path = SUWAYOMI_DIR
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
     logger.debug("Suwayomi extension: Pre-download hook called")
     return gallery_list
 
-def during_download_hook(config_dict, gallery_id, gallery_metadata):
+def during_gallery_download_hook(config_dict, gallery_id, gallery_metadata):
     logger.debug(f"Suwayomi extension: During-download hook for gallery {gallery_id}")
 
-def after_gallery_download(meta: dict):
+def after_gallery_download_hook(meta: dict):
     global extension_download_path
     artist = meta["artists"][0] if meta.get("artists") else "Unknown"
     details = {
@@ -125,10 +125,10 @@ def after_gallery_download(meta: dict):
             json.dump(details, f, ensure_ascii=False, indent=2)
         logger.debug(f"Suwayomi metadata saved for gallery {meta['id']}")
 
-def after_all_downloads(all_meta: list):
+def after_all_galleries_download_hook(all_meta: list):
     logger.debug(f"Suwayomi extension: batch of {len(all_meta)} galleries downloaded")
 
-def post_download_hook(config_dict, completed_galleries):
+def post_run_hook(config_dict, completed_galleries):
     global extension_download_path
     extension_download_path = ""
     update_env("EXTENSION_DOWNLOAD_PATH", "")
