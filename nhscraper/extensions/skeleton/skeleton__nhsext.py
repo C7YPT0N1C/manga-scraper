@@ -28,12 +28,12 @@ def pre_download_hook(config, gallery_list):
 # Hook for functionality during download
 def during_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
-    logger.debug(f"Extension: Skeleton: During-download hook called: Gallery {gallery_id}")
+    logger.debug(f"Extension: Skeleton: During-download hook called: Gallery: {gallery_id}")
 
 # Hook for functionality after each gallery download
 def after_gallery_download(meta: dict):
     log_clarification()
-    logger.debug(f"Extension: Skeleton: Post-Gallery Download hook called: Gallery {meta['id']} downloaded")
+    logger.debug(f"Extension: Skeleton: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
 
 # Hook for functionality after all downloads are complete
 def after_all_downloads(all_meta: list):
