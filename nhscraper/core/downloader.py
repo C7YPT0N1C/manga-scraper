@@ -83,6 +83,7 @@ def download_image(gallery, page, url, path, session, retries=None):
         return True
 
     if config.get("DRY_RUN", False):
+        log_clarification()
         logger.info(f"[DRY-RUN] Would download {url} -> {path}")
         return True
 
@@ -91,6 +92,7 @@ def download_image(gallery, page, url, path, session, retries=None):
             r = session.get(url, timeout=30, stream=True)
             if r.status_code == 429:
                 wait = 2 ** attempt
+                log_clarification()
                 logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
                 time.sleep(wait)
                 continue
@@ -100,12 +102,15 @@ def download_image(gallery, page, url, path, session, retries=None):
                 for chunk in r.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
+            log_clarification()
             logger.debug(f"Downloaded Gallery {gallery}: Page {page} to {path}")
             return True
         except Exception as e:
             wait = 2 ** attempt
+            log_clarification()
             logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
             time.sleep(wait)
+    log_clarification()
     logger.error(f"Failed to download after {retries} attempts: {url}")
     return False
 

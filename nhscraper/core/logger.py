@@ -33,8 +33,8 @@ else:
     log_console_level = logging.INFO
 
 # Manual Log Level Override # TEST
-logger.setLevel(logging.DEBUG)
-log_console_level = logging.DEBUG
+#logger.setLevel(logging.DEBUG)
+#log_console_level = logging.DEBUG
 
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
