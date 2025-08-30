@@ -147,7 +147,7 @@ NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
 NHENTAI_MIRRORS=https://i.nhentai.net
 
 # Gallery ID selection
-RANGE_START=592000
+RANGE_START=500000
 RANGE_END=600000
 GALLERIES=
 
