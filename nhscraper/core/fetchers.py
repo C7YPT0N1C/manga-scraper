@@ -203,12 +203,12 @@ def get_tag_names(meta, tag_type):
     Handles splitting cases like 'Artist A | Artist B'.
     """
     tags = meta.get("tags", {}).get(tag_type, [])
-    normalized = []
+    normalised = []
     for tag in tags:
         # split on | if present, strip whitespace
         parts = [t.strip() for t in tag.split("|") if t.strip()]
-        normalized.extend(parts)
-    return normalized or None
+        normalised.extend(parts)
+    return normalised or None
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
