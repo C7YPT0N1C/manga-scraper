@@ -199,9 +199,13 @@ def update_config(args, gallery_list): # Update config
 
 def main():
     args = parse_args()
-    
-    setup_logger(dry_run=args.dry_run, verbose=args.verbose) # Set logger to correct log level.
 
+    # Overwrite placeholder logger with real one
+    logger = setup_logger(
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+    ) 
+    
     # ------------------------------
     # Build gallery list
     # ------------------------------
@@ -217,13 +221,13 @@ def main():
     log_clarification()
     logger.debug(f"Updated Config: {config}")
     
-    build_session() # Call fetcher to build cloudscraper session.
+    build_session()
 
     # ------------------------------
     # Handle extension installation/uninstallation
     # ------------------------------
     if args.install_extension:
-        update_local_manifest_from_remote()  # just call it without argument
+        update_local_manifest_from_remote()
         install_extension(args.install_extension)
         return
 
@@ -234,8 +238,7 @@ def main():
     # ------------------------------
     # Download galleries
     # ------------------------------
-    #download_galleries(gallery_list)
-    start_downloader() # TEST
+    start_downloader()
 
 if __name__ == "__main__":
     main()

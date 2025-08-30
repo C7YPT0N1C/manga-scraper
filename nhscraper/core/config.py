@@ -51,17 +51,15 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-
 def setup_logger(dry_run=False, verbose=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
     """
-    logger = logging.getLogger("nhscraper")
 
-    # --- Clear existing handlers to prevent duplicates ---
-    if logger.handlers:
-        logger.handlers.clear()
+    # Always get the same logger
+    logger = logging.getLogger("nhscraper")
+    logger.handlers.clear()
 
     # --- Formatter ---
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -77,23 +75,30 @@ def setup_logger(dry_run=False, verbose=False):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # --- Master file handler (persistent across runs) ---
+    # --- File handlers ---
+    # Master log (always append)
     fh_master = logging.FileHandler(MASTER_LOG_FILE, mode="a", encoding="utf-8")
-    fh_master.setLevel(logging.DEBUG)  # capture everything
+    fh_master.setLevel(logging.DEBUG)
     fh_master.setFormatter(formatter)
     logger.addHandler(fh_master)
 
-    # --- Runtime file handler (new for each execution) ---
+    # Runtime log (new file per run, timestamped)
     fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
     fh_runtime.setLevel(logging.DEBUG)
     fh_runtime.setFormatter(formatter)
     logger.addHandler(fh_runtime)
 
-    # --- Initial log level banner ---
+    # Announce level
     if dry_run or verbose:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")
+
+    return logger
+
+# --- Placeholder logger so imports don’t crash before setup_logger() runs ---
+logger = logging.getLogger("nhscraper")
+logger.addHandler(logging.NullHandler())
 
 ##########################################################################################
 # LOGGER
