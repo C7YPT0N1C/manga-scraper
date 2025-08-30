@@ -22,6 +22,15 @@ if not config.get("DRY_RUN", False):
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+def get_tag_names(meta, tag_type):
+    """
+    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
+    Returns ['Unknown'] if none found.
+    """
+    if not meta or "tags" not in meta:
+        return ["Unknown"]
+    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
+    return names or ["Unknown"]
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
@@ -51,7 +60,7 @@ def should_download_gallery(meta):
 
     dry_run = config.get("DRY_RUN", False)
 
-    for artist in meta.get("artists", ["Unknown Artist"]):
+    for artist in get_tag_names(meta, "artist"):
         artist_folder = os.path.join(download_location, safe_name(artist))
         doujin_folder = os.path.join(artist_folder, clean_title(meta))
 
@@ -166,7 +175,7 @@ def process_gallery(gallery_id):
             # Call pre-download hook once per gallery batch
             active_extension.during_download_hook(config, gallery_id, meta)
 
-            for artist in meta.get("artists", ["Unknown Artist"]):
+            for artist in get_tag_names(meta, "artist"):
                 artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
                 doujin_folder = os.path.join(artist_folder, clean_title(meta))
                 if not config.get("DRY_RUN", False):
