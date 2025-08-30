@@ -10,7 +10,9 @@ from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url
 
 # Import active extension
-from nhscraper.extensions import active_extension
+from nhscraper.extensions.extension_loader import *
+
+active_extension = get_selected_extension()
 
 log_clarification()
 logger.info("Downloader ready.")
