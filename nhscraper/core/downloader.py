@@ -59,17 +59,22 @@ def should_download_gallery(meta):
         return False
 
     dry_run = config.get("DRY_RUN", False)
+    gallery_title = clean_title(meta)
+    num_pages = len(meta.get("images", {}).get("pages", []))
 
-    for artist in get_tag_names(meta, "artist"):
+    if num_pages == 0:
+        logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
+        return False
+
+    for artist in get_tag_names(meta, "artist") or ["Unknown Artist"]:
         artist_folder = os.path.join(download_location, safe_name(artist))
-        doujin_folder = os.path.join(artist_folder, clean_title(meta))
+        doujin_folder = os.path.join(artist_folder, gallery_title)
 
         # Skip existence check if dry-run
         if not dry_run and os.path.exists(doujin_folder):
-            num_pages = meta.get("num_pages", 0)
             all_exist = all(
                 any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
-                    for ext in ("jpg","png","gif","webp"))
+                    for ext in ("jpg", "png", "gif", "webp"))
                 for i in range(num_pages)
             )
             if all_exist:
@@ -172,33 +177,30 @@ def process_gallery(gallery_id):
 
             gallery_failed = False
 
-            # Call pre-download hook once per gallery batch
             active_extension.during_download_hook(config, gallery_id, meta)
 
-            for artist in get_tag_names(meta, "artist"):
-                artist_folder = os.path.join(download_location, safe_name(artist)) # TEST
-                doujin_folder = os.path.join(artist_folder, clean_title(meta))
+            artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
+            gallery_title = clean_title(meta)
+
+            for artist in artists:
+                artist_folder = os.path.join(download_location, safe_name(artist))
+                doujin_folder = os.path.join(artist_folder, gallery_title)
                 if not config.get("DRY_RUN", False):
                     os.makedirs(doujin_folder, exist_ok=True)
 
-                num_pages = meta.get("num_pages", 0)
+                num_pages = len(meta.get("images", {}).get("pages", []))
                 if num_pages == 0:
                     log_clarification()
                     logger.warning(f"Gallery {gallery_id} has no pages, skipping")
                     gallery_failed = True
                     break
 
-                # Threaded downloads with progress bar
+                # Threaded downloads
                 futures = []
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     log_clarification()
                     for i in range(num_pages):
                         page = i + 1
-                        
-                        if not meta or not meta.get("images"):
-                            logger.warning(f"Gallery {gallery_id}: Metadata incomplete, skipping Page: {page}")
-                            gallery_failed = True
-                            continue
 
                         img_url = fetch_image_url(meta, page)
                         if not img_url:
@@ -206,12 +208,10 @@ def process_gallery(gallery_id):
                             gallery_failed = True
                             continue
                         
-                        # Build the full path for the image
+                        # Correct path: always [ARTIST]/[TITLE]/image
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
-                        img_path = os.path.join(
-                            doujin_folder,               # Use the folder already created above
-                            img_filename                 # Filename
-                        )
+                        img_path = os.path.join(doujin_folder, img_filename)
+
                         futures.append(executor.submit(download_image, gallery_id, page, img_url, img_path, session))
 
                     for _ in tqdm(concurrent.futures.as_completed(futures),
@@ -225,7 +225,6 @@ def process_gallery(gallery_id):
                 logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
                 continue
 
-            # Call after-gallery hook
             active_extension.after_gallery_download(meta)
             db.mark_gallery_completed(gallery_id)
             log_clarification()
