@@ -183,3 +183,25 @@ def fetch_image_url(meta: dict, page: int):
     except Exception as e:
         logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
         return None
+
+# ===============================
+# METADATA CLEANING
+# ===============================
+def get_tag_names(meta, tag_type):
+    """
+    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
+    Returns ['Unknown'] if none found.
+    """
+    if not meta or "tags" not in meta:
+        return ["Unknown"]
+    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
+    return names or ["Unknown"]
+
+def safe_name(s: str) -> str:
+    return s.replace("/", "-").replace("\\", "-").strip()
+
+def clean_title(meta):
+    title_obj = meta.get("title", {}) or {}
+    # Prefer 'pretty', then 'english', then 'japanese', then fallback
+    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
+    return safe_name(title)

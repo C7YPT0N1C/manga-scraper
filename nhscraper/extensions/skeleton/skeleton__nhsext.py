@@ -7,7 +7,7 @@
 import os, time, subprocess, json, requests
 
 from nhscraper.core.config import logger, config, log_clarification, update_env
-from nhscraper.core.downloader import get_tag_names, clean_title
+from nhscraper.core.fetchers import get_tag_names, safe_name, clean_title
 
 # Global variable for download path, update here.
 extension_download_path = "/opt/nhentai-scraper/downloads/default"

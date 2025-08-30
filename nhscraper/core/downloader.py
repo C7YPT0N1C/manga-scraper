@@ -6,35 +6,22 @@ from tqdm import tqdm
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import build_session, session, fetch_gallery_metadata, fetch_image_url
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-active_extension = "skeleton"
+active_extension = get_selected_extension()
+log_clarification()
+logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+if not config.get("DRY_RUN", False):
+    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
 
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
-def get_tag_names(meta, tag_type):
-    """
-    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
-    Returns ['Unknown'] if none found.
-    """
-    if not meta or "tags" not in meta:
-        return ["Unknown"]
-    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
-    return names or ["Unknown"]
-
-def safe_name(s: str) -> str:
-    return s.replace("/", "-").replace("\\", "-").strip()
-
-def clean_title(meta):
-    title_obj = meta.get("title", {}) or {}
-    # Prefer 'pretty', then 'english', then 'japanese', then fallback
-    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
-    return safe_name(title)
 
 def build_gallery_path(meta):
     # Ask extension for variables
@@ -198,17 +185,6 @@ def start_downloader():
     log_clarification()
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
-    
-    ####################################################################################################
-    # Select extension
-    ####################################################################################################
-    global active_extension
-    active_extension = get_selected_extension()
-    log_clarification()
-    logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
-    download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
-    if not config.get("DRY_RUN", False):
-        os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
 
     gallery_ids = config.get("GALLERIES", [])
     active_extension.test_hook(config, gallery_ids) # TEST
