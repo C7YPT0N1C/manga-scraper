@@ -113,47 +113,47 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
         try:
             log_clarification()
-            logger.debug(f"Fetching metadata for Gallery {gallery_id} from {url}")
+            logger.debug(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
                 wait = 2 ** attempt
-                logger.warning(f"429 rate limit hit for Gallery {gallery_id}, waiting {wait}s")
+                logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             
             log_clarification()
-            logger.debug(f"Raw API response for Gallery {gallery_id}: {resp.text}")
+            logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
             
             data = resp.json()
 
             # Validate the response
             if not isinstance(data, dict):
-                logger.error(f"Unexpected response type for Gallery {gallery_id}: {type(data)}")
+                logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                 return None
 
             log_clarification()
-            logger.debug(f"Fetched metadata for Gallery {gallery_id}: {data}")
+            logger.debug(f"Fetched metadata for Gallery: {gallery_id}: {data}")
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
-                logger.warning(f"Gallery {gallery_id} not found (404), skipping retries.")
+                logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
             if attempt >= config.get("MAX_RETRIES", 3):
-                logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
+                logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
             log_clarification()
-            logger.warning(f"Attempt {attempt} failed for Gallery {gallery_id}: {e}, retrying in {wait}s")
+            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", 3):
-                logger.warning(f"Failed to fetch metadata for Gallery {gallery_id} after max retries: {e}")
+                logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
             log_clarification()
-            logger.warning(f"Attempt {attempt} failed for Gallery {gallery_id}: {e}, retrying in {wait}s")
+            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
 def fetch_image_url(meta: dict, page: int):
@@ -197,23 +197,11 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_meta_tag_namesssssssssssss(meta, tag_type):
-    """
-    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
-    Returns ['Unknown'] if none found.
-    """
-    if not meta or "tags" not in meta:
-        return ["Unknown"]
-    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
-    return names or ["Unknown"]
-
-def get_meta_tag_names(meta, tag_type):
+def get_meta_tags(meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
     - Splits names on "|".
     - Returns ['Unknown'] if none found.
-    - Filters tag names based on config settings:
-        e.g., config.get('LANGUAGES') for language, config.get('CATEGORIES') for categories, etc.
     """
     if not meta or "tags" not in meta:
         return ["Unknown"]
@@ -221,24 +209,8 @@ def get_meta_tag_names(meta, tag_type):
     names = []
     for tag in meta["tags"]:
         if tag.get("type") == tag_type and tag.get("name"):
-            # Split on "|" and clean whitespace
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
-
-    # Apply config-based filtering
-    excluded_lower = config.get("EXCLUDED_TAGS", [])
-    names = [n for n in names if n.lower() not in excluded_lower]
-    
-    if tag_type.lower() == "language":
-        allowed = config.get("LANGUAGE")  # e.g., ['english']
-        if allowed:
-            allowed_lower = [a.lower() for a in allowed]
-            names = [n for n in names if n.lower() in allowed_lower]
-
-    # Example: you can do similar for category or other tag types:
-    # elif tag_type.lower() == "category":
-    #     allowed = config.get("CATEGORIES")
-    #     ...
 
     return names or ["Unknown"]
 

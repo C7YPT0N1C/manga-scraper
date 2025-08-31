@@ -100,8 +100,8 @@ def parse_args():
     )
 
     # Threads
-    parser.add_argument("--threads-galleries", type=int, default=4)
-    parser.add_argument("--threads-images", type=int, default=4)
+    parser.add_argument("--threads-galleries", type=int, default=2)
+    parser.add_argument("--threads-images", type=int, default=10)
     
     parser.add_argument(
         "--max-retries",

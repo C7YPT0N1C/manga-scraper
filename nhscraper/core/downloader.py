@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
@@ -23,6 +23,8 @@ if not config.get("DRY_RUN", False):
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+gallery_threads = 2
+image_threads = 10
 
 def build_gallery_path(meta):
     # Ask extension for variables
@@ -41,29 +43,37 @@ def build_gallery_path(meta):
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage="gallery"):
-    num_galleries = max(1, len(config.get("GALLERIES", [])))
-    total_load = config.get("THREADS_GALLERIES", 4) * config.get("THREADS_IMAGES", 4)
-    base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
-    scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
-    sleep_time = random.uniform(base_min*scale, base_max*scale)
-    log_clarification()
-    logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
-    time.sleep(sleep_time)
+def dynamic_sleep(stage):
+    if stage=="gallery":
+        num_galleries = max(1, len(config.get("GALLERIES", [])))
+        total_load = config.get("THREADS_GALLERIES", 2) * config.get("THREADS_IMAGES", 10)
+        base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
+        scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
+        sleep_time = random.uniform(base_min*scale, base_max*scale)
+        log_clarification()
+        logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
+        time.sleep(sleep_time)
 
 def should_download_gallery(meta, num_pages):
+    """
+    Decide whether to download a gallery based on:
+      - language requirements (must include requested language or "translated")
+      - excluded tags (any tag in EXCLUDED_TAGS skips gallery)
+      - existing files (skip if all pages exist)
+    """
     if not meta:
         return False
 
     dry_run = config.get("DRY_RUN", False)
-
-    if num_pages == 0:
-        logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
-        return False
-
+    gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta)
 
-    # Skip existence check if dry-run
+    # 0 pages, skip
+    if num_pages == 0:
+        logger.warning(f"Gallery: {gallery_id}: No pages, skipping")
+        return False
+
+    # Skip if already fully downloaded
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -71,122 +81,118 @@ def should_download_gallery(meta, num_pages):
             for i in range(num_pages)
         )
         if all_exist:
-            logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
+            logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
+            return False
+
+    # Check excluded tags
+    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    if excluded_tags:
+        gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
+        if any(tag.lower() in gallery_tags for tag in excluded_tags):
+            logger.info(f"Skipping Gallery: {gallery_id}: Filtered tags ({gallery_tags})")
+            return False
+    
+    # Check language requirement
+    allowed_langs = config.get("LANGUAGE", [])
+    if allowed_langs:
+        gallery_langs = get_meta_tags(meta, "language")
+        gallery_langs_lower = [l.lower() for l in gallery_langs]
+        allowed_lower = [l.lower() for l in allowed_langs]
+        # Include 'translated' as acceptable if any requested language is present
+        if not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
+            logger.info(f"Skipping Gallery: {gallery_id}: Filtered language ({gallery_langs})")
             return False
 
     return True
 
-def process_galleries(gallery_list):
-    """
-    Processes multiple galleries with an overall progress bar.
-    """
-    total_galleries = len(gallery_list)
-    threads = config.get("THREADS_IMAGES", 4)
 
-    # Outer progress bar for galleries
-    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={threads}]", unit="gallery") as overall_pbar:
-        for gallery_id in gallery_list:
-            process_gallery(gallery_id)
-            overall_pbar.update(1)
+def process_galleries(gallery_ids):
+    for gallery_id in gallery_ids:
+        extension_name = getattr(active_extension, "__name__", "skeleton")
+        db.mark_gallery_started(gallery_id, download_location, extension_name)
 
-def process_gallery(gallery_id):
-    extension_name = getattr(active_extension, "__name__", "skeleton")
-    
-    log_clarification()
-    logger.info(f"Active Download Location: {download_location}")
-    
-    db.mark_gallery_started(gallery_id, download_location, extension_name)
+        gallery_attempts = 0
+        max_gallery_attempts = config.get("MAX_RETRIES", 3)
 
-    gallery_attempts = 0
-    max_gallery_attempts = config.get("MAX_RETRIES", 3)
+        while gallery_attempts < max_gallery_attempts:
+            gallery_attempts += 1
+            try:
+                log_clarification()
+                logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
+                dynamic_sleep("gallery")
 
-    while gallery_attempts < max_gallery_attempts:
-        gallery_attempts += 1
-        try:
-            log_clarification()
-            logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
-            dynamic_sleep("gallery")
+                meta = fetch_gallery_metadata(gallery_id)
+                if not meta or not isinstance(meta, dict):
+                    logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
+                    if gallery_attempts >= max_gallery_attempts:
+                        db.mark_gallery_failed(gallery_id)
+                    continue
 
-            meta = fetch_gallery_metadata(gallery_id)
-            if not meta or not isinstance(meta, dict):
-                logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
+                num_pages = len(meta.get("images", {}).get("pages", []))
+                if not should_download_gallery(meta, num_pages):
+                    logger.info(f"Skipping Gallery: {gallery_id}")
+                    db.mark_gallery_completed(gallery_id)
+                    active_extension.after_gallery_download_hook(meta)
+                    break
+
+                gallery_failed = False
+                active_extension.during_gallery_download_hook(config, gallery_id, meta)
+
+                artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
+                gallery_title = clean_title(meta)
+
+                grouped_tasks = []
+                for artist in artists:
+                    safe_artist = safe_name(artist)
+                    doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
+                    if not config.get("DRY_RUN", False):
+                        os.makedirs(doujin_folder, exist_ok=True)
+
+                    artist_tasks = []
+                    for i in range(num_pages):
+                        page = i + 1
+                        img_url = fetch_image_url(meta, page)
+                        if not img_url:
+                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
+                            gallery_failed = True
+                            continue
+
+                        img_filename = f"{page}.{img_url.split('.')[-1]}"
+                        img_path = os.path.join(doujin_folder, img_filename)
+                        artist_tasks.append((page, img_url, img_path, safe_artist))
+
+                    if artist_tasks:
+                        grouped_tasks.append((safe_artist, artist_tasks))
+
+                total_images = sum(len(t[1]) for t in grouped_tasks)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                        for safe_artist, artist_tasks in grouped_tasks:
+                            pbar.set_postfix_str(f"Artist: {safe_artist}")
+                            futures = [
+                                executor.submit(
+                                    active_extension.download_images_hook,
+                                    gallery_id, page, url, path, session, pbar, safe_artist
+                                )
+                                for page, url, path, _ in artist_tasks
+                            ]
+                            for _ in concurrent.futures.as_completed(futures):
+                                pbar.update(1)
+
+                if gallery_failed:
+                    logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
+                    continue
+
+                active_extension.after_gallery_download_hook(meta)
+                db.mark_gallery_completed(gallery_id)
+                logger.info(f"Completed Gallery: {gallery_id}")
+                log_clarification()
+                break
+
+            except Exception as e:
+                logger.error(f"Error processing Gallery: {gallery_id}: {e}")
                 if gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
-                continue
-
-            num_pages = len(meta.get("images", {}).get("pages", []))
-            if num_pages == 0:
-                logger.warning(f"Gallery {gallery_id} has no pages, skipping")
-                db.mark_gallery_failed(gallery_id)
-                return
-
-            if not should_download_gallery(meta, num_pages):
-                logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
-                db.mark_gallery_completed(gallery_id)
-                active_extension.after_gallery_download_hook(meta)
-                return
-
-            gallery_failed = False
-            active_extension.during_gallery_download_hook(config, gallery_id, meta)
-
-            artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
-            gallery_title = clean_title(meta)
-            log_clarification()
-            logger.debug(f"Gallery title: '{gallery_title}'")
-
-            # Prepare tasks grouped by artist
-            grouped_tasks = []
-            for artist in artists:
-                safe_artist = safe_name(artist)
-                doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
-                if not config.get("DRY_RUN", False):
-                    os.makedirs(doujin_folder, exist_ok=True)
-
-                artist_tasks = []
-                for i in range(num_pages):
-                    page = i + 1
-                    img_url = fetch_image_url(meta, page)
-                    if not img_url:
-                        logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
-                        gallery_failed = True
-                        continue
-
-                    img_filename = f"{page}.{img_url.split('.')[-1]}"
-                    img_path = os.path.join(doujin_folder, img_filename)
-                    artist_tasks.append((page, img_url, img_path, safe_artist))
-
-                if artist_tasks:
-                    grouped_tasks.append((safe_artist, artist_tasks))
-
-            # Inner progress bar for this gallery
-            total_images = sum(len(t[1]) for t in grouped_tasks)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
-                    for safe_artist, artist_tasks in grouped_tasks:
-                        pbar.set_postfix_str(f"Artist: {safe_artist}")
-                        futures = [
-                            executor.submit(
-                                active_extension.download_images_hook,
-                                gallery_id, page, url, path, session, pbar, safe_artist
-                            )
-                            for page, url, path, _ in artist_tasks
-                        ]
-                        for _ in concurrent.futures.as_completed(futures):
-                            pbar.update(1)
-
-            if gallery_failed:
-                logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
-                continue
-
-            active_extension.after_gallery_download_hook(meta)
-            db.mark_gallery_completed(gallery_id)
-            logger.info(f"Completed Gallery {gallery_id}")
-            break
-
-        except Exception as e:
-            logger.error(f"Error processing Gallery {gallery_id}: {e}")
-            if gallery_attempts >= max_gallery_attempts:
-                db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN

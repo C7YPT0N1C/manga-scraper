@@ -32,8 +32,9 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
 # LOG CLARIFICATION
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------
-def log_clarification():  
-    print()
+def log_clarification():
+    if logger.getEffectiveLevel == 20:
+        print() # Only print new life if log level is INFO
     logger.debug("")
 
 log_clarification()
@@ -119,8 +120,8 @@ config = {
     "LANGUAGE": os.getenv("LANGUAGE", "english"),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", "english"),
     "TITLE_SANITISE": os.getenv("TITLE_SANITISE", "false").lower() == "true",
-    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 4)),
-    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 4)),
+    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 2)),
+    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 10)),
     "MAX_RETRIES": int(os.getenv("MAX_RETRIES", 3)),
     "USE_TOR": os.getenv("USE_TOR", "false").lower() == "true",
     "DRY_RUN": os.getenv("DRY_RUN", "false").lower() == "true",
