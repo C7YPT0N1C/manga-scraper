@@ -70,7 +70,7 @@ def should_download_gallery(meta, num_pages):
 
     # 0 pages, skip
     if num_pages == 0:
-        logger.warning(f"Gallery {gallery_id} has no pages, skipping")
+        logger.warning(f"Gallery: {gallery_id}: No pages, skipping")
         return False
 
     # Skip if already fully downloaded
@@ -118,19 +118,19 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 log_clarification()
-                logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
+                logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 dynamic_sleep("gallery")
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
-                    logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
+                    logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
                     if gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 if not should_download_gallery(meta, num_pages):
-                    logger.info(f"Skipping Gallery {gallery_id}")
+                    logger.info(f"Skipping Gallery: {gallery_id}")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break
@@ -166,7 +166,7 @@ def process_galleries(gallery_ids):
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                    with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
                         for safe_artist, artist_tasks in grouped_tasks:
                             pbar.set_postfix_str(f"Artist: {safe_artist}")
                             futures = [
@@ -180,17 +180,17 @@ def process_galleries(gallery_ids):
                                 pbar.update(1)
 
                 if gallery_failed:
-                    logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
+                    logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
                     continue
 
                 active_extension.after_gallery_download_hook(meta)
                 db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery {gallery_id}")
+                logger.info(f"Completed Gallery: {gallery_id}")
                 log_clarification()
                 break
 
             except Exception as e:
-                logger.error(f"Error processing Gallery {gallery_id}: {e}")
+                logger.error(f"Error processing Gallery: {gallery_id}: {e}")
                 if gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
