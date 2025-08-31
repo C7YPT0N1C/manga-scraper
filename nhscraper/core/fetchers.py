@@ -217,16 +217,15 @@ def get_meta_tag_names(meta, tag_type):
 
     # Apply config-based filtering
     excluded_lower = config.get("EXCLUDED_TAGS", [])
-    for n in names:
-        if n.lower() not in excluded_lower:
-            names = n 
-            logger.debug(f"Removed Metadata Tag: {n}")
+    names = [n for n in names if n.lower() not in excluded_lower]
+    logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
     
     if tag_type.lower() == "language":
         allowed = config.get("LANGUAGE")  # e.g., ['english']
         if allowed:
             allowed_lower = [a.lower() for a in allowed]
             names = [n for n in names if n.lower() in allowed_lower]
+            logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
 
     # Example: you can do similar for category or other tag types:
     # elif tag_type.lower() == "category":
