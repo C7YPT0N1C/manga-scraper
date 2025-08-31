@@ -79,30 +79,15 @@ def should_download_gallery(meta, num_pages):
 
     return True
 
-def process_galleries(gallery_list):
-    """
-    Processes multiple galleries with an overall progress bar.
-    """
-    global gallery_threads
-    global image_threads
-    
-    total_galleries = len(gallery_list)
-    gallery_threads = config.get("THREADS_GALLERIES", 2)
-    image_threads = config.get("THREADS_IMAGES", 10)
-    total_threads = gallery_threads + image_threads
+def process_galleries(gallery_ids):
+    total = len(gallery_ids)
+    with tqdm(total=total, desc="Overall Galleries", unit="gallery", position=1, leave=True) as overall_pbar:
+        for gallery_id in gallery_ids:
+            process_gallery(gallery_id, config["THREADS_IMAGES"], overall_pbar)
 
-    # Outer progress bar for galleries
-    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={total_threads}]", unit="gallery") as overall_pbar:
-        for gallery_id in gallery_list:
-            process_gallery(gallery_id, image_threads)
-            overall_pbar.update(1)
 
-def process_gallery(gallery_id, image_threads):
+def process_gallery(gallery_id, image_threads, overall_pbar):
     extension_name = getattr(active_extension, "__name__", "skeleton")
-    
-    #log_clarification()
-    #logger.info(f"Active Download Location: {download_location}")
-    
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
     gallery_attempts = 0
@@ -111,8 +96,6 @@ def process_gallery(gallery_id, image_threads):
     while gallery_attempts < max_gallery_attempts:
         gallery_attempts += 1
         try:
-            log_clarification()
-            log_clarification()
             logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
             dynamic_sleep("gallery")
 
@@ -133,6 +116,7 @@ def process_gallery(gallery_id, image_threads):
                 logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
                 db.mark_gallery_completed(gallery_id)
                 active_extension.after_gallery_download_hook(meta)
+                overall_pbar.update(1)
                 return
 
             gallery_failed = False
@@ -140,10 +124,7 @@ def process_gallery(gallery_id, image_threads):
 
             artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
-            log_clarification()
-            logger.debug(f"Gallery title: '{gallery_title}'")
 
-            # Prepare tasks grouped by artist
             grouped_tasks = []
             for artist in artists:
                 safe_artist = safe_name(artist)
@@ -167,10 +148,9 @@ def process_gallery(gallery_id, image_threads):
                 if artist_tasks:
                     grouped_tasks.append((safe_artist, artist_tasks))
 
-            # Inner progress bar for this gallery
             total_images = sum(len(t[1]) for t in grouped_tasks)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
+                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", position=0, leave=False) as pbar:
                     for safe_artist, artist_tasks in grouped_tasks:
                         pbar.set_postfix_str(f"Artist: {safe_artist}")
                         futures = [
@@ -189,15 +169,12 @@ def process_gallery(gallery_id, image_threads):
 
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
-            pbar.close()
-            time.sleep(0.1)  # tiny pause, just for terminal flush
+            overall_pbar.update(1)
             logger.info(f"Completed Gallery {gallery_id}")
-            log_clarification()
             break
 
         except Exception as e:
             logger.error(f"Error processing Gallery {gallery_id}: {e}")
-            log_clarification()
             if gallery_attempts >= max_gallery_attempts:
                 db.mark_gallery_failed(gallery_id)
 

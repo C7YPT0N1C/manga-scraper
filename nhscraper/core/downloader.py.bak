@@ -3,10 +3,11 @@
 
 import os, time, random, concurrent.futures
 from tqdm import tqdm
+from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_tag_names, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
@@ -22,6 +23,8 @@ if not config.get("DRY_RUN", False):
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+gallery_threads = 2
+image_threads = 10
 
 def build_gallery_path(meta):
     # Ask extension for variables
@@ -40,15 +43,16 @@ def build_gallery_path(meta):
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage="gallery"):
-    num_galleries = max(1, len(config.get("GALLERIES", [])))
-    total_load = config.get("THREADS_GALLERIES", 1) * config.get("THREADS_IMAGES", 4)
-    base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
-    scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
-    sleep_time = random.uniform(base_min*scale, base_max*scale)
-    log_clarification()
-    logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
-    time.sleep(sleep_time)
+def dynamic_sleep(stage):
+    if stage=="gallery":
+        num_galleries = max(1, len(config.get("GALLERIES", [])))
+        total_load = config.get("THREADS_GALLERIES", 2) * config.get("THREADS_IMAGES", 10)
+        base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
+        scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
+        sleep_time = random.uniform(base_min*scale, base_max*scale)
+        log_clarification()
+        logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
+        time.sleep(sleep_time)
 
 def should_download_gallery(meta, num_pages):
     if not meta:
@@ -75,13 +79,29 @@ def should_download_gallery(meta, num_pages):
 
     return True
 
-from functools import partial
+def process_galleries(gallery_list):
+    """
+    Processes multiple galleries with an overall progress bar.
+    """
+    global gallery_threads
+    global image_threads
+    
+    total_galleries = len(gallery_list)
+    gallery_threads = config.get("THREADS_GALLERIES", 2)
+    image_threads = config.get("THREADS_IMAGES", 10)
+    total_threads = gallery_threads + image_threads
 
-def process_gallery(gallery_id):
+    # Outer progress bar for galleries
+    with tqdm(total=total_galleries, desc=f"Overall Galleries [threads={total_threads}]", unit="gallery") as overall_pbar:
+        for gallery_id in gallery_list:
+            process_gallery(gallery_id, image_threads)
+            overall_pbar.update(1)
+
+def process_gallery(gallery_id, image_threads):
     extension_name = getattr(active_extension, "__name__", "skeleton")
     
-    log_clarification()
-    logger.info(f"Active Download Location: {download_location}")
+    #log_clarification()
+    #logger.info(f"Active Download Location: {download_location}")
     
     db.mark_gallery_started(gallery_id, download_location, extension_name)
 
@@ -91,6 +111,7 @@ def process_gallery(gallery_id):
     while gallery_attempts < max_gallery_attempts:
         gallery_attempts += 1
         try:
+            log_clarification()
             log_clarification()
             logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
             dynamic_sleep("gallery")
@@ -117,18 +138,20 @@ def process_gallery(gallery_id):
             gallery_failed = False
             active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-            artists = get_tag_names(meta, "artist") or ["Unknown Artist"]
+            artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
             gallery_title = clean_title(meta)
+            log_clarification()
             logger.debug(f"Gallery title: '{gallery_title}'")
 
-            # Prepare all download tasks
-            tasks = []
+            # Prepare tasks grouped by artist
+            grouped_tasks = []
             for artist in artists:
                 safe_artist = safe_name(artist)
                 doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
                 if not config.get("DRY_RUN", False):
                     os.makedirs(doujin_folder, exist_ok=True)
 
+                artist_tasks = []
                 for i in range(num_pages):
                     page = i + 1
                     img_url = fetch_image_url(meta, page)
@@ -139,23 +162,26 @@ def process_gallery(gallery_id):
 
                     img_filename = f"{page}.{img_url.split('.')[-1]}"
                     img_path = os.path.join(doujin_folder, img_filename)
-                    tasks.append((page, img_url, img_path, safe_artist))
+                    artist_tasks.append((page, img_url, img_path, safe_artist))
 
-            # Download all images concurrently with a single progress bar
-            futures = []
+                if artist_tasks:
+                    grouped_tasks.append((safe_artist, artist_tasks))
+
+            # Inner progress bar for this gallery
+            total_images = sum(len(t[1]) for t in grouped_tasks)
             with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                with tqdm(total=len(tasks), desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
-                    for page, img_url, img_path, safe_artist in tasks:
-                        # Partial passes pbar and safe_artist to each download future
-                        func = partial(
-                            active_extension.download_images_hook,
-                            gallery_id, page, img_url, img_path, session, pbar, safe_artist
-                        )
-                        futures.append(executor.submit(func))
-
-                    # Wait for completion
-                    for _ in concurrent.futures.as_completed(futures):
-                        pbar.update(1)
+                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", leave=True) as pbar:
+                    for safe_artist, artist_tasks in grouped_tasks:
+                        pbar.set_postfix_str(f"Artist: {safe_artist}")
+                        futures = [
+                            executor.submit(
+                                active_extension.download_images_hook,
+                                gallery_id, page, url, path, session, pbar, safe_artist
+                            )
+                            for page, url, path, _ in artist_tasks
+                        ]
+                        for _ in concurrent.futures.as_completed(futures):
+                            pbar.update(1)
 
             if gallery_failed:
                 logger.warning(f"Gallery {gallery_id} encountered download issues, retrying...")
@@ -163,11 +189,15 @@ def process_gallery(gallery_id):
 
             active_extension.after_gallery_download_hook(meta)
             db.mark_gallery_completed(gallery_id)
+            pbar.close()
+            time.sleep(0.1)  # tiny pause, just for terminal flush
             logger.info(f"Completed Gallery {gallery_id}")
+            log_clarification()
             break
 
         except Exception as e:
             logger.error(f"Error processing Gallery {gallery_id}: {e}")
+            log_clarification()
             if gallery_attempts >= max_gallery_attempts:
                 db.mark_gallery_failed(gallery_id)
 
@@ -191,7 +221,8 @@ def start_downloader():
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("threads_galleries", 4)) as executor:
-        futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        #futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
+        futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)
 
     log_clarification()
