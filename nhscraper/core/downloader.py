@@ -15,7 +15,8 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------
 def log_clarification():
-    logger.debug("")
+    #logger.debug("")
+    print("TEST")
 
 ####################################################################################################
 # Select extension (skeleton fallback)
