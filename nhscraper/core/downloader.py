@@ -84,6 +84,14 @@ def should_download_gallery(meta, num_pages):
             logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
             return False
 
+    # Check excluded tags
+    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    if excluded_tags:
+        gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
+        if any(tag.lower() in gallery_tags for tag in excluded_tags):
+            logger.info(f"Skipping Gallery: {gallery_id}: Filtered tags ({gallery_tags})")
+            return False
+    
     # Check language requirement
     allowed_langs = config.get("LANGUAGE", [])
     if allowed_langs:
@@ -92,15 +100,7 @@ def should_download_gallery(meta, num_pages):
         allowed_lower = [l.lower() for l in allowed_langs]
         # Include 'translated' as acceptable if any requested language is present
         if not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
-            logger.info(f"Skipping {gallery_id}, language not allowed ({gallery_langs})")
-            return False
-
-    # Check excluded tags
-    excluded_tags = config.get("EXCLUDED_TAGS", [])
-    if excluded_tags:
-        gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
-        if any(tag.lower() in gallery_tags for tag in excluded_tags):
-            logger.info(f"Skipping {gallery_id}, contains excluded tags ({gallery_tags})")
+            logger.info(f"Skipping Gallery: {gallery_id}: Filtered language ({gallery_langs})")
             return False
 
     return True
