@@ -217,8 +217,9 @@ def get_meta_tag_names(meta, tag_type):
 
     # Apply config-based filtering
     excluded_lower = config.get("EXCLUDED_TAGS", [])
-    names = [n for n in names if n.lower() not in excluded_lower]
-    logger.debug("Removed Metadata Tag: {n}")
+    for n in names if n.lower() not in excluded_lower:
+        names = n 
+        logger.debug(f"Removed Metadata Tag: {n}")
     
     if tag_type.lower() == "language":
         allowed = config.get("LANGUAGE")  # e.g., ['english']
