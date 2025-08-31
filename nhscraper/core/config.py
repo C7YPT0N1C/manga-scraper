@@ -33,8 +33,10 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------
 def log_clarification():
-    if logger.getEffectiveLevel == 20:
-        print() # Only print new life if log level is INFO
+    # Only print a new line if log level is INFO
+    if logger.getEffectiveLevel() == logging.INFO:
+        print()
+    # Dummy debug to flush logger if needed
     logger.debug("")
 
 log_clarification()
