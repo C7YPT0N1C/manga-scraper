@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_values, filter_meta_tags, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
@@ -55,13 +55,18 @@ def dynamic_sleep(stage):
         time.sleep(sleep_time)
 
 def should_download_gallery(meta, num_pages):
-    if not meta or num_pages == 0:
-        logger.warning(f"Gallery {meta.get('id') if meta else 'Unknown'} has no pages, skipping")
+    if not meta:
         return False
 
-    # Existing files
-    doujin_folder = build_gallery_path(meta)
     dry_run = config.get("DRY_RUN", False)
+
+    if num_pages == 0:
+        logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
+        return False
+
+    doujin_folder = build_gallery_path(meta)
+
+    # Skip existence check if dry-run
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -71,20 +76,6 @@ def should_download_gallery(meta, num_pages):
         if all_exist:
             logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
             return False
-    
-    # Excluded tags
-    all_tags = get_meta_tag_values(meta, "tag")  # or another generic type
-    filtered_tags = filter_meta_tags(all_tags, "tag")
-    if not filtered_tags:  # If all tags were excluded
-        logger.info(f"Skipping gallery {meta.get('id')} due to excluded tags")
-        return False
-
-    # Language
-    language_tags = get_meta_tag_values(meta, "language")
-    allowed_languages = filter_meta_tags(language_tags, "language")
-    if not allowed_languages:
-        logger.info(f"Skipping gallery {meta.get('id')} due to language filter")
-        return False
 
     return True
 
@@ -111,8 +102,13 @@ def process_galleries(gallery_ids):
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
+                if num_pages == 0:
+                    logger.warning(f"Gallery {gallery_id} has no pages, skipping")
+                    db.mark_gallery_failed(gallery_id)
+                    break
+
                 if not should_download_gallery(meta, num_pages):
-                    logger.info(f"Skipping Gallery {gallery_id} due to filter rules or already downloaded")
+                    logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break
