@@ -5,10 +5,17 @@ import os, time, random, concurrent.futures
 from tqdm import tqdm
 from functools import partial
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import logger, config
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
+
+# ------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------
+def log_clarification():
+    logger.debug("")
 
 ####################################################################################################
 # Select extension (skeleton fallback)
