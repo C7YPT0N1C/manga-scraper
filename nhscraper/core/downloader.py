@@ -5,18 +5,10 @@ import os, time, random, concurrent.futures
 from tqdm import tqdm
 from functools import partial
 
-from nhscraper.core.config import logger, config
+from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
-
-# ------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
-def log_clarification():
-    #logger.debug("")
-    print("TEST")
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -58,7 +50,7 @@ def dynamic_sleep(stage):
         base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
         scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
         sleep_time = random.uniform(base_min*scale, base_max*scale)
-        log_clarification()
+        #log_clarification()
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
 
@@ -98,7 +90,7 @@ def process_galleries(gallery_ids):
         while gallery_attempts < max_gallery_attempts:
             gallery_attempts += 1
             try:
-                log_clarification()
+                #log_clarification()
                 logger.info(f"Starting Gallery {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 dynamic_sleep("gallery")
 
@@ -172,7 +164,7 @@ def process_galleries(gallery_ids):
                 active_extension.after_gallery_download_hook(meta)
                 db.mark_gallery_completed(gallery_id)
                 logger.info(f"Completed Gallery {gallery_id}")
-                log_clarification()
+                #log_clarification()
                 break
 
             except Exception as e:
@@ -184,7 +176,7 @@ def process_galleries(gallery_ids):
 # MAIN
 ####################################################################################################
 def start_downloader():
-    log_clarification()
+    #log_clarification()
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
 
@@ -195,7 +187,7 @@ def start_downloader():
         logger.error("No galleries specified. Use --galleries or --range.")
         return
     
-    log_clarification()
+    #log_clarification()
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
@@ -204,7 +196,7 @@ def start_downloader():
         futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)
 
-    log_clarification()
+    #log_clarification()
     logger.info("All galleries processed")
     
     active_extension.after_all_galleries_download_hook(gallery_ids)
