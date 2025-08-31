@@ -81,7 +81,7 @@ def should_download_gallery(meta, num_pages):
 
 def process_galleries(gallery_ids):
     total = len(gallery_ids)
-    with tqdm(total=total, desc="Overall Galleries", unit="gallery", position=1, leave=False) as overall_pbar:
+    with tqdm(total=total, desc="Overall Galleries", unit="gallery", position=0, leave=True) as overall_pbar:
         for gallery_id in gallery_ids:
             process_gallery(gallery_id, config["THREADS_IMAGES"], overall_pbar)
 
@@ -150,7 +150,7 @@ def process_gallery(gallery_id, image_threads, overall_pbar):
 
             total_images = sum(len(t[1]) for t in grouped_tasks)
             with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
-                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                with tqdm(total=total_images, desc=f"Gallery {gallery_id}", unit="img", position=1, leave=False) as pbar:
                     for safe_artist, artist_tasks in grouped_tasks:
                         pbar.set_postfix_str(f"Artist: {safe_artist}")
                         futures = [
