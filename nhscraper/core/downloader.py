@@ -82,6 +82,7 @@ def should_download_gallery(meta, num_pages):
 def process_galleries(gallery_ids):
     total = len(gallery_ids)
     with tqdm(total=total, desc="Overall Galleries", unit="gallery", position=0, leave=True) as overall_pbar:
+        overall_pbar.refresh()
         for gallery_id in gallery_ids:
             process_gallery(gallery_id, config["THREADS_IMAGES"], overall_pbar)
 
