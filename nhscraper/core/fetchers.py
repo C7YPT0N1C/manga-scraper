@@ -197,13 +197,14 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_meta_tag_names(meta, tag_type):
+def get_meta_tag_values(meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
     - Splits names on "|".
-    - Returns ['Unknown'] if none found.
-    - Filters tag names based on config settings:
-        e.g., config.get('LANGUAGES') for language, config.get('CATEGORIES') for categories, etc.
+    - Returns ['Unknown'] if none found or filtered out.
+    - Applies config-based filtering:
+        - EXCLUDED_TAGS: always excluded
+        - LANGUAGE: only allowed languages (if tag_type == "language")
     """
     if not meta or "tags" not in meta:
         return ["Unknown"]
@@ -215,24 +216,24 @@ def get_meta_tag_names(meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
 
-    # Apply config-based filtering
-    excluded_lower = config.get("EXCLUDED_TAGS", [])
-    names = [n for n in names if n.lower() not in excluded_lower]
-    logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
-    
+    logger.debug(f"For Metadata Tag Type {tag_type}: RETURNED: {names}")
+    return names
+
+def filter_meta_tags(names, tag_type):
+    """
+    Apply config-based filtering.
+    - Skip tags in EXCLUDED_TAGS
+    - Only allow galleries with languages in LANGUAGE (or 'translated')
+    """
+    filtered = [n for n in names if n.lower() not in [t.lower() for t in config.get("EXCLUDED_TAGS", [])]]
+
     if tag_type.lower() == "language":
-        allowed = config.get("LANGUAGE")  # e.g., ['english']
+        allowed = [l.lower() for l in config.get("LANGUAGE", [])]
         if allowed:
-            allowed_lower = [a.lower() for a in allowed]
-            names = [n for n in names if n.lower() in allowed_lower]
-            logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
+            filtered = [n for n in filtered if n.lower() in allowed or n.lower() == "translated"]
 
-    # Example: you can do similar for category or other tag types:
-    # elif tag_type.lower() == "category":
-    #     allowed = config.get("CATEGORIES")
-    #     ...
-
-    return names or ["Unknown"]
+    logger.debug(f"For Metadata Tag Type {tag_type}: FILTERED: {names}")
+    return filtered
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
