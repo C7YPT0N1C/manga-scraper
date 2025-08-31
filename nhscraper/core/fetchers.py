@@ -197,13 +197,11 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_meta_tag_names(meta, tag_type):
+def get_meta_tags(meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
     - Splits names on "|".
     - Returns ['Unknown'] if none found.
-    - Filters tag names based on config settings:
-        e.g., config.get('LANGUAGES') for language, config.get('CATEGORIES') for categories, etc.
     """
     if not meta or "tags" not in meta:
         return ["Unknown"]
@@ -211,26 +209,8 @@ def get_meta_tag_names(meta, tag_type):
     names = []
     for tag in meta["tags"]:
         if tag.get("type") == tag_type and tag.get("name"):
-            # Split on "|" and clean whitespace
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
-
-    # Apply config-based filtering
-    excluded_lower = config.get("EXCLUDED_TAGS", [])
-    names = [n for n in names if n.lower() not in excluded_lower]
-    logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
-    
-    if tag_type.lower() == "language":
-        allowed = config.get("LANGUAGE")  # e.g., ['english']
-        if allowed:
-            allowed_lower = [a.lower() for a in allowed]
-            names = [n for n in names if n.lower() in allowed_lower]
-            logger.debug(f"For Tag Type {tag_type} Returned Metadata Tag: {names}")
-
-    # Example: you can do similar for category or other tag types:
-    # elif tag_type.lower() == "category":
-    #     allowed = config.get("CATEGORIES")
-    #     ...
 
     return names or ["Unknown"]
 

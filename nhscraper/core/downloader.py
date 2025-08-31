@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tag_names, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import * # Import active extension
 
 ####################################################################################################
@@ -55,18 +55,25 @@ def dynamic_sleep(stage):
         time.sleep(sleep_time)
 
 def should_download_gallery(meta, num_pages):
+    """
+    Decide whether to download a gallery based on:
+      - language requirements (must include requested language or "translated")
+      - excluded tags (any tag in EXCLUDED_TAGS skips gallery)
+      - existing files (skip if all pages exist)
+    """
     if not meta:
         return False
 
     dry_run = config.get("DRY_RUN", False)
-
-    if num_pages == 0:
-        logger.warning(f"Gallery {meta.get('id')} has no pages, skipping")
-        return False
-
+    gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta)
 
-    # Skip existence check if dry-run
+    # 0 pages, skip
+    if num_pages == 0:
+        logger.warning(f"Gallery {gallery_id} has no pages, skipping")
+        return False
+
+    # Skip if already fully downloaded
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -74,10 +81,30 @@ def should_download_gallery(meta, num_pages):
             for i in range(num_pages)
         )
         if all_exist:
-            logger.info(f"Skipping {meta['id']} ({doujin_folder}), already complete.")
+            logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
+            return False
+
+    # Check language requirement
+    allowed_langs = config.get("LANGUAGE", [])
+    if allowed_langs:
+        gallery_langs = get_meta_tags(meta, "language")
+        gallery_langs_lower = [l.lower() for l in gallery_langs]
+        allowed_lower = [l.lower() for l in allowed_langs]
+        # Include 'translated' as acceptable if any requested language is present
+        if not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
+            logger.info(f"Skipping {gallery_id}, language not allowed ({gallery_langs})")
+            return False
+
+    # Check excluded tags
+    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    if excluded_tags:
+        gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
+        if any(tag.lower() in gallery_tags for tag in excluded_tags):
+            logger.info(f"Skipping {gallery_id}, contains excluded tags ({gallery_tags})")
             return False
 
     return True
+
 
 def process_galleries(gallery_ids):
     for gallery_id in gallery_ids:
@@ -102,13 +129,8 @@ def process_galleries(gallery_ids):
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                if num_pages == 0:
-                    logger.warning(f"Gallery {gallery_id} has no pages, skipping")
-                    db.mark_gallery_failed(gallery_id)
-                    break
-
                 if not should_download_gallery(meta, num_pages):
-                    logger.info(f"Skipping Gallery {gallery_id}, already downloaded")
+                    logger.info(f"Skipping Gallery {gallery_id}")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break
@@ -116,7 +138,7 @@ def process_galleries(gallery_ids):
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-                artists = get_meta_tag_names(meta, "artist") or ["Unknown Artist"]
+                artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
                 gallery_title = clean_title(meta)
 
                 grouped_tasks = []
