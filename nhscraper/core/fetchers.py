@@ -197,16 +197,6 @@ def fetch_image_url(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_meta_tag_namesssssssssssss(meta, tag_type):
-    """
-    Extracts all tag names of a given type (artist, group, tag, parody, etc.) from meta['tags'].
-    Returns ['Unknown'] if none found.
-    """
-    if not meta or "tags" not in meta:
-        return ["Unknown"]
-    names = [t["name"] for t in meta["tags"] if t.get("type") == tag_type and t.get("name")]
-    return names or ["Unknown"]
-
 def get_meta_tag_names(meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
@@ -228,6 +218,7 @@ def get_meta_tag_names(meta, tag_type):
     # Apply config-based filtering
     excluded_lower = config.get("EXCLUDED_TAGS", [])
     names = [n for n in names if n.lower() not in excluded_lower]
+    logger.debug("Removed Metadata Tag: {n}")
     
     if tag_type.lower() == "language":
         allowed = config.get("LANGUAGE")  # e.g., ['english']
