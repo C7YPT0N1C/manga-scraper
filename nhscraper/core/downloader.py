@@ -54,7 +54,7 @@ def dynamic_sleep(stage):
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
 
-def should_download_gallery(meta, num_pages, img_url, img_path):
+def should_download_gallery(meta, num_pages):
     """
     Decide whether to download a gallery based on:
       - language requirements (must include requested language or "translated")
@@ -67,10 +67,6 @@ def should_download_gallery(meta, num_pages, img_url, img_path):
     dry_run = config.get("DRY_RUN", False)
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta)
-    
-    if dry_run:
-        logger.info(f"Would download {img_url} -> {img_path}")
-        logger.info(f"Downloaded {img_url} -> {img_path}")
 
     # 0 pages, skip
     if num_pages == 0:
@@ -164,6 +160,11 @@ def process_galleries(gallery_ids):
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
                         artist_tasks.append((page, img_url, img_path, safe_artist))
+                    
+                    if config.get("DRY_RUN", False): # TEST
+                        logger.info(f"Would download {img_url} -> {img_path}")
+                    else:
+                        logger.info(f"Downloaded {img_url} -> {img_path}")
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
