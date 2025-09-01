@@ -211,7 +211,7 @@ def get_mirrors():
     if env_mirrors:
         mirrors = [m.strip() for m in env_mirrors.split(",") if m.strip()]
     # Ensure default mirror is first
-    mirrors = ["https://i.nhentai.net"] + [m for m in mirrors if m != "https://i.nhentai.net"]
+    mirrors = [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
     return mirrors
 
 MIRRORS = get_mirrors()

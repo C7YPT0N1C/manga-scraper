@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tags, safe_name, clean_title
+from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
@@ -161,6 +161,17 @@ def should_download_gallery(meta, gallery_title, num_pages):
 
     return True
 
+def submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist):
+    futures = [
+        executor.submit(
+            active_extension.download_images_hook,
+            gallery_id, page, urls, path, session, pbar, safe_artist
+        )
+        for page, urls, path, _ in artist_tasks
+    ]
+    for _ in concurrent.futures.as_completed(futures):
+        pbar.update(1)
+
 def process_galleries(gallery_ids):
     global meta
     
@@ -202,16 +213,18 @@ def process_galleries(gallery_ids):
                     artist_tasks = []
                     for i in range(num_pages):
                         page = i + 1
-                        img_url = fetch_image_url(meta, page)
-                        if not img_url:
-                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
-                            update_skipped_galleries("Failed to get URL.", False)
+                        img_urls = fetch_image_urls(meta, page)
+                        if not img_urls:
+                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URLs")
+                            update_skipped_galleries("Failed to get URLs.", False)
                             gallery_failed = True
                             continue
 
-                        img_filename = f"{page}.{img_url.split('.')[-1]}"
+                        # Use extension of the first URL (all mirrors should have same filename)
+                        img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
-                        artist_tasks.append((page, img_url, img_path, safe_artist))
+
+                        artist_tasks.append((page, img_urls, img_path, safe_artist))
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
@@ -223,32 +236,12 @@ def process_galleries(gallery_ids):
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
-                        with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
-                            for safe_artist, artist_tasks in grouped_tasks:
-                                pbar.set_postfix_str(f"Artist: {safe_artist}")
-                                futures = [
-                                    executor.submit(
-                                        active_extension.download_images_hook,
-                                        gallery_id, page, url, path, session, pbar, safe_artist
-                                    )
-                                    for page, url, path, _ in artist_tasks
-                                ]
-                                for _ in concurrent.futures.as_completed(futures):
-                                    pbar.update(1)
-                    else:
-                        with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
-                            for safe_artist, artist_tasks in grouped_tasks:
-                                pbar.set_postfix_str(f"Artist: {safe_artist}")
-                                futures = [
-                                    executor.submit(
-                                        active_extension.download_images_hook,
-                                        gallery_id, page, url, path, session, pbar, safe_artist
-                                    )
-                                    for page, url, path, _ in artist_tasks
-                                ]
-                                for _ in concurrent.futures.as_completed(futures):
-                                    pbar.update(1)
+                    desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
+
+                    with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
+                        for safe_artist, artist_tasks in grouped_tasks:
+                            pbar.set_postfix_str(f"Artist: {safe_artist}")
+                            submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist)
 
                 if gallery_failed:
                     logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
@@ -287,7 +280,6 @@ def start_downloader():
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
-        #futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
         futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)
 

@@ -127,13 +127,14 @@ def pre_run_hook(config, gallery_list):
     return gallery_list
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, url, path, session, pbar=None, artist=None, retries=None):
+def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=None, retries=None):
     """
-    Downloads an image from URL to the given path.
+    Downloads an image from one of the provided URLs to the given path.
+    Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current artist.
     """
-    if not url:
-        logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
+    if not urls:
+        logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
         if pbar and artist:
             pbar.set_postfix_str(f"Skipped artist: {artist}")
         return False
@@ -148,7 +149,7 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
         return True
 
     if config.get("DRY_RUN", DEFAULT_DRY_RUN):
-        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {url} -> {path}")
+        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and artist:
             pbar.set_postfix_str(f"Artist: {artist}")
         return True
@@ -156,34 +157,41 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
     if not isinstance(session, requests.Session):
         session = requests.Session()
 
-    for attempt in range(1, retries + 1):
-        try:
-            r = session.get(url, timeout=30, stream=True)
-            if r.status_code == 429:
+    # Loop through mirrors
+    for url in urls:
+        for attempt in range(1, retries + 1):
+            try:
+                r = session.get(url, timeout=30, stream=True)
+                if r.status_code == 429:
+                    wait = 2 ** attempt
+                    logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                    time.sleep(wait)
+                    continue
+                r.raise_for_status()
+
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+                if pbar and artist:
+                    pbar.set_postfix_str(f"Artist: {artist}")
+                return True
+
+            except Exception as e:
                 wait = 2 ** attempt
-                logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                log_clarification()
+                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait}s")
                 time.sleep(wait)
-                continue
-            r.raise_for_status()
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
 
-            logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
-            if pbar and artist:
-                pbar.set_postfix_str(f"Artist: {artist}")
-            return True
+        # If all retries for this mirror failed, move to next mirror
+        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror")
 
-        except Exception as e:
-            wait = 2 ** attempt
-            log_clarification()
-            logger.warning(f"Attempt {attempt} failed for {url}: {e}, retrying in {wait}s")
-            time.sleep(wait)
-
+    # If no mirrors succeeded
     log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: Failed to download after {retries} attempts: {url}")
+    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
     if pbar and artist:
         pbar.set_postfix_str(f"Failed artist: {artist}")
     return False

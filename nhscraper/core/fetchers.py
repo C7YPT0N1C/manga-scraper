@@ -190,9 +190,10 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
-def fetch_image_url(meta: dict, page: int):
+def fetch_image_urls(meta: dict, page: int):
     """
     Returns the full image URL for a gallery page.
+    Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
@@ -219,10 +220,12 @@ def fetch_image_url(meta: dict, page: int):
 
         ext = ext_map.get(type_code, "webp")
         filename = f"{page}.{ext}"
-        url = f"https://i.nhentai.net/galleries/{meta.get('media_id','')}/{filename}"
 
-        logger.debug(f"Built image URL: {url}")
-        return url
+        # Try each mirror in order
+        urls = [f"{mirror}/galleries/{meta.get('media_id','')}/{filename}" for mirror in NHENTAI_MIRRORS]
+
+        logger.debug(f"Built candidate image URLs: {urls}")
+        return urls  # return list so downloader can try them in order
 
     except Exception as e:
         logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
