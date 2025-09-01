@@ -173,10 +173,10 @@ def process_galleries(gallery_ids):
                         img_path = os.path.join(doujin_folder, img_filename)
                         artist_tasks.append((page, img_url, img_path, safe_artist))
                     
-                        if config.get("DRY_RUN", False): # TEST
-                            logger.info(f"[DRY-RUN] Would download {img_url} -> {img_path}")
-                        else:
-                            logger.info(f"Downloaded {img_url} -> {img_path}")
+                        #if config.get("DRY_RUN", False): # TEST
+                        #    logger.info(f"[DRY-RUN] Would download {img_url} -> {img_path}")
+                        #else:
+                        #    logger.info(f"Downloaded {img_url} -> {img_path}")
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
@@ -215,7 +215,6 @@ def process_galleries(gallery_ids):
                                 ]
                                 for _ in concurrent.futures.as_completed(futures):
                                     pbar.update(1)
-
 
                 if gallery_failed:
                     logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
