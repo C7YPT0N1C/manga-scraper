@@ -291,7 +291,7 @@ def start_downloader():
         concurrent.futures.wait(futures)
 
     log_clarification()
-    logger.info("All galleries processed")
+    logger.info("All galleries processed.")
     update_skipped_galleries("", True)
     
     active_extension.post_run_hook(config, gallery_ids)
