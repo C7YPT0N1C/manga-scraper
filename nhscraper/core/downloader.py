@@ -68,7 +68,7 @@ def dynamic_sleep(stage): # TEST
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
         
-def update_skipped_galleries(Reason: str, ReturnReport: bool = False):
+def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: bool = False):
     global skipped_galleries
     
     gallery_id = meta.get("id")
@@ -87,7 +87,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
       - existing files (skip if all pages exist)
     """
     if not meta:
-        update_skipped_galleries(meta, "Not Meta.", False)
+        update_skipped_galleries("Not Meta.", False)
         return False
 
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
@@ -102,7 +102,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Title: {gallery_title}\n"
             "Reason: No pages."
         )
-        update_skipped_galleries(meta, "No Pages.", False)
+        update_skipped_galleries("No Pages.", False)
         return False
 
     # Skip if gallery already fully downloaded
@@ -120,7 +120,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
                 f"Folder: {doujin_folder}\n"
                 "Reason: Already complete."
             )
-            update_skipped_galleries(meta, "Already complete.", False)
+            update_skipped_galleries("Already complete.", False)
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
@@ -154,7 +154,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries(meta, "Contains either filtered tags or filtered languages (see logs).", False)
+        update_skipped_galleries("Contains either filtered tags or filtered languages (see logs).", False)
         return False
 
     return True
@@ -203,7 +203,7 @@ def process_galleries(gallery_ids):
                         img_url = fetch_image_url(meta, page)
                         if not img_url:
                             logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
-                            update_skipped_galleries(meta, "Failed to get URL.", False)
+                            update_skipped_galleries("Failed to get URL.", False)
                             gallery_failed = True
                             continue
 
