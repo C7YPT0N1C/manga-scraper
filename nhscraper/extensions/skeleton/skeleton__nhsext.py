@@ -14,22 +14,22 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 
 # Global variables for download path and subfolder strucutre.
-EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 def install_extension():
-    os.makedirs(EXTENSION_DOWNLOAD_PATH, exist_ok=True)
-    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
+    os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
     log_clarification()
     logger.info(f"Extension: Skeleton: Installed.")
 
 def uninstall_extension():
-    global EXTENSION_DOWNLOAD_PATH
+    global DEDICATED_DOWNLOAD_PATH
     try:
-        if os.path.exists(EXTENSION_DOWNLOAD_PATH):
-            os.rmdir(EXTENSION_DOWNLOAD_PATH)
-        EXTENSION_DOWNLOAD_PATH = ""
-        update_env("EXTENSION_DOWNLOAD_PATH", "")
+        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
+            os.rmdir(DEDICATED_DOWNLOAD_PATH)
+        DEDICATED_DOWNLOAD_PATH = ""
+        update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
         log_clarification()
         logger.info("Extension: Skeleton: Uninstalled")
     except Exception as e:
@@ -40,7 +40,7 @@ def update_extension_download_path():
     log_clarification()
     logger.info("Extension: Skeleton: Ready.")
     logger.debug("Extension: Skeleton: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def build_gallery_subfolders(meta):
     """Return a dict of possible variables to use in folder naming."""
@@ -57,12 +57,12 @@ def build_gallery_subfolders(meta):
 
 def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
     # Remove empty directories - safety check
-    if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
-        logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        logger.debug("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
         return
 
-    if RemoveEmptyArtistFolder: # Remove empty directories, deepest first, up to EXTENSION_DOWNLOAD_PATH
-        for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
+    if RemoveEmptyArtistFolder: # Remove empty directories, deepest first, up to DEDICATED_DOWNLOAD_PATH
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
             try:
                 if not os.listdir(dirpath):  # directory is empty (no files, no subdirs)
                     os.rmdir(dirpath)
@@ -70,7 +70,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
             except Exception as e:
                 logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
     else: # Remove empty directories, deepest only.
-        for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
             if not dirnames and not filenames:
                 try:
                     os.rmdir(dirpath)
@@ -78,8 +78,8 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
                 except Exception as e:
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
-    EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
-    update_env("EXTENSION_DOWNLOAD_PATH", "")
+    DEDICATED_DOWNLOAD_PATH = ""  # Reset after download batch
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
@@ -172,8 +172,6 @@ def after_gallery_download_hook(meta: dict):
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
-    global EXTENSION_DOWNLOAD_PATH
-
     log_clarification()
     logger.debug("Extension: Skeleton: Post-run hook called.")
 
