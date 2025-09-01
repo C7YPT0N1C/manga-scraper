@@ -71,7 +71,11 @@ def should_download_gallery(meta, gallery_title, num_pages):
     # Skip if gallery has 0 pages
     if num_pages == 0:
         log_clarification()
-        logger.warning(f"Gallery: {gallery_id}: No pages, skipping")
+        logger.warning(
+            f"Skipping Gallery: {gallery_id}:\n"
+            f"Title: {gallery_title}\n"
+            "Reason: No pages."
+        )
         return False
 
     # Skip if gallery already fully downloaded
@@ -83,7 +87,12 @@ def should_download_gallery(meta, gallery_title, num_pages):
         )
         if all_exist:
             log_clarification()
-            logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
+            logger.info(
+                f"Skipping Gallery: {gallery_id}:\n"
+                f"Title: {gallery_title}\n"
+                f"Folder: {doujin_folder}\n"
+                "Reason: Already complete."
+            )
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
