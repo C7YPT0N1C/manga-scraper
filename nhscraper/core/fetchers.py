@@ -33,19 +33,25 @@ def session_builder():
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://nhentai.net/",
     })
-
+    
+    logger.debug(f"Built HTTP session with cloudscraper: {s}")
+    
     if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
     else:
         logger.info("Not using Tor proxy")
-
+    
     return s
 
 def build_session():
     global session
-    session = session_builder() # cloudscraper session, default.
+    
+    # Ensure session is ready
+    # Uses cloudscraper session by default.
+    if session is None:
+        session = session_builder()
     
 ################################################################################################################
 
@@ -63,8 +69,9 @@ def preload_tag_cache():
     Fetch all tags from /api/tags and populate the cache in memory and on disk.
     Only fetches if a type is missing a requested tag.
     """
+
     try:
-        resp = requests.get(f"{API_BASE}/tags", timeout=30)
+        resp = session.get(f"{API_BASE}/tags", timeout=30)
         resp.raise_for_status()
         tags = resp.json()
 
@@ -85,7 +92,6 @@ def preload_tag_cache():
         logger.info(f"Preloaded {sum(len(v) for v in TAG_CACHE.values())} tags into cache")
     except Exception as e:
         logger.warning(f"Failed to preload tags from API: {e}")
-
 
 # ------------------------------
 # Build URL with automatic tag ID resolution
