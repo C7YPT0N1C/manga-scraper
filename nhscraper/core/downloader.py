@@ -87,31 +87,36 @@ def should_download_gallery(meta, gallery_title, num_pages):
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
-    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", [])]
     gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
     blocked_tags = []
-        
-    allowed_langs = config.get("LANGUAGE", [])
+    
+    allowed_langs = [l.lower() for l in config.get("LANGUAGE", [])]
     gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
     blocked_langs = []
-    
-    gallery_langs_lower = [l.lower() for l in gallery_langs]
-    allowed_lower = [l.lower() for l in allowed_langs]
-    
-    # Include 'translated' as acceptable if any requested language is present 
-    if excluded_tags or allowed_langs:
-        for tag in excluded_tags:
-            if tag.lower() in gallery_tags:
-                blocked_tags = blocked_tags.append(tag.lower())
-        
-        for lang in allowed_langs:
-            if lang.lower() in gallery_langs:
-                blocked_langs = blocked_langs.append(lang.lower())
-                
-        if not blocked_tags == [] or not blocked_langs == []:
-            log_clarification()
-            logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}):\nFiltered tags: ({blocked_tags})\nFiltered languages: ({blocked_langs})")
-            return False
+
+    # Check tags
+    for tag in gallery_tags:
+        if tag in excluded_tags:
+            blocked_tags.append(tag)
+
+    # Check languages
+    if allowed_langs:
+        has_allowed = any(lang in allowed_langs for lang in gallery_langs)
+        has_translated = "translated" in gallery_langs and has_allowed
+
+        if not (has_allowed or has_translated):
+            blocked_langs = gallery_langs[:]  # keep full list for logging
+
+    # Final decision
+    if blocked_tags or blocked_langs:
+        log_clarification()
+        logger.info(
+            f"Skipping Gallery: {gallery_id} ({gallery_title}):\n"
+            f"Filtered tags: {blocked_tags}\n"
+            f"Filtered languages: {blocked_langs}"
+        )
+        return False
     
     # Include 'translated' as acceptable if any requested language is present 
     #if excluded_tags or allowed_langs:
