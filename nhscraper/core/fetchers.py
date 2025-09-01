@@ -37,7 +37,7 @@ def session_builder():
     logger.debug(f"Built HTTP session with cloudscraper")
     
     logger.info(f"DEFAULT_USE_TOR = {DEFAULT_USE_TOR}") # TEST
-    if config.get("USE_TOR", DEFAULT_USE_TOR):
+    if config.get("USE_TOR", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
@@ -65,38 +65,58 @@ if os.path.exists(TAG_CACHE_FILE):
 else:
     TAG_CACHE = {"tag": {}, "artist": {}, "group": {}, "parody": {}}
 
-def preload_tag_cache():
+def preload_tag_cache(tag_type: str, tag_name: str):
     """
-    Fetch all tags from /api/tags and populate the cache in memory and on disk.
-    Only fetches if a type is missing a requested tag.
+    Resolves a tag ID by querying nhentai's search API.
+    Populates TAG_CACHE for the given type/name.
     """
+    global TAG_CACHE
+
+    # Already cached
+    if tag_type in TAG_CACHE and tag_name in TAG_CACHE[tag_type]:
+        return TAG_CACHE[tag_type][tag_name]
+
+    # Build search query
+    search_query = f"{tag_type}:{tag_name}"
+    url = f"{API_BASE}/galleries/search?query={search_query}&page=1&sort=date"
 
     try:
-        resp = session.get(f"{API_BASE}/tags", timeout=30)
+        resp = session.get(url, timeout=30)
         resp.raise_for_status()
-        tags = resp.json()
+        data = resp.json()
+        galleries = data.get("result", [])
 
-        for tag in tags:
-            tag_type = tag["type"]
-            tag_name = tag["name"].lower()
-            tag_id = tag["id"]
+        tag_id = None
 
-            if tag_type not in TAG_CACHE:
-                TAG_CACHE[tag_type] = {}
+        # Find the tag ID in first gallery result
+        for gallery in galleries:
+            for tag in gallery.get("tags", []):
+                if tag.get("type") == tag_type and tag.get("name").lower() == tag_name:
+                    tag_id = tag.get("id")
+                    break
+            if tag_id:
+                break
 
-            TAG_CACHE[tag_type][tag_name] = tag_id
+        if tag_id is None:
+            raise ValueError(f"Could not resolve tag ID for {tag_type}:{tag_name}")
 
+        # Save in cache
+        if tag_type not in TAG_CACHE:
+            TAG_CACHE[tag_type] = {}
+        TAG_CACHE[tag_type][tag_name] = tag_id
+
+        # Persist cache to disk
         os.makedirs(os.path.dirname(TAG_CACHE_FILE), exist_ok=True)
         with open(TAG_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(TAG_CACHE, f, ensure_ascii=False, indent=2)
 
-        logger.info(f"Preloaded {sum(len(v) for v in TAG_CACHE.values())} tags into cache")
-    except Exception as e:
-        logger.warning(f"Failed to preload tags from API: {e}")
+        logger.info(f"Resolved tag {tag_type}:{tag_name} → ID {tag_id}")
+        return tag_id
 
-# ------------------------------
-# Build URL with automatic tag ID resolution
-# ------------------------------
+    except Exception as e:
+        logger.warning(f"Failed to resolve tag {tag_type}:{tag_name}: {e}")
+        return None
+
 def build_url(query: str, page: int) -> str:
     query_lower = query.lower()
 
@@ -115,14 +135,13 @@ def build_url(query: str, page: int) -> str:
         if query_lower.startswith(prefix):
             tag_name = query[len(prefix):].strip().lower()
 
-            # If tag missing, preload cache
-            if tag_type not in TAG_CACHE or tag_name not in TAG_CACHE.get(tag_type, {}):
-                logger.debug(f"Tag '{tag_name}' not found in cache, preloading...")
-                preload_tag_cache()
-
+            # Resolve tag ID dynamically if missing from cache
             tag_id = TAG_CACHE.get(tag_type, {}).get(tag_name)
             if tag_id is None:
-                raise ValueError(f"Tag not found in cache: {tag_type}='{tag_name}'")
+                logger.debug(f"Tag '{tag_name}' not found in cache, resolving via search...")
+                tag_id = preload_tag_cache(tag_type, tag_name)
+                if tag_id is None:
+                    raise ValueError(f"Tag not found: {tag_type}='{tag_name}'")
 
             return f"{API_BASE}/galleries/tagged?tag_id={tag_id}&page={page}&sort=date"
 
