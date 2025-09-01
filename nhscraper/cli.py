@@ -188,15 +188,7 @@ def build_gallery_list(args):
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
-def update_config(args, gallery_list): # Update config
-    # Build scraper session.
-    build_session()
-    
-    if not gallery_list: # Quit if Gallery List is Empty.
-        logger.warning("No galleries to download. Exiting.")
-        sys.exit(0)  # Or just return
-    
-    config["GALLERIES"] = gallery_list
+def update_config(args): # Update config    
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
@@ -220,7 +212,23 @@ def main():
     
     log_clarification()
     logger.debug("Updating Config...")
-    update_config(args, build_gallery_list(args))  
+    
+    # Update Config
+    # Allows session to use correct config values on creation
+    update_config(args)
+    
+    # Build scraper session.
+    build_session()
+    
+    # Build Gallery List (make sure not empty.)
+    gallery_list = build_gallery_list(args)
+    if not gallery_list:
+        logger.warning("No galleries provided. Exiting.")
+        sys.exit(0)  # Or just return
+    
+    # Update Config with Built Gallery List
+    update_env("GALLERIES", gallery_list)
+    
     log_clarification()
     logger.debug(f"Updated Config: {config}")
 

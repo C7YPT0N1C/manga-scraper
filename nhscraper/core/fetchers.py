@@ -34,7 +34,7 @@ def session_builder():
         "Referer": "https://nhentai.net/",
     })
     
-    logger.debug(f"Built HTTP session with cloudscraper: {s}")
+    logger.debug(f"Built HTTP session with cloudscraper")
     
     logger.info(f"DEFAULT_USE_TOR = {DEFAULT_USE_TOR}") # TEST
     if config.get("USE_TOR", DEFAULT_USE_TOR):
