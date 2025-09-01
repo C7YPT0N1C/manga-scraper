@@ -56,6 +56,8 @@ def build_gallery_subfolders(meta):
 ####################################################################################################################
 
 def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
+    global DEDICATED_DOWNLOAD_PATH
+    
     # Remove empty directories - safety check
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         logger.debug("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
