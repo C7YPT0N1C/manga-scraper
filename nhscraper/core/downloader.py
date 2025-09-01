@@ -68,12 +68,13 @@ def should_download_gallery(meta, gallery_title, num_pages):
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta)
 
-    # 0 pages, skip
+    # Skip if gallery has 0 pages
     if num_pages == 0:
+        log_clarification()
         logger.warning(f"Gallery: {gallery_id}: No pages, skipping")
         return False
 
-    # Skip if already fully downloaded
+    # Skip if gallery already fully downloaded
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -81,10 +82,11 @@ def should_download_gallery(meta, gallery_title, num_pages):
             for i in range(num_pages)
         )
         if all_exist:
+            log_clarification()
             logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
             return False
 
-    # Check excluded tags and language requirement
+    # Skip if gallery has excluded tags or doesn't meet language requirements
     excluded_tags = config.get("EXCLUDED_TAGS", [])
     
     allowed_langs = config.get("LANGUAGE", [])
@@ -100,7 +102,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}):\nFiltered tags ({gallery_tags})\nFiltered language ({gallery_langs})")
             return False
     
-    # Check excluded tags (LEGACY)
+    # Skip if gallery has excluded tags (LEGACY)
     excluded_tags = config.get("EXCLUDED_TAGS", [])
     if excluded_tags:
         gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
@@ -109,7 +111,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}): Filtered tags ({gallery_tags})")
             return False
     
-    # Check language requirements (LEGACY)
+    # Skip if gallery doesn't meet language requirements (LEGACY)
     allowed_langs = config.get("LANGUAGE", [])
     if allowed_langs:
         gallery_langs = get_meta_tags(meta, "language")
