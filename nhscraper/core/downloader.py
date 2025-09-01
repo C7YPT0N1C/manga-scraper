@@ -166,18 +166,33 @@ def process_galleries(gallery_ids):
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
-                        for safe_artist, artist_tasks in grouped_tasks:
-                            pbar.set_postfix_str(f"Artist: {safe_artist}")
-                            futures = [
-                                executor.submit(
-                                    active_extension.download_images_hook,
-                                    gallery_id, page, url, path, session, pbar, safe_artist
-                                )
-                                for page, url, path, _ in artist_tasks
-                            ]
-                            for _ in concurrent.futures.as_completed(futures):
-                                pbar.update(1)
+                    if config.get("DRY_RUN", False):
+                        with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                            for safe_artist, artist_tasks in grouped_tasks:
+                                pbar.set_postfix_str(f"Artist: {safe_artist}")
+                                futures = [
+                                    executor.submit(
+                                        active_extension.download_images_hook,
+                                        gallery_id, page, url, path, session, pbar, safe_artist
+                                    )
+                                    for page, url, path, _ in artist_tasks
+                                ]
+                                for _ in concurrent.futures.as_completed(futures):
+                                    pbar.update(1)
+                    else:
+                        with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                            for safe_artist, artist_tasks in grouped_tasks:
+                                pbar.set_postfix_str(f"Artist: {safe_artist}")
+                                futures = [
+                                    executor.submit(
+                                        active_extension.download_images_hook,
+                                        gallery_id, page, url, path, session, pbar, safe_artist
+                                    )
+                                    for page, url, path, _ in artist_tasks
+                                ]
+                                for _ in concurrent.futures.as_completed(futures):
+                                    pbar.update(1)
+
 
                 if gallery_failed:
                     logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
