@@ -106,7 +106,7 @@ if os.path.exists(ENV_FILE):
 
 # Download paths
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
-DEFAULT_EXTENSION_DOWNLOAD_PATH=""
+DEFAULT_EXTENSION_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
 
 # APIs and Mirrors
 DEFAULT_NHENTAI_API_BASE="https://nhentai.net/api"
