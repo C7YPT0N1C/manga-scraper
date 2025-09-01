@@ -124,18 +124,20 @@ def after_all_galleries_download_hook(all_meta: list):
 def post_run_hook(config, completed_galleries):
     global extension_download_path
     
+    log_clarification()
+    logger.debug(f"Extension: Skeleton: Post-run hook called.")
+    
     # Remove empty directories under the extension_download_path
     for dirpath, dirnames, filenames in os.walk(extension_download_path, topdown=False):
         if not dirnames and not filenames:
             try:
                 os.rmdir(dirpath)
+                logger.warning(f"Removed empty directory: {dirpath}")
             except Exception as e:
-                logger.warning(f"Could not remove empty directory {dirpath}: {e}")
+                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
     extension_download_path = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-    log_clarification()
-    logger.debug(f"Extension: Skeleton: Post-run hook called.")
 
 # ------------------------------
 # Install / Uninstall
