@@ -13,7 +13,11 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
 
-with open("local_manifest.json", "r", encoding="utf-8") as f:
+LOCAL_MANIFEST_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "local_manifest.json"
+)
+
+with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
     manifest = json.load(f)
 
 for ext in manifest.get("extensions", []):

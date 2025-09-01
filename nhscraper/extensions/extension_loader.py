@@ -150,7 +150,7 @@ def install_selected_extension(extension_name: str):
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
-    module_name = f"extensions.{extension_name}.{entry_point.replace('.py', '')}"
+    module_name = f"nhscraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()
