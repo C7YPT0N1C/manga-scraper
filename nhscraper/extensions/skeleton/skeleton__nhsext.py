@@ -128,6 +128,7 @@ def post_run_hook(config, completed_galleries):
     logger.debug(f"Extension: Skeleton: Post-run hook called.")
     
     # Remove empty directories under the extension_download_path
+    log_clarification()
     for dirpath, dirnames, filenames in os.walk(extension_download_path, topdown=False):
         if not dirnames and not filenames:
             try:

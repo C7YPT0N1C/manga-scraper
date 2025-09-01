@@ -87,9 +87,10 @@ def should_download_gallery(meta, gallery_title, num_pages):
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
-    excluded_tags = config.get("EXCLUDED_TAGS", [])    
+    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    blocked_tags = []
+        
     allowed_langs = config.get("LANGUAGE", [])
-    
     gallery_langs = get_meta_tags(meta, "language")
     gallery_langs_lower = [l.lower() for l in gallery_langs]
     allowed_lower = [l.lower() for l in allowed_langs]
