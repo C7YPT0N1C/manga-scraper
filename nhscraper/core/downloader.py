@@ -13,15 +13,22 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-active_extension = get_selected_extension()
-log_clarification()
-logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+active_extension = "skeleton"
+download_location = config.get["EXTENSION_DOWNLOAD_PATH"]
 
-download_location = get_download_path()
-if not config.get("DRY_RUN", False):
-    os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
-log_clarification()
-logger.info(f"Using download path: {download_location}")
+def load_extension():
+    global active_extension
+    global download_location
+
+    active_extension = get_selected_extension()
+    log_clarification()
+    logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+
+    download_location = get_download_path()
+    if not config.get("DRY_RUN", False):
+        os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
+    log_clarification()
+    logger.info(f"Using download path: {download_location}")
 
 ####################################################################################################
 # UTILITIES
@@ -255,6 +262,8 @@ def start_downloader():
     log_clarification()
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
+    
+    load_installed_extensions
 
     gallery_ids = config.get("GALLERIES", [])
     active_extension.pre_run_hook(config, gallery_ids)
