@@ -36,6 +36,7 @@ def session_builder():
     
     logger.debug(f"Built HTTP session with cloudscraper: {s}")
     
+    logger.info(f"DEFAULT_USE_TOR = {DEFAULT_USE_TOR}") # TEST
     if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}

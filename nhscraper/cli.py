@@ -189,8 +189,11 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args, gallery_list): # Update config
+    # Build scraper session.
+    build_session()
+    
     if not gallery_list: # Quit if Gallery List is Empty.
-        logger.warning("No galleries provided. Exiting.")
+        logger.warning("No galleries to download. Exiting.")
         sys.exit(0)  # Or just return
     
     config["GALLERIES"] = gallery_list
@@ -220,9 +223,6 @@ def main():
     update_config(args, build_gallery_list(args))  
     log_clarification()
     logger.debug(f"Updated Config: {config}")
-    
-    # Build scraper session.
-    build_session()
 
     # ------------------------------
     # Handle extension installation/uninstallation
