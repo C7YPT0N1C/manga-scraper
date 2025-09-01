@@ -129,17 +129,17 @@ def process_galleries(gallery_ids):
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                if not should_download_gallery(meta, num_pages):
-                    logger.info("TEST: RETURNED FALSE?")
-                    db.mark_gallery_completed(gallery_id)
-                    active_extension.after_gallery_download_hook(meta)
-                    break
-
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
                 artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
                 gallery_title = clean_title(meta)
+                
+                if not should_download_gallery(meta, num_pages):
+                    logger.info("TEST: RETURNED FALSE?")
+                    db.mark_gallery_completed(gallery_id)
+                    active_extension.after_gallery_download_hook(meta)
+                    break
 
                 grouped_tasks = []
                 for artist in artists:
