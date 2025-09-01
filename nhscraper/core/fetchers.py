@@ -3,12 +3,12 @@
 
 import os, time, random, json, cloudscraper, requests
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 
 # ===============================
 # GLOBAL VARIABLES
 # ===============================
-API_BASE = config.get("NHENTAI_API_BASE", "https://nhentai.net/api")
+API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 TAG_CACHE_FILE = "/opt/nhentai-scraper/tag_cache.json"
 
 # ===============================
@@ -34,7 +34,7 @@ def session_builder():
         "Referer": "https://nhentai.net/",
     })
 
-    if config.get("USE_TOR", False):
+    if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
@@ -77,7 +77,7 @@ def preload_tag_cache():
             if tag_name not in TAG_CACHE[tag_type]:
                 TAG_CACHE[tag_type][tag_name] = tag_id
 
-        # Save to disk
+        # Save cache to disk
         os.makedirs(os.path.dirname(TAG_CACHE_FILE), exist_ok=True)
         with open(TAG_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(TAG_CACHE, f, ensure_ascii=False, indent=2)
@@ -94,6 +94,7 @@ def build_url(query: str, page: int) -> str:
     Build nhentai API URL from a generic query (homepage, search, artist, group, tag, parody) and page.
     Resolves tag IDs from batch-loaded cache.
     """
+    query = query.strip()
     query_lower = query.lower()
 
     # ------------------------------
@@ -106,7 +107,7 @@ def build_url(query: str, page: int) -> str:
     # Search
     # ------------------------------
     if query_lower.startswith("search:"):
-        search_value = query.split(":", 1)[1]
+        search_value = query.split(":", 1)[1].strip()
         return f"{API_BASE}/galleries/search?query={search_value}&page={page}&sort=date"
 
     # ------------------------------
@@ -117,7 +118,7 @@ def build_url(query: str, page: int) -> str:
         if query_lower.startswith(prefix):
             tag_name = query[len(prefix):].strip().lower()
 
-            # Check cache
+            # Lookup in cache
             tag_id = TAG_CACHE.get(tag_type, {}).get(tag_name)
             if tag_id is None:
                 raise ValueError(f"Tag not found in cache: {tag_type}='{tag_name}'")
@@ -144,7 +145,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
             logger.debug(f"Requesting {url}")
 
             resp = None
-            for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
+            for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
                 try:
                     resp = session.get(url, timeout=30)
                     if resp.status_code == 429:
@@ -155,7 +156,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= config.get("MAX_RETRIES", 3):
+                    if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         break
@@ -191,7 +192,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
     url = f"{API_BASE}/gallery/{gallery_id}"
-    for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
+    for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
         try:
             log_clarification()
             logger.debug(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
@@ -221,7 +222,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if "404 Client Error: Not Found for url" in str(e):
                 logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
-            if attempt >= config.get("MAX_RETRIES", 3):
+            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
@@ -229,7 +230,7 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
-            if attempt >= config.get("MAX_RETRIES", 3):
+            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt

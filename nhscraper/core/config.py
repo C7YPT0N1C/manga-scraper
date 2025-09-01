@@ -100,36 +100,72 @@ os.makedirs(NHENTAI_DIR, exist_ok=True)
 if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
 
-# ------------------------------
-# Config dictionary
-# ------------------------------
-# Also change corresponding parser.add_argument in CLI
-API_BASE = "https://nhentai.net/api" # Set NHentai API Base here. Overrides .env .
+# ------------------------------------------------------------
+# NHentai Scraper Configuration Defaults
+# ------------------------------------------------------------
 
+# Download paths
+DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+DEFAULT_EXTENSION_DOWNLOAD_PATH=""
+
+# APIs and Mirrors
+DEFAULT_NHENTAI_API_BASE="https://nhentai.net/api"
+DEFAULT_NHENTAI_MIRRORS="https://i.nhentai.net"
+
+# Gallery ID selection
+DEFAULT_HOMEPAGE_RANGE_START=1
+DEFAULT_HOMEPAGE_RANGE_END=3
+DEFAULT_RANGE_START=500000
+DEFAULT_RANGE_END=600000
+DEFAULT_GALLERIES=""
+
+# Filters
+DEFAULT_EXCLUDED_TAGS=""
+DEFAULT_LANGUAGE="english"
+
+# Titles
+DEFAULT_TITLE_TYPE="english"
+DEFAULT_TITLE_SANITISE="True"
+
+# Threads
+DEFAULT_THREADS_GALLERIES=2
+DEFAULT_THREADS_IMAGES=10
+DEFAULT_MAX_RETRIES=3
+
+# Download Options
+DEFAULT_USE_TOR="True"
+DEFAULT_DRY_RUN="False"
+DEFAULT_VERBOSE="False"
+
+# ------------------------------------------------------------
+# Config Dictionary
+# ------------------------------------------------------------
+
+# Also change corresponding parser.add_argument in CLI
 config = {
-    "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
-    "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),
-    "NHENTAI_API_BASE": os.getenv(f"NHENTAI_API_BASE", {API_BASE}),
-    "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", "https://i.nhentai.net"),
-    "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", 1)),
-    "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", 3)),
-    "RANGE_START": int(os.getenv("RANGE_START", 500000)),
-    "RANGE_END": int(os.getenv("RANGE_END", 600000)),
-    "GALLERIES": os.getenv("GALLERIES", ""),
+    "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
+    "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
+    "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
+    "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS),
+    "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START)),
+    "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END)),
+    "RANGE_START": int(os.getenv("RANGE_START", DEFAULT_RANGE_START)),
+    "RANGE_END": int(os.getenv("RANGE_END", DEFAULT_RANGE_END)),
+    "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
     "ARTIST": os.getenv("ARTIST", ""),
     "GROUP": os.getenv("GROUP", ""),
     "TAG": os.getenv("TAG", ""),
     "PARODY": os.getenv("PARODY", ""),
-    "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", ""),
-    "LANGUAGE": os.getenv("LANGUAGE", "english"),
-    "TITLE_TYPE": os.getenv("TITLE_TYPE", "english"),
-    "TITLE_SANITISE": os.getenv("TITLE_SANITISE", "false").lower() == "true",
-    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", 2)),
-    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", 10)),
-    "MAX_RETRIES": int(os.getenv("MAX_RETRIES", 3)),
-    "USE_TOR": os.getenv("USE_TOR", "false").lower() == "true",
-    "DRY_RUN": os.getenv("DRY_RUN", "false").lower() == "true",
-    "VERBOSE": os.getenv("VERBOSE", "false").lower() == "true",
+    "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
+    "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
+    "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
+    "TITLE_SANITISE": os.getenv("TITLE_SANITISE", DEFAULT_TITLE_SANITISE).lower() == "true",
+    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
+    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
+    "MAX_RETRIES": int(os.getenv("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
+    "USE_TOR": os.getenv("USE_TOR", DEFAULT_USE_TOR).lower() == "true",
+    "DRY_RUN": os.getenv("DRY_RUN", DEFAULT_DRY_RUN).lower() == "true",
+    "VERBOSE": os.getenv("VERBOSE", DEFAULT_VERBOSE).lower() == "true",
 }
 
 # ------------------------------
@@ -161,16 +197,16 @@ def get_download_path():
         1. EXTENSION_DOWNLOAD_PATH if set and valid
         2. Default DOWNLOAD_PATH
     """
-    ext_path = config.get("EXTENSION_DOWNLOAD_PATH", "").strip()
+    ext_path = config.get("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH).strip()
     if ext_path and os.path.isdir(ext_path):
         return ext_path
-    return config.get("DOWNLOAD_PATH")
+    return config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
 
 # ------------------------------
 # Get mirrors list
 # ------------------------------
 def get_mirrors():
-    env_mirrors = config.get("NHENTAI_MIRRORS", "")
+    env_mirrors = config.get("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
     mirrors = []
     if env_mirrors:
         mirrors = [m.strip() for m in env_mirrors.split(",") if m.strip()]

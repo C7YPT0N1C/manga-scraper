@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from tqdm import tqdm
 from threading import Thread, Lock
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 
 app = Flask(__name__)
 
@@ -28,7 +28,7 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    title_type = config.get("TITLE_TYPE", "pretty").lower()
+    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
     if "|" in title: title = title.split("|")[-1].strip()
     title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
@@ -49,7 +49,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
     # Unified function to update gallery state per stage.
     # stage: 'download' or 'graphql'
     # success: True if stage completed, False if failed
-    max_attempts = config.get("MAX_ATTEMPTS", 3)
+    max_attempts = config.get("MAX_ATTEMPTS", DEFAULT_MAX_RETRIES)
     
     with state_lock:
         entry = gallery_metadata.setdefault(gallery_id, {"meta": None})
@@ -79,7 +79,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
 def get_tor_ip():
     """Fetch current IP, through Tor if enabled."""
     try:
-        if config.get("USE_TOR", True):
+        if config.get("USE_TOR", DEFAULT_USE_TOR):
             r = requests.get("https://httpbin.org/ip",
                              proxies={
                                  "http": "socks5h://127.0.0.1:9050",
@@ -156,5 +156,5 @@ if __name__ == "__main__":
     app.run(
     host="0.0.0.0",
     port=5000,
-    debug=config.get("VERBOSE", False)
+    debug=config.get("VERBOSE", DEFAULT_VERBOSE)
 )

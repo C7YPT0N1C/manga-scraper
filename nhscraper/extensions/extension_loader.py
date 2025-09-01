@@ -4,7 +4,7 @@
 import os, json, importlib, subprocess
 from urllib.request import urlopen
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------

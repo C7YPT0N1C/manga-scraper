@@ -3,7 +3,7 @@
 
 import os, json, subprocess, requests
 
-from nhscraper.core.config import logger, config, log_clarification, update_env
+from nhscraper.core.config import *
 
 # ===============================
 # GLOBALS
@@ -22,7 +22,7 @@ def graphql_request(query, variables=None, USE_STUB=False):
         logger.info(f"[STUB] Skipping GraphQL call. Query: {query}, Variables: {variables}")
         return {"data": "stub"}
 
-    if config.get("DRY_RUN", False):
+    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
         log_clarification()
         logger.info("[DRY-RUN] Skipping GraphQL request")
         return None
@@ -118,7 +118,7 @@ def after_gallery_download_hook(meta: dict):
     gallery_folder = os.path.join(extension_download_path, artist, f"{meta['id']}")
     os.makedirs(gallery_folder, exist_ok=True)
     details_file = os.path.join(gallery_folder, "details.json")
-    if config.get("DRY_RUN", False):
+    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
         logger.debug(f"Dry-run: Would save details.json to {details_file}")
     else:
         with open(details_file, "w", encoding="utf-8") as f:

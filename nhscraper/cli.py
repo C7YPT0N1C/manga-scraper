@@ -3,7 +3,7 @@
 
 import argparse
 
-from nhscraper.core.config import logger, config, log_clarification, setup_logger # TEST
+from nhscraper.core.config import *
 from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
@@ -91,38 +91,38 @@ def parse_args():
 
     # Filters
     parser.add_argument(
-        "--excluded-tags", type=str, default="",
+        "--excluded-tags", type=str, default=DEFAULT_EXCLUDED_TAGS,
         help="Comma-separated list of tags to exclude galleries"
     )
     parser.add_argument(
-        "--language", type=str, default="english",
+        "--language", type=str, default=DEFAULT_LANGUAGE,
         help="Comma-separated list of languages to include"
     )
 
     # Titles
     parser.add_argument(
-        "--title-type", choices=["english","japanese","pretty"], default="english"
+        "--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE
     )
     parser.add_argument(
-        "--title-sanitise", action="store_true", default=True,
+        "--title-sanitise", action="store_true", default=DEFAULT_TITLE_SANITISE,
         help="Sanitise titles for filesystem safety (pretty only by default)"
     )
 
     # Threads
-    parser.add_argument("--threads-galleries", type=int, default=2)
-    parser.add_argument("--threads-images", type=int, default=10)
+    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES)
+    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES)
     
     parser.add_argument(
         "--max-retries",
         type=int,
-        default=int(os.getenv("MAX_RETRIES", 3)),
+        default=DEFAULT_MAX_RETRIES,
         help="Maximum number of retry attempts for failed downloads (default: 3)"
     )   
 
     # Download Options
-    parser.add_argument("--use-tor", action="store_true", default=False)
-    parser.add_argument("--dry-run", action="store_true", default=False)
-    parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR)
+    parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN)
+    parser.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE)
 
     return parser.parse_args()
 
@@ -131,11 +131,11 @@ def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]
     if not arg_list:
         return set()
 
-    name = arg_list[0]
+    name = arg_list[0].strip()  # remove whitespaces
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
 
-    query = f'{query_type}:"{name}"'
+    query = f"{query_type}:{name}"  # remove quotes
     return fetch_gallery_ids(query, start_page, end_page)
 
 def build_gallery_list(args):

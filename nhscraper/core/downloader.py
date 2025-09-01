@@ -5,7 +5,7 @@ import os, time, random, concurrent.futures
 from tqdm import tqdm
 from functools import partial
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
@@ -24,8 +24,8 @@ def load_extension():
     log_clarification()
     logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
-    download_location = config.get("DOWNLOAD_PATH", []) # Updated by loaded extension via extension_loader
-    if not config.get("DRY_RUN", False):
+    download_location = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH) # Updated by loaded extension via extension_loader
+    if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
         os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
     log_clarification()
     logger.info(f"Using download path: {download_location}")
@@ -53,10 +53,10 @@ def build_gallery_path(meta):
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage):
+def dynamic_sleep(stage): # TEST
     if stage=="gallery":
-        num_galleries = max(1, len(config.get("GALLERIES", [])))
-        total_load = config.get("THREADS_GALLERIES", 2) * config.get("THREADS_IMAGES", 10)
+        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
+        total_load = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES) * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
         base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
         scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
         sleep_time = random.uniform(base_min*scale, base_max*scale)
@@ -77,7 +77,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
     if not meta:
         return False
 
-    dry_run = config.get("DRY_RUN", False)
+    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta)
 
@@ -109,11 +109,11 @@ def should_download_gallery(meta, gallery_title, num_pages):
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
-    excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", [])]
+    excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)]
     gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
     blocked_tags = []
     
-    allowed_langs = [l.lower() for l in config.get("LANGUAGE", [])]
+    allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
     gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
     blocked_langs = []
 
@@ -157,7 +157,7 @@ def process_galleries(gallery_ids):
         db.mark_gallery_started(gallery_id, download_location, extension_name)
 
         gallery_attempts = 0
-        max_gallery_attempts = config.get("MAX_RETRIES", 3)
+        max_gallery_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
         while gallery_attempts < max_gallery_attempts:
             gallery_attempts += 1
@@ -184,7 +184,7 @@ def process_galleries(gallery_ids):
                 for artist in artists:
                     safe_artist = safe_name(artist)
                     doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
-                    if not config.get("DRY_RUN", False):
+                    if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
                     artist_tasks = []
@@ -199,11 +199,6 @@ def process_galleries(gallery_ids):
                         img_filename = f"{page}.{img_url.split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
                         artist_tasks.append((page, img_url, img_path, safe_artist))
-                    
-                        #if config.get("DRY_RUN", False): # TEST
-                        #    logger.info(f"[DRY-RUN] Would download {img_url} -> {img_path}")
-                        #else:
-                        #    logger.info(f"Downloaded {img_url} -> {img_path}")
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
@@ -215,7 +210,7 @@ def process_galleries(gallery_ids):
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    if config.get("DRY_RUN", False):
+                    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
                             for safe_artist, artist_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Artist: {safe_artist}")
@@ -268,7 +263,7 @@ def start_downloader():
     log_clarification()
     load_extension() # Load extension variables, etc
 
-    gallery_ids = config.get("GALLERIES", [])
+    gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
     active_extension.pre_run_hook(config, gallery_ids)
 
     if not gallery_ids:
@@ -279,7 +274,7 @@ def start_downloader():
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("threads_galleries", 4)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
         #futures = [executor.submit(process_gallery, gid) for gid in gallery_ids]
         futures = [executor.submit(process_galleries, gallery_ids)]
         concurrent.futures.wait(futures)

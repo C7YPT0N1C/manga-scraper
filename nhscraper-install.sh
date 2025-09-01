@@ -130,7 +130,7 @@ install_scraper() {
 }
 
 create_env_file() {
-    # Also change corresponding parser.add_argument in CLI
+    # Update defaults in Config.py
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
@@ -140,32 +140,32 @@ create_env_file() {
 NHENTAI_DIR=/opt/nhentai-scraper
 
 # Download paths
-DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
+DOWNLOAD_PATH=
 EXTENSION_DOWNLOAD_PATH=
 
 # APIs and Mirrors
-NHENTAI_API_BASE=https://nhentai.net/api
-NHENTAI_MIRRORS=https://i.nhentai.net
+NHENTAI_API_BASE=
+NHENTAI_MIRRORS=
 
 # Gallery ID selection
-HOMEPAGE_RANGE_START=1
-HOMEPAGE_RANGE_END=3
-RANGE_START=500000
-RANGE_END=600000
+HOMEPAGE_RANGE_START=
+HOMEPAGE_RANGE_END=
+RANGE_START=
+RANGE_END=
 GALLERIES=
 
 # Filters
 EXCLUDED_TAGS=
-LANGUAGE=english
+LANGUAGE=
 
 # Titles
-TITLE_TYPE=english
-TITLE_SANITISE=true
+TITLE_TYPE=
+TITLE_SANITISE=
 
 # Threads
-THREADS_GALLERIES=2
-THREADS_IMAGES=10
-MAX_RETRIES=3
+THREADS_GALLERIES=
+THREADS_IMAGES=
+MAX_RETRIES=
 
 # Download Options
 USE_TOR=true

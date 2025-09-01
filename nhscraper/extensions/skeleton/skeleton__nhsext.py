@@ -6,7 +6,7 @@
 
 import os, time, subprocess, json, requests
 
-from nhscraper.core.config import logger, config, log_clarification, update_env
+from nhscraper.core.config import *
 from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 
 ####################################################################################################################
@@ -111,7 +111,7 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
         return False
 
     if retries is None:
-        retries = config.get("MAX_RETRIES", 3)
+        retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
     if os.path.exists(path):
         logger.debug(f"Already exists, skipping: {path}")
@@ -119,7 +119,7 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
             pbar.set_postfix_str(f"Artist: {artist}")
         return True
 
-    if config.get("DRY_RUN", False):
+    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {url} -> {path}")
         if pbar and artist:
             pbar.set_postfix_str(f"Artist: {artist}")
