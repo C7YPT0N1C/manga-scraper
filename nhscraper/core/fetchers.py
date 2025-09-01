@@ -5,15 +5,15 @@ import os, time, random, cloudscraper, requests, json, urllib.parse
 
 from nhscraper.core.config import *
 
-# ===============================
+################################################################################################################
 # GLOBAL VARIABLES
-# ===============================
+################################################################################################################
 API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
-TAG_CACHE_FILE = "/opt/nhentai-scraper/tag_cache.json"
+METADATA_CACHE_FILE = "/opt/nhentai-scraper/metadata_cache.json"
 
-# ===============================
+################################################################################################################
 # HTTP SESSION
-# ===============================
+################################################################################################################
 session = None
 
 def session_builder():
@@ -54,68 +54,8 @@ def build_session():
         session = session_builder()
     
 ################################################################################################################
-
-# ------------------------------
-# Load or initialise tag cache
-# ------------------------------
-if os.path.exists(TAG_CACHE_FILE):
-    with open(TAG_CACHE_FILE, "r", encoding="utf-8") as f:
-        TAG_CACHE: dict[str, dict[str, int]] = json.load(f)
-else:
-    TAG_CACHE = {"tag": {}, "artist": {}, "group": {}, "parody": {}}
-
-def cache_tags(tag_type: str, tag_name: str):
-    """
-    Resolves a tag ID by querying nhentai's search API.
-    Populates TAG_CACHE for the given type/name.
-    """
-    global TAG_CACHE
-
-    # Already cached
-    if tag_type in TAG_CACHE and tag_name in TAG_CACHE[tag_type]:
-        return TAG_CACHE[tag_type][tag_name]
-
-    # Build search query
-    search_query = f"{tag_type}:{tag_name}"
-    url = f"{API_BASE}/galleries/search?query={search_query}&page=1&sort=date"
-
-    try:
-        resp = session.get(url, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        galleries = data.get("result", [])
-
-        tag_id = None
-
-        # Find the tag ID in first gallery result
-        for gallery in galleries:
-            for tag in gallery.get("tags", []):
-                if tag.get("type") == tag_type and tag.get("name").lower() == tag_name:
-                    tag_id = tag.get("id")
-                    break
-            if tag_id:
-                break
-
-        if tag_id is None:
-            raise ValueError(f"Could not resolve tag ID for {tag_type}:{tag_name}")
-
-        # Save in cache
-        if tag_type not in TAG_CACHE:
-            TAG_CACHE[tag_type] = {}
-        TAG_CACHE[tag_type][tag_name] = tag_id
-
-        # Persist cache to disk
-        os.makedirs(os.path.dirname(TAG_CACHE_FILE), exist_ok=True)
-        with open(TAG_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(TAG_CACHE, f, ensure_ascii=False, indent=2)
-
-        logger.info(f"Resolved tag {tag_type}:{tag_name} → ID {tag_id}")
-        return tag_id
-
-    except Exception as e:
-        logger.warning(f"Failed to resolve tag {tag_type}:{tag_name}: {e}")
-        return None
-
+# API Handling
+################################################################################################################
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
 
@@ -199,9 +139,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
         logger.warning(f"Failed to fetch galleries for query '{query_value}': {e}")
         return set()
 
-# ===============================
+################################################################################################################
 # FETCH METADATA
-# ===============================
+################################################################################################################
 def fetch_gallery_metadata(gallery_id: int):
     url = f"{API_BASE}/gallery/{gallery_id}"
     for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
