@@ -127,15 +127,19 @@ def parse_args():
     return parser.parse_args()
 
 def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]:
-    """Helper to parse CLI args and call fetch_gallery_ids."""
+    """Parse CLI args and call fetch_gallery_ids."""
     if not arg_list:
         return set()
 
-    name = arg_list[0].strip()  # remove whitespaces
+    name = arg_list[0].strip()
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
 
-    query = f"{query_type}:{name}"  # remove quotes
+    # Wrap name in quotes if it contains spaces
+    if " " in name and not (name.startswith('"') and name.endswith('"')):
+        name = f'"{name}"'
+
+    query = f"{query_type}:{name}"
     return fetch_gallery_ids(query, start_page, end_page)
 
 def build_gallery_list(args):

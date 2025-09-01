@@ -46,6 +46,8 @@ def session_builder():
 def build_session():
     global session
     session = session_builder() # cloudscraper session, default.
+    
+################################################################################################################
 
 # ------------------------------
 # Load or initialize tag cache
@@ -56,11 +58,11 @@ if os.path.exists(TAG_CACHE_FILE):
 else:
     TAG_CACHE = {"tag": {}, "artist": {}, "group": {}, "parody": {}}
 
-# ------------------------------
-# Batch-load tags from API
-# ------------------------------
 def preload_tag_cache():
-    """Fetch all tags from /api/tags and populate the cache in memory and on disk."""
+    """
+    Fetch all tags from /api/tags and populate the cache in memory and on disk.
+    Only fetches if a type is missing a requested tag.
+    """
     try:
         resp = requests.get(f"{API_BASE}/tags", timeout=30)
         resp.raise_for_status()
@@ -74,10 +76,8 @@ def preload_tag_cache():
             if tag_type not in TAG_CACHE:
                 TAG_CACHE[tag_type] = {}
 
-            if tag_name not in TAG_CACHE[tag_type]:
-                TAG_CACHE[tag_type][tag_name] = tag_id
+            TAG_CACHE[tag_type][tag_name] = tag_id
 
-        # Save cache to disk
         os.makedirs(os.path.dirname(TAG_CACHE_FILE), exist_ok=True)
         with open(TAG_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(TAG_CACHE, f, ensure_ascii=False, indent=2)
@@ -86,46 +86,39 @@ def preload_tag_cache():
     except Exception as e:
         logger.warning(f"Failed to preload tags from API: {e}")
 
+
 # ------------------------------
-# Build URLs
+# Build URL with automatic tag ID resolution
 # ------------------------------
 def build_url(query: str, page: int) -> str:
-    """
-    Build nhentai API URL from a generic query (homepage, search, artist, group, tag, parody) and page.
-    Resolves tag IDs from batch-loaded cache.
-    """
-    query = query.strip()
     query_lower = query.lower()
 
-    # ------------------------------
     # Homepage
-    # ------------------------------
     if query_lower == "homepage":
         return f"{API_BASE}/galleries/all?page={page}&sort=date"
 
-    # ------------------------------
     # Search
-    # ------------------------------
     if query_lower.startswith("search:"):
         search_value = query.split(":", 1)[1].strip()
         return f"{API_BASE}/galleries/search?query={search_value}&page={page}&sort=date"
 
-    # ------------------------------
-    # Tag-based queries ("artist", "group", "tag", "parody")
-    # ------------------------------
+    # Tag-based queries
     for tag_type in ("artist", "group", "tag", "parody"):
         prefix = f"{tag_type}:"
         if query_lower.startswith(prefix):
             tag_name = query[len(prefix):].strip().lower()
 
-            # Lookup in cache
+            # If tag missing, preload cache
+            if tag_type not in TAG_CACHE or tag_name not in TAG_CACHE.get(tag_type, {}):
+                logger.debug(f"Tag '{tag_name}' not found in cache, preloading...")
+                preload_tag_cache()
+
             tag_id = TAG_CACHE.get(tag_type, {}).get(tag_name)
             if tag_id is None:
                 raise ValueError(f"Tag not found in cache: {tag_type}='{tag_name}'")
 
             return f"{API_BASE}/galleries/tagged?tag_id={tag_id}&page={page}&sort=date"
 
-    # ------------------------------
     raise ValueError(f"Unknown query format: {query}")
 
 def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
