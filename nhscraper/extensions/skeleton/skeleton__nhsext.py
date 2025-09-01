@@ -33,6 +33,7 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
     Downloads an image from URL to the given path.
     Updates tqdm progress bar with current artist.
     """
+    log_clarification()
     if not url:
         logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
         if pbar and artist:
@@ -49,7 +50,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
         return True
 
     if config.get("DRY_RUN", False):
-        log_clarification()
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {url} -> {path}")
         if pbar and artist:
             pbar.set_postfix_str(f"Artist: {artist}")
@@ -63,7 +63,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
             r = session.get(url, timeout=30, stream=True)
             if r.status_code == 429:
                 wait = 2 ** attempt
-                log_clarification()
                 logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
                 time.sleep(wait)
                 continue
@@ -74,7 +73,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
                     if chunk:
                         f.write(chunk)
 
-            log_clarification()
             logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
             if pbar and artist:
                 pbar.set_postfix_str(f"Artist: {artist}")
@@ -125,7 +123,16 @@ def after_all_galleries_download_hook(all_meta: list):
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS)
 def post_run_hook(config, completed_galleries):
     global extension_download_path
-    extension_download_path = ""  # Reset after downloads
+    
+    # Remove empty directories under the extension_download_path
+    for dirpath, dirnames, filenames in os.walk(extension_download_path, topdown=False):
+        if not dirnames and not filenames:
+            try:
+                os.rmdir(dirpath)
+            except Exception as e:
+                logger.warning(f"Could not remove empty directory {dirpath}: {e}")
+
+    extension_download_path = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", "")
     log_clarification()
     logger.debug(f"Extension: Skeleton: Post-run hook called.")
