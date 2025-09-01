@@ -227,7 +227,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        logger.debug(f"Built candidate image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
+        logger.debug(f"Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
