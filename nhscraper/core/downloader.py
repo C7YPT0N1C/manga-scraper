@@ -112,7 +112,8 @@ def should_download_gallery(meta, gallery_title, num_pages):
     if blocked_tags or blocked_langs:
         log_clarification()
         logger.info(
-            f"Skipping Gallery: {gallery_id} ({gallery_title}):\n"
+            f"Skipping Gallery: {gallery_id}:\n"
+            f"Title: {gallery_title}\n"
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
@@ -187,7 +188,6 @@ def process_galleries(gallery_ids):
                         grouped_tasks.append((safe_artist, artist_tasks))
                 
                 if not should_download_gallery(meta, gallery_title, num_pages):
-                    logger.info("TEST: RETURNED FALSE?")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break

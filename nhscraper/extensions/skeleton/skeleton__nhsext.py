@@ -122,17 +122,21 @@ def after_all_galleries_download_hook(all_meta: list):
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS)
 def post_run_hook(config, completed_galleries):
     global extension_download_path
-    
+
     log_clarification()
-    logger.debug(f"Extension: Skeleton: Post-run hook called.")
-    
-    # Remove empty directories under the extension_download_path
-    log_clarification()
+    logger.debug("Extension: Skeleton: Post-run hook called.")
+
+    # Remove empty directories - safety check
+    if not extension_download_path or not os.path.isdir(extension_download_path):
+        logger.debug("No valid extension_download_path set, skipping cleanup.")
+        return
+
+    # Remove empty directories
     for dirpath, dirnames, filenames in os.walk(extension_download_path, topdown=False):
         if not dirnames and not filenames:
             try:
                 os.rmdir(dirpath)
-                logger.warning(f"Removed empty directory: {dirpath}")
+                logger.info(f"Removed empty directory: {dirpath}")
             except Exception as e:
                 logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
