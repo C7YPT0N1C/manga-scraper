@@ -205,7 +205,10 @@ def main():
     args = parse_args()
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(verbose=args.verbose) 
+    logger = setup_logger(verbose=args.verbose)
+    
+    # Build scraper session.
+    build_session()
     
     log_clarification()
     logger.info("CLI: Ready.")
@@ -225,8 +228,6 @@ def main():
     update_config(args, gallery_list)    
     log_clarification()
     logger.debug(f"Updated Config: {config}")
-    
-    build_session()
 
     # ------------------------------
     # Handle extension installation/uninstallation
