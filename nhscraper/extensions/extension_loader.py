@@ -112,40 +112,38 @@ def load_installed_extensions():
 # Install / Uninstall Extension
 # ------------------------------
 def install_selected_extension(extension_name: str):
-    """Install an extension if not already installed."""
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
-        log_clarification()
         logger.error(f"Extension '{extension_name}': Not found in remote manifest")
         return
 
     if ext_entry.get("installed", False):
-        log_clarification()
         logger.info(f"Extension '{extension_name}': Already installed")
         return
 
-    # Clone/download extension if needed (with repo backup)
+    repo_url = ext_entry.get("repo_url", "")
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
     if not os.path.exists(ext_folder):
-        repo_url = ext_entry.get("repo_url", "")
         try:
-            log_clarification()
-            logger.debug(f"Cloning {extension_name} from {repo_url}...")
-            subprocess.run(["git", "clone", repo_url, ext_folder], check=True)
+            logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+
+            os.makedirs(ext_folder, exist_ok=True)
+            subprocess.run(["git", "init", ext_folder], check=True)
+            subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", repo_url], check=True)
+            subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+
+            # Enable sparse-checkout of only the needed extension folder
+            sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+            with open(sparse_file, "w") as f:
+                f.write(f"{extension_name}/\n")
+
+            subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+
         except Exception as e:
-            log_clarification()
-            logger.warning(f"Failed to clone from primary repo: {e}")
-            if BASE_REPO_BACKUP_URL:
-                backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
-                try:
-                    log_clarification()
-                    logger.debug(f"Retrying with backup repo: {backup_url}")
-                    subprocess.run(["git", "clone", backup_url, ext_folder], check=True)
-                except Exception as e2:
-                    log_clarification()
-                    logger.error(f"Failed to clone from backup repo: {e2}")
-                    return
+            logger.error(f"Failed to sparse-clone {extension_name}: {e}")
+            return
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
