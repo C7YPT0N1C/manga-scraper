@@ -130,7 +130,7 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 if not should_download_gallery(meta, num_pages):
-                    print("TEST: RETURNED FALSE?")
+                    logger.info("TEST: RETURNED FALSE?")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break
@@ -168,7 +168,6 @@ def process_galleries(gallery_ids):
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     if config.get("DRY_RUN", False):
                         with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
-                            logger.info(f"Would download {img_url} -> {img_path}")
                             for safe_artist, artist_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Artist: {safe_artist}")
                                 futures = [
@@ -179,6 +178,7 @@ def process_galleries(gallery_ids):
                                     for page, url, path, _ in artist_tasks
                                 ]
                                 for _ in concurrent.futures.as_completed(futures):
+                                    logger.info(f"Would download {img_url} -> {img_path}")
                                     pbar.update(1)
                     else:
                         with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
@@ -192,6 +192,7 @@ def process_galleries(gallery_ids):
                                     for page, url, path, _ in artist_tasks
                                 ]
                                 for _ in concurrent.futures.as_completed(futures):
+                                    logger.info(f"Downloaded {img_url} -> {img_path}")
                                     pbar.update(1)
 
 
