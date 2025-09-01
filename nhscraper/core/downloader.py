@@ -74,9 +74,11 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     gallery_id = meta.get("id")
 
     if ReturnReport == False:
+        log_clarification()
         skipped_galleries.append(f"{gallery_id}: {Reason}")
-        logger.debug(f"Update Skipped Galleries List with {gallery_id}: {Reason}")
+        logger.debug(f"Updated Skipped Galleries List with '{gallery_id}: {Reason}'")
     else:
+        log_clarification()
         logger.debug(f"All Skipped Galleries: {skipped_galleries}")
 
 def should_download_gallery(meta, gallery_title, num_pages):
@@ -292,6 +294,6 @@ def start_downloader():
 
     log_clarification()
     logger.info("All galleries processed")
-    update_skipped_galleries(True)
+    update_skipped_galleries("", True)
     
     active_extension.post_run_hook(config, gallery_ids)
