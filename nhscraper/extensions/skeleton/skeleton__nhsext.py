@@ -15,7 +15,7 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 
 # Global variables for download path and subfolder strucutre.
 EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
-SUBFOLDER_STRUCTURE = ["artist", "title"]
+SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 def install_extension():
     os.makedirs(EXTENSION_DOWNLOAD_PATH, exist_ok=True)
@@ -54,6 +54,34 @@ def build_gallery_subfolders(meta):
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
 ####################################################################################################################
+
+def remove_empty_directories(RemoveEmptyArtistFolder: bool = False):
+    # Remove empty directories - safety check
+    if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
+        logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
+        return
+
+    if RemoveEmptyArtistFolder: # Remove empty directories, deepest first, up to EXTENSION_DOWNLOAD_PATH
+        for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
+            try:
+                if not os.listdir(dirpath):  # directory is empty (no files, no subdirs)
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+            except Exception as e:
+                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    else: # Remove empty directories, deepest only.
+        for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
+            if not dirnames and not filenames:
+                try:
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+                except Exception as e:
+                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    
+    
+
+    EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
+    update_env("EXTENSION_DOWNLOAD_PATH", "")
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
@@ -152,19 +180,7 @@ def post_run_hook(config, completed_galleries):
     logger.debug("Extension: Skeleton: Post-run hook called.")
 
     log_clarification()
-    # Remove empty directories - safety check
-    if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
-        logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
-        return
-
-    # Remove empty directories
-    for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
-        if not dirnames and not filenames:
-            try:
-                os.rmdir(dirpath)
-                logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
-    update_env("EXTENSION_DOWNLOAD_PATH", "")
+    # Remove empty folders.
+    # Set argument to True to remove empty SUBDIR_1's
+    # Set argument to False to only remove deepest subdirectory (SUBDIR_2, etc) (refer to SUBFOLDER_STRUCTURE)
+    remove_empty_directories(True)

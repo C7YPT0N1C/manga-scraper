@@ -8,7 +8,7 @@ from functools import partial
 from nhscraper.core.config import logger, config, log_clarification
 from nhscraper.core import db
 from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_url, get_meta_tags, safe_name, clean_title
-from nhscraper.extensions.extension_loader import * # Import active extension
+from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -63,6 +63,9 @@ def dynamic_sleep(stage):
         log_clarification()
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
+        
+def update_skipped_galleries():
+    print("Placeholder.")
 
 def should_download_gallery(meta, gallery_title, num_pages):
     """
@@ -147,7 +150,6 @@ def should_download_gallery(meta, gallery_title, num_pages):
     #        return False
 
     return True
-
 
 def process_galleries(gallery_ids):
     for gallery_id in gallery_ids:
