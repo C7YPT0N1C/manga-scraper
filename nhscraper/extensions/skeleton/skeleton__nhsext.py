@@ -56,6 +56,10 @@ def build_gallery_subfolders(meta):
 ####################################################################################################################
 
 def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
+    # Remove empty folders.
+    # Set argument to True to remove empty SUBDIR_1's
+    # Set argument to False to only remove deepest subdirectory (SUBDIR_2, etc) (refer to SUBFOLDER_STRUCTURE)
+    
     global DEDICATED_DOWNLOAD_PATH
     
     # Remove empty directories - safety check
@@ -178,7 +182,4 @@ def post_run_hook(config, completed_galleries):
     logger.debug("Extension: Skeleton: Post-run hook called.")
 
     log_clarification()
-    # Remove empty folders.
-    # Set argument to True to remove empty SUBDIR_1's
-    # Set argument to False to only remove deepest subdirectory (SUBDIR_2, etc) (refer to SUBFOLDER_STRUCTURE)
     remove_empty_directories(True)
