@@ -123,8 +123,8 @@ def fetch_gallery_metadata(gallery_id: int):
                 continue
             resp.raise_for_status()
             
-            log_clarification()
-            logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
+            #log_clarification()
+            #logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
             
             data = resp.json()
 

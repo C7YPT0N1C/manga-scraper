@@ -54,7 +54,7 @@ def dynamic_sleep(stage):
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
 
-def should_download_gallery(meta, num_pages):
+def should_download_gallery(meta, gallery_title, num_pages):
     """
     Decide whether to download a gallery based on:
       - language requirements (must include requested language or "translated")
@@ -84,15 +84,32 @@ def should_download_gallery(meta, num_pages):
             logger.info(f"Skipping {gallery_id} ({doujin_folder}), already complete.")
             return False
 
-    # Check excluded tags
+    # Check excluded tags and language requirement
+    excluded_tags = config.get("EXCLUDED_TAGS", [])
+    
+    allowed_langs = config.get("LANGUAGE", [])
+    gallery_langs = get_meta_tags(meta, "language")
+    gallery_langs_lower = [l.lower() for l in gallery_langs]
+    allowed_lower = [l.lower() for l in allowed_langs]
+    
+    # Include 'translated' as acceptable if any requested language is present 
+    if excluded_tags or allowed_langs:
+        gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
+        if any(tag.lower() in gallery_tags for tag in excluded_tags) or not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
+            log_clarification()
+            logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}):\nFiltered tags ({gallery_tags})\nFiltered language ({gallery_langs})")
+            return False
+    
+    # Check excluded tags (LEGACY)
     excluded_tags = config.get("EXCLUDED_TAGS", [])
     if excluded_tags:
         gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
         if any(tag.lower() in gallery_tags for tag in excluded_tags):
-            logger.info(f"Skipping Gallery: {gallery_id}: Filtered tags ({gallery_tags})")
+            log_clarification()
+            logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}): Filtered tags ({gallery_tags})")
             return False
     
-    # Check language requirement
+    # Check language requirements (LEGACY)
     allowed_langs = config.get("LANGUAGE", [])
     if allowed_langs:
         gallery_langs = get_meta_tags(meta, "language")
@@ -100,7 +117,8 @@ def should_download_gallery(meta, num_pages):
         allowed_lower = [l.lower() for l in allowed_langs]
         # Include 'translated' as acceptable if any requested language is present
         if not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
-            logger.info(f"Skipping Gallery: {gallery_id}: Filtered language ({gallery_langs})")
+            log_clarification()
+            logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}): Filtered language ({gallery_langs})")
             return False
 
     return True
@@ -156,14 +174,14 @@ def process_galleries(gallery_ids):
                         artist_tasks.append((page, img_url, img_path, safe_artist))
                     
                         if config.get("DRY_RUN", False): # TEST
-                            logger.info(f"Would download {img_url} -> {img_path}")
+                            logger.info(f"[DRY-RUN] Would download {img_url} -> {img_path}")
                         else:
                             logger.info(f"Downloaded {img_url} -> {img_path}")
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
                 
-                if not should_download_gallery(meta, num_pages):
+                if not should_download_gallery(meta, gallery_title, num_pages):
                     logger.info("TEST: RETURNED FALSE?")
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
