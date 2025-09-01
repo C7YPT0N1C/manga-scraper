@@ -14,7 +14,7 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 # Select extension (skeleton fallback)
 ####################################################################################################
 active_extension = "skeleton"
-download_location = config.get["EXTENSION_DOWNLOAD_PATH"]
+download_location = config.get("EXTENSION_DOWNLOAD_PATH", [])
 
 def load_extension():
     global active_extension
