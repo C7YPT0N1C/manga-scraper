@@ -104,8 +104,11 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-# Download paths
+# Default Download Path
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+
+# Extensions
+DEFAULT_EXTENSION="skeleton"
 DEFAULT_EXTENSION_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
 
 # APIs and Mirrors
@@ -144,6 +147,7 @@ DEFAULT_VERBOSE="False"
 # Also change corresponding parser.add_argument in CLI
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
+    "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS),

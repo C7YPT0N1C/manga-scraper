@@ -27,13 +27,15 @@ def load_extension():
     global active_extension
     global download_location
 
-    active_extension = get_selected_extension()
+    ext_name = config.get("EXTENSION", "skeleton")
+    active_extension = get_selected_extension(ext_name)
     logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
     download_location = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH) # Updated by loaded extension via extension_loader
     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
         os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
     logger.info(f"Using download path: {download_location}")
+
 
 ####################################################################################################
 # UTILITIES

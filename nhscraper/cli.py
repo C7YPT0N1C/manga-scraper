@@ -182,7 +182,8 @@ def build_gallery_list(args):
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
-def update_config(args): # Update config    
+def update_config(args): # Update config   
+    config["EXTENSION"] = args.extension 
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
