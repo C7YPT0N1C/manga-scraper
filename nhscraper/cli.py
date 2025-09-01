@@ -135,12 +135,7 @@ def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
 
-    # Wrap name in quotes if it contains spaces
-    if " " in name and not (name.startswith('"') and name.endswith('"')):
-        name = f'"{name}"'
-
-    query = f"{query_type}:{name}"
-    return fetch_gallery_ids(query, start_page, end_page)
+    return fetch_gallery_ids(query_type, name, start_page, end_page)
 
 def build_gallery_list(args):
     gallery_ids = set()

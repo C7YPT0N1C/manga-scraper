@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # core/fetchers.py
 
-import os, time, random, json, cloudscraper, requests
+import os, time, random, cloudscraper, requests, json, urllib.parse
 
 from nhscraper.core.config import *
 
@@ -117,49 +117,45 @@ def preload_tag_cache(tag_type: str, tag_name: str):
         logger.warning(f"Failed to resolve tag {tag_type}:{tag_name}: {e}")
         return None
 
-def build_url(query: str, page: int) -> str:
-    query_lower = query.lower()
+def build_url(query_type: str, query_value: str, page: int) -> str:
+    query_lower = query_type.lower()
 
     # Homepage
     if query_lower == "homepage":
         return f"{API_BASE}/galleries/all?page={page}&sort=date"
 
-    # Search
-    if query_lower.startswith("search:"):
-        search_value = query.split(":", 1)[1].strip()
-        return f"{API_BASE}/galleries/search?query={search_value}&page={page}&sort=date"
+    # Search queries
+    if query_lower == "search":
+        # Wrap search term in quotes for exact match if it contains spaces
+        search_value = query_value
+        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
+            search_value = f'"{search_value}"'
+        encoded = urllib.parse.quote(search_value, safe='"')
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
 
-    # Tag-based queries
-    for tag_type in ("artist", "group", "tag", "parody"):
-        prefix = f"{tag_type}:"
-        if query_lower.startswith(prefix):
-            tag_name = query[len(prefix):].strip().lower()
+    # Tag-based queries (artist, group, tag, parody)
+    if query_lower in ("artist", "group", "tag", "parody"):
+        search_value = query_value
+        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
+            search_value = f'"{search_value}"'
+        encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
 
-            # Resolve tag ID dynamically if missing from cache
-            tag_id = TAG_CACHE.get(tag_type, {}).get(tag_name)
-            if tag_id is None:
-                logger.debug(f"Tag '{tag_name}' not found in cache, resolving via search...")
-                tag_id = preload_tag_cache(tag_type, tag_name)
-                if tag_id is None:
-                    raise ValueError(f"Tag not found: {tag_type}='{tag_name}'")
+    raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
-            return f"{API_BASE}/galleries/tagged?tag_id={tag_id}&page={page}&sort=date"
-
-    raise ValueError(f"Unknown query format: {query}")
-
-def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
+def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     ids: set[int] = set()
     page = start_page
     
     try:
         log_clarification()
-        logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page} → {end_page or '∞'})")
+        logger.info(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
             if end_page is not None and page > end_page:
                 break
             
-            url = build_url(query, page) # TEST
+            url = build_url(query_type, query_value, page) # TEST
             log_clarification()
             logger.debug(f"Requesting {url}")
 
@@ -199,11 +195,11 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
             ids.update(batch)
             page += 1
 
-        logger.info(f"Fetched total {len(ids)} galleries for query '{query}'")
+        logger.info(f"Fetched total {len(ids)} galleries for query '{query_value}'")
         return ids
 
     except Exception as e:
-        logger.warning(f"Failed to fetch galleries for query '{query}': {e}")
+        logger.warning(f"Failed to fetch galleries for query '{query_value}': {e}")
         return set()
 
 # ===============================
