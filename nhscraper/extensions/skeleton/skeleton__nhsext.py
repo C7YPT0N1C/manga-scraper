@@ -33,7 +33,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
     Downloads an image from URL to the given path.
     Updates tqdm progress bar with current artist.
     """
-    log_clarification()
     if not url:
         logger.warning(f"Gallery {gallery}: Page {page}: No URL, skipping")
         if pbar and artist:
