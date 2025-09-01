@@ -12,11 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper"
     )
-
-    # Extension installation/uninstallation
-    parser.add_argument("--install-extension", type=str, help="Install an extension by name")
-    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
-
+    
     # Extension selection
     parser.add_argument(
         "--extension",
@@ -24,6 +20,9 @@ def parse_args():
         default="none",
         help="Extension to use (default: none)"
     )
+
+    # Extension installation/uninstallation
+    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Download Gallerries on Homepage
     parser.add_argument(
@@ -176,9 +175,10 @@ def build_gallery_list(args):
         gallery_ids.update(_handle_gallery_arg(args.search, "search"))
 
     # ------------------------------
-    # Final sorted list
+    # Final sorted list (Processes highest gallery ID (latest gallery) first.)
     # ------------------------------
-    gallery_list = list(reversed(sorted(gallery_ids))) # Processes highest gallery ID (latest gallery) first.
+    gallery_list = list(reversed(sorted(gallery_ids)))
+    #gallery_list = list(reversed(sorted(int(gid) for gid in gallery_ids if str(gid).isdigit()))) # TEST
     log_clarification()
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
@@ -228,15 +228,10 @@ def main():
     logger.debug(f"Updated Config: {config}")
 
     # ------------------------------
-    # Handle extension installation/uninstallation
+    # Handle extension uninstallation (--extension automatically installs extension)
     # ------------------------------
-    if args.install_extension:
-        update_local_manifest_from_remote()
-        install_extension(args.install_extension)
-        return
-
     if args.uninstall_extension:
-        uninstall_extension(args.uninstall_extension)
+        uninstall_selected_extension(args.uninstall_extension)
         return
     
     # ------------------------------

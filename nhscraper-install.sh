@@ -395,8 +395,6 @@ case "$1" in
     *)
         echo "Invalid or missing argument. Options:"
         echo "    --install"
-        echo "    --install-extension <name>"
-        echo "    --uninstall-extension <name>"
         echo "    --update-env"
         echo "    --update"
         echo "    --uninstall / --remove"

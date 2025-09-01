@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # extensions/skeleton/skeleton__nhsext.py
-# This is a skeleton/example extension for nhentai-scraper. It is also use as the default extension if none is specified.
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
@@ -9,37 +8,51 @@ import os, time, subprocess, json, requests
 from nhscraper.core.config import *
 from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 
+# This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
+
+####################################################################################################################
+# Global variables
+####################################################################################################################
+EXTENSION_NAME = "skeleton" # Must be fully lowercase
+
+with open("local_manifest.json", "r", encoding="utf-8") as f:
+    manifest = json.load(f)
+
+for ext in manifest.get("extensions", []):
+    if ext.get("name") == EXTENSION_NAME:
+        DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
+        break
+# Optional fallback
+if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
+    DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+
+SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
+
 ####################################################################################################################
 # CORE
 ####################################################################################################################
-
-# Global variables for download path and subfolder strucutre.
-DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
-SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
-
 def install_extension():
     os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    
     log_clarification()
-    logger.info(f"Extension: Skeleton: Installed.")
+    logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
 
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH
     try:
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        DEDICATED_DOWNLOAD_PATH = ""
-        update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+        
         log_clarification()
-        logger.info("Extension: Skeleton: Uninstalled")
+        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
     except Exception as e:
         log_clarification()
-        logger.error(f"Extension: Skeleton: Failed to uninstall: {e}")
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
 
 def update_extension_download_path():
     log_clarification()
-    logger.info("Extension: Skeleton: Ready.")
-    logger.debug("Extension: Skeleton: Debugging started.")
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def build_gallery_subfolders(meta):
@@ -93,7 +106,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    logger.debug(f"Extension: Skeleton: Test hook called.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Test hook called.")
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
@@ -104,7 +117,7 @@ def pre_run_hook(config, gallery_list):
     update_extension_download_path()
     
     log_clarification()
-    logger.debug(f"Extension: Skeleton: Pre-run hook called.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
     return gallery_list
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -172,17 +185,17 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
-    logger.debug(f"Extension: Skeleton: During-download hook called: Gallery: {gallery_id}")
+    logger.debug(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
-    logger.debug(f"Extension: Skeleton: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     log_clarification()
-    logger.debug("Extension: Skeleton: Post-run hook called.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
 
     log_clarification()
     remove_empty_directories(True)
