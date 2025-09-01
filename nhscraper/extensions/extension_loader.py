@@ -117,12 +117,12 @@ def install_selected_extension(extension_name: str):
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
         log_clarification()
-        logger.error(f"Extension '{extension_name}' not found in remote manifest")
+        logger.error(f"Extension '{extension_name}': Not found in remote manifest")
         return
 
     if ext_entry.get("installed", False):
         log_clarification()
-        logger.info(f"Extension '{extension_name}' is already installed")
+        logger.info(f"Extension '{extension_name}': Already installed")
         return
 
     # Clone/download extension if needed (with repo backup)
@@ -154,7 +154,7 @@ def install_selected_extension(extension_name: str):
     if hasattr(module, "install_extension"):
         module.install_extension()
         log_clarification()
-        logger.info(f"Extension '{extension_name}' installed successfully")
+        logger.info(f"Extension '{extension_name}': Installed successfully.")
 
     # Update manifest
     ext_entry["installed"] = True
@@ -166,7 +166,7 @@ def uninstall_selected_extension(extension_name: str):
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
         log_clarification()
-        logger.warning(f"Extension '{extension_name}' is not installed")
+        logger.warning(f"Extension '{extension_name}': Not installed")
         return
 
     # Import and run uninstall hook
@@ -177,7 +177,7 @@ def uninstall_selected_extension(extension_name: str):
     if hasattr(module, "uninstall_extension"):
         module.uninstall_extension()
         log_clarification()
-        logger.info(f"Extension '{extension_name}' uninstalled successfully")
+        logger.info(f"Extension '{extension_name}': Uninstalled successfully.")
 
     # Update manifest
     ext_entry["installed"] = False
