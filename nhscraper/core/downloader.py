@@ -156,7 +156,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries("Contains either filtered tags or filtered languages (see logs).", False)
+        update_skipped_galleries("Contains either filtered tags or languages (see logs).", False)
         return False
 
     return True
