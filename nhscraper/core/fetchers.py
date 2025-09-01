@@ -197,7 +197,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        logger.debug(f"Building image URL for Gallery {meta.get('id','?')}: Page {page}")
+        logger.debug(f"Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -227,7 +227,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        logger.debug(f"Built candidate image URLs: {urls}")
+        logger.debug(f"Built candidate image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
