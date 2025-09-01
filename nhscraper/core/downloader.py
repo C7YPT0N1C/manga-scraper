@@ -285,5 +285,4 @@ def start_downloader():
     log_clarification()
     logger.info("All galleries processed")
     
-    active_extension.after_all_galleries_download_hook(gallery_ids)
     active_extension.post_run_hook(config, gallery_ids)

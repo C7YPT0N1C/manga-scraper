@@ -144,11 +144,6 @@ def after_gallery_download_hook(meta: dict):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
 
-# Hook for functionality after all downloads are complete. Use active_extension.after_all_galleries_download_hook(ARGS) in downloader.
-def after_all_galleries_download_hook(all_meta: list):
-    log_clarification()
-    logger.debug(f"Extension: Skeleton: Post-Batch hook called: Batch of {len(all_meta)} galleries downloaded")
-
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     global EXTENSION_DOWNLOAD_PATH
@@ -156,6 +151,7 @@ def post_run_hook(config, completed_galleries):
     log_clarification()
     logger.debug("Extension: Skeleton: Post-run hook called.")
 
+    log_clarification()
     # Remove empty directories - safety check
     if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
         logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
