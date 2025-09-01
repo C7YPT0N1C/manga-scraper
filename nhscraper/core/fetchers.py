@@ -222,7 +222,10 @@ def fetch_image_urls(meta: dict, page: int):
         filename = f"{page}.{ext}"
 
         # Try each mirror in order
-        urls = [f"{mirror}/galleries/{meta.get('media_id','')}/{filename}" for mirror in NHENTAI_MIRRORS]
+        urls = [
+            f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
+            for mirror in config.get("NHENTAI_MIRRORS", [])
+        ]
 
         logger.debug(f"Built candidate image URLs: {urls}")
         return urls  # return list so downloader can try them in order
