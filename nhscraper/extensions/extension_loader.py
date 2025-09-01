@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # extensions/extension_loader.py
 
-import os, json, importlib, subprocess
+import os, json, importlib, shutil, subprocess
 from urllib.request import urlopen
 
 from nhscraper.core.config import *
@@ -126,12 +126,11 @@ def install_selected_extension(extension_name: str):
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
     if not os.path.exists(ext_folder):
-        try:
-            logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+        os.makedirs(ext_folder, exist_ok=True)
 
-            os.makedirs(ext_folder, exist_ok=True)
+        def sparse_clone(url: str):
             subprocess.run(["git", "init", ext_folder], check=True)
-            subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", repo_url], check=True)
+            subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
             subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
 
             # Enable sparse-checkout of only the needed extension folder
@@ -141,9 +140,24 @@ def install_selected_extension(extension_name: str):
 
             subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
 
+        try:
+            logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+            sparse_clone(repo_url)
         except Exception as e:
-            logger.error(f"Failed to sparse-clone {extension_name}: {e}")
-            return
+            logger.warning(f"Failed to sparse-clone from primary repo: {e}")
+            if BASE_REPO_BACKUP_URL:
+                backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+                try:
+                    logger.debug(f"Retrying sparse-clone with backup repo: {backup_url}")
+                    # clean up half-baked folder before retry
+                    shutil.rmtree(ext_folder, ignore_errors=True)
+                    os.makedirs(ext_folder, exist_ok=True)
+                    sparse_clone(backup_url)
+                except Exception as e2:
+                    logger.error(f"Failed to sparse-clone from backup repo: {e2}")
+                    return
+            else:
+                return
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
