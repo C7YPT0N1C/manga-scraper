@@ -263,7 +263,8 @@ def start_downloader():
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
     
-    load_installed_extensions
+    log_clarification()
+    load_extension() # Load extension variables, etc
 
     gallery_ids = config.get("GALLERIES", [])
     active_extension.pre_run_hook(config, gallery_ids)
