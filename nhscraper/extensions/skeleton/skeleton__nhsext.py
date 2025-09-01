@@ -48,13 +48,6 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
             pbar.set_postfix_str(f"Artist: {artist}")
         return True
 
-    if config.get("DRY_RUN", False):
-        log_clarification()
-        #logger.info(f"[DRY-RUN] Would download {url} -> {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
-        return True
-
     if not isinstance(session, requests.Session):
         session = requests.Session()
 
