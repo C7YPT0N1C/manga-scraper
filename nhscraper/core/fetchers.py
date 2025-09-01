@@ -56,7 +56,7 @@ def build_session():
 ################################################################################################################
 
 # ------------------------------
-# Load or initialize tag cache
+# Load or initialise tag cache
 # ------------------------------
 if os.path.exists(TAG_CACHE_FILE):
     with open(TAG_CACHE_FILE, "r", encoding="utf-8") as f:
@@ -64,7 +64,7 @@ if os.path.exists(TAG_CACHE_FILE):
 else:
     TAG_CACHE = {"tag": {}, "artist": {}, "group": {}, "parody": {}}
 
-def preload_tag_cache(tag_type: str, tag_name: str):
+def cache_tags(tag_type: str, tag_name: str):
     """
     Resolves a tag ID by querying nhentai's search API.
     Populates TAG_CACHE for the given type/name.
@@ -119,18 +119,9 @@ def preload_tag_cache(tag_type: str, tag_name: str):
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
 
-    # Homepage
+    # Homepage # TEST
     if query_lower == "homepage":
         return f"{API_BASE}/galleries/all?page={page}&sort=date"
-
-    # Search queries
-    if query_lower == "search":
-        # Wrap search term in quotes for exact match if it contains spaces
-        search_value = query_value
-        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
-            search_value = f'"{search_value}"'
-        encoded = urllib.parse.quote(search_value, safe='"')
-        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
 
     # Tag-based queries (artist, group, tag, parody)
     if query_lower in ("artist", "group", "tag", "parody"):
@@ -138,6 +129,15 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+    
+    # Search queries
+    if query_lower == "search":
+        # Wrap search term in quotes for exact match if it contains spaces
+        search_value = query_value
+        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
+            search_value = f'"{search_value}"'
+        encoded = urllib.parse.quote(search_value, safe='"')
         return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
@@ -154,7 +154,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             if end_page is not None and page > end_page:
                 break
             
-            url = build_url(query_type, query_value, page) # TEST
+            url = build_url(query_type, query_value, page)
             logger.debug(f"Requesting URL: {url}")
 
             resp = None

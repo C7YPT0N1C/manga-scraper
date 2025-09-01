@@ -4,7 +4,7 @@
 import os, sys, argparse
 
 from nhscraper.core.config import *
-from nhscraper.core.downloader import *
+from nhscraper.core.downloader import start_downloader
 from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 

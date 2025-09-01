@@ -67,7 +67,7 @@ install_filebrowser() {
         rm -f "$FB_DB"
     fi
     
-    # Initialize default config in current user's home (~/.filebrowser)
+    # Initialise default config in current user's home (~/.filebrowser)
     filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
 
 

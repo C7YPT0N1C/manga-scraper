@@ -212,7 +212,7 @@ The basics of the flow of data is: (CLI → Config → Downloader → Extensions
   - `--title-type`, `--title-sanitise`
   - `--threads-galleries`, `--threads-images`
   - `--use-tor`, `--dry-run`, `--verbose`
-- Initializes config from CLI args + .env
+- Initialises config from CLI args + .env
 - Determines active galleries list (combined from all flags)
 - Sets EXTENSION_DOWNLOAD_PATH if extension is active
 
@@ -231,7 +231,7 @@ The basics of the flow of data is: (CLI → Config → Downloader → Extensions
   - Fetch gallery metadata via NHentai API
   - Apply filters: language, excluded-tags
   - Resolve download folder: EXTENSION_DOWNLOAD_PATH > default DOWNLOAD_PATH
-  - Pretty titles sanitized if enabled
+  - Pretty titles sanitised if enabled
   - Download images using threads-images
   - During-download hooks (extensions)
   - After-gallery-download hooks (extensions)
@@ -269,7 +269,7 @@ The basics of the flow of data is: (CLI → Config → Downloader → Extensions
 
 #### FileBrowser / Suwayomi / Other Integrations
 - Suwayomi reads metadata JSON
-- Galleries categorized by tags
+- Galleries categorised by tags
 - FileBrowser provides web access to galleries
 
 #### Uninstallation / Cleanup

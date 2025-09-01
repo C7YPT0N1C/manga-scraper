@@ -11,11 +11,18 @@ from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
-# Select extension (skeleton fallback)
+# Global Variables
 ####################################################################################################
 active_extension = "skeleton"
 download_location = ""
+gallery_threads = 2
+image_threads = 10
+meta = None
+skipped_galleries = []
 
+####################################################################################################
+# Select extension (skeleton fallback)
+####################################################################################################
 def load_extension():
     global active_extension
     global download_location
@@ -33,9 +40,6 @@ def load_extension():
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
-gallery_threads = 2
-image_threads = 10
-
 def build_gallery_path(meta):
     # Ask extension for variables
     subs = active_extension.build_gallery_subfolders(meta)
@@ -64,8 +68,16 @@ def dynamic_sleep(stage): # TEST
         logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
         time.sleep(sleep_time)
         
-def update_skipped_galleries():
-    print("Placeholder.")
+def update_skipped_galleries(Reason: str, ReturnReport: bool = False):
+    global skipped_galleries
+    
+    gallery_id = meta.get("id")
+
+    if ReturnReport == False:
+        skipped_galleries.append(f"{gallery_id}: {Reason}")
+        logger.debug(f"Update Skipped Galleries List with {gallery_id}: {Reason}")
+    else:
+        logger.debug(f"All Skipped Galleries: {skipped_galleries}")
 
 def should_download_gallery(meta, gallery_title, num_pages):
     """
@@ -75,6 +87,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
       - existing files (skip if all pages exist)
     """
     if not meta:
+        update_skipped_galleries(meta, "Not Meta.", False)
         return False
 
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
@@ -89,6 +102,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Title: {gallery_title}\n"
             "Reason: No pages."
         )
+        update_skipped_galleries(meta, "No Pages.", False)
         return False
 
     # Skip if gallery already fully downloaded
@@ -106,6 +120,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
                 f"Folder: {doujin_folder}\n"
                 "Reason: Already complete."
             )
+            update_skipped_galleries(meta, "Already complete.", False)
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
@@ -139,19 +154,14 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
+        update_skipped_galleries(meta, "Contains either filtered tags or filtered languages (see logs).", False)
         return False
-    
-    # Include 'translated' as acceptable if any requested language is present 
-    #if excluded_tags or allowed_langs:
-    #    gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
-    #    if any(tag.lower() in gallery_tags for tag in excluded_tags) or not any(lang in gallery_langs_lower or "translated" in gallery_langs_lower for lang in allowed_lower):
-    #        log_clarification()
-    #        logger.info(f"Skipping Gallery: {gallery_id} ({gallery_title}):\nFiltered tags: ({gallery_tags})\nFiltered languages: ({gallery_langs})")
-    #        return False
 
     return True
 
 def process_galleries(gallery_ids):
+    global meta
+    
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         db.mark_gallery_started(gallery_id, download_location, extension_name)
@@ -193,6 +203,7 @@ def process_galleries(gallery_ids):
                         img_url = fetch_image_url(meta, page)
                         if not img_url:
                             logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URL")
+                            update_skipped_galleries(meta, "Failed to get URL.", False)
                             gallery_failed = True
                             continue
 
@@ -281,5 +292,6 @@ def start_downloader():
 
     log_clarification()
     logger.info("All galleries processed")
+    update_skipped_galleries(True)
     
     active_extension.post_run_hook(config, gallery_ids)

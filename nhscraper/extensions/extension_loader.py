@@ -39,7 +39,7 @@ def load_local_manifest():
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
-        #print("Local Manifest:\n", json_load) # TEST
+        #logger.debug("Local Manifest: {json_load}")
         return json_load
 
 def save_local_manifest(manifest: dict):

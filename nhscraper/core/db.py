@@ -10,7 +10,7 @@ DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
-# DB INITIALIZATION
+# DB INITIALISATION
 # ===============================
 def init_db():
     os.makedirs(NHENTAI_DIR, exist_ok=True)
