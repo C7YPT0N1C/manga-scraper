@@ -167,7 +167,7 @@ def process_galleries(gallery_ids):
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     if config.get("DRY_RUN", False):
-                        with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
+                        with tqdm(total=total_images, desc=f"[DRY-RUN] Gallery: {gallery_id}: Would download {img_url} -> {img_path}", unit="img", position=0, leave=True) as pbar:
                             for safe_artist, artist_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Artist: {safe_artist}")
                                 futures = [
