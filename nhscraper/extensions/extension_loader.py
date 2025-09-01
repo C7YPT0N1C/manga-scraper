@@ -221,6 +221,10 @@ def get_selected_extension(name: str = "skeleton"):
     logger.error("Skeleton extension not found! This should never happen.")
     return None
 
+def get_download_path():
+    path = os.getenv("EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+    return path
+
 # ------------------------------
 # Run on import
 # ------------------------------

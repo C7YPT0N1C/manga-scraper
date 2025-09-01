@@ -16,9 +16,12 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 active_extension = get_selected_extension()
 log_clarification()
 logger.debug(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
-download_location = getattr(active_extension, "EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
+
+download_location = get_download_path()
 if not config.get("DRY_RUN", False):
     os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
+log_clarification()
+logger.debug(f"Using download path: {download_location}")
 
 ####################################################################################################
 # UTILITIES

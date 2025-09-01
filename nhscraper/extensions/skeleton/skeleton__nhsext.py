@@ -10,14 +10,14 @@ from nhscraper.core.config import logger, config, log_clarification, update_env
 from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 
 # Global variables for download path and subfolder strucutre.
-extension_download_path = "/opt/nhentai-scraper/downloads/default"
+EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 SUBFOLDER_STRUCTURE = ["artist", "title"]
 
 def update_extension_download_path():
     log_clarification()
     logger.info("Extension: Skeleton: Ready.")
     logger.debug("Extension: Skeleton: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
+    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
 
 def build_gallery_subfolders(meta):
     """Return a dict of possible variables to use in folder naming."""
@@ -121,18 +121,18 @@ def after_all_galleries_download_hook(all_meta: list):
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS)
 def post_run_hook(config, completed_galleries):
-    global extension_download_path
+    global EXTENSION_DOWNLOAD_PATH
 
     log_clarification()
     logger.debug("Extension: Skeleton: Post-run hook called.")
 
     # Remove empty directories - safety check
-    if not extension_download_path or not os.path.isdir(extension_download_path):
-        logger.debug("No valid extension_download_path set, skipping cleanup.")
+    if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
+        logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
         return
 
     # Remove empty directories
-    for dirpath, dirnames, filenames in os.walk(extension_download_path, topdown=False):
+    for dirpath, dirnames, filenames in os.walk(EXTENSION_DOWNLOAD_PATH, topdown=False):
         if not dirnames and not filenames:
             try:
                 os.rmdir(dirpath)
@@ -140,28 +140,27 @@ def post_run_hook(config, completed_galleries):
             except Exception as e:
                 logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
-    extension_download_path = ""  # Reset after download batch
+    EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", "")
 
 # ------------------------------
 # Install / Uninstall
 # ------------------------------
 def install_extension():
-    extension_install_download_path = extension_download_path
-    os.makedirs(extension_install_download_path, exist_ok=True)
-    update_env("EXTENSION_DOWNLOAD_PATH", extension_install_download_path)
+    os.makedirs(EXTENSION_DOWNLOAD_PATH, exist_ok=True)
+    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
     log_clarification()
-    logger.info(f"Extension: Skeleton: Installed at {extension_install_download_path}")
+    logger.info(f"Extension: Skeleton: Installed.")
 
 def uninstall_extension():
-    global extension_download_path
+    global EXTENSION_DOWNLOAD_PATH
     try:
-        if os.path.exists(extension_download_path):
-            os.rmdir(extension_download_path)
-        extension_download_path = ""
+        if os.path.exists(EXTENSION_DOWNLOAD_PATH):
+            os.rmdir(EXTENSION_DOWNLOAD_PATH)
+        EXTENSION_DOWNLOAD_PATH = ""
         update_env("EXTENSION_DOWNLOAD_PATH", "")
         log_clarification()
         logger.info("Extension: Skeleton: Uninstalled")
     except Exception as e:
         log_clarification()
-        logger.error(f"Failed to uninstall skeleton extension: {e}")
+        logger.error(f"Extension: Skeleton: Failed to uninstall: {e}")
