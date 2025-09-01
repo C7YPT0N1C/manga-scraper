@@ -55,7 +55,7 @@ def build_gallery_subfolders(meta):
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
 ####################################################################################################################
 
-def remove_empty_directories(RemoveEmptyArtistFolder: bool = False):
+def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
     # Remove empty directories - safety check
     if not EXTENSION_DOWNLOAD_PATH or not os.path.isdir(EXTENSION_DOWNLOAD_PATH):
         logger.debug("No valid EXTENSION_DOWNLOAD_PATH set, skipping cleanup.")
@@ -77,8 +77,6 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = False):
                     logger.info(f"Removed empty directory: {dirpath}")
                 except Exception as e:
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    
-    
 
     EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", "")
