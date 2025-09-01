@@ -177,8 +177,8 @@ def process_galleries(gallery_ids):
                                     )
                                     for page, url, path, _ in artist_tasks
                                 ]
+                                logger.info(f"Would download {img_url} -> {img_path}")
                                 for _ in concurrent.futures.as_completed(futures):
-                                    logger.info(f"Would download {img_url} -> {img_path}")
                                     pbar.update(1)
                     else:
                         with tqdm(total=total_images, desc=f"Gallery: {gallery_id}", unit="img", position=0, leave=True) as pbar:
@@ -191,8 +191,8 @@ def process_galleries(gallery_ids):
                                     )
                                     for page, url, path, _ in artist_tasks
                                 ]
+                                logger.info(f"Downloaded {img_url} -> {img_path}")
                                 for _ in concurrent.futures.as_completed(futures):
-                                    logger.info(f"Downloaded {img_url} -> {img_path}")
                                     pbar.update(1)
 
 
