@@ -125,7 +125,7 @@ DEFAULT_LANGUAGE="english"
 
 # Titles
 DEFAULT_TITLE_TYPE="english"
-DEFAULT_TITLE_SANITISE=True
+DEFAULT_TITLE_SANITISE="True"
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
@@ -133,9 +133,9 @@ DEFAULT_THREADS_IMAGES=10
 DEFAULT_MAX_RETRIES=3
 
 # Download Options
-DEFAULT_USE_TOR=True
-DEFAULT_DRY_RUN=False
-DEFAULT_VERBOSE=False
+DEFAULT_USE_TOR="True"
+DEFAULT_DRY_RUN="False"
+DEFAULT_VERBOSE="False"
 
 # ------------------------------------------------------------
 # Config Dictionary
