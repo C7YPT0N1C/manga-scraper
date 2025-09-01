@@ -70,11 +70,12 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     global skipped_galleries
     
     gallery_id = meta.get("id")
+    gallery_title = clean_title(meta)
 
     if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        logger.debug(f"Updated Skipped Galleries List with 'Gallery {gallery_id}: {Reason}'")
+        logger.debug(f"Updated Skipped Galleries List with 'Gallery {gallery_id} ({gallery_title}): {Reason}'")
     else:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
