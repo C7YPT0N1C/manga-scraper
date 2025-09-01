@@ -9,9 +9,32 @@ import os, time, subprocess, json, requests
 from nhscraper.core.config import logger, config, log_clarification, update_env
 from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 
+####################################################################################################################
+# CORE
+####################################################################################################################
+
 # Global variables for download path and subfolder strucutre.
 EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 SUBFOLDER_STRUCTURE = ["artist", "title"]
+
+def install_extension():
+    os.makedirs(EXTENSION_DOWNLOAD_PATH, exist_ok=True)
+    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
+    log_clarification()
+    logger.info(f"Extension: Skeleton: Installed.")
+
+def uninstall_extension():
+    global EXTENSION_DOWNLOAD_PATH
+    try:
+        if os.path.exists(EXTENSION_DOWNLOAD_PATH):
+            os.rmdir(EXTENSION_DOWNLOAD_PATH)
+        EXTENSION_DOWNLOAD_PATH = ""
+        update_env("EXTENSION_DOWNLOAD_PATH", "")
+        log_clarification()
+        logger.info("Extension: Skeleton: Uninstalled")
+    except Exception as e:
+        log_clarification()
+        logger.error(f"Extension: Skeleton: Failed to uninstall: {e}")
 
 def update_extension_download_path():
     log_clarification()
@@ -28,6 +51,28 @@ def build_gallery_subfolders(meta):
         "language": (get_meta_tags(meta, "language") or ["Unknown"])[0],
     }
 
+####################################################################################################################
+# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
+####################################################################################################################
+
+# Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
+def test_hook():
+    log_clarification()
+    logger.debug(f"Extension: Skeleton: Test hook called.")
+
+####################################################################################################################
+# CORE HOOKS (Please add too the functions, try not to change or remove anything)
+####################################################################################################################
+
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook(config, gallery_list):
+    update_extension_download_path()
+    
+    log_clarification()
+    logger.debug(f"Extension: Skeleton: Pre-run hook called.")
+    return gallery_list
+
+# Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, url, path, session, pbar=None, artist=None, retries=None):
     """
     Downloads an image from URL to the given path.
@@ -88,38 +133,23 @@ def download_images_hook(gallery, page, url, path, session, pbar=None, artist=No
     if pbar and artist:
         pbar.set_postfix_str(f"Failed artist: {artist}")
     return False
-    
-####################################################################################################################
 
-# Hook for testing functionality. Use active_extension.test_hook(ARGS)
-def test_hook(config, gallery_list):
-    log_clarification()
-    logger.debug(f"Extension: Skeleton: Test hook called.")
-
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS)
-def pre_run_hook(config, gallery_list):
-    update_extension_download_path()
-    
-    log_clarification()
-    logger.debug(f"Extension: Skeleton: Pre-run hook called.")
-    return gallery_list
-
-# Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS)
+# Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
     logger.debug(f"Extension: Skeleton: During-download hook called: Gallery: {gallery_id}")
 
-# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS)
+# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
 
-# Hook for functionality after all downloads are complete. Use active_extension.after_all_galleries_download_hook(ARGS)
+# Hook for functionality after all downloads are complete. Use active_extension.after_all_galleries_download_hook(ARGS) in downloader.
 def after_all_galleries_download_hook(all_meta: list):
     log_clarification()
     logger.debug(f"Extension: Skeleton: Post-Batch hook called: Batch of {len(all_meta)} galleries downloaded")
 
-# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS)
+# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     global EXTENSION_DOWNLOAD_PATH
 
@@ -142,25 +172,3 @@ def post_run_hook(config, completed_galleries):
 
     EXTENSION_DOWNLOAD_PATH = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-
-# ------------------------------
-# Install / Uninstall
-# ------------------------------
-def install_extension():
-    os.makedirs(EXTENSION_DOWNLOAD_PATH, exist_ok=True)
-    update_env("EXTENSION_DOWNLOAD_PATH", EXTENSION_DOWNLOAD_PATH)
-    log_clarification()
-    logger.info(f"Extension: Skeleton: Installed.")
-
-def uninstall_extension():
-    global EXTENSION_DOWNLOAD_PATH
-    try:
-        if os.path.exists(EXTENSION_DOWNLOAD_PATH):
-            os.rmdir(EXTENSION_DOWNLOAD_PATH)
-        EXTENSION_DOWNLOAD_PATH = ""
-        update_env("EXTENSION_DOWNLOAD_PATH", "")
-        log_clarification()
-        logger.info("Extension: Skeleton: Uninstalled")
-    except Exception as e:
-        log_clarification()
-        logger.error(f"Extension: Skeleton: Failed to uninstall: {e}")

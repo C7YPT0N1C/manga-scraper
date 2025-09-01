@@ -209,21 +209,21 @@ def get_selected_extension(name: str = "skeleton"):
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
             logger.info(f"Selected extension: {name}")
+            if hasattr(ext, "update_extension_download_path"):
+                ext.update_extension_download_path()
             return ext
 
     # Fallback to skeleton
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
             logger.info("Fallback to skeleton extension")
+            if hasattr(ext, "update_extension_download_path"):
+                ext.update_extension_download_path()
             return ext
 
     log_clarification()
     logger.error("Skeleton extension not found! This should never happen.")
     return None
-
-def get_download_path():
-    path = os.getenv("EXTENSION_DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads")
-    return path
 
 # ------------------------------
 # Run on import

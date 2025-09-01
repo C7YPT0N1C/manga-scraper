@@ -14,7 +14,7 @@ from nhscraper.extensions.extension_loader import * # Import active extension
 # Select extension (skeleton fallback)
 ####################################################################################################
 active_extension = "skeleton"
-download_location = config.get("EXTENSION_DOWNLOAD_PATH", [])
+download_location = ""
 
 def load_extension():
     global active_extension
@@ -24,7 +24,7 @@ def load_extension():
     log_clarification()
     logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
-    download_location = get_download_path()
+    download_location = config.get("DOWNLOAD_PATH", []) # Updated by loaded extension via extension_loader
     if not config.get("DRY_RUN", False):
         os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
     log_clarification()
