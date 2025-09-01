@@ -178,7 +178,6 @@ def build_gallery_list(args):
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
     # ------------------------------
     gallery_list = list(reversed(sorted(gallery_ids)))
-    #gallery_list = list(reversed(sorted(int(gid) for gid in gallery_ids if str(gid).isdigit()))) # TEST
     log_clarification()
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
@@ -225,7 +224,7 @@ def main():
     update_env("GALLERIES", gallery_list)
     
     log_clarification()
-    logger.debug(f"Updated Config: {config}")
+    logger.debug(f"Updated Config:\n{config}")
 
     # ------------------------------
     # Handle extension uninstallation (--extension automatically installs extension)

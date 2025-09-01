@@ -103,6 +103,8 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.info(f"Removed empty directory: {dirpath}")
                 except Exception as e:
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    
+    logger.info(f"Removed empty directories.")
 
     DEDICATED_DOWNLOAD_PATH = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)

@@ -92,7 +92,6 @@ def load_installed_extensions():
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
-    log_clarification()
     for ext in manifest.get("extensions", []):
         if ext.get("installed", False):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -228,6 +227,7 @@ def get_selected_extension(name: str = "skeleton"):
             # Optional: update download path
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
+            log_clarification()
             logger.info(f"Selected extension: {name}")
             return ext
 

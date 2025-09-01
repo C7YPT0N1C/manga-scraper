@@ -28,13 +28,11 @@ def load_extension():
     global download_location
 
     active_extension = get_selected_extension()
-    log_clarification()
     logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
     download_location = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH) # Updated by loaded extension via extension_loader
     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
         os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
-    log_clarification()
     logger.info(f"Using download path: {download_location}")
 
 ####################################################################################################
@@ -274,7 +272,6 @@ def start_downloader():
     logger.info("Downloader: Ready.")
     logger.debug("Downloader: Debugging Started.")
     
-    log_clarification()
     load_extension() # Load extension variables, etc
 
     gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
