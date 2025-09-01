@@ -56,27 +56,30 @@ def build_gallery_subfolders(meta):
 ####################################################################################################################
 
 def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
-    # Remove empty folders.
-    # Set argument to True to remove empty SUBDIR_1's
-    # Set argument to False to only remove deepest subdirectory (SUBDIR_2, etc) (refer to SUBFOLDER_STRUCTURE)
+    # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
     
     global DEDICATED_DOWNLOAD_PATH
-    
-    # Remove empty directories - safety check
+
+    # Safety check
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         logger.debug("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
         return
 
-    if RemoveEmptyArtistFolder: # Remove empty directories, deepest first, up to DEDICATED_DOWNLOAD_PATH
+    if RemoveEmptyArtistFolder:  # Remove empty subdirectories, deepest first. Does not delete DEDICATED_DOWNLOAD_PATH.
         for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue  # Skip root folder
             try:
                 if not os.listdir(dirpath):  # directory is empty (no files, no subdirs)
                     os.rmdir(dirpath)
                     logger.info(f"Removed empty directory: {dirpath}")
             except Exception as e:
                 logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else: # Remove empty directories, deepest only.
+    
+    else:  # Remove empty subdirectories, deepest only
         for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue  # Skip root folder
             if not dirnames and not filenames:
                 try:
                     os.rmdir(dirpath)
