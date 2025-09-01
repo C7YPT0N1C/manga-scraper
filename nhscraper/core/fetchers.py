@@ -15,7 +15,6 @@ def session_builder():
     logger.info("Fetcher: Ready.")
     logger.debug("Fetcher: Debugging Started.")
 
-    log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(

@@ -92,23 +92,21 @@ def load_installed_extensions():
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
+    log_clarification()
     for ext in manifest.get("extensions", []):
         if ext.get("installed", False):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
             entry_point = os.path.join(ext_folder, ext["entry_point"])
             if os.path.exists(entry_point):
-                module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
+                module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
 
                 try:
                     module = importlib.import_module(module_name)
                     INSTALLED_EXTENSIONS.append(module)
-                    log_clarification()
                     logger.debug(f"Extension: {ext['name']}: Loaded.")
                 except Exception as e:
-                    log_clarification()
                     logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
             else:
-                log_clarification()
                 logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------
@@ -208,7 +206,8 @@ def get_selected_extension(name: str = "skeleton"):
     # Try requested extension first
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
-            logger.info(f"Selected extension: {name}")
+            log_clarification()
+            logger.info(f"Called for extension: {name}")
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
             return ext
