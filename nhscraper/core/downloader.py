@@ -134,12 +134,6 @@ def process_galleries(gallery_ids):
 
                 artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
                 gallery_title = clean_title(meta)
-                
-                if not should_download_gallery(meta, num_pages):
-                    logger.info("TEST: RETURNED FALSE?")
-                    db.mark_gallery_completed(gallery_id)
-                    active_extension.after_gallery_download_hook(meta)
-                    break
 
                 grouped_tasks = []
                 for artist in artists:
@@ -168,6 +162,12 @@ def process_galleries(gallery_ids):
 
                     if artist_tasks:
                         grouped_tasks.append((safe_artist, artist_tasks))
+                
+                if not should_download_gallery(meta, num_pages):
+                    logger.info("TEST: RETURNED FALSE?")
+                    db.mark_gallery_completed(gallery_id)
+                    active_extension.after_gallery_download_hook(meta)
+                    break
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
