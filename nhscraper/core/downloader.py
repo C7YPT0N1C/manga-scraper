@@ -79,8 +79,7 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
         logger.debug(f"Updated Skipped Galleries List with 'Gallery {gallery_id}: {Reason}'")
     else:
         log_clarification()
-        # Number each entry
-        skipped_report = "\n".join(f"{i+1}. {entry}" for i, entry in enumerate(skipped_galleries))
+        skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
         logger.debug(f"All Skipped Galleries:\n{skipped_report}")
 
 def should_download_gallery(meta, gallery_title, num_pages):
