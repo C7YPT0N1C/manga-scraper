@@ -36,7 +36,6 @@ def session_builder():
     
     logger.debug(f"Built HTTP session with cloudscraper")
     
-    logger.info(f"DEFAULT_USE_TOR = {DEFAULT_USE_TOR}") # TEST
     if config.get("USE_TOR", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
@@ -156,8 +155,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 break
             
             url = build_url(query_type, query_value, page) # TEST
-            log_clarification()
-            logger.debug(f"Requesting {url}")
+            logger.debug(f"Requesting URL: {url}")
 
             resp = None
             for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
@@ -185,7 +183,6 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log_clarification()
             logger.debug(f"Page {page}: Fetched {len(batch)} gallery IDs")
 
             if not batch:
