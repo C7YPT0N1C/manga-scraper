@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, sys, argparse
+import argparse
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import *
@@ -189,10 +189,6 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args, gallery_list): # Update config
-    if not gallery_list: # Quit if Gallery List is Empty.
-        logger.warning("No galleries provided. Exiting.")
-        sys.exit(0)  # Or just return
-    
     config["GALLERIES"] = gallery_list
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
@@ -211,18 +207,27 @@ def main():
     # Overwrite placeholder logger with real one
     logger = setup_logger(verbose=args.verbose)
     
+    # Build scraper session.
+    build_session()
+    
     log_clarification()
     logger.info("CLI: Ready.")
     logger.debug("CLI: Debugging Started.")
     
+    # ------------------------------
+    # Build gallery list
+    # ------------------------------
+    gallery_list = build_gallery_list(args)
+    if not gallery_list:
+        log_clarification()
+        logger.warning("No galleries to download. Exiting.")
+        return
+    
     log_clarification()
     logger.debug("Updating Config...")
-    update_config(args, build_gallery_list(args))  
+    update_config(args, gallery_list)    
     log_clarification()
     logger.debug(f"Updated Config: {config}")
-    
-    # Build scraper session.
-    build_session()
 
     # ------------------------------
     # Handle extension installation/uninstallation
