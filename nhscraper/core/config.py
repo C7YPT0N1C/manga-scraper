@@ -104,11 +104,15 @@ if os.path.exists(ENV_FILE):
 # Config dictionary
 # ------------------------------
 # Also change corresponding parser.add_argument in CLI
+API_BASE = "https://nhentai.net/api" # Set NHentai API Base here. Overrides .env .
+
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", "/opt/nhentai-scraper/downloads"),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", ""),
-    "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", "https://nhentai.net/api/galleries/search"),
+    "NHENTAI_API_BASE": os.getenv(f"NHENTAI_API_BASE", {API_BASE}),
     "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", "https://i.nhentai.net"),
+    "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", 1)),
+    "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", 3)),
     "RANGE_START": int(os.getenv("RANGE_START", 500000)),
     "RANGE_END": int(os.getenv("RANGE_END", 600000)),
     "GALLERIES": os.getenv("GALLERIES", ""),

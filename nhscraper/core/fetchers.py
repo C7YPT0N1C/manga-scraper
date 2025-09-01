@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 # core/fetchers.py
 
-import time, random, cloudscraper, requests
+import os, time, random, json, cloudscraper, requests
 
 from nhscraper.core.config import logger, config, log_clarification
+
+# ===============================
+# GLOBAL VARIABLES
+# ===============================
+API_BASE = config.get("NHENTAI_API_BASE", "https://nhentai.net/api")
+TAG_CACHE_FILE = "/opt/nhentai-scraper/tag_cache.json"
 
 # ===============================
 # HTTP SESSION
@@ -41,14 +47,90 @@ def build_session():
     global session
     session = session_builder() # cloudscraper session, default.
 
-# ===============================
-# FETCH IDs
-# ===============================
-API_BASE = config["NHENTAI_API_BASE"]
+# ------------------------------
+# Load or initialize tag cache
+# ------------------------------
+if os.path.exists(TAG_CACHE_FILE):
+    with open(TAG_CACHE_FILE, "r", encoding="utf-8") as f:
+        TAG_CACHE: dict[str, dict[str, int]] = json.load(f)
+else:
+    TAG_CACHE = {"tag": {}, "artist": {}, "group": {}, "parody": {}}
+
+# ------------------------------
+# Batch-load tags from API
+# ------------------------------
+def preload_tag_cache():
+    """Fetch all tags from /api/tags and populate the cache in memory and on disk."""
+    try:
+        resp = requests.get(f"{API_BASE}/tags", timeout=30)
+        resp.raise_for_status()
+        tags = resp.json()
+
+        for tag in tags:
+            tag_type = tag["type"]
+            tag_name = tag["name"].lower()
+            tag_id = tag["id"]
+
+            if tag_type not in TAG_CACHE:
+                TAG_CACHE[tag_type] = {}
+
+            if tag_name not in TAG_CACHE[tag_type]:
+                TAG_CACHE[tag_type][tag_name] = tag_id
+
+        # Save to disk
+        os.makedirs(os.path.dirname(TAG_CACHE_FILE), exist_ok=True)
+        with open(TAG_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(TAG_CACHE, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"Preloaded {sum(len(v) for v in TAG_CACHE.values())} tags into cache")
+    except Exception as e:
+        logger.warning(f"Failed to preload tags from API: {e}")
+
+# ------------------------------
+# Build URLs
+# ------------------------------
+def build_url(query: str, page: int) -> str:
+    """
+    Build nhentai API URL from a generic query (homepage, search, artist, group, tag, parody) and page.
+    Resolves tag IDs from batch-loaded cache.
+    """
+    query_lower = query.lower()
+
+    # ------------------------------
+    # Homepage
+    # ------------------------------
+    if query_lower == "homepage":
+        return f"{API_BASE}/galleries/all?page={page}&sort=date"
+
+    # ------------------------------
+    # Search
+    # ------------------------------
+    if query_lower.startswith("search:"):
+        search_value = query.split(":", 1)[1]
+        return f"{API_BASE}/galleries/search?query={search_value}&page={page}&sort=date"
+
+    # ------------------------------
+    # Tag-based queries ("artist", "group", "tag", "parody")
+    # ------------------------------
+    for tag_type in ("artist", "group", "tag", "parody"):
+        prefix = f"{tag_type}:"
+        if query_lower.startswith(prefix):
+            tag_name = query[len(prefix):].strip().lower()
+
+            # Check cache
+            tag_id = TAG_CACHE.get(tag_type, {}).get(tag_name)
+            if tag_id is None:
+                raise ValueError(f"Tag not found in cache: {tag_type}='{tag_name}'")
+
+            return f"{API_BASE}/galleries/tagged?tag_id={tag_id}&page={page}&sort=date"
+
+    # ------------------------------
+    raise ValueError(f"Unknown query format: {query}")
 
 def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     ids: set[int] = set()
     page = start_page
+    
     try:
         log_clarification()
         logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page} → {end_page or '∞'})")
@@ -56,8 +138,8 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
         while True:
             if end_page is not None and page > end_page:
                 break
-
-            url = f"{API_BASE}?query={query}&sort=date&page={page}"
+            
+            url = build_url(query, page) # TEST
             log_clarification()
             logger.debug(f"Requesting {url}")
 
@@ -108,7 +190,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
 # FETCH METADATA
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
-    url = f"https://nhentai.net/api/gallery/{gallery_id}"
+    url = f"{API_BASE}/gallery/{gallery_id}"
     for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
         try:
             log_clarification()

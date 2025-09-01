@@ -25,6 +25,15 @@ def parse_args():
         help="Extension to use (default: none)"
     )
 
+    # Download Gallerries on Homepage
+    parser.add_argument(
+        "--homepage",
+        nargs=2,
+        type=int,
+        metavar=("START", "END"),
+        help="Page range of galleries to download from NHentai Homepage"
+    )
+    
     # Gallery ID selection
     parser.add_argument(
         "--range",
@@ -149,6 +158,9 @@ def build_gallery_list(args):
     # ------------------------------
     # Artist / Group / Tag / Parody / Search
     # ------------------------------
+    if args.homepage:
+        gallery_ids.update(_handle_gallery_arg(args.homepage, "homepage"))
+    
     if args.artist:
         gallery_ids.update(_handle_gallery_arg(args.artist, "artist"))
 
@@ -173,7 +185,7 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args, gallery_list): # Update config
-    config["GALLERIES"] = gallery_list # TEST
+    config["GALLERIES"] = gallery_list
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type

@@ -144,10 +144,12 @@ DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
 EXTENSION_DOWNLOAD_PATH=
 
 # APIs and Mirrors
-NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
+NHENTAI_API_BASE=https://nhentai.net/api
 NHENTAI_MIRRORS=https://i.nhentai.net
 
 # Gallery ID selection
+HOMEPAGE_RANGE_START=1
+HOMEPAGE_RANGE_END=3
 RANGE_START=500000
 RANGE_END=600000
 GALLERIES=
