@@ -175,7 +175,7 @@ def main():
     gallery_args = [args.homepage, args.range, args.galleries, args.artist,
                     args.group, args.tag, args.parody, args.search]
     if not any(gallery_args):
-        args.homepage = [{DEFAULT_HOMEPAGE_RANGE_START}, {DEFAULT_HOMEPAGE_RANGE_END}]  # default to page 1 of homepage
+        args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(verbose=args.verbose)
