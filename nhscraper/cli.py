@@ -82,16 +82,29 @@ def parse_args():
 
     return parser.parse_args()
 
-def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]:
-    """Parse CLI args and call fetch_gallery_ids."""
+def _handle_gallery_arg(arg_list: list | None, query_type: str) -> set[int]:
+    """Parse CLI args and call fetch_gallery_ids for any query type."""
     if not arg_list:
         return set()
 
-    name = arg_list[0].strip()
+    query_lower = query_type.lower()
+    gallery_ids = set()
+
+    # Homepage doesn't require a name
+    if query_lower == "homepage":
+        start_page = int(arg_list[0])
+        end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
+        for page in range(start_page, end_page + 1):
+            gallery_ids.update(fetch_gallery_ids("homepage", None, page))
+        return gallery_ids
+
+    # Other types require a name
+    name = str(arg_list[0]).strip()
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
-
-    return fetch_gallery_ids(query_type, name, start_page, end_page)
+    gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
+    
+    return gallery_ids
 
 def build_gallery_list(args):
     gallery_ids = set()
