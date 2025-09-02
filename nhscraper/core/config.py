@@ -145,12 +145,20 @@ DEFAULT_VERBOSE=False
 # ------------------------------------------------------------
 
 # Also change corresponding parser.add_argument in CLI
+
+# NHENTAI_MIRRORS: always a list
+MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+if isinstance(MIRRORS_ENV, str):
+    MIRRORS_LIST = [m.strip() for m in MIRRORS_ENV.split(",") if m.strip()]
+else:
+    MIRRORS_LIST = list(MIRRORS_ENV)
+
 config = {
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
     "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
-    "NHENTAI_MIRRORS": os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS),
+    "NHENTAI_MIRRORS": MIRRORS_LIST,  # ✅ now always a list
     "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START)),
     "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END)),
     "RANGE_START": int(os.getenv("RANGE_START", DEFAULT_RANGE_START)),
