@@ -209,12 +209,11 @@ def uninstall_selected_extension(extension_name: str):
 
 # ------------------------------
 # Get selected extension (with skeleton fallback)
-# ------------------------------
 def get_selected_extension(name: str = "skeleton"):
     """
     Returns the selected extension module.
     If the extension is not installed, installs it first.
-    Defaults to 'skeleton' if none specified or if requested extension not found.
+    Ensures 'skeleton' is always installed to provide a valid download path.
     """
     original_name = name  # Save the originally requested extension
 
@@ -228,49 +227,47 @@ def get_selected_extension(name: str = "skeleton"):
     # Load installed extensions
     load_installed_extensions()
 
-    # Try to find the requested extension in the manifest
+    # Load manifest
     manifest = load_local_manifest()
-    ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == name.lower()), None)
 
-    if ext_entry is None:
-        logger.warning(f"Extension '{name}' not found in manifest, falling back to skeleton")
-        name = "skeleton"
-        ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
-
-    # Install if not installed
-    if not ext_entry.get("installed", False):
-        logger.info(f"Extension '{name}' not installed, installing now...")
-        install_selected_extension(name)
+    # Ensure skeleton is installed first
+    skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
+    if skeleton_entry is None or not skeleton_entry.get("installed", False):
+        logger.info("Skeleton extension not installed, installing now...")
+        install_selected_extension("skeleton")
+        update_local_manifest_from_remote()
         load_installed_extensions()
+        manifest = load_local_manifest()
+
+    # Ensure the requested extension is installed
+    ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
+    if ext_entry is None:
+        logger.warning(f"Extension '{original_name}' not found in manifest, falling back to skeleton")
+        name = "skeleton"
+    elif not ext_entry.get("installed", False):
+        logger.info(f"Extension '{original_name}' not installed, installing now...")
+        install_selected_extension(original_name)
+        update_local_manifest_from_remote()
+        load_installed_extensions()
+        manifest = load_local_manifest()
+
+    # Final name to load (fall back to skeleton if necessary)
+    final_name = original_name if ext_entry else "skeleton"
 
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
+        if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             if hasattr(ext, "install_extension"):
                 ext.install_extension()
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
             log_clarification()
-            logger.info(f"Selected extension: {name}")
+            logger.info(f"Selected extension: {final_name}")
             return ext
 
-    # Fallback to skeleton if still not found
-    logger.warning(f"Extension '{name}' not loaded properly, falling back to skeleton")
-    for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
-            if hasattr(ext, "install_extension"):
-                ext.install_extension()
-            if hasattr(ext, "update_extension_download_path"):
-                ext.update_extension_download_path()
-            return ext
-
-    # If skeleton truly isn't installed, install skeleton and the original requested extension, then retry
-    logger.error("Skeleton extension not found! Installing skeleton and the requested extension...")
-    install_selected_extension("skeleton")
-    if original_name.lower() != "skeleton":
-        install_selected_extension(original_name)
-    load_installed_extensions()
-    return get_selected_extension(original_name)
+    # If we reach here, something went really wrong
+    logger.error("Failed to load the requested extension or skeleton! This should never happen, something went really wrong.")
+    return None
 
 # ------------------------------
 # Run on import
