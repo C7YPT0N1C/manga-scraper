@@ -36,9 +36,20 @@ SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 # CORE
 ####################################################################################################################
 def install_extension():
-    os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-    
-    logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    """
+    Install the extension and ensure the dedicated download path exists.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
+        DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed. Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH
