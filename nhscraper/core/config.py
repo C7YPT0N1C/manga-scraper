@@ -220,8 +220,17 @@ def get_download_path():
 def get_mirrors():
     env_mirrors = config.get("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
     mirrors = []
-    if env_mirrors:
+
+    if isinstance(env_mirrors, str):
+        # comma-separated string from environment
         mirrors = [m.strip() for m in env_mirrors.split(",") if m.strip()]
+    elif isinstance(env_mirrors, list):
+        # already a list
+        mirrors = env_mirrors
+    else:
+        # fallback
+        mirrors = [DEFAULT_NHENTAI_MIRRORS]
+
     # Ensure default mirror is first
     mirrors = [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
     return mirrors
