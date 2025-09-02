@@ -12,6 +12,7 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
+DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"

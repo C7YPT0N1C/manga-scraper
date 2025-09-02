@@ -235,9 +235,11 @@ def get_selected_extension(name: str = "skeleton"):
             # Always call the extension's install_extension hook if it exists
             if hasattr(ext, "install_extension"):
                 ext.install_extension()
-            # Optional: update download path
+            
+            # Update download path
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
+            
             log_clarification()
             logger.info(f"Selected extension: {name}")
             return ext

@@ -16,7 +16,7 @@
       "repo_url": "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
       "installed": false,
       "entry_point": "suwayomi__nhsext.py",
-      "image_download_path": "/opt/nhentai-scraper/downloads/"
+      "image_download_path": "/opt/suwayomi-server/local/"
     }
   ]
 }
