@@ -32,16 +32,12 @@ def load_extension():
     logger.info(f"Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
     # Prefer extension-specific download path, fallback to config/global default
-    # Updated by loaded extension via extension_loader
-    download_location = os.environ.get(
-        "EXTENSION_DOWNLOAD_PATH",
-        config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
-    )
+    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) \
+                        or config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
 
     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
-        os.makedirs(download_location, exist_ok=True) # Ensure the folder exists
+        os.makedirs(download_location, exist_ok=True)
     logger.info(f"Using download path: {download_location}")
-
 
 ####################################################################################################
 # UTILITIES
