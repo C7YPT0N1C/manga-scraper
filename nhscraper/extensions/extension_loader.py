@@ -29,9 +29,9 @@ BASE_REPO_BACKUP_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/
 
 INSTALLED_EXTENSIONS = []
 
-# ------------------------------
-# Helper functions
-# ------------------------------
+#######################################################################
+# Helpers
+#######################################################################
 def load_local_manifest():
     """Load the local manifest, create it from remote if it doesn't exist."""
     if not os.path.exists(LOCAL_MANIFEST_PATH):
@@ -85,92 +85,140 @@ def update_local_manifest_from_remote():
     return local_manifest
 
 # ------------------------------
+# Refresh manifest and installed extensions
+# ------------------------------
+def _reload_extensions():
+    """Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS."""
+    update_local_manifest_from_remote()
+    load_installed_extensions()
+    return load_local_manifest()
+
+# ------------------------------
+# Sparse clone repo
+# ------------------------------
+def sparse_clone(extension_name: str, url: str):
+    ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+    # Initialize empty repo
+    subprocess.run(["git", "init", ext_folder], check=True)
+    subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
+    subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+
+    # Configure sparse-checkout to fetch the top-level folder
+    sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+    with open(sparse_file, "w", encoding="utf-8") as f:
+        f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
+
+    # Pull the branch (assumes 'main')
+    subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+
+    # Flatten nested folder if exists
+    repo_folder = os.path.join(ext_folder, extension_name)
+    if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
+        for item in os.listdir(repo_folder):
+            shutil.move(os.path.join(repo_folder, item), ext_folder)
+        shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+
+    logger.debug(f"Clone complete: {extension_name} -> {ext_folder}")
+
+#######################################################################
+
+# ------------------------------
 # Extension Loader
 # ------------------------------
 def load_installed_extensions():
-    """Load installed extensions dynamically."""
+    """Load installed extensions dynamically; reinstall if missing."""
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
     for ext in manifest.get("extensions", []):
-        if ext.get("installed", False):
-            ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
-            entry_point = os.path.join(ext_folder, ext["entry_point"])
-            if os.path.exists(entry_point):
-                module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
+        ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
+        entry_point = os.path.join(ext_folder, ext["entry_point"])
 
-                try:
-                    module = importlib.import_module(module_name)
-                    INSTALLED_EXTENSIONS.append(module)
-                    logger.debug(f"Extension: {ext['name']}: Loaded.")
-                except Exception as e:
-                    logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
-            else:
-                logger.warning(f"Extension: {ext['name']}: Entry point not found.")
+        # If marked installed but entry point missing, reinstall
+        if ext.get("installed", False) and not os.path.exists(entry_point):
+            logger.warning(f"Extension '{ext['name']}' marked as installed but missing files. Reinstalling...")
+            install_selected_extension(ext["name"], reinstall=True)
+            entry_point = os.path.join(ext_folder, ext["entry_point"])  # refresh path after install
+
+        if os.path.exists(entry_point):
+            module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
+            try:
+                module = importlib.import_module(module_name)
+                INSTALLED_EXTENSIONS.append(module)
+                logger.debug(f"Extension: {ext['name']}: Loaded.")
+            except Exception as e:
+                logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
+        else:
+            logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------
 # Install / Uninstall Extension
 # ------------------------------
-def install_selected_extension(extension_name: str):
+def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
         logger.error(f"Extension '{extension_name}': Not found in remote manifest")
         return
 
-    if ext_entry.get("installed", False):
+    ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+    # Remove old folder if reinstalling
+    if reinstall and os.path.exists(ext_folder):
+        shutil.rmtree(ext_folder)
+
+    if ext_entry.get("installed", False) and not reinstall:
         logger.info(f"Extension '{extension_name}': Already installed")
         return
 
     repo_url = ext_entry.get("repo_url", "")
-    ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
-
     if not os.path.exists(ext_folder):
         os.makedirs(ext_folder, exist_ok=True)
 
-        def sparse_clone(extension_name: str, url: str):
-            ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+    def sparse_clone(extension_name: str, url: str):
+        ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
-            # Initialize empty repo
-            subprocess.run(["git", "init", ext_folder], check=True)
-            subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
-            subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+        # Initialize empty repo
+        subprocess.run(["git", "init", ext_folder], check=True)
+        subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
+        subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
 
-            # Configure sparse-checkout to fetch the top-level folder
-            sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
-            with open(sparse_file, "w", encoding="utf-8") as f:
-                f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
+        # Configure sparse-checkout to fetch the top-level folder
+        sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+        with open(sparse_file, "w", encoding="utf-8") as f:
+            f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
 
-            # Pull the branch (assumes 'main')
-            subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+        # Pull the branch (assumes 'main')
+        subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
 
-            # Check if repo folder exists inside ext_folder (double nesting)
-            repo_folder = os.path.join(ext_folder, extension_name)
-            if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
-                for item in os.listdir(repo_folder):
-                    shutil.move(os.path.join(repo_folder, item), ext_folder)
-                shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+        # Check if repo folder exists inside ext_folder (double nesting)
+        repo_folder = os.path.join(ext_folder, extension_name)
+        if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
+            for item in os.listdir(repo_folder):
+                shutil.move(os.path.join(repo_folder, item), ext_folder)
+            shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
 
-            print(f"Clone complete: {extension_name} -> {ext_folder}")
+        print(f"Clone complete: {extension_name} -> {ext_folder}")
 
-        try:
-            logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
-            sparse_clone(extension_name, repo_url)
-        except Exception as e:
-            logger.warning(f"Failed to sparse-clone from primary repo: {e}")
-            if BASE_REPO_BACKUP_URL:
-                backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
-                try:
-                    logger.debug(f"Retrying sparse-clone with backup repo: {backup_url}")
-                    # clean up half-baked folder before retry
-                    shutil.rmtree(ext_folder, ignore_errors=True)
-                    os.makedirs(ext_folder, exist_ok=True)
-                    sparse_clone(extension_name, backup_url)
-                except Exception as e2:
-                    logger.error(f"Failed to sparse-clone from backup repo: {e2}")
-                    return
-            else:
+    try:
+        logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+        sparse_clone(extension_name, repo_url)
+    except Exception as e:
+        logger.warning(f"Failed to sparse-clone from primary repo: {e}")
+        if BASE_REPO_BACKUP_URL:
+            backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+            try:
+                logger.debug(f"Retrying sparse-clone with backup repo: {backup_url}")
+                # clean up half-baked folder before retry
+                shutil.rmtree(ext_folder, ignore_errors=True)
+                os.makedirs(ext_folder, exist_ok=True)
+                sparse_clone(extension_name, backup_url)
+            except Exception as e2:
+                logger.error(f"Failed to sparse-clone from backup repo: {e2}")
                 return
+        else:
+            return
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
@@ -234,10 +282,8 @@ def get_selected_extension(name: str = "skeleton"):
     skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
         logger.info("Skeleton extension not installed, installing now...")
-        install_selected_extension("skeleton")
-        update_local_manifest_from_remote()
-        load_installed_extensions()
-        manifest = load_local_manifest()
+        install_selected_extension("skeleton", reinstall=True)
+        manifest = _reload_extensions()
 
     # Ensure the requested extension is installed
     ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
@@ -246,10 +292,8 @@ def get_selected_extension(name: str = "skeleton"):
         name = "skeleton"
     elif not ext_entry.get("installed", False):
         logger.info(f"Extension '{original_name}' not installed, installing now...")
-        install_selected_extension(original_name)
-        update_local_manifest_from_remote()
-        load_installed_extensions()
-        manifest = load_local_manifest()
+        install_selected_extension(original_name, reinstall=True)
+        manifest = _reload_extensions()
 
     # Final name to load (fall back to skeleton if necessary)
     final_name = original_name if ext_entry else "skeleton"
@@ -266,7 +310,7 @@ def get_selected_extension(name: str = "skeleton"):
             return ext
 
     # If we reach here, something went really wrong
-    logger.error("Failed to load the requested extension or skeleton! This should never happen, something went really wrong.")
+    logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
     return None
 
 # ------------------------------
