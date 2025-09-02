@@ -165,7 +165,6 @@ def install_selected_extension(extension_name: str):
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()
-        log_clarification()
         logger.info(f"Extension '{extension_name}': Installed successfully.")
 
     # Update manifest

@@ -38,7 +38,6 @@ SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 def install_extension():
     os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
     
-    log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
 
 def uninstall_extension():
@@ -47,10 +46,8 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
-        log_clarification()
         logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
     except Exception as e:
-        log_clarification()
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
 
 def update_extension_download_path():
