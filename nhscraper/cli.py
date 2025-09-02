@@ -31,125 +31,45 @@ def run_installer(flag: str):
     sys.exit(0) # Exit after running installer
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="NHentai scraper"
-    )
-    
-    # Installer flags
+    parser = argparse.ArgumentParser(description="NHentai scraper CLI")
+
+    # Installer / Updater flags
     parser.add_argument("--install", action="store_true", help="Install nhentai-scraper and dependencies")
     parser.add_argument("--update", action="store_true", help="Update nhentai-scraper")
     parser.add_argument("--update-env", action="store_true", help="Update the .env file")
     parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall nhentai-scraper")
-    
-    # Extension selection
-    parser.add_argument(
-        "--extension",
-        type=str,
-        default="none",
-        help="Extension to use (default: none)"
-    )
 
-    # Extension installation/uninstallation
+    # Extension selection / management
+    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
-    # Download Gallerries on Homepage
-    parser.add_argument(
-        "--homepage",
-        nargs=2,
-        type=int,
-        metavar=("START", "END"),
-        help="Page range of galleries to download from NHentai Homepage"
-    )
-    
-    # Gallery ID selection
-    parser.add_argument(
-        "--range",
-        nargs=2,
-        type=int,
-        metavar=("START", "END"),
-        help="Gallery ID range to download"
-    )
-    parser.add_argument(
-        "--galleries",
-        type=str,
-        help="Comma-separated gallery IDs to download"
-    )
-
-    # Artist/Group/Tag/Parody/Search arguments
-    parser.add_argument(
-        "--artist",
-        nargs="+",
-        metavar="ARGS",
-        help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. "
-            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
-    )
-
-    parser.add_argument(
-        "--group",
-        nargs="+",
-        metavar="ARGS",
-        help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. "
-            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
-    )
-
-    parser.add_argument(
-        "--tag",
-        nargs="+",
-        metavar="ARGS",
-        help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. "
-            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
-    )
-
-    parser.add_argument(
-        "--parody",
-        nargs="+",
-        metavar="ARGS",
-        help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. "
-            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
-    )
-
-    parser.add_argument(
-        "--search",
-        nargs="+",
-        metavar="ARGS",
-        help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. "
-            "START_PAGE defaults to 1, END_PAGE fetches all pages if omitted."
-    )
+    # Gallery selection
+    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END})")
+    parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
+    parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
+    parser.add_argument("--artist", nargs="+", metavar="ARGS", help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    parser.add_argument("--group", nargs="+", metavar="ARGS", help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    parser.add_argument("--tag", nargs="+", metavar="ARGS", help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    parser.add_argument("--parody", nargs="+", metavar="ARGS", help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    parser.add_argument("--search", nargs="+", metavar="ARGS", help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
 
     # Filters
-    parser.add_argument(
-        "--excluded-tags", type=str, default=DEFAULT_EXCLUDED_TAGS,
-        help="Comma-separated list of tags to exclude galleries"
-    )
-    parser.add_argument(
-        "--language", type=str, default=DEFAULT_LANGUAGE,
-        help="Comma-separated list of languages to include"
-    )
+    parser.add_argument("--excluded-tags", type=str, default=DEFAULT_EXCLUDED_TAGS, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
+    parser.add_argument("--language", type=str, default=DEFAULT_LANGUAGE, help=f"Comma-separated list of languages to include (default: '{DEFAULT_LANGUAGE}')")
 
     # Titles
-    parser.add_argument(
-        "--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE
-    )
-    parser.add_argument(
-        "--title-sanitise", action="store_true", default=DEFAULT_TITLE_SANITISE,
-        help="Sanitise titles for filesystem safety (pretty only by default)"
-    )
+    parser.add_argument("--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE, help=f"What title type to use (default: {DEFAULT_TITLE_TYPE})")
+    parser.add_argument("--title-sanitise", action="store_true", default=DEFAULT_TITLE_SANITISE, help=f"Sanitise titles for filesystem safety (pretty only by default, default: {DEFAULT_TITLE_SANITISE})")
 
-    # Threads
-    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES)
-    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES)
-    
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=DEFAULT_MAX_RETRIES,
-        help="Maximum number of retry attempts for failed downloads (default: 3)"
-    )   
+    # Threads / concurrency
+    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
+    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads to use for image downloads (default: {DEFAULT_THREADS_IMAGES})")
+    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
 
-    # Download Options
-    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR)
-    parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN)
-    parser.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE)
+    # Download / runtime options
+    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
+    parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
+    parser.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help=f"Enable verbose logging (default: {DEFAULT_VERBOSE})")
 
     return parser.parse_args()
 
