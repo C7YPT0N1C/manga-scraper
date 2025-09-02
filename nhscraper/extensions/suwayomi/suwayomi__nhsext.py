@@ -61,6 +61,12 @@ def uninstall_extension():
 
 def update_extension_download_path():
     log_clarification()
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
