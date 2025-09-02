@@ -42,6 +42,8 @@ def load_extension():
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
+
 def build_gallery_path(meta):
     # Ask extension for variables
     subs = active_extension.build_gallery_subfolders(meta)
