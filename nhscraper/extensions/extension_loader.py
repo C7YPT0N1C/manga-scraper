@@ -155,7 +155,7 @@ def install_selected_extension(extension_name: str):
 
         try:
             logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
-            sparse_clone(repo_url)
+            sparse_clone(extension_name, repo_url)
         except Exception as e:
             logger.warning(f"Failed to sparse-clone from primary repo: {e}")
             if BASE_REPO_BACKUP_URL:
@@ -165,7 +165,7 @@ def install_selected_extension(extension_name: str):
                     # clean up half-baked folder before retry
                     shutil.rmtree(ext_folder, ignore_errors=True)
                     os.makedirs(ext_folder, exist_ok=True)
-                    sparse_clone(backup_url)
+                    sparse_clone(extension_name, backup_url)
                 except Exception as e2:
                     logger.error(f"Failed to sparse-clone from backup repo: {e2}")
                     return
