@@ -216,6 +216,8 @@ def get_selected_extension(name: str = "skeleton"):
     If the extension is not installed, installs it first.
     Defaults to 'skeleton' if none specified or if requested extension not found.
     """
+    original_name = name  # Save the originally requested extension
+
     log_clarification()
     logger.info("Extension Loader: Ready.")
     logger.debug("Extension Loader: Debugging Started.")
@@ -239,20 +241,15 @@ def get_selected_extension(name: str = "skeleton"):
     if not ext_entry.get("installed", False):
         logger.info(f"Extension '{name}' not installed, installing now...")
         install_selected_extension(name)
-        # Reload installed extensions after installation
         load_installed_extensions()
 
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
-            # Always call the extension's install_extension hook if it exists
             if hasattr(ext, "install_extension"):
                 ext.install_extension()
-            
-            # Update download path
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
-            
             log_clarification()
             logger.info(f"Selected extension: {name}")
             return ext
@@ -267,14 +264,13 @@ def get_selected_extension(name: str = "skeleton"):
                 ext.update_extension_download_path()
             return ext
 
-    # If skeleton truly isn't installed, install skeleton and the requested extension, then retry
-    logger.error("Skeleton extension not found! Installing skeleton and requested extension...")
+    # If skeleton truly isn't installed, install skeleton and the original requested extension, then retry
+    logger.error("Skeleton extension not found! Installing skeleton and the requested extension...")
     install_selected_extension("skeleton")
-    install_selected_extension(name)
-    # Refresh installed extensions
+    if original_name.lower() != "skeleton":
+        install_selected_extension(original_name)
     load_installed_extensions()
-    # Retry selection
-    return get_selected_extension(name)
+    return get_selected_extension(original_name)
 
 # ------------------------------
 # Run on import
