@@ -60,7 +60,6 @@ install_python_packages() {
     export PATH="$NHENTAI_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
-<<<<<<< HEAD
 
 install_filebrowser() {
         echo -e "\nInstalling FileBrowser..."
@@ -78,7 +77,7 @@ install_filebrowser() {
         rm -f "$FB_DB"
     fi
     
-    # Initialize default config in current user's home (~/.filebrowser)
+    # Initialise default config in current user's home (~/.filebrowser)
     filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
 
 
@@ -155,7 +154,7 @@ install_filebrowser() {
         rm -f "$FB_DB"
     fi
     
-    # Initialize default config in current user's home (~/.filebrowser)
+    # Initialise default config in current user's home (~/.filebrowser)
     filebrowser config init --database /opt/filebrowser/filebrowser.db --address 0.0.0.0
 
 
@@ -219,10 +218,7 @@ install_scraper() {
 }
 
 create_env_file() {
-<<<<<<< HEAD
-=======
-    # Also change corresponding parser.add_argument in CLI
->>>>>>> dev
+    # Update defaults in Config.py
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
@@ -231,35 +227,36 @@ create_env_file() {
 # Directories
 NHENTAI_DIR=/opt/nhentai-scraper
 
-# Download paths
-DOWNLOAD_PATH=/opt/nhentai-scraper/downloads
+# Default Download Path
+DOWNLOAD_PATH=
+
+# Extensions
+EXTENSION=
 EXTENSION_DOWNLOAD_PATH=
 
 # APIs and Mirrors
-NHENTAI_API_BASE=https://nhentai.net/api/galleries/search
-NHENTAI_MIRRORS=https://i.nhentai.net
+NHENTAI_API_BASE=
+NHENTAI_MIRRORS=
 
 # Gallery ID selection
-<<<<<<< HEAD
-RANGE_START=592000
-=======
-RANGE_START=500000
->>>>>>> dev
-RANGE_END=600000
+HOMEPAGE_RANGE_START=
+HOMEPAGE_RANGE_END=
+RANGE_START=
+RANGE_END=
 GALLERIES=
 
 # Filters
 EXCLUDED_TAGS=
-LANGUAGE=english
+LANGUAGE=
 
 # Titles
-TITLE_TYPE=english
-TITLE_SANITISE=true
+TITLE_TYPE=
+TITLE_SANITISE=
 
 # Threads
-THREADS_GALLERIES=2
-THREADS_IMAGES=10
-MAX_RETRIES=3
+THREADS_GALLERIES=
+THREADS_IMAGES=
+MAX_RETRIES=
 
 # Download Options
 USE_TOR=true
@@ -489,8 +486,6 @@ case "$1" in
     *)
         echo "Invalid or missing argument. Options:"
         echo "    --install"
-        echo "    --install-extension <name>"
-        echo "    --uninstall-extension <name>"
         echo "    --update-env"
         echo "    --update"
         echo "    --uninstall / --remove"

@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # core/fetchers.py
 
-import time, random, cloudscraper, requests
+import os, time, random, cloudscraper, requests, json, urllib.parse
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 
-# ===============================
+################################################################################################################
+# GLOBAL VARIABLES
+################################################################################################################
+API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
+METADATA_CACHE_FILE = "/opt/nhentai-scraper/metadata_cache.json"
+
+################################################################################################################
 # HTTP SESSION
-# ===============================
+################################################################################################################
 session = None
 
 def session_builder():
@@ -15,7 +21,6 @@ def session_builder():
     logger.info("Fetcher: Ready.")
     logger.debug("Fetcher: Debugging Started.")
 
-    log_clarification()
     logger.debug("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(
@@ -28,42 +33,72 @@ def session_builder():
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://nhentai.net/",
     })
-
-    if config.get("USE_TOR", False):
+    
+    logger.debug(f"Built HTTP session with cloudscraper")
+    
+    if config.get("USE_TOR", True):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
     else:
         logger.info("Not using Tor proxy")
-
+    
     return s
 
 def build_session():
     global session
-    session = session_builder() # cloudscraper session, default.
+    
+    # Ensure session is ready
+    # Uses cloudscraper session by default.
+    if session is None:
+        session = session_builder()
+    
+################################################################################################################
+# API Handling
+################################################################################################################
+def build_url(query_type: str, query_value: str, page: int) -> str:
+    query_lower = query_type.lower()
 
-# ===============================
-# FETCH IDs
-# ===============================
-API_BASE = config["NHENTAI_API_BASE"]
+    # Homepage # TEST
+    if query_lower == "homepage":
+        return f"{API_BASE}/galleries/all?page={page}&sort=date"
 
-def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
+    # Tag-based queries (artist, group, tag, parody)
+    if query_lower in ("artist", "group", "tag", "parody"):
+        search_value = query_value
+        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
+            search_value = f'"{search_value}"'
+        encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+    
+    # Search queries
+    if query_lower == "search":
+        # Wrap search term in quotes for exact match if it contains spaces
+        search_value = query_value
+        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
+            search_value = f'"{search_value}"'
+        encoded = urllib.parse.quote(search_value, safe='"')
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+
+    raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
+
+def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     ids: set[int] = set()
     page = start_page
+    
     try:
         log_clarification()
-        logger.info(f"Fetching gallery IDs for query '{query}' (pages {start_page} → {end_page or '∞'})")
+        logger.info(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
             if end_page is not None and page > end_page:
                 break
-
-            url = f"{API_BASE}?query={query}&sort=date&page={page}"
-            log_clarification()
-            logger.debug(f"Requesting {url}")
+            
+            url = build_url(query_type, query_value, page)
+            logger.debug(f"Requesting URL: {url}")
 
             resp = None
-            for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
+            for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
                 try:
                     resp = session.get(url, timeout=30)
                     if resp.status_code == 429:
@@ -74,7 +109,7 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= config.get("MAX_RETRIES", 3):
+                    if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         break
@@ -88,7 +123,6 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log_clarification()
             logger.debug(f"Page {page}: Fetched {len(batch)} gallery IDs")
 
             if not batch:
@@ -98,19 +132,19 @@ def fetch_gallery_ids(query: str, start_page: int = 1, end_page: int | None = No
             ids.update(batch)
             page += 1
 
-        logger.info(f"Fetched total {len(ids)} galleries for query '{query}'")
+        logger.info(f"Fetched total {len(ids)} galleries for query '{query_value}'")
         return ids
 
     except Exception as e:
-        logger.warning(f"Failed to fetch galleries for query '{query}': {e}")
+        logger.warning(f"Failed to fetch galleries for query '{query_value}': {e}")
         return set()
 
-# ===============================
+################################################################################################################
 # FETCH METADATA
-# ===============================
+################################################################################################################
 def fetch_gallery_metadata(gallery_id: int):
-    url = f"https://nhentai.net/api/gallery/{gallery_id}"
-    for attempt in range(1, config.get("MAX_RETRIES", 3) + 1):
+    url = f"{API_BASE}/gallery/{gallery_id}"
+    for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
         try:
             log_clarification()
             logger.debug(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
@@ -123,8 +157,8 @@ def fetch_gallery_metadata(gallery_id: int):
                 continue
             resp.raise_for_status()
             
-            log_clarification()
-            logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
+            #log_clarification()
+            #logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
             
             data = resp.json()
 
@@ -140,7 +174,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if "404 Client Error: Not Found for url" in str(e):
                 logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
-            if attempt >= config.get("MAX_RETRIES", 3):
+            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
@@ -148,7 +182,7 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
-            if attempt >= config.get("MAX_RETRIES", 3):
+            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             wait = 2 ** attempt
@@ -156,13 +190,14 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
-def fetch_image_url(meta: dict, page: int):
+def fetch_image_urls(meta: dict, page: int):
     """
     Returns the full image URL for a gallery page.
+    Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        logger.debug(f"Building image URL for Gallery {meta.get('id','?')}: Page {page}")
+        logger.debug(f"Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -185,10 +220,15 @@ def fetch_image_url(meta: dict, page: int):
 
         ext = ext_map.get(type_code, "webp")
         filename = f"{page}.{ext}"
-        url = f"https://i.nhentai.net/galleries/{meta.get('media_id','')}/{filename}"
 
-        logger.debug(f"Built image URL: {url}")
-        return url
+        # Try each mirror in order
+        urls = [
+            f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
+            for mirror in config.get("NHENTAI_MIRRORS", [])
+        ]
+
+        logger.debug(f"Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
+        return urls  # return list so downloader can try them in order
 
     except Exception as e:
         logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")

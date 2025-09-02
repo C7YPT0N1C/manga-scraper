@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # extensions/extension_loader.py
 
-import os, json, importlib, subprocess
+import os, json, importlib, shutil, subprocess
 from urllib.request import urlopen
 
-from nhscraper.core.config import logger, config, log_clarification
+from nhscraper.core.config import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------
@@ -29,9 +29,9 @@ BASE_REPO_BACKUP_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/
 
 INSTALLED_EXTENSIONS = []
 
-# ------------------------------
-# Helper functions
-# ------------------------------
+#######################################################################
+# Helpers
+#######################################################################
 def load_local_manifest():
     """Load the local manifest, create it from remote if it doesn't exist."""
     if not os.path.exists(LOCAL_MANIFEST_PATH):
@@ -39,7 +39,7 @@ def load_local_manifest():
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
-        #print("Local Manifest:\n", json_load) # TEST
+        #logger.debug("Local Manifest: {json_load}")
         return json_load
 
 def save_local_manifest(manifest: dict):
@@ -85,91 +85,160 @@ def update_local_manifest_from_remote():
     return local_manifest
 
 # ------------------------------
+# Refresh manifest and installed extensions
+# ------------------------------
+def _reload_extensions():
+    """Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS."""
+    update_local_manifest_from_remote()
+    load_installed_extensions()
+    return load_local_manifest()
+
+# ------------------------------
+# Sparse clone repo
+# ------------------------------
+def sparse_clone(extension_name: str, url: str):
+    ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+    # Initialize empty repo
+    subprocess.run(["git", "init", ext_folder], check=True)
+    subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
+    subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+
+    # Configure sparse-checkout to fetch the top-level folder
+    sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+    with open(sparse_file, "w", encoding="utf-8") as f:
+        f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
+
+    # Pull the branch (assumes 'main')
+    subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+
+    # Flatten nested folder if exists
+    repo_folder = os.path.join(ext_folder, extension_name)
+    if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
+        for item in os.listdir(repo_folder):
+            shutil.move(os.path.join(repo_folder, item), ext_folder)
+        shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+
+    logger.debug(f"Clone complete: {extension_name} -> {ext_folder}")
+
+#######################################################################
+
+# ------------------------------
 # Extension Loader
 # ------------------------------
 def load_installed_extensions():
-    """Load installed extensions dynamically."""
+    """Load installed extensions dynamically; reinstall if missing."""
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
     for ext in manifest.get("extensions", []):
-        if ext.get("installed", False):
-            ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
-            entry_point = os.path.join(ext_folder, ext["entry_point"])
-            if os.path.exists(entry_point):
-                module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
+        ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
+        entry_point = os.path.join(ext_folder, ext["entry_point"])
 
-                try:
-                    module = importlib.import_module(module_name)
-                    INSTALLED_EXTENSIONS.append(module)
-                    log_clarification()
-                    logger.debug(f"Extension: {ext['name']}: Loaded.")
-                except Exception as e:
-                    log_clarification()
-                    logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
-            else:
-                log_clarification()
-                logger.warning(f"Extension: {ext['name']}: Entry point not found.")
+        # If marked installed but entry point missing, reinstall
+        if ext.get("installed", False) and not os.path.exists(entry_point):
+            logger.warning(f"Extension '{ext['name']}' marked as installed but missing files. Reinstalling...")
+            install_selected_extension(ext["name"], reinstall=True)
+            entry_point = os.path.join(ext_folder, ext["entry_point"])  # refresh path after install
+
+        if os.path.exists(entry_point):
+            module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
+            try:
+                module = importlib.import_module(module_name)
+                INSTALLED_EXTENSIONS.append(module)
+                logger.debug(f"Extension: {ext['name']}: Loaded.")
+            except Exception as e:
+                logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
+        else:
+            logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------
 # Install / Uninstall Extension
 # ------------------------------
-def install_extension(extension_name: str):
-    """Install an extension if not already installed."""
+def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
-        log_clarification()
-        logger.error(f"Extension '{extension_name}' not found in remote manifest")
+        logger.error(f"Extension '{extension_name}': Not found in remote manifest")
         return
 
-    if ext_entry.get("installed", False):
-        log_clarification()
-        logger.info(f"Extension '{extension_name}' is already installed")
-        return
-
-    # Clone/download extension if needed (with repo backup)
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+    # Remove old folder if reinstalling
+    if reinstall and os.path.exists(ext_folder):
+        shutil.rmtree(ext_folder)
+
+    if ext_entry.get("installed", False) and not reinstall:
+        logger.info(f"Extension '{extension_name}': Already installed")
+        return
+
+    repo_url = ext_entry.get("repo_url", "")
     if not os.path.exists(ext_folder):
-        repo_url = ext_entry.get("repo_url", "")
-        try:
-            log_clarification()
-            logger.debug(f"Cloning {extension_name} from {repo_url}...")
-            subprocess.run(["git", "clone", repo_url, ext_folder], check=True)
-        except Exception as e:
-            log_clarification()
-            logger.warning(f"Failed to clone from primary repo: {e}")
-            if BASE_REPO_BACKUP_URL:
-                backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
-                try:
-                    log_clarification()
-                    logger.debug(f"Retrying with backup repo: {backup_url}")
-                    subprocess.run(["git", "clone", backup_url, ext_folder], check=True)
-                except Exception as e2:
-                    log_clarification()
-                    logger.error(f"Failed to clone from backup repo: {e2}")
-                    return
+        os.makedirs(ext_folder, exist_ok=True)
+
+    def sparse_clone(extension_name: str, url: str):
+        ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+        # Initialize empty repo
+        subprocess.run(["git", "init", ext_folder], check=True)
+        subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
+        subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+
+        # Configure sparse-checkout to fetch the top-level folder
+        sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+        with open(sparse_file, "w", encoding="utf-8") as f:
+            f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
+
+        # Pull the branch (assumes 'main')
+        subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+
+        # Check if repo folder exists inside ext_folder (double nesting)
+        repo_folder = os.path.join(ext_folder, extension_name)
+        if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
+            for item in os.listdir(repo_folder):
+                shutil.move(os.path.join(repo_folder, item), ext_folder)
+            shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+
+        print(f"Clone complete: {extension_name} -> {ext_folder}")
+
+    try:
+        logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+        sparse_clone(extension_name, repo_url)
+    except Exception as e:
+        logger.warning(f"Failed to sparse-clone from primary repo: {e}")
+        if BASE_REPO_BACKUP_URL:
+            backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+            try:
+                logger.debug(f"Retrying sparse-clone with backup repo: {backup_url}")
+                # clean up half-baked folder before retry
+                shutil.rmtree(ext_folder, ignore_errors=True)
+                os.makedirs(ext_folder, exist_ok=True)
+                sparse_clone(extension_name, backup_url)
+            except Exception as e2:
+                logger.error(f"Failed to sparse-clone from backup repo: {e2}")
+                return
+        else:
+            return
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
-    module_name = f"extensions.{extension_name}.{entry_point.replace('.py', '')}"
+    module_name = f"nhscraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()
-        log_clarification()
-        logger.info(f"Extension '{extension_name}' installed successfully")
+        logger.info(f"Extension '{extension_name}': Installed successfully.")
 
     # Update manifest
     ext_entry["installed"] = True
     save_local_manifest(manifest)
 
-def uninstall_extension(extension_name: str):
+def uninstall_selected_extension(extension_name: str):
     """Uninstall an extension."""
     manifest = load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
         log_clarification()
-        logger.warning(f"Extension '{extension_name}' is not installed")
+        logger.warning(f"Extension '{extension_name}': Not installed")
         return
 
     # Import and run uninstall hook
@@ -180,7 +249,7 @@ def uninstall_extension(extension_name: str):
     if hasattr(module, "uninstall_extension"):
         module.uninstall_extension()
         log_clarification()
-        logger.info(f"Extension '{extension_name}' uninstalled successfully")
+        logger.info(f"Extension '{extension_name}': Uninstalled successfully.")
 
     # Update manifest
     ext_entry["installed"] = False
@@ -188,37 +257,60 @@ def uninstall_extension(extension_name: str):
 
 # ------------------------------
 # Get selected extension (with skeleton fallback)
-# ------------------------------
 def get_selected_extension(name: str = "skeleton"):
     """
     Returns the selected extension module.
-    Defaults to 'skeleton' if none specified or if requested extension not installed.
+    If the extension is not installed, installs it first.
+    Ensures 'skeleton' is always installed to provide a valid download path.
     """
+    original_name = name  # Save the originally requested extension
+
     log_clarification()
     logger.info("Extension Loader: Ready.")
     logger.debug("Extension Loader: Debugging Started.")
-    
+
+    # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
+
+    # Load installed extensions
     load_installed_extensions()
 
-    # Debug: Log installed extensions
-    log_clarification()
-    logger.debug(f"Installed extensions: {[getattr(ext, '__name__', 'unknown') for ext in INSTALLED_EXTENSIONS]}")
+    # Load manifest
+    manifest = load_local_manifest()
 
-    # Try requested extension first
+    # Ensure skeleton is installed first
+    skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
+    if skeleton_entry is None or not skeleton_entry.get("installed", False):
+        logger.info("Skeleton extension not installed, installing now...")
+        install_selected_extension("skeleton", reinstall=True)
+        manifest = _reload_extensions()
+
+    # Ensure the requested extension is installed
+    ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
+    if ext_entry is None:
+        logger.warning(f"Extension '{original_name}' not found in manifest, falling back to skeleton")
+        name = "skeleton"
+    elif not ext_entry.get("installed", False):
+        logger.info(f"Extension '{original_name}' not installed, installing now...")
+        install_selected_extension(original_name, reinstall=True)
+        manifest = _reload_extensions()
+
+    # Final name to load (fall back to skeleton if necessary)
+    final_name = original_name if ext_entry else "skeleton"
+
+    # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith(f"{name.lower()}__nhsext"):
-            logger.info(f"Selected extension: {name}")
+        if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
+            if hasattr(ext, "install_extension"):
+                ext.install_extension()
+            if hasattr(ext, "update_extension_download_path"):
+                ext.update_extension_download_path()
+            log_clarification()
+            logger.info(f"Selected extension: {final_name}")
             return ext
 
-    # Fallback to skeleton
-    for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith("skeleton__nhsext"):
-            logger.info("Fallback to skeleton extension")
-            return ext
-
-    log_clarification()
-    logger.error("Skeleton extension not found! This should never happen.")
+    # If we reach here, something went really wrong
+    logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
     return None
 
 # ------------------------------

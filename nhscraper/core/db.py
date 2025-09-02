@@ -4,13 +4,13 @@
 import os, sqlite3, threading
 from datetime import datetime
 
-from nhscraper.core.config import logger, config, NHENTAI_DIR
+from nhscraper.core.config import *
 
 DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
-# DB INITIALIZATION
+# DB INITIALISATION
 # ===============================
 def init_db():
     os.makedirs(NHENTAI_DIR, exist_ok=True)
