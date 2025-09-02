@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, sys, argparse
+import argparse
 
 from nhscraper.core.config import *
-from nhscraper.core.downloader import start_downloader
+from nhscraper.core.downloader import *
 from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
@@ -12,7 +12,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper"
     )
-    
+
+    # Extension installation/uninstallation
+    parser.add_argument("--install-extension", type=str, help="Install an extension by name")
+    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
+
     # Extension selection
     parser.add_argument(
         "--extension",
@@ -20,9 +24,6 @@ def parse_args():
         default="none",
         help="Extension to use (default: none)"
     )
-
-    # Extension installation/uninstallation
-    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Download Gallerries on Homepage
     parser.add_argument(
@@ -134,7 +135,12 @@ def _handle_gallery_arg(arg_list: list[str] | None, query_type: str) -> set[int]
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
 
-    return fetch_gallery_ids(query_type, name, start_page, end_page)
+    # Wrap name in quotes if it contains spaces
+    if " " in name and not (name.startswith('"') and name.endswith('"')):
+        name = f'"{name}"'
+
+    query = f"{query_type}:{name}"
+    return fetch_gallery_ids(query, start_page, end_page)
 
 def build_gallery_list(args):
     gallery_ids = set()
@@ -175,15 +181,15 @@ def build_gallery_list(args):
         gallery_ids.update(_handle_gallery_arg(args.search, "search"))
 
     # ------------------------------
-    # Final sorted list (Processes highest gallery ID (latest gallery) first.)
+    # Final sorted list
     # ------------------------------
-    gallery_list = list(reversed(sorted(gallery_ids)))
+    gallery_list = list(reversed(sorted(gallery_ids))) # Processes highest gallery ID (latest gallery) first.
     log_clarification()
     logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
 
-def update_config(args): # Update config   
-    config["EXTENSION"] = args.extension 
+def update_config(args, gallery_list): # Update config
+    config["GALLERIES"] = gallery_list
     config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
@@ -201,37 +207,38 @@ def main():
     # Overwrite placeholder logger with real one
     logger = setup_logger(verbose=args.verbose)
     
+    # Build scraper session.
+    build_session()
+    
     log_clarification()
     logger.info("CLI: Ready.")
     logger.debug("CLI: Debugging Started.")
     
-    log_clarification()
-    logger.debug("Updating Config...")
-    
-    # Update Config
-    # Allows session to use correct config values on creation
-    update_config(args)
-    
-    # Build scraper session.
-    build_session()
-    
-    # Build Gallery List (make sure not empty.)
+    # ------------------------------
+    # Build gallery list
+    # ------------------------------
     gallery_list = build_gallery_list(args)
     if not gallery_list:
-        logger.warning("No galleries provided. Exiting.")
-        sys.exit(0)  # Or just return
-    
-    # Update Config with Built Gallery List
-    update_env("GALLERIES", gallery_list)
+        log_clarification()
+        logger.warning("No galleries to download. Exiting.")
+        return
     
     log_clarification()
-    logger.debug(f"Updated Config:\n{config}")
+    logger.debug("Updating Config...")
+    update_config(args, gallery_list)    
+    log_clarification()
+    logger.debug(f"Updated Config: {config}")
 
     # ------------------------------
-    # Handle extension uninstallation (--extension automatically installs extension)
+    # Handle extension installation/uninstallation
     # ------------------------------
+    if args.install_extension:
+        update_local_manifest_from_remote()
+        install_extension(args.install_extension)
+        return
+
     if args.uninstall_extension:
-        uninstall_selected_extension(args.uninstall_extension)
+        uninstall_extension(args.uninstall_extension)
         return
     
     # ------------------------------

@@ -10,11 +10,12 @@
 - [**Usage**](#usage)
   a- [CLI Arguments](#cli-arguments)
   - [Examples](#examples)
-- [**Documentation**](#documentation)
+- [**Documentation**](#documentation
   - [Directory Layout](#directory-layout)
   - [Systemd Services](#systemd-services)
   - [GraphQL API Queries](#graphql-api-queries)
   - [Flask Monitoring Endpoint](#flask-monitoring-endpoint)
+  - [Data Flow Diagram](#data-flow-diagram)
 
 ## Overview and Disclaimer
 nhentai-scraper is a fully-featured Python scraper for **nhentai** that downloads galleries, supports multi-artist/group galleries. Has its own API running as a systemd service.
@@ -121,26 +122,27 @@ nhentai-scraper --exclude-tags yaoi, shotacon --use-tor
 ```
 
 ## Documentation
-### Directory Layout
-Galleries (Suwayomi compatible) saved as:
+### Folder Structure
 ```
-ARTIST_FOLDER/
-└─ DOUJIN_FOLDER/
-   ├─ 1.jpg
-   ├─ 2.jpg
-   └─ details.json
-```
-Suwayomi metadata format:
-```json
-{
-  "title": "AUTHOR_NAME",
-  "author": "AUTHOR_NAME",
-  "artist": "AUTHOR_NAME",
-  "description": "An archive of AUTHOR_NAME's works.",
-  "genre": ["tags_here"],
-  "status": "1",
-  "_status values": ["0=Unknown","1=Ongoing","2=Completed","3=Licensed"]
-}
+nhentai-scraper/
+├─ core/
+│  ├─ __init__.py
+│  ├─ config.py
+│  ├─ db.py
+│  ├─ downloader.py
+│  ├─ fetchers.py
+│  └─ logger.py
+├─ extensions/
+│  ├─ __init__.py
+│  ├─ extension_loader.py
+│  ├─ manifest.json
+│  └─ [EXTENSION NAME]/
+│     ├─ __init__.py
+│     └─ [EXTENSION NAME]__nhsext.py
+├─ __init__.py
+├─ api.py
+├─ cli.py
+└─ nhscraper-install.sh
 ```
 
 ### Systemd Services
@@ -169,31 +171,104 @@ Run `sudo systemctl daemon-reload` if service files have been manually changed.
 }
 ```
 
-### TO-DO LIST
-(Basically just me looking at features / everything in the readme and make sure it's accurate lol)
+### Data Flow Diagram:
 
-- [ ] Look over / rewrite code
-- [ ] Make sure tags with multiple words (e.g. big ass) parse properly
-- [x] Ensure variables are formatted correctly (env file and the use of quotes around variables, "cookie" vs cookie)
-- [x] Add gallery download with language/tag filters
-- [ ] Sort downloads by artists and groups
-- [x] Add multi-threaded download support
-- [x] Implement automatic retry of failed/skipped galleries
-- [x] Add Flask monitoring endpoint
+The basics of the flow of data is: (CLI → Config → Downloader → Extensions → Output)
 
-Suwayomi:
-- [ ] Use GraphQL to automatically change Suwayomi settings on install
-- [ ] Sort downloaded galleries into Suwayomi categories by tags)
-- [x] Generate Suwayomi metadata automatically
-- [ ] Automatically create a category in Suwayomi for each gallery tag/genre if it doesn't already exist
-- [ ] Assign galleries to corresponding categories based on their tags
-- [ ] Allow manual reordering of categories or extend logic to sort by number of galleries per category
-- [ ] Exclude tags listed in `SUWAYOMI_IGNORED_CATEGORIES` (default: `Favourites, Favs`) from automated categories
+#### Installer Script: nhscraper-install.sh
+- Checks root privileges
+- Installs system packages (Python3, pip, git, tor, etc.)
+- Clones/updates nhentai-scraper repo
+- Creates virtual environment + installs Python dependencies
+- Creates default .env with all CLI flag defaults:
+  - range, galleries, artist, group, tag, parody
+  - excluded-tags, language, title-type, title-sanitise
+  - threads-galleries, threads-images, use-tor, dry-run, verbose
+  - extension_download_path (default: "")
+- Installs nhentai-scraper API systemd service
+- Installs core extensions if flagged:
+  - Calls install_extension() in extension module
+  - Creates any required systemd services (e.g., suwayomi-server)
+- Installer can also:
+  - `--update`: fully overwrite files + dependencies
+  - `--update-env`: update .env values individually
+  - `--uninstall`: remove nhentai-scraper + services + venv
+  - `--install-extension` / `--uninstall-extension`
 
-Other Tasks:
-- [x] Implement automatic cookie updates?
-- [ ] Allow users to select specific VPN server (via launch argument)?
-- [ ] Add more launch arguments / API endpoints
-- [ ] Improve documentation
-- [ ] Add better debugging (e.g., reasons for gallery skip)
-- [ ] New workflow?: suwayomi extension → API request → scraper → downloader → import to Suwayomi
+#### CLI: nhscraper/cli.py
+- Parses arguments:
+  - `--extension` (select extension or 'none')
+  - `--range` (start/end gallery IDs)
+  - `--galleries` (list of gallery IDs)
+  - `--artist/group/tag/parody` + start/end pages
+  - `--excluded-tags`, `--language`
+  - `--title-type`, `--title-sanitise`
+  - `--threads-galleries`, `--threads-images`
+  - `--use-tor`, `--dry-run`, `--verbose`
+- Initialises config from CLI args + .env
+- Determines active galleries list (combined from all flags)
+- Sets EXTENSION_DOWNLOAD_PATH if extension is active
+
+#### Config Loader: core/config.py
+- Reads default .env values
+- Updates config dictionary with CLI args overrides
+- Provides helper functions:
+  - `get_download_path()` returns NHENTAI_DIR/downloads
+  - `get_extension_path()` returns EXTENSION_DOWNLOAD_PATH if set
+- Ensures dynamic path resolution for extensions
+
+#### Downloader: core/downloader.py
+- Reads active gallery list
+- Pre-download hooks (extensions)
+- Iterates galleries using threads-galleries:
+  - Fetch gallery metadata via NHentai API
+  - Apply filters: language, excluded-tags
+  - Resolve download folder: EXTENSION_DOWNLOAD_PATH > default DOWNLOAD_PATH
+  - Pretty titles sanitised if enabled
+  - Download images using threads-images
+  - During-download hooks (extensions)
+  - After-gallery-download hooks (extensions)
+- After-all-downloads hooks (extensions)
+- Post-download hooks (extensions, resets EXTENSION_DOWNLOAD_PATH)
+
+#### Extension Loader: core/extension_loader.py
+- Dynamically imports installed extensions
+- Exposes pre_download_hook, during_download_hook, after_gallery_download, after_all_downloads, post_download_hook
+- Extensions can:
+  - Override EXTENSION_DOWNLOAD_PATH
+  - Create metadata files
+  - Create additional systemd services
+  - Respect dry-run mode
+
+#### NHentai API / Metadata Fetchers: core/fetchers.py
+- `fetch_gallery_metadata(gallery_id, use_tor)`: requests gallery info
+- Returns dict: title_pretty, title_english, title_japanese, images, artists, tags, language
+- `download_image(url, target_path, use_tor)`: downloads image respecting dry-run
+
+#### Extensions: extensions/
+- Skeleton (skeleton__nhsext.py): example hooks, install/uninstall
+- Suwayomi (suwayomi__nhsext.py):
+  - Sets EXTENSION_DOWNLOAD_PATH
+  - Generates metadata JSON per gallery
+  - Creates suwayomi-server.service
+  - Handles dry-run
+  - Install/uninstall functions
+
+#### API / Flask Monitoring: nhscraper/api.py
+- Starts systemd-enabled service
+- Exposes status endpoint `/scraper_status`
+- Reports last_run, success/error, downloaded/skipped galleries
+- Can interact with extensions hooks
+
+#### FileBrowser / Suwayomi / Other Integrations
+- Suwayomi reads metadata JSON
+- Galleries categorised by tags
+- FileBrowser provides web access to galleries
+
+#### Uninstallation / Cleanup
+- Installer with `--uninstall`:
+  - Stops nhentai-scraper API service
+  - Removes venv + repo files
+  - Removes systemd services
+  - Optionally cleans extension folders
+- Extensions uninstalled separately via `--uninstall-extension <name>`
