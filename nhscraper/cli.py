@@ -16,22 +16,30 @@ INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
 
 def run_installer(flag: str):
-    """Call the Bash installer with the given flag."""
+    """Call the Bash installer with the given flag, using sudo if needed."""
     if not os.path.exists(INSTALLER_PATH):
         print(f"Installer not found at {INSTALLER_PATH}")
         sys.exit(1)
-    # Forward flag directly
-    subprocess.run([INSTALLER_PATH, flag], check=True)
-    sys.exit(0)  # Exit after running installer
+    
+    cmd = [INSTALLER_PATH, flag]
+    
+    # If not root, prepend sudo
+    if os.geteuid() != 0:
+        cmd.insert(0, "sudo")
+    
+    subprocess.run(cmd, check=True)
+    sys.exit(0) # Exit after running installer
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper"
     )
     
-    # Check installer flags first
-    if len(sys.argv) > 1 and sys.argv[1] in INSTALLER_FLAGS:
-        run_installer(sys.argv[1])
+    # Installer flags
+    parser.add_argument("--install", action="store_true", help="Install nhentai-scraper and dependencies")
+    parser.add_argument("--update", action="store_true", help="Update nhentai-scraper")
+    parser.add_argument("--update-env", action="store_true", help="Update the .env file")
+    parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall nhentai-scraper")
     
     # Extension selection
     parser.add_argument(
@@ -215,6 +223,10 @@ def update_config(args): # Update config
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
 
+
+# ------------------------------
+# Main
+# ------------------------------
 def main():
     args = parse_args()
 
@@ -224,6 +236,16 @@ def main():
     log_clarification()
     logger.info("CLI: Ready.")
     logger.debug("CLI: Debugging Started.")
+    
+    # Installer / Updater
+    if args.install:
+        run_installer("--install")
+    elif args.update:
+        run_installer("--update")
+    elif args.update_env:
+        run_installer("--update-env")
+    elif args.uninstall:
+        run_installer("--uninstall")
     
     log_clarification()
     logger.debug("Updating Config...")
