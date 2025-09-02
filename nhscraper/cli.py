@@ -94,8 +94,7 @@ def _handle_gallery_arg(arg_list: list | None, query_type: str) -> set[int]:
     if query_lower == "homepage":
         start_page = int(arg_list[0])
         end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
-        for page in range(start_page, end_page + 1):
-            gallery_ids.update(fetch_gallery_ids("homepage", None, page))
+        gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
     # Other types require a name
