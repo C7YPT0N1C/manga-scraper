@@ -133,10 +133,10 @@ def install_selected_extension(extension_name: str):
             subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
             subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
 
-            # Enable sparse-checkout of only the needed extension folder
+            # Only pull the repo root into the folder
             sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
             with open(sparse_file, "w") as f:
-                f.write(f"{extension_name}/\n")
+                f.write(".\n")  # <- this prevents double nesting
 
             subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
 
