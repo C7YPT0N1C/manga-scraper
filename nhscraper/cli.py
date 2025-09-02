@@ -8,10 +8,30 @@ from nhscraper.core.downloader import start_downloader
 from nhscraper.core.fetchers import build_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
+INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
+
+# ------------------------------
+# Delegate to installer
+# ------------------------------
+INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
+
+def run_installer(flag: str):
+    """Call the Bash installer with the given flag."""
+    if not os.path.exists(INSTALLER_PATH):
+        print(f"Installer not found at {INSTALLER_PATH}")
+        sys.exit(1)
+    # Forward flag directly
+    subprocess.run([INSTALLER_PATH, flag], check=True)
+    sys.exit(0)  # Exit after running installer
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="NHentai scraper"
     )
+    
+    # Check installer flags first
+    if len(sys.argv) > 1 and sys.argv[1] in INSTALLER_FLAGS:
+        run_installer(sys.argv[1])
     
     # Extension selection
     parser.add_argument(
