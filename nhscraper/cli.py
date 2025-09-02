@@ -53,7 +53,7 @@ def parse_args():
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Gallery selection
-    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END})")
+    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
     parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
     parser.add_argument("--artist", nargs="+", metavar="ARGS", help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
