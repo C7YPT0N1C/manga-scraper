@@ -170,6 +170,12 @@ def update_config(args): # Update config
 # ------------------------------
 def main():
     args = parse_args()
+    
+    # If no gallery input is provided, default to homepage 1 1
+    gallery_args = [args.homepage, args.range, args.galleries, args.artist,
+                    args.group, args.tag, args.parody, args.search]
+    if not any(gallery_args):
+        args.homepage = [{DEFAULT_HOMEPAGE_RANGE_START}, {DEFAULT_HOMEPAGE_RANGE_END}]  # default to page 1 of homepage
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(verbose=args.verbose)
