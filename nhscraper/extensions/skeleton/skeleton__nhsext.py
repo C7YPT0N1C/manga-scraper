@@ -14,7 +14,7 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
-#DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/" # TEST
+REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -27,9 +27,10 @@ for ext in manifest.get("extensions", []):
     if ext.get("name") == EXTENSION_NAME:
         DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
         break
+
 # Optional fallback
 if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
-    DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+    DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
 SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 
@@ -44,7 +45,7 @@ def install_extension():
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
