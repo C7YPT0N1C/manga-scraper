@@ -136,7 +136,7 @@ def install_selected_extension(extension_name: str):
             # Only pull the repo root into the folder
             sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
             with open(sparse_file, "w") as f:
-                f.write(".\n")  # <- this prevents double nesting
+                f.write(f"{extension_name}/*\n") # Clone only extension name's folder into /extensions/
 
             subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
 
