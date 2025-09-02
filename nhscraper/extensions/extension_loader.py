@@ -267,8 +267,14 @@ def get_selected_extension(name: str = "skeleton"):
                 ext.update_extension_download_path()
             return ext
 
-    logger.error("Skeleton extension not found! This should never happen.")
-    return None
+    # If skeleton truly isn't installed, install skeleton and the requested extension, then retry
+    logger.error("Skeleton extension not found! Installing skeleton and requested extension...")
+    install_selected_extension("skeleton")
+    install_selected_extension(name)
+    # Refresh installed extensions
+    load_installed_extensions()
+    # Retry selection
+    return get_selected_extension(name)
 
 # ------------------------------
 # Run on import
