@@ -18,17 +18,26 @@ INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--re
 def run_installer(flag: str):
     """Call the Bash installer with the given flag, using sudo if needed."""
     if not os.path.exists(INSTALLER_PATH):
-        print(f"Installer not found at {INSTALLER_PATH}")
+        print(f"[ERROR] Installer not found at {INSTALLER_PATH}")
         sys.exit(1)
-    
-    cmd = [INSTALLER_PATH, flag]
-    
+
+    # Build command: run via bash explicitly
+    cmd = ["/bin/bash", INSTALLER_PATH, flag]
+
     # If not root, prepend sudo
     if os.geteuid() != 0:
         cmd.insert(0, "sudo")
-    
-    subprocess.run(cmd, check=True)
-    sys.exit(0) # Exit after running installer
+
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Installer failed with exit code {e.returncode}")
+        sys.exit(e.returncode)
+    except PermissionError:
+        print(f"[ERROR] Permission denied: {INSTALLER_PATH}. Did you chmod +x it?")
+        sys.exit(1)
+
+    sys.exit(0)  # Exit after running installer
 
 def parse_args():
     parser = argparse.ArgumentParser(description="NHentai scraper CLI")
