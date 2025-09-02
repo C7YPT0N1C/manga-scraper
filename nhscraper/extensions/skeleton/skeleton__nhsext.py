@@ -14,6 +14,7 @@ from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
+DEDICATED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/" # TEST
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -117,9 +118,9 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.info(f"Removed empty directory: {dirpath}")
                 except Exception as e:
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    
-    logger.info(f"Removed empty directories.")
 
+    logger.info(f"Removed empty directories.")
+    
     DEDICATED_DOWNLOAD_PATH = ""  # Reset after download batch
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
