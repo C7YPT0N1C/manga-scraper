@@ -167,9 +167,9 @@ config = {
     "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
     "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
     "MAX_RETRIES": int(os.getenv("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
-    "USE_TOR": os.getenv("USE_TOR", DEFAULT_USE_TOR).lower() == "true",
-    "DRY_RUN": os.getenv("DRY_RUN", DEFAULT_DRY_RUN).lower() == "true",
-    "VERBOSE": os.getenv("VERBOSE", DEFAULT_VERBOSE).lower() == "true",
+    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
+    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
+    "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
 }
 
 # ------------------------------
