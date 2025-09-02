@@ -128,17 +128,30 @@ def install_selected_extension(extension_name: str):
     if not os.path.exists(ext_folder):
         os.makedirs(ext_folder, exist_ok=True)
 
-        def sparse_clone(url: str):
+        def sparse_clone(extension_name: str, url: str):
+            ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+
+            # Initialize empty repo
             subprocess.run(["git", "init", ext_folder], check=True)
             subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
             subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
 
-            # Only pull the repo root into the folder
+            # Configure sparse-checkout to fetch the top-level folder
             sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
-            with open(sparse_file, "w") as f:
-                f.write(f"{extension_name}/*\n") # Clone only extension name's folder into /extensions/
+            with open(sparse_file, "w", encoding="utf-8") as f:
+                f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
 
+            # Pull the branch (assumes 'main')
             subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
+
+            # Check if repo folder exists inside ext_folder (double nesting)
+            repo_folder = os.path.join(ext_folder, extension_name)
+            if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
+                for item in os.listdir(repo_folder):
+                    shutil.move(os.path.join(repo_folder, item), ext_folder)
+                shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+
+            print(f"Clone complete: {extension_name} -> {ext_folder}")
 
         try:
             logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
