@@ -192,6 +192,7 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 log_clarification()
+                active_extension.pre_gallery_download_hook(config, gallery_id, meta)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 dynamic_sleep("gallery")
 

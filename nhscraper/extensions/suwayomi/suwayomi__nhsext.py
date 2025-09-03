@@ -33,56 +33,6 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 ####################################################################################################################
-# CORE
-####################################################################################################################
-def install_extension():
-    """
-    Install the extension and ensure the dedicated download path exists.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH:
-        # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed. Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-
-def uninstall_extension():
-    global DEDICATED_DOWNLOAD_PATH
-    try:
-        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
-
-def update_extension_download_path():
-    log_clarification()
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-def build_gallery_subfolders(meta):
-    """Return a dict of possible variables to use in folder naming."""
-    return {
-        "artist": (get_meta_tags(meta, "artist") or ["Unknown Artist"])[0],
-        "title": clean_title(meta),
-        "id": str(meta.get("id", "unknown")),
-        "language": (get_meta_tags(meta, "language") or ["Unknown"])[0],
-    }
-
-####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
 ####################################################################################################################
 
@@ -227,3 +177,53 @@ def post_run_hook(config, completed_galleries):
 
     log_clarification()
     remove_empty_directories(True)
+    
+####################################################################################################################
+# CORE
+####################################################################################################################
+def install_extension():
+    """
+    Install the extension and ensure the dedicated download path exists.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
+        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed. Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+
+def uninstall_extension():
+    global DEDICATED_DOWNLOAD_PATH
+    try:
+        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
+            os.rmdir(DEDICATED_DOWNLOAD_PATH)
+        
+        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+
+def update_extension_download_path():
+    log_clarification()
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
+def build_gallery_subfolders(meta):
+    """Return a dict of possible variables to use in folder naming."""
+    return {
+        "artist": (get_meta_tags(meta, "artist") or ["Unknown Artist"])[0],
+        "title": clean_title(meta),
+        "id": str(meta.get("id", "unknown")),
+        "language": (get_meta_tags(meta, "language") or ["Unknown"])[0],
+    }

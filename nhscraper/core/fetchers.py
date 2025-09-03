@@ -6,12 +6,6 @@ import os, time, random, cloudscraper, requests, json, urllib.parse
 from nhscraper.core.config import *
 
 ################################################################################################################
-# GLOBAL VARIABLES
-################################################################################################################
-API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
-METADATA_CACHE_FILE = "/opt/nhentai-scraper/metadata_cache.json"
-
-################################################################################################################
 # HTTP SESSION
 ################################################################################################################
 session = None
@@ -52,6 +46,58 @@ def build_session():
     # Uses cloudscraper session by default.
     if session is None:
         session = session_builder()
+        
+################################################################################################################
+# GLOBAL VARIABLES
+################################################################################################################
+
+# NHentai API Endpoints
+#
+API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
+# Default base URL: https://nhentai.net/api
+#
+# 1. Homepage
+#    GET /galleries
+#    - Returns the most recent galleries
+#
+# 2. Gallery by ID
+#    GET /gallery/{id}
+#    - Fetch gallery information for a specific gallery ID
+#
+# 3. Search
+#    GET /galleries/search
+#    - Parameters:
+#        query=<search terms>
+#        page=<page number>
+#
+# 4. Tag
+#    GET /galleries/tag/{tag}
+#    - Fetch galleries by a specific tag
+#
+# 5. Artist
+#    GET /galleries/artist/{artist}
+#    - Fetch galleries by a specific artist
+#
+# 6. Group
+#    GET /galleries/group/{group}
+#    - Fetch galleries by a specific circle/group
+#
+# 7. Parody
+#    GET /galleries/parody/{parody}
+#    - Fetch galleries by a specific parody/series
+#
+# 8. Character
+#    GET /galleries/character/{character}
+#    - Fetch galleries by a specific character
+#
+# 9. Popular / Trending (if supported)
+#    GET /galleries/popular
+#    GET /galleries/trending
+#
+# Notes:
+# - Pagination is typically handled via the `page` query parameter.
+# - Responses are in JSON format with metadata, tags, images, and media info.
+# - Image URLs are usually served via https://i.nhentai.net/galleries/{media_id}/{page}.{ext}
     
 ################################################################################################################
 # API Handling

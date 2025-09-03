@@ -68,7 +68,7 @@ def parse_args():
 
     # Titles
     parser.add_argument("--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE, help=f"What title type to use (default: {DEFAULT_TITLE_TYPE})")
-    parser.add_argument("--title-sanitise", action="store_true", default=DEFAULT_TITLE_SANITISE, help=f"Sanitise titles for filesystem safety (pretty only by default, default: {DEFAULT_TITLE_SANITISE})")
+    parser.add_argument("--title-sanitise", action="store_true", default=DEFAULT_TITLE_SANITISE, help=f"Sanitise titles for filesystem safety, default: {DEFAULT_TITLE_SANITISE})")
 
     # Threads / concurrency
     parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
@@ -181,6 +181,10 @@ def main():
     logger = setup_logger(verbose=args.verbose)
     
     log_clarification()
+    logger.info("====================================================")
+    logger.info("                  nhentai-scraper                   ")
+    logger.info("====================================================")
+    
     logger.info("CLI: Ready.")
     logger.debug("CLI: Debugging Started.")
     
