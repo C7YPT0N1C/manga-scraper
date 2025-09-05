@@ -6,7 +6,7 @@
 import os, time, subprocess, json, requests
 
 from nhscraper.core.config import *
-from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 
 # This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
 

@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import session, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
