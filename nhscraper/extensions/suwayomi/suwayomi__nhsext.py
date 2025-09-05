@@ -30,7 +30,7 @@ for ext in manifest.get("extensions", []):
 if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
     DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
+SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
