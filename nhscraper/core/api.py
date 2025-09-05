@@ -372,12 +372,22 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    # Prefer 'TITLE_TYPE', then default back to 'pretty', then 'english', then 'japanese', then fallback
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
-    if "|" in title: title = title.split("|")[-1].strip()
-    title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
-    log(f"Returned Title: {title}") # TEST
+    
+    # Get preferred title or fallbacks
+    title = title_obj.get(title_type) or title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or ""
+    
+    # Clean title
+    if title:
+        if "|" in title:
+            title = title.split("|")[-1].strip()
+        title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
+    
+    # Fallback to gallery ID if title is empty
+    if not title:
+        title = f"Gallery_{meta.get('id')}"
+    
+    log(f"Returned Title: {title}")  # TEST
     return safe_name(title)
 
 ##################################################################################################################################
