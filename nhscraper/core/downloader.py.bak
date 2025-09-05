@@ -57,6 +57,9 @@ def build_gallery_path(meta):
     # Append resolved variables
     for key in template:
         value = gallery_metas.get(key, "Unknown")
+        # If value is a list (e.g. "creator"), take first element for folder
+        if isinstance(value, list):
+            value = value[0] if value else "Unknown"
         path_parts.append(safe_name(value))
 
     return os.path.join(*path_parts)
