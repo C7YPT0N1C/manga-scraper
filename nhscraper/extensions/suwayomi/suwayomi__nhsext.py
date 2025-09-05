@@ -221,13 +221,11 @@ def update_extension_download_path():
 
 def return_gallery_metas(meta):
     """Return a dict of possible variables to use in folder naming, etc."""
+    creators = get_meta_tags(meta, "artist") or get_meta_tags(meta, "group") or ["Unknown Creator"]
+
     return {
-        "creator": (
-            get_meta_tags(meta, "artist")
-            or get_meta_tags(meta, "group")
-            or ["Unknown Creator"]
-        )[0],
+        "creator": creators,  # always a list
         "title": clean_title(meta),
         "id": str(meta.get("id", "unknown")),
-        "language": (get_meta_tags(meta, "language") or ["Unknown Language"])[0],
+        "language": get_meta_tags(meta, "language") or ["Unknown Language"],
     }
