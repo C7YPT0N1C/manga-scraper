@@ -77,6 +77,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 def test_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log_clarification()
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
@@ -88,6 +89,7 @@ def pre_run_hook(config, gallery_list):
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log_clarification()
     return gallery_list
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -164,11 +166,13 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
 def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log_clarification()
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log_clarification()
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
