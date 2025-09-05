@@ -230,7 +230,7 @@ def return_gallery_metas(meta):
     
     title = clean_title(meta)
     
-    id = str(meta.get("id", "unknown"))
+    id = str(meta.get("id", "Unknown ID"))
     
     language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
