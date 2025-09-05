@@ -223,6 +223,8 @@ def process_galleries(gallery_ids):
                 grouped_tasks = []
                 for creator in creators:
                     iteration = {"creator": [creator]}  # pass the specific creator for this iteration
+                    safe_creator_name = safe_name(creator)
+                    
                     doujin_folder = build_gallery_path(meta, iteration)
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)#
