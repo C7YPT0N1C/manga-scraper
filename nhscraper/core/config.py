@@ -39,7 +39,7 @@ def log_clarification():
 
 log_clarification()
 logger.info("Logger: Ready.")
-log("Logger: Debugging Started.")
+logger.debug("Logger: Debugging Started.")
 
 def setup_logger(debug=False):
     """
