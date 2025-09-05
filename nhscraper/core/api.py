@@ -375,16 +375,16 @@ def clean_title(meta):
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
 
+    # If there's a |, take the last part
+    if "|" in title:
+        title = title.split("|")[-1].strip()
+
     # Remove all content inside [] or (), including the brackets themselves
     title = re.sub(r"[\[\(].*?[\]\)]", "", title)
 
-    # Remove leftover brackets and whitespace
-    title = title.replace("[", "").replace("]", "").replace("(", "").replace(")", "").strip()
-    
     # Collapse multiple spaces
     title = " ".join(title.split())
-    
-    log(f"Returned Title: {title}")
+
     return safe_name(title)
 
 ##################################################################################################################################
