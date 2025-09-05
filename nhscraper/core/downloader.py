@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import db
-from nhscraper.core.api import session, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
@@ -61,17 +61,6 @@ def build_gallery_path(meta):
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage): # TEST
-    if stage=="gallery":
-        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-        total_load = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES) * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
-        scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
-        sleep_time = random.uniform(base_min*scale, base_max*scale)
-        log_clarification()
-        logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
-        time.sleep(sleep_time)
-        
 def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: bool = False):
     global skipped_galleries
     
@@ -194,7 +183,7 @@ def process_galleries(gallery_ids):
                 log_clarification()
                 active_extension.pre_gallery_download_hook(config, gallery_id, meta)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
-                dynamic_sleep("gallery")
+                time.sleep(dynamic_sleep("gallery"))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
