@@ -146,7 +146,15 @@ def build_gallery_list(args):
     # ------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
     # ------------------------------
-    gallery_list = list(reversed(sorted(map(int, gallery_ids))))
+    gallery_list = list( # Convert to list
+        reversed( # Highest ID first
+            sorted( # Sort list so it can be reversed.
+                map( # Make sure Gallery IDs processed as integers
+                    int, gallery_ids
+                    )
+                )
+            )
+        )
     #log_clarification()
     #logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
