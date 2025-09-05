@@ -97,11 +97,11 @@ def pre_run_hook(config_dict, gallery_list):
     global extension_download_path
     extension_download_path = SUWAYOMI_DIR
     update_env("EXTENSION_DOWNLOAD_PATH", extension_download_path)
-    logger.debug("Suwayomi extension: Pre-download hook called")
+    log("Suwayomi extension: Pre-download hook called")
     return gallery_list
 
 def during_gallery_download_hook(config_dict, gallery_id, gallery_metadata):
-    logger.debug(f"Suwayomi extension: During-download hook for gallery {gallery_id}")
+    log(f"Suwayomi extension: During-download hook for gallery {gallery_id}")
 
 def after_gallery_download_hook(meta: dict):
     global extension_download_path
@@ -119,20 +119,20 @@ def after_gallery_download_hook(meta: dict):
     os.makedirs(gallery_folder, exist_ok=True)
     details_file = os.path.join(gallery_folder, "details.json")
     if config.get("DRY_RUN", DEFAULT_DRY_RUN):
-        logger.debug(f"Dry-run: Would save details.json to {details_file}")
+        log(f"Dry-run: Would save details.json to {details_file}")
     else:
         with open(details_file, "w", encoding="utf-8") as f:
             json.dump(details, f, ensure_ascii=False, indent=2)
-        logger.debug(f"Suwayomi metadata saved for gallery {meta['id']}")
+        log(f"Suwayomi metadata saved for gallery {meta['id']}")
 
 def after_all_galleries_download_hook(all_meta: list):
-    logger.debug(f"Suwayomi extension: batch of {len(all_meta)} galleries downloaded")
+    log(f"Suwayomi extension: batch of {len(all_meta)} galleries downloaded")
 
 def post_run_hook(config_dict, completed_galleries):
     global extension_download_path
     extension_download_path = ""
     update_env("EXTENSION_DOWNLOAD_PATH", "")
-    logger.debug("Suwayomi extension: Post-download hook called")
+    log("Suwayomi extension: Post-download hook called")
 
 # ===============================
 # SUWAYOMI GRAPHQL HELPERS

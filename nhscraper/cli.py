@@ -78,7 +78,11 @@ def parse_args():
     # Download / runtime options
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
-    parser.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help=f"Enable verbose logging (default: {DEFAULT_VERBOSE})")
+    
+    # Make verbose/debug mutually exclusive
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--verbose", action="store_true", default=False, help="Enable verbose logging (print to stdout)")
+    group.add_argument("--debug", action="store_true", default=False, help="Enable debug logging (logger.debug)")
 
     return parser.parse_args()
 
@@ -155,8 +159,9 @@ def build_gallery_list(args):
                 )
             )
         )
-    #log_clarification()
-    #logger.debug(f"Gallery List: {gallery_list}")
+    
+    log(f"Gallery List: {gallery_list}")
+    
     return gallery_list
 
 def update_config(args): # Update config   
@@ -171,6 +176,7 @@ def update_config(args): # Update config
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
+    config["DEBUG"] = args.debug
 
 
 # ------------------------------
@@ -186,7 +192,7 @@ def main():
         args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(verbose=args.verbose)
+    logger = setup_logger(debug=args.debug)
     
     log_clarification()
     logger.info("====================================================")
@@ -194,7 +200,7 @@ def main():
     logger.info("====================================================")
     
     logger.info("CLI: Ready.")
-    logger.debug("CLI: Debugging Started.")
+    log("CLI: Debugging Started.")
     
     # Installer / Updater
     if args.install:
@@ -206,8 +212,7 @@ def main():
     elif args.uninstall:
         run_installer("--uninstall")
     
-    log_clarification()
-    logger.debug("Updating Config...")
+    log("Updating Config...")
     
     # Update Config
     # Allows session to use correct config values on creation
@@ -225,8 +230,7 @@ def main():
     # Update Config with Built Gallery List
     update_env("GALLERIES", gallery_list)
     
-    log_clarification()
-    logger.debug(f"Updated Config:\n{config}")
+    log(f"Updated Config:\n{config}")
 
     # ------------------------------
     # Handle extension uninstallation (--extension automatically installs extension)

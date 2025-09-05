@@ -70,11 +70,11 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        logger.debug(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
+        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
     else:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
-        logger.debug(f"All Skipped Galleries:\n{skipped_report}")
+        log(f"All Skipped Galleries:\n{skipped_report}")
 
 def should_download_gallery(meta, gallery_title, num_pages):
     """
@@ -260,7 +260,7 @@ def process_galleries(gallery_ids):
 def start_downloader():
     log_clarification()
     logger.info("Downloader: Ready.")
-    logger.debug("Downloader: Debugging Started.")
+    log("Downloader: Debugging Started.")
     
     load_extension() # Load extension variables, etc
 

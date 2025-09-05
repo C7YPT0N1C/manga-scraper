@@ -18,9 +18,9 @@ session = None
 def session_builder():
     log_clarification()
     logger.info("Fetcher: Ready.")
-    logger.debug("Fetcher: Debugging Started.")
+    log("Fetcher: Debugging Started.")
 
-    logger.debug("Building HTTP session with cloudscraper")
+    log("Building HTTP session with cloudscraper")
 
     s = cloudscraper.create_scraper(
         browser={'browser': 'chrome', 'mobile': False, 'platform': 'windows'}
@@ -33,7 +33,7 @@ def session_builder():
         "Referer": "https://nhentai.net/",
     })
     
-    logger.debug(f"Built HTTP session with cloudscraper")
+    log(f"Built HTTP session with cloudscraper")
     
     if config.get("USE_TOR", True):
         proxy = "socks5h://127.0.0.1:9050"
@@ -161,7 +161,7 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
 
     # Debug logging for transparency
     log_clarification()
-    logger.debug(
+    log(
         f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})"
     )
 
@@ -206,7 +206,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 break
             
             url = build_url(query_type, query_value, page)
-            logger.debug(f"Requesting URL: {url}")
+            log(f"Requesting URL: {url}")
 
             resp = None
             for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
@@ -234,7 +234,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            logger.debug(f"Page {page}: Fetched {len(batch)} gallery IDs")
+            log(f"Page {page}: Fetched {len(batch)} gallery IDs")
 
             if not batch:
                 logger.info(f"Page {page}: No results, stopping early")
@@ -258,7 +258,7 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
         try:
             log_clarification()
-            logger.debug(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
+            log(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
@@ -269,7 +269,7 @@ def fetch_gallery_metadata(gallery_id: int):
             resp.raise_for_status()
             
             #log_clarification()
-            #logger.debug(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
+            #log(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
             
             data = resp.json()
 
@@ -279,7 +279,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            logger.debug(f"Fetched metadata for Gallery: {gallery_id}: {data}")
+            log(f"Fetched metadata for Gallery: {gallery_id}: {data}")
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
@@ -308,7 +308,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        logger.debug(f"Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
+        log(f"Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -338,7 +338,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        logger.debug(f"Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
+        log(f"Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
@@ -471,10 +471,10 @@ def all_galleries_status():
 if __name__ == "__main__":
     log_clarification()
     logger.info("API: Ready.")
-    logger.debug("API: Debugging Started.")
+    log("API: Debugging Started.")
     
     app.run(
     host="0.0.0.0",
     port=5000,
-    debug=config.get("VERBOSE", DEFAULT_VERBOSE)
+    debug=config.get("DEBUG", DEFAULT_DEBUG)
 )

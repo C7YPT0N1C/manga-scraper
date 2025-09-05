@@ -43,7 +43,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 
     # Safety check
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.debug("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
         return
 
     if RemoveEmptyArtistFolder:  # Remove empty subdirectories, deepest first. Does not delete DEDICATED_DOWNLOAD_PATH.
@@ -76,7 +76,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Test hook called.")
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
@@ -87,7 +87,7 @@ def pre_run_hook(config, gallery_list):
     update_extension_download_path()
     
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
     return gallery_list
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -107,7 +107,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
         retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
     if os.path.exists(path):
-        logger.debug(f"Already exists, skipping: {path}")
+        log(f"Already exists, skipping: {path}")
         if pbar and artist:
             pbar.set_postfix_str(f"Artist: {artist}")
         return True
@@ -139,7 +139,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
                         if chunk:
                             f.write(chunk)
 
-                logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
                 if pbar and artist:
                     pbar.set_postfix_str(f"Artist: {artist}")
                 return True
@@ -163,17 +163,17 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
 
     log_clarification()
     remove_empty_directories(True)
@@ -216,7 +216,7 @@ def update_extension_download_path():
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
     
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def build_gallery_subfolders(meta):

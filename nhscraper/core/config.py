@@ -35,13 +35,13 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
 def log_clarification():
     if logger.getEffectiveLevel == 20:
         print() # Only print new life if log level is INFO
-    logger.debug("")
+    log("")
 
 log_clarification()
 logger.info("Logger: Ready.")
-logger.debug("Logger: Debugging Started.")
+log("Logger: Debugging Started.")
 
-def setup_logger(verbose=False):
+def setup_logger(debug=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -56,7 +56,7 @@ def setup_logger(verbose=False):
 
     # --- Console handler ---
     ch = logging.StreamHandler()
-    if  verbose:
+    if debug:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     else:
@@ -72,7 +72,7 @@ def setup_logger(verbose=False):
     logger.addHandler(fh_runtime)
 
     # Announce level
-    if verbose:
+    if debug:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")
@@ -83,8 +83,18 @@ def setup_logger(verbose=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
+def log(message: str):
+    """Unified logging for CLI depending on verbose/debug flags."""
+    if config.get("DEBUG"):
+        logger.debug(message)   # always debug
+    elif config.get("VERBOSE"):
+        print(message)          # always print
+    else:
+        logger.info(message)    # default
+
+
 ##########################################################################################
-# LOGGER
+# CONFIGS
 ##########################################################################################
 
 # ------------------------------
@@ -139,6 +149,7 @@ DEFAULT_MAX_RETRIES=3
 DEFAULT_USE_TOR=True
 DEFAULT_DRY_RUN=False
 DEFAULT_VERBOSE=False
+DEFAULT_DEBUG=False
 
 # ------------------------------------------------------------
 # Config Dictionary
@@ -158,7 +169,7 @@ config = {
     "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
-    "NHENTAI_MIRRORS": MIRRORS_LIST,  # ✅ now always a list
+    "NHENTAI_MIRRORS": MIRRORS_LIST,
     "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START)),
     "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END)),
     "RANGE_START": int(os.getenv("RANGE_START", DEFAULT_RANGE_START)),
@@ -178,6 +189,7 @@ config = {
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
+    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
 }
 
 # ------------------------------

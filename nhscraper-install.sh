@@ -174,6 +174,7 @@ MAX_RETRIES=
 USE_TOR=true
 DRY_RUN=false
 VERBOSE=false
+DEBUG=false
 EOF
     echo "Environment file created at $ENV_FILE"
     echo "Environment updated."
