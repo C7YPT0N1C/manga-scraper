@@ -377,8 +377,8 @@ def clean_title(meta):
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     
     log(f"Returned Title: {title}")  # DEBUG
-    #return ssafe_name(title)
-    return title
+    return safe_name(title)
+    #return title
 
 ##################################################################################################################################
 # API STATE HELPERS
