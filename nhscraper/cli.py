@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument("--search", nargs="+", metavar="ARGS", help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
 
     # Filters
-    parser.add_argument("--excluded-tags", type=str, default=DEFAULT_EXCLUDED_TAGS, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
+    parser.add_argument("--excluded-tags", type=str, default=None, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
     parser.add_argument("--language", type=str, default=DEFAULT_LANGUAGE, help=f"Comma-separated list of languages to include (default: '{DEFAULT_LANGUAGE}')")
     parser.add_argument("--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE, help=f"What title type to use (default: {DEFAULT_TITLE_TYPE})")
 
@@ -163,8 +163,15 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args): # Update config   
-    config["EXTENSION"] = args.extension 
-    config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
+    config["EXTENSION"] = args.extension
+    
+    if args.excluded_tags is not None:
+        config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
+    else:
+        # keep whatever was already in config (env or default)
+        if isinstance(config["EXCLUDED_TAGS"], str):
+            config["EXCLUDED_TAGS"] = [t.strip().lower() for t in config["EXCLUDED_TAGS"].split(",")]
+    
     config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
     config["TITLE_TYPE"] = args.title_type
     config["THREADS_GALLERIES"] = args.threads_galleries
