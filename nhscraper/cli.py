@@ -143,7 +143,10 @@ def build_gallery_list(args):
     # File input (overrides .env galleries)
     # ------------------------------
     if args.file:
-        gallery_ids.update(_handle_gallery_args([args.file], "file"))
+        if os.path.exists(args.file):
+            gallery_ids.update(_handle_gallery_args(args.file, "file"))
+        else:
+            logger.warning(f"Gallery file not found: {args.file}")
 
     # ------------------------------
     # Range
