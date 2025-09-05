@@ -206,7 +206,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 break
             
             url = build_url(query_type, query_value, page)
-            log(f"Requesting URL: {url}")
+            log(f"Fetcher: Requesting URL: {url}")
 
             resp = None
             for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
@@ -234,7 +234,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log(f"Page {page}: Fetched {len(batch)} gallery IDs")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs")
 
             if not batch:
                 logger.info(f"Page {page}: No results, stopping early")
@@ -258,7 +258,7 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
         try:
             log_clarification()
-            log(f"Fetching metadata for Gallery: {gallery_id} from URL: {url}")
+            log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}")
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
@@ -269,7 +269,7 @@ def fetch_gallery_metadata(gallery_id: int):
             resp.raise_for_status()
             
             #log_clarification()
-            #log(f"Raw API response for Gallery: {gallery_id}: {resp.text}")
+            #log(f"Fetcher: Raw API response for Gallery: {gallery_id}: {resp.text}")
             
             data = resp.json()
 
@@ -279,7 +279,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(f"Fetched metadata for Gallery: {gallery_id}: {data}")
+            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}: {data}")
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
@@ -308,7 +308,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        log(f"Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
+        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -338,7 +338,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        log(f"Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
@@ -352,18 +352,19 @@ def get_meta_tags(meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
     - Splits names on "|".
-    - Returns ['Unknown'] if none found.
+    - Returns [] if none found.
     """
     if not meta or "tags" not in meta:
-        return ["Unknown"]
+        return []
 
     names = []
     for tag in meta["tags"]:
         if tag.get("type") == tag_type and tag.get("name"):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
-
-    return names or ["Unknown"]
+    
+    log(f"Fetcher: Requested Tag Type {tag_type}, returning {names}")
+    return names
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
