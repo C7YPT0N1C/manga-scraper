@@ -117,7 +117,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
                 f"Folder: {doujin_folder}\n"
                 "Reason: Already complete."
             )
-            update_skipped_galleries("Already complete.", False)
+            update_skipped_galleries("Already downloaded.", False)
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
@@ -151,7 +151,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries("Contains either filtered tags or languages (see logs).", False)
+        update_skipped_galleries("Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})", False)
         return False
 
     return True
