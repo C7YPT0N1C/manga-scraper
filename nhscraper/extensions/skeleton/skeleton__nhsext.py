@@ -229,7 +229,8 @@ def build_gallery_subfolders(meta):
     """Return a dict of possible variables to use in folder naming."""
     return {
         "artist": (get_meta_tags(meta, "artist") or ["Unknown Artist"])[0],
+        "group": (get_meta_tags(meta, "group") or ["Unknown Group"])[0],
         "title": clean_title(meta),
         "id": str(meta.get("id", "unknown")),
-        "language": (get_meta_tags(meta, "language") or ["Unknown"])[0],
+        "language": (get_meta_tags(meta, "language") or ["Unknown Language"])[0],
     }
