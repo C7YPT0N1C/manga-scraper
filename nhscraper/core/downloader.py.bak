@@ -205,16 +205,7 @@ def process_galleries(gallery_ids):
                 grouped_tasks = []
                 for creator in creators:
                     safe_creator_name = safe_name(creator)
-
-                    # Build per-creator metas so SUBFOLDER_STRUCTURE can be respected
-                    gallery_metas_for_creator = {**gallery_metas, "creator": safe_creator_name}
-                    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
-                    path_parts = [download_location]
-                    for key in template:
-                        value = gallery_metas_for_creator.get(key, "Unknown")
-                        path_parts.append(safe_name(value))
-                    doujin_folder = os.path.join(*path_parts)
-
+                    doujin_folder = os.path.join(download_location, safe_creator_name, gallery_title)
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
