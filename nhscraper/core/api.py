@@ -348,7 +348,7 @@ def fetch_image_urls(meta: dict, page: int):
 # ===============================
 # METADATA CLEANING
 # ===============================
-def get_meta_tags(meta, tag_type):
+def get_meta_tags(referrer: str, meta, tag_type):
     """
     Extract all tag names of a given type (artist, group, parody, language, etc.).
     - Splits names on "|".
@@ -364,7 +364,7 @@ def get_meta_tags(meta, tag_type):
             names.extend(parts)
     
     #log_clarification() # TEST
-    log(f"Fetcher: Requested Tag Type '{tag_type}', returning {names}")
+    log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}")
     return names
 
 def safe_name(s: str) -> str:

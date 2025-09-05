@@ -220,15 +220,15 @@ def update_extension_download_path():
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def return_gallery_metas(meta):
-    artists = get_meta_tags(meta, "artist")
-    groups = get_meta_tags(meta, "group")
+    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
     title = clean_title(meta)
     
     id = str(meta.get("id", "unknown"))
     
-    language = get_meta_tags(meta, "language") or ["Unknown Language"]
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
     log_clarification()
 
