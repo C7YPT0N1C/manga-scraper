@@ -207,13 +207,13 @@ def process_galleries(gallery_ids):
 
                 grouped_tasks = []
                 for creator in creators:
-                    safe_creator_name = safe_name(creator)  # Keep this for task tracking
-
-                    # Build folder path using template
+                    safe_creator_name = safe_name(creator)
+                    
+                    # Temporarily override meta["creator"] to single creator for folder path
                     temp_meta = meta.copy()
                     temp_meta["creator"] = [creator]
+
                     doujin_folder = build_gallery_path(temp_meta)
-                    
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -227,10 +227,8 @@ def process_galleries(gallery_ids):
                             gallery_failed = True
                             continue
 
-                        # Use extension of the first URL (all mirrors should have same filename)
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
-
                         creator_tasks.append((page, img_urls, img_path, safe_creator_name))
 
                     if creator_tasks:
