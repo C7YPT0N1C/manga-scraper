@@ -56,8 +56,12 @@ def parse_args():
     parser.add_argument(
         "--file",
         type=str,
-        default=None,
-        help="Path to a file containing gallery URLs or IDs (one per line). Only used if specified."
+        nargs="?",                  # Makes the argument optional
+        const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
+        help=(
+            "Path to a file containing gallery URLs or IDs (one per line). "
+            "If no path is given, uses the default file."
+        )
     )
     parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
