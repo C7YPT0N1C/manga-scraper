@@ -207,11 +207,13 @@ def process_galleries(gallery_ids):
 
                 grouped_tasks = []
                 for creator in creators:
-                    # Temporarily set meta["creator"] to the single creator so the template resolves correctly
+                    safe_creator_name = safe_name(creator)  # Keep this for task tracking
+
+                    # Build folder path using template
                     temp_meta = meta.copy()
                     temp_meta["creator"] = [creator]
-
                     doujin_folder = build_gallery_path(temp_meta)
+                    
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
