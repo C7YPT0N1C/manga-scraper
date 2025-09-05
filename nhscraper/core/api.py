@@ -372,13 +372,16 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    # Prefer TITLE_TYPE, then fallback to english, pretty, japanese, then Gallery_ID
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     
-    log(f"Returned Title: {title}")  # DEBUG
+    # Remove all content inside [] or (), including the brackets themselves
+    title = re.sub(r"[\[\(].*?[\]\)]", "", title)
+    
+    # Clean up extra spaces
+    title = " ".join(title.split())
+    
     return safe_name(title)
-    #return title
 
 ##################################################################################################################################
 # API STATE HELPERS
