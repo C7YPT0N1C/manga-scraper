@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, sys, argparse
+import os, sys, argparse, re
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import start_downloader
@@ -53,6 +53,12 @@ def parse_args():
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Gallery selection
+    parser.add_argument(
+        "--file",
+        help="Path to a file containing gallery URLs (one per line). These will be converted to gallery IDs and downloaded.",
+        type=str,
+        default=config["DOUJIN_TXT_PATH"],
+    )
     parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
     parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
@@ -83,31 +89,58 @@ def parse_args():
 
     return parser.parse_args()
 
-def _handle_gallery_arg(arg_list: list | None, query_type: str) -> set[int]:
-    """Parse CLI args and call fetch_gallery_ids for any query type."""
-    if not arg_list:
-        return set()
+def _handle_gallery_args(arg):
+    """
+    Normalise gallery input:
+    - File path containing URLs or IDs
+    - Explicit range (e.g. 500000-500010)
+    - Single ID
+    - nhentai URL
+    Returns a list of gallery IDs (ints).
+    """
+    gallery_ids = []
 
-    query_lower = query_type.lower()
-    gallery_ids = set()
-
-    # Homepage doesn't require a name
-    if query_lower == "homepage":
-        start_page = int(arg_list[0])
-        end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
-        gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
+    # --- Case 1: File input ---
+    if arg and os.path.isfile(arg):
+        with open(arg, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                # Match nhentai URL
+                m = re.search(r"/g/(\d+)/", line)
+                if m:
+                    gallery_ids.append(int(m.group(1)))
+                # Allow raw IDs in file too
+                elif line.isdigit():
+                    gallery_ids.append(int(line))
         return gallery_ids
 
-    # Other types require a name
-    name = str(arg_list[0]).strip()
-    start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
-    end_page = int(arg_list[2]) if len(arg_list) > 2 else None
-    gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
-    
-    return gallery_ids
+    # --- Case 2: Range like 500000-500010 ---
+    if "-" in str(arg):
+        try:
+            start, end = map(int, arg.split("-"))
+            gallery_ids.extend(range(start, end + 1))
+        except ValueError:
+            raise ValueError(f"Invalid range format: {arg}")
+        return gallery_ids
+
+    # --- Case 3: Single ID ---
+    if str(arg).isdigit():
+        gallery_ids.append(int(arg))
+        return gallery_ids
+
+    # --- Case 4: Unhandled ---
+    raise ValueError(f"Unsupported gallery argument: {arg}")
 
 def build_gallery_list(args):
     gallery_ids = set()
+
+    # ------------------------------
+    # File input
+    # ------------------------------
+    if args.file and os.path.exists(args.file):
+        gallery_ids.update(_handle_gallery_args(args.file))
 
     # ------------------------------
     # Range
@@ -127,22 +160,22 @@ def build_gallery_list(args):
     # Artist / Group / Tag / Parody / Search
     # ------------------------------
     if args.homepage:
-        gallery_ids.update(_handle_gallery_arg(args.homepage, "homepage"))
+        gallery_ids.update(_handle_gallery_args(args.homepage, "homepage"))
     
     if args.artist:
-        gallery_ids.update(_handle_gallery_arg(args.artist, "artist"))
+        gallery_ids.update(_handle_gallery_args(args.artist, "artist"))
 
     if args.group:
-        gallery_ids.update(_handle_gallery_arg(args.group, "group"))
+        gallery_ids.update(_handle_gallery_args(args.group, "group"))
 
     if args.tag:
-        gallery_ids.update(_handle_gallery_arg(args.tag, "tag"))
+        gallery_ids.update(_handle_gallery_args(args.tag, "tag"))
 
     if args.parody:
-        gallery_ids.update(_handle_gallery_arg(args.parody, "parody"))
+        gallery_ids.update(_handle_gallery_args(args.parody, "parody"))
     
     if args.search:
-        gallery_ids.update(_handle_gallery_arg(args.search, "search"))
+        gallery_ids.update(_handle_gallery_args(args.search, "search"))
 
     # ------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)

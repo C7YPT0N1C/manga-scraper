@@ -139,8 +139,9 @@ create_env_file() {
 # Directories
 NHENTAI_DIR=/opt/nhentai-scraper
 
-# Default Download Path
+# Default Paths
 DOWNLOAD_PATH=
+DOUJIN_TXT_PATH=
 
 # Extensions
 EXTENSION=

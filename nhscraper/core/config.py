@@ -114,8 +114,15 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-# Default Download Path
+# Default Paths
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+
+DEFAULT_DOUJIN_TXT_PATH="/root/Doujinshi_IDs.txt"
+if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
+    # Create an empty file with a comment line
+    with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
+        f.write("# Add one nhentai URL or gallery ID per line\n")
+    logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
 
 # Extensions
 DEFAULT_EXTENSION="skeleton"
@@ -162,6 +169,7 @@ else:
     MIRRORS_LIST = list(MIRRORS_ENV)
 
 config = {
+    "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
     "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
@@ -212,6 +220,7 @@ def update_env(key, value):
 # ------------------------------
 def normalise_config():
     defaults = {
+        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
         "EXTENSION": DEFAULT_EXTENSION,
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
