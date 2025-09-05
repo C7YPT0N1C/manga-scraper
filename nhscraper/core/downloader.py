@@ -39,15 +39,15 @@ def load_extension():
         os.makedirs(download_location, exist_ok=True)
     logger.info(f"Using download path: {download_location}")
 
-# Ask extension for variables
-subs = active_extension.build_gallery_subfolders(meta)
-
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
 #logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
 
 def build_gallery_path(meta):
+    # Ask extension for variables
+    subs = active_extension.build_gallery_subfolders(meta)
+
     # Load template from extension (SUB1/SUB2/etc.)
     template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["artist", "title"])
 
@@ -196,13 +196,8 @@ def process_galleries(gallery_ids):
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-                #artists = get_meta_tags(meta, "artist") or get_meta_tags(meta, "group") or ["Unknown Artist"]
-                #gallery_title = clean_title(meta)
-
-                # TEST
-                artists = subs["artist"]   # already falls back to group or Unknown Artist
-                gallery_title = subs["title"]  # already cleaned
-
+                artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
+                gallery_title = clean_title(meta)
 
                 grouped_tasks = []
                 for artist in artists:
