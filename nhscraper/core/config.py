@@ -86,11 +86,11 @@ logger.addHandler(logging.NullHandler())
 def log(message: str):
     """Unified logging for CLI depending on verbose/debug flags."""
     if config.get("DEBUG"):
-        logger.debug(message)   # always debug
+        logger.debug(message)   # Output message as a debug to terminal AND log file.
     elif config.get("VERBOSE"):
-        print(message)          # always print
+        print(message)          # Output message as a print to only terminal.
     else:
-        logger.info(message)    # default
+        logger.debug(message)    # Default
 
 
 ##########################################################################################
