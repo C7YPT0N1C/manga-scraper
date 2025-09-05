@@ -55,10 +55,9 @@ def parse_args():
     # Gallery selection
     parser.add_argument(
         "--file",
-        nargs="?",
-        const=config.get("DOUJIN_TXT_PATH"),
         type=str,
-        help="Path to a file containing gallery URLs (one per line). These will be converted to gallery IDs and downloaded."
+        default=None,
+        help="Path to a file containing gallery URLs or IDs (one per line). Only used if specified."
     )
     parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
@@ -90,68 +89,57 @@ def parse_args():
 
     return parser.parse_args()
 
-def _handle_gallery_args(arg_list: list | None, query_type: str | None = None) -> set[int]:
-    """
-    Parse CLI args and convert to gallery IDs.
-    
-    Supports:
-    - File path containing URLs or raw IDs
-    - Homepage range
-    - Artist / Group / Tag / Parody / Search queries
-    """
+def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
+    """Parse CLI args and call fetch_gallery_ids for any query type."""
     if not arg_list:
         return set()
 
+    query_lower = query_type.lower()
     gallery_ids = set()
 
-    # --- Case: File input ---
-    if query_type and query_type.lower() == "file":
+    # --- File input ---
+    if query_lower == "file":
         file_path = arg_list[0]
-        if os.path.isfile(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    # Match nhentai URL
-                    m = re.search(r"/g/(\d+)/", line)
-                    if m:
-                        gallery_ids.add(int(m.group(1)))
-                    # Allow raw IDs in file too
-                    elif line.isdigit():
-                        gallery_ids.add(int(line))
-        else:
+        if not os.path.isfile(file_path):
             logger.warning(f"Gallery file not found: {file_path}")
+            return set()
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                # Match nhentai URL
+                m = re.search(r"/g/(\d+)/", line)
+                if m:
+                    gallery_ids.add(int(m.group(1)))
+                # Allow raw IDs in file too
+                elif line.isdigit():
+                    gallery_ids.add(int(line))
         return gallery_ids
 
-    query_lower = query_type.lower() if query_type else ""
-
-    # --- Homepage ---
+    # --- Homepage doesn't require a name ---
     if query_lower == "homepage":
         start_page = int(arg_list[0])
         end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
         gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
-    # --- Other types (artist, group, tag, parody, search) ---
+    # --- Other query types ---
     name = str(arg_list[0]).strip()
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
     gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
-
+    
     return gallery_ids
 
 def build_gallery_list(args):
     gallery_ids = set()
 
     # ------------------------------
-    # File input
+    # File input (overrides .env galleries)
     # ------------------------------
     if args.file:
-        if os.path.exists(args.file):
-            gallery_ids.update(_handle_gallery_args(args.file, "file"))
-        else:
-            logger.warning(f"Gallery file not found: {args.file}")
+        gallery_ids.update(_handle_gallery_args([args.file], "file"))
 
     # ------------------------------
     # Range
