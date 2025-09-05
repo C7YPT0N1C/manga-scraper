@@ -94,12 +94,15 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
         log(f"All Skipped Galleries:\n{skipped_report}")
 
-def should_download_gallery(meta, gallery_title, num_pages):
+def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
     Decide whether to download a gallery based on:
       - language requirements (must include requested language or "translated")
       - excluded tags (any tag in EXCLUDED_TAGS skips gallery)
       - existing files (skip if all pages exist)
+
+    Accepts an optional `iteration` dict to override gallery variables
+    (e.g., per-creator folder names) when building paths.
     """
     if not meta:
         update_skipped_galleries("Not Meta.", False)
@@ -107,7 +110,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
 
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
-    doujin_folder = build_gallery_path(meta)
+    doujin_folder = build_gallery_path(meta, iteration)  # use iteration if provided
 
     # Skip if gallery has 0 pages
     if num_pages == 0:
@@ -142,12 +145,12 @@ def should_download_gallery(meta, gallery_title, num_pages):
     excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)]
     gallery_tags = [t.lower() for t in get_meta_tags("Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
-    
+
     allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
     gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
-    
-    log_clarification() # TEST
+
+    log_clarification()  # TEST
 
     # Check tags
     for tag in gallery_tags:
@@ -171,7 +174,10 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries(f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})", False)
+        update_skipped_galleries(
+            f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})",
+            False
+        )
         return False
 
     return True
@@ -222,12 +228,13 @@ def process_galleries(gallery_ids):
 
                 grouped_tasks = []
                 for creator in creators:
-                    iteration = {"creator": [creator]}  # pass the specific creator for this iteration
+                    iteration = {"creator": [creator]}  # override creator for this iteration
                     safe_creator_name = safe_name(creator)
                     
-                    doujin_folder = build_gallery_path(meta, iteration)
+                    # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
+                    doujin_folder = build_gallery_path(meta, iteration)  
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
-                        os.makedirs(doujin_folder, exist_ok=True)#
+                        os.makedirs(doujin_folder, exist_ok=True)
 
                     creator_tasks = []
                     for i in range(num_pages):
@@ -239,7 +246,6 @@ def process_galleries(gallery_ids):
                             gallery_failed = True
                             continue
 
-                        # Use extension of the first URL (all mirrors should have same filename)
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
 
@@ -250,7 +256,7 @@ def process_galleries(gallery_ids):
                     
                     log_clarification()
                 
-                if not should_download_gallery(meta, gallery_title, num_pages):
+                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break
