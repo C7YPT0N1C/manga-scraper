@@ -372,7 +372,7 @@ def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
     # Prefer 'TITLE_TYPE', then default back to 'pretty', then 'english', then 'japanese', then fallback
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = title_obj.get(title_type) or title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
+    title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     if "|" in title: title = title.split("|")[-1].strip()
     title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
     return safe_name(title)
