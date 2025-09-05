@@ -92,6 +92,11 @@ def pre_run_hook(config, gallery_list):
     log_clarification()
     return gallery_list
 
+def pre_gallery_download_hook(config, gallery_id, meta):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
+    log_clarification()
+
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
     """
