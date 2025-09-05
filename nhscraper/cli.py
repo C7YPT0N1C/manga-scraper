@@ -103,7 +103,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- File input ---
     if query_lower == "file":
-        file_path = arg_list[0]
+        file_path = arg_list[0] if isinstance(arg_list, list) else arg_list
         if not os.path.isfile(file_path):
             logger.warning(f"Gallery file not found: {file_path}")
             return set()
@@ -112,28 +112,26 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 line = line.strip()
                 if not line:
                     continue
-                # Match nhentai URL
                 m = re.search(r"/g/(\d+)/", line)
                 if m:
                     gallery_ids.add(int(m.group(1)))
-                # Allow raw IDs in file too
                 elif line.isdigit():
                     gallery_ids.add(int(line))
         return gallery_ids
 
-    # --- Homepage doesn't require a name ---
+    # --- Homepage ---
     if query_lower == "homepage":
         start_page = int(arg_list[0])
         end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
         gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
-    # --- Other query types ---
+    # --- Other types ---
     name = str(arg_list[0]).strip()
     start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
     end_page = int(arg_list[2]) if len(arg_list) > 2 else None
     gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
-    
+
     return gallery_ids
 
 def build_gallery_list(args):
@@ -143,10 +141,7 @@ def build_gallery_list(args):
     # File input (overrides .env galleries)
     # ------------------------------
     if args.file:
-        if os.path.exists(args.file):
-            gallery_ids.update(_handle_gallery_args(args.file, "file"))
-        else:
-            logger.warning(f"Gallery file not found: {args.file}")
+        gallery_ids.update(_handle_gallery_args(args.file, "file"))
 
     # ------------------------------
     # Range
