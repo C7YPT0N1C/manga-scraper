@@ -379,8 +379,8 @@ def clean_title(meta):
     if "|" in title:
         title = title.split("|")[-1].strip()
 
-    # Remove all content inside [] or (), including the brackets themselves
-    title = re.sub(r"[\[\(].*?[\]\)]", "", title)
+    # Remove all content inside [] brackets, including the brackets themselves
+    title = re.sub(r"\[.*?\]", "", title)
 
     # Collapse multiple spaces
     title = " ".join(title.split())
