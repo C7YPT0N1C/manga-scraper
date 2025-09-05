@@ -146,7 +146,7 @@ def build_gallery_list(args):
     # ------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
     # ------------------------------
-    gallery_list = list(reversed(sorted(gallery_ids)))
+    gallery_list = list(reversed(sorted(int, gallery_ids)))
     #log_clarification()
     #logger.debug(f"Gallery List: {gallery_list}")
     return gallery_list
