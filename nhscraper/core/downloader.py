@@ -44,23 +44,25 @@ def load_extension():
 ####################################################################################################
 #logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
 
-def build_gallery_path(meta):
-    # Ask extension for variables
-    gallery_metas = active_extension.return_gallery_metas(meta)
-
-    # Load template from extension (SUB1/SUB2/etc.)
-    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
-
-    # Start with download base
+def build_gallery_path(creator=None, title=None):
+    """
+    Build a folder path for a gallery.
+    Uses the explicit creator and title if provided,
+    otherwise falls back to extension metadata.
+    """
     path_parts = [download_location]
 
-    # Append resolved variables
-    for key in template:
-        value = gallery_metas.get(key, "Unknown")
-        # If value is a list (e.g. "creator"), take first element for folder
-        if isinstance(value, list):
-            value = value[0] if value else "Unknown"
-        path_parts.append(safe_name(value))
+    # If creator/title not provided, fallback to metadata
+    if creator is None or title is None:
+        gallery_metas = active_extension.return_gallery_metas(meta)
+        if creator is None:
+            creators = gallery_metas.get("creator", ["Unknown"])
+            creator = creators[0] if creators else "Unknown"
+        if title is None:
+            title = gallery_metas.get("title", "Unknown")
+
+    path_parts.append(safe_name(creator))
+    path_parts.append(safe_name(title))
 
     return os.path.join(*path_parts)
 
@@ -208,12 +210,9 @@ def process_galleries(gallery_ids):
                 grouped_tasks = []
                 for creator in creators:
                     safe_creator_name = safe_name(creator)
-                    
-                    # Temporarily override meta["creator"] to single creator for folder path
-                    temp_meta = meta.copy()
-                    temp_meta["creator"] = [creator]
 
-                    doujin_folder = build_gallery_path(temp_meta)
+                    # Build folder path using explicit creator and gallery title
+                    doujin_folder = build_gallery_path(creator=creator, title=gallery_title)
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -233,7 +232,7 @@ def process_galleries(gallery_ids):
 
                     if creator_tasks:
                         grouped_tasks.append((safe_creator_name, creator_tasks))
-                    
+
                     log_clarification()
                 
                 if not should_download_gallery(meta, gallery_title, num_pages):
