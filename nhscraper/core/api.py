@@ -384,6 +384,7 @@ def clean_title(meta):
     # Collapse multiple spaces
     title = " ".join(title.split())
     
+    log(f"Returned Title: {title}")
     return safe_name(title)
 
 ##################################################################################################################################
