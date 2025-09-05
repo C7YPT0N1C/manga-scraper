@@ -219,11 +219,14 @@ def update_extension_download_path():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
-def build_gallery_subfolders(meta):
-    """Return a dict of possible variables to use in folder naming."""
+def return_gallery_metas(meta):
+    """Return a dict of possible variables to use in folder naming, etc."""
     return {
-        "artist": (get_meta_tags(meta, "artist") or ["Unknown Artist"])[0],
-        "group": (get_meta_tags(meta, "group") or ["Unknown Group"])[0],
+        "creator": (
+            get_meta_tags(meta, "artist")
+            or get_meta_tags(meta, "group")
+            or ["Unknown Creator"]
+        )[0],
         "title": clean_title(meta),
         "id": str(meta.get("id", "unknown")),
         "language": (get_meta_tags(meta, "language") or ["Unknown Language"])[0],

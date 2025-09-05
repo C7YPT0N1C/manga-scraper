@@ -46,17 +46,17 @@ def load_extension():
 
 def build_gallery_path(meta):
     # Ask extension for variables
-    subs = active_extension.build_gallery_subfolders(meta)
+    gallery_metas = active_extension.return_gallery_metas(meta)
 
     # Load template from extension (SUB1/SUB2/etc.)
-    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["artist", "title"])
+    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
 
     # Start with download base
     path_parts = [download_location]
 
     # Append resolved variables
     for key in template:
-        value = subs.get(key, "Unknown")
+        value = gallery_metas.get(key, "Unknown")
         path_parts.append(safe_name(value))
 
     return os.path.join(*path_parts)
@@ -156,13 +156,13 @@ def should_download_gallery(meta, gallery_title, num_pages):
 
     return True
 
-def submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist):
+def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
     futures = [
         executor.submit(
             active_extension.download_images_hook,
-            gallery_id, page, urls, path, session, pbar, safe_artist
+            gallery_id, page, urls, path, session, pbar, safe_creator_name
         )
-        for page, urls, path, _ in artist_tasks
+        for page, urls, path, _ in creator_tasks
     ]
     for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
@@ -196,22 +196,26 @@ def process_galleries(gallery_ids):
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-                artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
-                gallery_title = clean_title(meta)
+                #artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
+                #gallery_title = clean_title(meta)
+                
+                gallery_metas = active_extension.return_gallery_metas(meta) # TEST
+                creators = gallery_metas["creator"]   # already falls back to group or Unknown Artist
+                gallery_title = gallery_metas["title"]  # already cleaned
 
                 grouped_tasks = []
-                for artist in artists:
-                    safe_artist = safe_name(artist)
-                    doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
+                for creator in creators:
+                    safe_creator_name = safe_name(creator)
+                    doujin_folder = os.path.join(download_location, safe_creator_name, gallery_title)
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
-                    artist_tasks = []
+                    creator_tasks = []
                     for i in range(num_pages):
                         page = i + 1
                         img_urls = fetch_image_urls(meta, page)
                         if not img_urls:
-                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URLs")
+                            logger.warning(f"Skipping Page {page} for creator {creator}: Failed to get URLs")
                             update_skipped_galleries("Failed to get URLs.", False)
                             gallery_failed = True
                             continue
@@ -220,10 +224,10 @@ def process_galleries(gallery_ids):
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
 
-                        artist_tasks.append((page, img_urls, img_path, safe_artist))
+                        creator_tasks.append((page, img_urls, img_path, safe_creator_name))
 
-                    if artist_tasks:
-                        grouped_tasks.append((safe_artist, artist_tasks))
+                    if creator_tasks:
+                        grouped_tasks.append((safe_creator_name, creator_tasks))
                 
                 if not should_download_gallery(meta, gallery_title, num_pages):
                     db.mark_gallery_completed(gallery_id)
@@ -235,9 +239,9 @@ def process_galleries(gallery_ids):
                     desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
 
                     with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
-                        for safe_artist, artist_tasks in grouped_tasks:
-                            pbar.set_postfix_str(f"Artist: {safe_artist}")
-                            submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist)
+                        for safe_creator_name, creator_tasks in grouped_tasks:
+                            pbar.set_postfix_str(f"Creator: {safe_creator_name}")
+                            submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
 
                 if gallery_failed:
                     logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
