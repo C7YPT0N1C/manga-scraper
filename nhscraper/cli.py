@@ -55,9 +55,10 @@ def parse_args():
     # Gallery selection
     parser.add_argument(
         "--file",
-        help="Path to a file containing gallery URLs (one per line). These will be converted to gallery IDs and downloaded.",
+        nargs="?",
+        const=config.get("DOUJIN_TXT_PATH"),
         type=str,
-        default=config["DOUJIN_TXT_PATH"],
+        help="Path to a file containing gallery URLs (one per line). These will be converted to gallery IDs and downloaded."
     )
     parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
@@ -139,8 +140,11 @@ def build_gallery_list(args):
     # ------------------------------
     # File input
     # ------------------------------
-    if args.file and os.path.exists(args.file):
-        gallery_ids.update(_handle_gallery_args(args.file))
+    if args.file:
+        if os.path.exists(args.file):
+            gallery_ids.update(_handle_gallery_args(args.file))
+        else:
+            logger.warning(f"Gallery file not found: {args.file}")
 
     # ------------------------------
     # Range
