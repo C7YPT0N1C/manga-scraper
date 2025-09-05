@@ -223,8 +223,8 @@ def process_galleries(gallery_ids):
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
                 gallery_metas = active_extension.return_gallery_metas(meta) # TEST
-                creators = gallery_metas["creator"]   # already falls back to group or Unknown Artist
-                gallery_title = gallery_metas["title"]  # already cleaned
+                creators = gallery_metas["creator"]
+                gallery_title = gallery_metas["title"]
 
                 grouped_tasks = []
                 for creator in creators:
