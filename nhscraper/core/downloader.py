@@ -129,7 +129,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
     gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
     blocked_langs = []
     
-    log_clarification()
+    log_clarification() # TEST
 
     # Check tags
     for tag in gallery_tags:
@@ -198,9 +198,6 @@ def process_galleries(gallery_ids):
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
-                #artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
-                #gallery_title = clean_title(meta)
-                
                 gallery_metas = active_extension.return_gallery_metas(meta) # TEST
                 creators = gallery_metas["creator"]   # already falls back to group or Unknown Artist
                 gallery_title = gallery_metas["title"]  # already cleaned

@@ -222,12 +222,19 @@ def update_extension_download_path():
 def return_gallery_metas(meta):
     artists = get_meta_tags(meta, "artist")
     groups = get_meta_tags(meta, "group")
-
     creators = artists or groups or ["Unknown Creator"]
+    
+    title = clean_title(meta)
+    
+    id = str(meta.get("id", "unknown"))
+    
+    language = get_meta_tags(meta, "language") or ["Unknown Language"]
+    
+    log_clarification()
 
     return {
         "creator": creators,
-        "title": clean_title(meta),
-        "id": str(meta.get("id", "unknown")),
-        "language": get_meta_tags(meta, "language") or ["Unknown Language"],
+        "title": title,
+        "id": id,
+        "language": language,
     }
