@@ -127,8 +127,6 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
     if not isinstance(session, requests.Session):
         session = requests.Session()
 
-    log_clarification()
-    
     # Loop through mirrors
     for url in urls:
         for attempt in range(1, retries + 1):

@@ -128,6 +128,8 @@ def should_download_gallery(meta, gallery_title, num_pages):
     allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
     gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
     blocked_langs = []
+    
+    log_clarification()
 
     # Check tags
     for tag in gallery_tags:
