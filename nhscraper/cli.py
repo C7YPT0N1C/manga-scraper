@@ -160,6 +160,7 @@ def build_gallery_list(args):
             )
         )
     
+    log_clarification()
     log(f"Gallery List: {gallery_list}")
     
     return gallery_list
@@ -212,6 +213,7 @@ def main():
     elif args.uninstall:
         run_installer("--uninstall")
     
+    log_clarification()
     log("Updating Config...")
     
     # Update Config
@@ -230,6 +232,7 @@ def main():
     # Update Config with Built Gallery List
     update_env("GALLERIES", gallery_list)
     
+    log_clarification()
     log(f"Updated Config:\n{config}")
 
     # ------------------------------
