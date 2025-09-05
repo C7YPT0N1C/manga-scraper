@@ -377,6 +377,7 @@ def clean_title(meta):
     title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     if "|" in title: title = title.split("|")[-1].strip()
     title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
+    log(f"Returned Title: {title}") # TEST
     return safe_name(title)
 
 ##################################################################################################################################

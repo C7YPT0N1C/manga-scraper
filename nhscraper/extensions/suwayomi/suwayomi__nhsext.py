@@ -93,16 +93,16 @@ def pre_run_hook(config, gallery_list):
     return gallery_list
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=None, retries=None):
+def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
-    Updates tqdm progress bar with current artist.
+    Updates tqdm progress bar with current creator.
     """
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Skipped artist: {artist}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Skipped Creator: {creator}")
         return False
 
     if retries is None:
@@ -110,14 +110,14 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
 
     if os.path.exists(path):
         log(f"Already exists, skipping: {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
     if config.get("DRY_RUN", DEFAULT_DRY_RUN):
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
     if not isinstance(session, requests.Session):
@@ -142,8 +142,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
                             f.write(chunk)
 
                 log(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
-                if pbar and artist:
-                    pbar.set_postfix_str(f"Artist: {artist}")
+                if pbar and creator:
+                    pbar.set_postfix_str(f"Creator: {creator}")
                 return True
 
             except Exception as e:
@@ -158,8 +158,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
     # If no mirrors succeeded
     log_clarification()
     logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
-    if pbar and artist:
-        pbar.set_postfix_str(f"Failed artist: {artist}")
+    if pbar and creator:
+        pbar.set_postfix_str(f"Failed Creator: {creator}")
     return False
 
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
