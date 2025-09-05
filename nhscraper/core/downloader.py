@@ -228,6 +228,8 @@ def process_galleries(gallery_ids):
 
                     if creator_tasks:
                         grouped_tasks.append((safe_creator_name, creator_tasks))
+                    
+                    log_clarification()
                 
                 if not should_download_gallery(meta, gallery_title, num_pages):
                     db.mark_gallery_completed(gallery_id)

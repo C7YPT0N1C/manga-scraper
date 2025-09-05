@@ -363,7 +363,8 @@ def get_meta_tags(meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    log(f"Fetcher: Requested Tag Type {tag_type}, returning {names}")
+    #log_clarification() # TEST
+    log(f"Fetcher: Requested Tag Type '{tag_type}', returning {names}")
     return names
 
 def safe_name(s: str) -> str:
