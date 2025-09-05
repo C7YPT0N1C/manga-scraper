@@ -189,6 +189,42 @@ config = {
 }
 
 # ------------------------------
+# Normalize config with defaults
+# ------------------------------
+def normalise_config():
+    defaults = {
+        "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
+        "EXTENSION": DEFAULT_EXTENSION,
+        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
+        "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
+        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+        "HOMEPAGE_RANGE_START": DEFAULT_HOMEPAGE_RANGE_START,
+        "HOMEPAGE_RANGE_END": DEFAULT_HOMEPAGE_RANGE_END,
+        "RANGE_START": DEFAULT_RANGE_START,
+        "RANGE_END": DEFAULT_RANGE_END,
+        "GALLERIES": DEFAULT_GALLERIES,
+        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
+        "LANGUAGE": DEFAULT_LANGUAGE,
+        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+        "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
+        "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+        "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+        "USE_TOR": DEFAULT_USE_TOR,
+        "DRY_RUN": DEFAULT_DRY_RUN,
+        "VERBOSE": DEFAULT_VERBOSE,
+        "DEBUG": DEFAULT_DEBUG,
+    }
+
+    for key, default_val in defaults.items():
+        val = config.get(key)
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            config[key] = default_val
+            update_env(key, default_val)
+
+# Run normalization immediately so .env is populated
+normalise_config()
+
+# ------------------------------
 # Update .env safely
 # ------------------------------
 def update_env(key, value):

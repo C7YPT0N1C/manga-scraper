@@ -165,10 +165,10 @@ def build_gallery_list(args):
 def update_config(args): # Update config   
     config["EXTENSION"] = args.extension
     
-    if args.excluded_tags is not None:
+    if args.excluded_tags is not None: # Use new excluded tags.
         config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
     else:
-        # keep whatever was already in config (env or default)
+        # Use whatever excluded tags were already in config (env or default)
         if isinstance(config["EXCLUDED_TAGS"], str):
             config["EXCLUDED_TAGS"] = [t.strip().lower() for t in config["EXCLUDED_TAGS"].split(",")]
     
@@ -181,7 +181,6 @@ def update_config(args): # Update config
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
     config["DEBUG"] = args.debug
-
 
 # ------------------------------
 # Main
