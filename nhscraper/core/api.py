@@ -56,12 +56,19 @@ def build_session():
 ################################################################################################################
 # GLOBAL VARIABLES
 ################################################################################################################
+
+# ===============================
+# SCRAPER API
+# ===============================
 app = Flask(__name__)
 last_gallery_id = None
 running_galleries = []
 gallery_metadata = {}  # global state for /status/galleries, key=gallery_id, value={'meta': {...}, 'status': ..., 'last_checked': ...}
 state_lock = Lock()
 
+# ===============================
+# NHentai API
+# ===============================
 # NHentai API Endpoints
 #
 API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
@@ -101,7 +108,7 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 #    GET /galleries/character/{character}
 #    - Fetch galleries by a specific character
 #
-# 9. Popular / Trending (if supported)
+# 9. Popular / Trending (if supported) # ADD SUPPORT FOR THESE # TEST
 #    GET /galleries/popular
 #    GET /galleries/trending
 #
@@ -116,7 +123,7 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
 
-    # Homepage # TEST
+    # Homepage
     if query_lower == "homepage":
         return f"{API_BASE}/galleries/all?page={page}&sort=date"
 
@@ -316,20 +323,9 @@ def safe_name(s: str) -> str:
 
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
-    # Prefer 'pretty', then 'english', then 'japanese', then fallback
-    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
-    return safe_name(title)
-
-##################################################################################################################################
-# API UTILITIES
-##################################################################################################################################
-def safe_name(s: str) -> str:
-    return s.replace("/", "-").replace("\\", "-").strip()
-
-def clean_title(meta):
-    title_obj = meta.get("title", {}) or {}
+    # Prefer 'TITLE_TYPE', then default back to 'pretty', then 'english', then 'japanese', then fallback
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("japanese") or title_obj.get("pretty") or f"Gallery_{meta.get('id')}"
+    title = title_obj.get(title_type) or title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
     if "|" in title: title = title.split("|")[-1].strip()
     title = re.sub(r'(\s*\[.*?\]\s*)+$', '', title.strip())
     return safe_name(title)
@@ -337,6 +333,23 @@ def clean_title(meta):
 ##################################################################################################################################
 # API STATE HELPERS
 ##################################################################################################################################
+def get_tor_ip():
+    """Fetch current IP, through Tor if enabled."""
+    try:
+        if config.get("USE_TOR", DEFAULT_USE_TOR):
+            r = requests.get("https://httpbin.org/ip",
+                             proxies={
+                                 "http": "socks5h://127.0.0.1:9050",
+                                 "https": "socks5h://127.0.0.1:9050"
+                             },
+                             timeout=10)
+        else:
+            r = requests.get("https://httpbin.org/ip", timeout=10)
+        r.raise_for_status()
+        return r.json().get("origin")
+    except Exception as e:
+        return f"Error: {e}"
+
 def get_last_gallery_id():
     with state_lock:
         return last_gallery_id
@@ -364,53 +377,13 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
                 entry["download_status"] = "failed"
                 if entry["download_attempts"] >= max_attempts:
                     logger.error(f"Gallery {gallery_id} download failed after {max_attempts} attempts")
-        elif stage == "graphql":
-            if success:
-                entry["graphql_status"] = "completed"
-            else:
-                entry["graphql_attempts"] += 1
-                entry["graphql_status"] = "failed"
-                if entry["graphql_attempts"] >= max_attempts:
-                    logger.error(f"Gallery {gallery_id} GraphQL update failed after {max_attempts} attempts")
 
         entry["last_checked"] = datetime.now().isoformat()
         logger.info(f"Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
 
-def get_tor_ip():
-    """Fetch current IP, through Tor if enabled."""
-    try:
-        if config.get("USE_TOR", DEFAULT_USE_TOR):
-            r = requests.get("https://httpbin.org/ip",
-                             proxies={
-                                 "http": "socks5h://127.0.0.1:9050",
-                                 "https": "socks5h://127.0.0.1:9050"
-                             },
-                             timeout=10)
-        else:
-            r = requests.get("https://httpbin.org/ip", timeout=10)
-        r.raise_for_status()
-        return r.json().get("origin")
-    except Exception as e:
-        return f"Error: {e}"
-
 ##################################################################################################################################
 # FLASK ENDPOINTS
 ##################################################################################################################################
-@app.route("/skeleton", methods=["GET", "POST"])
-def skeleton_endpoint():
-    if request.method == "GET":
-        return jsonify({
-            "timestamp": datetime.now().isoformat(),
-            "message": "Skeleton GET live response"
-        })
-    elif request.method == "POST":
-        data = request.get_json(force=True, silent=True) or {}
-        return jsonify({
-            "timestamp": datetime.now().isoformat(),
-            "message": "Skeleton POST live response",
-            "received_data": data
-        })
-
 @app.route("/status", methods=["GET"])
 def status_endpoint():
     return jsonify({

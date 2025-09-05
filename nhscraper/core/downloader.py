@@ -81,7 +81,7 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        logger.debug(f"Updated Skipped Galleries List with 'Gallery {gallery_id} ({gallery_title}): {Reason}'")
+        logger.debug(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
     else:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing

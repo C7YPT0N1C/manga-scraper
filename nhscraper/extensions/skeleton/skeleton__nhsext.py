@@ -199,7 +199,7 @@ def install_extension():
 
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed. Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
