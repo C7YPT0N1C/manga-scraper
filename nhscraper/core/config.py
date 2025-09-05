@@ -41,7 +41,7 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(verbose=False):
+def setup_logger(debug=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -56,7 +56,7 @@ def setup_logger(verbose=False):
 
     # --- Console handler ---
     ch = logging.StreamHandler()
-    if  verbose:
+    if debug:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     else:
@@ -72,7 +72,7 @@ def setup_logger(verbose=False):
     logger.addHandler(fh_runtime)
 
     # Announce level
-    if verbose:
+    if debug:
         logger.info("Log Level Set To DEBUG")
     else:
         logger.info("Log Level Set To INFO")
@@ -83,8 +83,18 @@ def setup_logger(verbose=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
+def log(message: str):
+    """Unified logging for CLI depending on verbose/debug flags."""
+    if config.get("DEBUG"):
+        logger.debug(message)   # Output message as a debug to terminal AND log file.
+    elif config.get("VERBOSE"):
+        print(message)          # Output message as a print to only terminal.
+    else:
+        logger.debug(message)    # Default
+
+
 ##########################################################################################
-# LOGGER
+# CONFIGS
 ##########################################################################################
 
 # ------------------------------
@@ -104,8 +114,15 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-# Default Download Path
+# Default Paths
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+
+DEFAULT_DOUJIN_TXT_PATH="/root/Doujinshi_IDs.txt"
+if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
+    # Create an empty file with a comment line
+    with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
+        f.write("# Add one nhentai URL or gallery ID per line\n")
+    logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
 
 # Extensions
 DEFAULT_EXTENSION="skeleton"
@@ -123,12 +140,9 @@ DEFAULT_RANGE_END=600000
 DEFAULT_GALLERIES=""
 
 # Filters
-DEFAULT_EXCLUDED_TAGS=""
+DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
 DEFAULT_LANGUAGE="english"
-
-# Titles
 DEFAULT_TITLE_TYPE="english"
-DEFAULT_TITLE_SANITISE=True
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
@@ -139,6 +153,7 @@ DEFAULT_MAX_RETRIES=3
 DEFAULT_USE_TOR=True
 DEFAULT_DRY_RUN=False
 DEFAULT_VERBOSE=False
+DEFAULT_DEBUG=False
 
 # ------------------------------------------------------------
 # Config Dictionary
@@ -154,11 +169,12 @@ else:
     MIRRORS_LIST = list(MIRRORS_ENV)
 
 config = {
+    "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
     "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
-    "NHENTAI_MIRRORS": MIRRORS_LIST,  # ✅ now always a list
+    "NHENTAI_MIRRORS": MIRRORS_LIST,
     "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START)),
     "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END)),
     "RANGE_START": int(os.getenv("RANGE_START", DEFAULT_RANGE_START)),
@@ -171,13 +187,13 @@ config = {
     "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
     "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
-    "TITLE_SANITISE": os.getenv("TITLE_SANITISE", DEFAULT_TITLE_SANITISE).lower() == "true",
     "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
     "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
     "MAX_RETRIES": int(os.getenv("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
+    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
 }
 
 # ------------------------------
@@ -198,6 +214,43 @@ def update_env(key, value):
 
     # Update runtime config
     config[key] = value
+
+# ------------------------------
+# Normalize config with defaults
+# ------------------------------
+def normalise_config():
+    defaults = {
+        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
+        "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
+        "EXTENSION": DEFAULT_EXTENSION,
+        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
+        "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
+        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+        "HOMEPAGE_RANGE_START": DEFAULT_HOMEPAGE_RANGE_START,
+        "HOMEPAGE_RANGE_END": DEFAULT_HOMEPAGE_RANGE_END,
+        "RANGE_START": DEFAULT_RANGE_START,
+        "RANGE_END": DEFAULT_RANGE_END,
+        "GALLERIES": DEFAULT_GALLERIES,
+        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
+        "LANGUAGE": DEFAULT_LANGUAGE,
+        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+        "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
+        "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+        "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+        "USE_TOR": DEFAULT_USE_TOR,
+        "DRY_RUN": DEFAULT_DRY_RUN,
+        "VERBOSE": DEFAULT_VERBOSE,
+        "DEBUG": DEFAULT_DEBUG,
+    }
+
+    for key, default_val in defaults.items():
+        val = config.get(key)
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            config[key] = default_val
+            update_env(key, default_val)
+
+# Run normalization immediately so .env is populated
+normalise_config()
 
 # ------------------------------
 # Dynamic download path

@@ -44,18 +44,9 @@ def load_extension():
 ####################################################################################################
 #logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
 
-def build_gallery_path(meta, iteration: dict = None):
-    """
-    Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
-    You can pass `iteration` to override specific variables (e.g., creator).
-    """
+def build_gallery_path(meta):
     # Ask extension for variables
     gallery_metas = active_extension.return_gallery_metas(meta)
-
-    # Apply any overrides for this iteration
-    if iteration:
-        for k, v in iteration.items():
-            gallery_metas[k] = v
 
     # Load template from extension (SUB1/SUB2/etc.)
     template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
@@ -66,15 +57,9 @@ def build_gallery_path(meta, iteration: dict = None):
     # Append resolved variables
     for key in template:
         value = gallery_metas.get(key, "Unknown")
-
-        # If value is a list, take the first element (e.g., creators)
+        # If value is a list (e.g. "creator"), take first element for folder
         if isinstance(value, list):
             value = value[0] if value else "Unknown"
-
-        # Ensure value is string for safe_name
-        if not isinstance(value, str):
-            value = str(value)
-
         path_parts.append(safe_name(value))
 
     return os.path.join(*path_parts)
@@ -94,15 +79,12 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
         log(f"All Skipped Galleries:\n{skipped_report}")
 
-def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
+def should_download_gallery(meta, gallery_title, num_pages):
     """
     Decide whether to download a gallery based on:
       - language requirements (must include requested language or "translated")
       - excluded tags (any tag in EXCLUDED_TAGS skips gallery)
       - existing files (skip if all pages exist)
-
-    Accepts an optional `iteration` dict to override gallery variables
-    (e.g., per-creator folder names) when building paths.
     """
     if not meta:
         update_skipped_galleries("Not Meta.", False)
@@ -110,7 +92,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
-    doujin_folder = build_gallery_path(meta, iteration)  # use iteration if provided
+    doujin_folder = build_gallery_path(meta)
 
     # Skip if gallery has 0 pages
     if num_pages == 0:
@@ -145,12 +127,12 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)]
     gallery_tags = [t.lower() for t in get_meta_tags("Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
-
+    
     allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
     gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
-
-    log_clarification()  # TEST
+    
+    log_clarification() # TEST
 
     # Check tags
     for tag in gallery_tags:
@@ -174,10 +156,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries(
-            f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})",
-            False
-        )
+        update_skipped_galleries(f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})", False)
         return False
 
     return True
@@ -223,17 +202,16 @@ def process_galleries(gallery_ids):
                 active_extension.during_gallery_download_hook(config, gallery_id, meta)
 
                 gallery_metas = active_extension.return_gallery_metas(meta) # TEST
-                creators = gallery_metas["creator"]
-                gallery_title = gallery_metas["title"]
+                creators = gallery_metas["creator"]   # already falls back to group or Unknown Artist
+                gallery_title = gallery_metas["title"]  # already cleaned
 
                 grouped_tasks = []
                 for creator in creators:
-                    iteration = {"creator": [creator]}  # override creator for this iteration
-                    safe_creator_name = safe_name(creator)
-                    
-                    # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
-                    doujin_folder = build_gallery_path(meta, iteration)
-                    log(f"Initialising Doujin Folder for Creator '{creator}': {doujin_folder}")
+                    # Temporarily override meta["creator"] to single creator for folder building
+                    temp_meta = meta.copy()
+                    temp_meta["creator"] = [creator]
+
+                    doujin_folder = build_gallery_path(temp_meta)  # now respects SUBFOLDER_STRUCTURE
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -247,6 +225,7 @@ def process_galleries(gallery_ids):
                             gallery_failed = True
                             continue
 
+                        # Use extension of the first URL (all mirrors should have same filename)
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
 
@@ -257,7 +236,7 @@ def process_galleries(gallery_ids):
                     
                     log_clarification()
                 
-                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                if not should_download_gallery(meta, gallery_title, num_pages):
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta)
                     break

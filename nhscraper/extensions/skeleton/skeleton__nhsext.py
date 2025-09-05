@@ -6,7 +6,7 @@
 import os, time, subprocess, json, requests
 
 from nhscraper.core.config import *
-from nhscraper.core.fetchers import get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 
 # This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
 
@@ -32,57 +32,7 @@ for ext in manifest.get("extensions", []):
 if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
     DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-SUBFOLDER_STRUCTURE = ["artist", "title"] # SUBDIR_1, SUBDIR_2, etc
-
-####################################################################################################################
-# CORE
-####################################################################################################################
-def install_extension():
-    """
-    Install the extension and ensure the dedicated download path exists.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH:
-        # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed. Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-
-def uninstall_extension():
-    global DEDICATED_DOWNLOAD_PATH
-    try:
-        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
-
-def update_extension_download_path():
-    log_clarification()
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    logger.debug(f"Extension: {EXTENSION_NAME}: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-def build_gallery_subfolders(meta):
-    """Return a dict of possible variables to use in folder naming."""
-    return {
-        "artist": (get_meta_tags(meta, "artist") or ["Unknown Artist"])[0],
-        "title": clean_title(meta),
-        "id": str(meta.get("id", "unknown")),
-        "language": (get_meta_tags(meta, "language") or ["Unknown"])[0],
-    }
+SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
@@ -95,7 +45,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 
     # Safety check
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.debug("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
         return
 
     if RemoveEmptyArtistFolder:  # Remove empty subdirectories, deepest first. Does not delete DEDICATED_DOWNLOAD_PATH.
@@ -128,7 +78,8 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log_clarification()
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
@@ -139,35 +90,41 @@ def pre_run_hook(config, gallery_list):
     update_extension_download_path()
     
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log_clarification()
     return gallery_list
 
+def pre_gallery_download_hook(config, gallery_id, meta):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
+    log_clarification()
+
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=None, retries=None):
+def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
-    Updates tqdm progress bar with current artist.
+    Updates tqdm progress bar with current creator.
     """
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Skipped artist: {artist}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Skipped Creator: {creator}")
         return False
 
     if retries is None:
         retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
     if os.path.exists(path):
-        logger.debug(f"Already exists, skipping: {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
+        log(f"Already exists, skipping: {path}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
     if config.get("DRY_RUN", DEFAULT_DRY_RUN):
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
-        if pbar and artist:
-            pbar.set_postfix_str(f"Artist: {artist}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
     if not isinstance(session, requests.Session):
@@ -191,9 +148,9 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
                         if chunk:
                             f.write(chunk)
 
-                logger.debug(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
-                if pbar and artist:
-                    pbar.set_postfix_str(f"Artist: {artist}")
+                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+                if pbar and creator:
+                    pbar.set_postfix_str(f"Creator: {creator}")
                 return True
 
             except Exception as e:
@@ -208,24 +165,87 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, artist=N
     # If no mirrors succeeded
     log_clarification()
     logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
-    if pbar and artist:
-        pbar.set_postfix_str(f"Failed artist: {artist}")
+    if pbar and creator:
+        pbar.set_postfix_str(f"Failed Creator: {creator}")
     return False
 
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log_clarification()
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log_clarification()
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
 
     log_clarification()
     remove_empty_directories(True)
+
+####################################################################################################################
+# CORE
+####################################################################################################################
+def install_extension():
+    """
+    Install the extension and ensure the dedicated download path exists.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
+        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+
+def uninstall_extension():
+    global DEDICATED_DOWNLOAD_PATH
+    try:
+        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
+            os.rmdir(DEDICATED_DOWNLOAD_PATH)
+        
+        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+
+def update_extension_download_path():
+    log_clarification()
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
+def return_gallery_metas(meta):
+    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    title = clean_title(meta)
+    
+    id = str(meta.get("id", "unknown"))
+    
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas",meta, "language") or ["Unknown Language"]
+    
+    log_clarification()
+
+    return {
+        "creator": creators,
+        "title": title,
+        "id": id,
+        "language": language,
+    }
