@@ -233,7 +233,7 @@ def process_galleries(gallery_ids):
                     
                     # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
                     doujin_folder = build_gallery_path(meta, iteration)
-                    log(f"Initialising Doujin Folder for Creator '{creator}': {doujin_folder}")
+                    log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 

@@ -363,8 +363,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    #log_clarification() # TEST
-    log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}")
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}")
     return names
 
 def safe_name(s: str) -> str:
