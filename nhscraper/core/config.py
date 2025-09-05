@@ -189,6 +189,25 @@ config = {
 }
 
 # ------------------------------
+# Update .env safely
+# ------------------------------
+def update_env(key, value):
+    """
+    Update a single variable in the .env file.
+    If the key doesn't exist, append it.
+    """
+    if not os.path.exists(ENV_FILE):
+        # create empty file if missing
+        with open(ENV_FILE, "w") as f:
+            f.write("")
+
+    # Use set_key from dotenv to safely update
+    set_key(ENV_FILE, key, str(value))
+
+    # Update runtime config
+    config[key] = value
+
+# ------------------------------
 # Normalize config with defaults
 # ------------------------------
 def normalise_config():
@@ -223,25 +242,6 @@ def normalise_config():
 
 # Run normalization immediately so .env is populated
 normalise_config()
-
-# ------------------------------
-# Update .env safely
-# ------------------------------
-def update_env(key, value):
-    """
-    Update a single variable in the .env file.
-    If the key doesn't exist, append it.
-    """
-    if not os.path.exists(ENV_FILE):
-        # create empty file if missing
-        with open(ENV_FILE, "w") as f:
-            f.write("")
-
-    # Use set_key from dotenv to safely update
-    set_key(ENV_FILE, key, str(value))
-
-    # Update runtime config
-    config[key] = value
 
 # ------------------------------
 # Dynamic download path
