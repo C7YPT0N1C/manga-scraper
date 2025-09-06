@@ -334,9 +334,6 @@ def main():
     # Allows session to use correct config values on creation
     update_config(args)
     
-    # Build scraper session.
-    build_session()
-    
     # Build Gallery List (make sure not empty.)
     gallery_list = build_gallery_list(args)
     if not gallery_list:
