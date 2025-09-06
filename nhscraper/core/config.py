@@ -155,6 +155,15 @@ DEFAULT_DRY_RUN=False
 DEFAULT_VERBOSE=False
 DEFAULT_DEBUG=False
 
+# ------------------------------
+# Helper: safe int from env
+# ------------------------------
+def getenv_int(key, default):
+    val = os.getenv(key)
+    if val is None or val.strip() == "":
+        return default
+    return int(val)
+
 # ------------------------------------------------------------
 # Config Dictionary
 # ------------------------------------------------------------
@@ -162,7 +171,7 @@ DEFAULT_DEBUG=False
 # Also change corresponding parser.add_argument in CLI
 
 # NHENTAI_MIRRORS: always a list
-MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+MIRRORS_ENV = getenv_int("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
 if isinstance(MIRRORS_ENV, str):
     MIRRORS_LIST = [m.strip() for m in MIRRORS_ENV.split(",") if m.strip()]
 else:
@@ -175,10 +184,10 @@ config = {
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "HOMEPAGE_RANGE_START": int(os.getenv("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START)),
-    "HOMEPAGE_RANGE_END": int(os.getenv("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END)),
-    "RANGE_START": int(os.getenv("RANGE_START", DEFAULT_RANGE_START)),
-    "RANGE_END": int(os.getenv("RANGE_END", DEFAULT_RANGE_END)),
+    "HOMEPAGE_RANGE_START": getenv_int("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START),
+    "HOMEPAGE_RANGE_END": getenv_int("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END),
+    "RANGE_START": getenv_int("RANGE_START", DEFAULT_RANGE_START),
+    "RANGE_END": getenv_int("RANGE_END", DEFAULT_RANGE_END),
     "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
     "ARTIST": os.getenv("ARTIST", ""),
     "GROUP": os.getenv("GROUP", ""),
@@ -187,9 +196,9 @@ config = {
     "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
     "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
-    "THREADS_GALLERIES": int(os.getenv("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
-    "THREADS_IMAGES": int(os.getenv("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
-    "MAX_RETRIES": int(os.getenv("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
+    "THREADS_GALLERIES": getenv_int("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
+    "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
+    "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
@@ -214,11 +223,14 @@ def update_env(key, value):
 
     # Update runtime config
     config[key] = value
-
+    
 # ------------------------------
-# Normalize config with defaults
+# Normalise config with defaults
 # ------------------------------
 def normalise_config():
+    log_clarification()
+    log("Populating Config...")
+    
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -249,7 +261,7 @@ def normalise_config():
             config[key] = default_val
             update_env(key, default_val)
 
-# Run normalization immediately so .env is populated
+# Run normalisation immediately so .env is populated
 normalise_config()
 
 # ------------------------------
