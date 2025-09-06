@@ -252,23 +252,6 @@ def uninstall_extension():
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def update_extension_download_path():
     log_clarification()
     try:
