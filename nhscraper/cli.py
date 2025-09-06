@@ -82,7 +82,7 @@ def parse_args():
         default=DEFAULT_TITLE_TYPE,
         help=(
             f"What title type to use."
-            "Using 'english' can lead to galleries not in Suwayomi if the gallery contains unsupported symbols. (default: {DEFAULT_TITLE_TYPE})"
+            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning. (default: {DEFAULT_TITLE_TYPE})"
         )
     )
 
