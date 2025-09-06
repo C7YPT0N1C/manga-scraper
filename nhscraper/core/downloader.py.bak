@@ -289,14 +289,14 @@ def process_galleries(gallery_ids):
 ####################################################################################################
 # MAIN
 ####################################################################################################
-def start_downloader():
+def start_downloader(gallery_list=None):
     log_clarification()
     logger.info("Downloader: Ready.")
     log("Downloader: Debugging Started.")
     
     load_extension() # Load extension variables, etc
 
-    gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
+    gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
     active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:

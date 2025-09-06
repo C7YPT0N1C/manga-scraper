@@ -352,7 +352,7 @@ def main():
     # ------------------------------
     # Download galleries
     # ------------------------------
-    start_downloader()
+    start_downloader(gallery_list)
 
 if __name__ == "__main__":
     main()
