@@ -380,7 +380,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
 
     details_file = os.path.join(creator_folder, "details.json")
-    top_genres_file = os.path.join(creator_folder, "top_10_genres.json")
+    top_genres_file = os.path.join(creator_folder, "most_popular_genres.json")
     os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
 
     # Load existing details.json or create default
@@ -423,8 +423,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         genre_counts[genre] = genre_counts.get(genre, 0) + 1
 
     # Compute top 10 genres
-    top_10 = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-    details["genre"] = [g for g, count in top_10]
+    most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+    details["genre"] = [g for g, count in most_popular]
 
     # Save updated details.json
     with open(details_file, "w", encoding="utf-8") as f:
