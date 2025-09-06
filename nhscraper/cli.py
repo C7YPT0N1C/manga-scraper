@@ -64,14 +64,45 @@ def parse_args():
             "If no path is given, uses the default file."
         )
     )
-    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
+    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
     parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
-    parser.add_argument("--artist", nargs="+", metavar="ARGS", help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--group", nargs="+", metavar="ARGS", help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--tag", nargs="+", metavar="ARGS", help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--parody", nargs="+", metavar="ARGS", help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--search", nargs="+", metavar="ARGS", help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    # Allow multiple --artist, --group, etc. each with their own arguments
+    parser.add_argument(
+        "--artist",
+        action="append",
+        nargs="+",  # All args after this flag are collected
+        metavar="ARGS",
+        help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--group",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--tag",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--parody",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--search",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. Can be repeated."
+    )
 
     # Filters
     parser.add_argument("--excluded-tags", type=str, default=None, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
@@ -103,12 +134,16 @@ def parse_args():
     return parser.parse_args()
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
-    """Parse CLI args and call fetch_gallery_ids for any query type."""
+    """Parse CLI args and call fetch_gallery_ids for any query type.
+
+    Supports repeated flags like --tag "big boobs" --tag "big ass"
+    and optional page ranges. Defaults to start_page=1, end_page=None.
+    """
     if not arg_list:
         return set()
 
-    query_lower = query_type.lower()
     gallery_ids = set()
+    query_lower = query_type.lower()
 
     # --- File input ---
     if query_lower == "file":
@@ -130,16 +165,25 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- Homepage ---
     if query_lower == "homepage":
-        start_page = int(arg_list[0])
-        end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
+        # Use defaults if no pages are provided
+        start_page = int(arg_list[0]) if len(arg_list) > 0 else DEFAULT_PAGE_RANGE_START
+        end_page = int(arg_list[1]) if len(arg_list) > 1 else DEFAULT_PAGE_RANGE_END
         gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
-    # --- Other types ---
-    name = str(arg_list[0]).strip()
-    start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
-    end_page = int(arg_list[2]) if len(arg_list) > 2 else None
-    gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
+    # --- Artist / Group / Tag / Parody / Search ---
+    for entry in arg_list:
+        # Each entry may already be a list from argparse 'append' + 'nargs'
+        if isinstance(entry, str):
+            entry = [entry]
+
+        name = str(entry[0]).strip()  # First element is always the query value
+
+        # Use homepage defaults if start/end not provided
+        start_page = int(entry[1]) if len(entry) > 1 else DEFAULT_PAGE_RANGE_START
+        end_page = int(entry[2]) if len(entry) > 2 else DEFAULT_PAGE_RANGE_END
+
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
 
     return gallery_ids
 
@@ -271,7 +315,7 @@ def main():
     gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
                     args.group, args.tag, args.parody, args.search]
     if not any(gallery_args):
-        args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
+        args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
     log_clarification()
     log("Updating Config...")
