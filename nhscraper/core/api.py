@@ -15,46 +15,7 @@ from nhscraper.core.config import *
 ################################################################################################################
 session = None
 
-def global_session_builder():
-    log_clarification()
-    logger.info("Fetcher: Ready.")
-    log("Fetcher: Debugging Started.")
-
-    log("Building Global HTTP session with cloudscraper")
-
-    s = cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'mobile': False, 'platform': 'windows'}
-    )
-
-    s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://nhentai.net/",
-    })
-    
-    log(f"Built Global HTTP session with cloudscraper")
-    
-    if config.get("USE_TOR", DEFAULT_USE_TOR):
-        proxy = "socks5h://127.0.0.1:9050"
-        s.proxies = {"http": proxy, "https": proxy}
-        logger.info(f"Using Tor proxy: {proxy}")
-    else:
-        logger.info("Not using Tor proxy")
-    
-    return s
-
-def build_global_session():
-    global session
-    
-    # Ensure session is ready
-    # Uses cloudscraper session by default.
-    if session is None:
-        session = global_session_builder()
-        
-
-
-def session_builder(worker_id):
+def session_builder():
     log_clarification()
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.")
@@ -72,7 +33,7 @@ def session_builder(worker_id):
         "Referer": "https://nhentai.net/",
     })
     
-    log(f"Built HTTP session with cloudscraper for Worker {worker_id}")
+    log(f"Built HTTP session with cloudscraper")
     
     if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
@@ -83,9 +44,13 @@ def session_builder(worker_id):
     
     return s
 
-def build_session(worker_id):
-    session = session_builder(worker_id)
-    return session
+def build_session():
+    global session
+    
+    # Ensure session is ready
+    # Uses cloudscraper session by default.
+    if session is None:
+        session = session_builder()
         
 ################################################################################################################
 # GLOBAL VARIABLES

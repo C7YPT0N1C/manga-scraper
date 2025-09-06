@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import database as db
-from nhscraper.core.api import build_session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
@@ -19,7 +19,6 @@ gallery_threads = 2
 image_threads = 10
 meta = None
 skipped_galleries = []
-dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -86,7 +85,7 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     gallery_id = meta.get("id")
     gallery_title = clean_title(meta)
 
-    if not isinstance(meta, dict) or not ReturnReport:
+    if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
         log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
@@ -109,6 +108,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         update_skipped_galleries("Not Meta.", False)
         return False
 
+    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta, iteration)  # use iteration if provided
 
@@ -183,26 +183,18 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     return True
 
 def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
-    futures = []
-    for page, urls, path, _ in creator_tasks:
-        if dry_run:
-            log(f"[DRY RUN] Would download Gallery {gallery_id}, Page {page}, Path: {path}")
-        else:
-            futures.append(
-                executor.submit(
-                    active_extension.download_images_hook,
-                    gallery_id, page, urls, path, session, pbar, safe_creator_name
-                )
-            )
-
+    futures = [
+        executor.submit(
+            active_extension.download_images_hook,
+            gallery_id, page, urls, path, session, pbar, safe_creator_name
+        )
+        for page, urls, path, _ in creator_tasks
+    ]
     for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
 
-def process_galleries(gallery_ids, worker_id=0, session=None):
+def process_galleries(gallery_ids):
     global meta
-    
-    if session is None:
-        session = build_session(worker_id)  # fallback
     
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
@@ -216,12 +208,12 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
             try:
                 log_clarification()
                 active_extension.pre_gallery_download_hook(gallery_id)
-                logger.info(f"[Worker {worker_id}] Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
+                logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
-                    logger.warning(f"[Worker {worker_id}] Failed to fetch metadata for Gallery: {gallery_id}")
+                    logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
                     if gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
@@ -241,7 +233,7 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
                     
                     # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
                     doujin_folder = build_gallery_path(meta, iteration)
-                    log(f"[Worker {worker_id}] Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
+                    log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -250,7 +242,7 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
                         page = i + 1
                         img_urls = fetch_image_urls(meta, page)
                         if not img_urls:
-                            logger.warning(f"[Worker {worker_id}] Skipping Page {page} for creator {creator}: Failed to get URLs")
+                            logger.warning(f"Skipping Page {page} for creator {creator}: Failed to get URLs")
                             update_skipped_galleries("Failed to get URLs.", False)
                             gallery_failed = True
                             continue
@@ -268,7 +260,6 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
                 # If should_download_gallery() says the gallery should be skipped.
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
                     db.mark_gallery_skipped(gallery_id)
-                    logger.info(f"[Worker {worker_id}] Skipped Gallery: {gallery_id}")
                     break
                 else:
                     total_images = sum(len(t[1]) for t in grouped_tasks)
@@ -277,70 +268,52 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
 
                         with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
                             for safe_creator_name, creator_tasks in grouped_tasks:
-                                pbar.set_postfix_str(f"[Worker {worker_id}] Creator: {safe_creator_name}")
+                                pbar.set_postfix_str(f"Creator: {safe_creator_name}")
                                 submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
 
                     if gallery_failed:
-                        logger.warning(f"[Worker {worker_id}] Gallery: {gallery_id}: Encountered download issues, retrying...")
+                        logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
                         continue
 
-                    if not dry_run:
-                        active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-                        db.mark_gallery_completed(gallery_id)
-                        logger.info(f"[Worker {worker_id}] Completed Gallery: {gallery_id}")
-                        log_clarification()
-                                          
+                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    db.mark_gallery_completed(gallery_id)
+                    logger.info(f"Completed Gallery: {gallery_id}")
+                    log_clarification()
                     break
 
             except Exception as e:
-                logger.error(f"[Worker {worker_id}] Error processing Gallery: {gallery_id}: {e}")
+                logger.error(f"Error processing Gallery: {gallery_id}: {e}")
                 if gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN
 ####################################################################################################
-from multiprocessing import Process
-import math
-
 def start_downloader(gallery_list=None):
     log_clarification()
     logger.info("Downloader: Ready.")
     log("Downloader: Debugging Started.")
     
-    load_extension()  # Load extension variables, etc
+    load_extension() # Load extension variables, etc
 
-    # Use provided gallery list or fall back to config
-    all_galleries = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
-    active_extension.pre_run_hook(all_galleries)
+    gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
+    active_extension.pre_run_hook(gallery_ids)
 
-    if not all_galleries:
+    if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
     
     log_clarification()
-    logger.info(
-        f"Galleries to process: {all_galleries[0]} -> {all_galleries[-1]}" 
-        if len(all_galleries) > 1 else f"Galleries to process: {all_galleries[0]}"
-    )
+    logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
+                if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
-    # --- Split galleries across workers ---
-    num_workers = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-    chunk_size = math.ceil(len(all_galleries) / num_workers)
-    chunks = [all_galleries[i:i + chunk_size] for i in range(0, len(all_galleries), chunk_size)]
-
-    processes = []
-    for i, chunk in enumerate(chunks):
-        p = Process(target=process_galleries, args=(chunk, i+1))  # <-- pass worker ID
-        p.start()
-        logger.info(f"Spawned Worker {i+1}: Handling {len(chunk)} Galleries")
-        processes.append(p)
-
-    for p in processes:
-        p.join()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
+        futures = [executor.submit(process_galleries, gallery_ids)] # Run each gallery thread in serial
+        #futures = [executor.submit(process_galleries, [gid]) for gid in gallery_ids] # Run each gallery thread in parallel
+        concurrent.futures.wait(futures)
 
     log_clarification()
     logger.info("All galleries processed.")
-    #update_skipped_galleries("", True)
+    update_skipped_galleries("", True)
     
     active_extension.post_run_hook()
