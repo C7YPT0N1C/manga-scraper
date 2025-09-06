@@ -60,13 +60,16 @@ def return_gallery_metas(meta):
     
     id = str(meta.get("id", "Unknown ID"))
     
-    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas",meta, "language") or ["Unknown Language"]
+    full_title = f"({id}) {title}"
+    
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
     log_clarification()
 
     return {
         "creator": creators,
-        "title": title,
+        "title": full_title,
+        "short_title": title,
         "id": id,
         "language": language,
     }

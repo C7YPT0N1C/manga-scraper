@@ -69,6 +69,7 @@ def return_gallery_metas(meta):
     return {
         "creator": creators,
         "title": full_title,
+        "short_title": title,
         "id": id,
         "language": language,
     }
@@ -405,9 +406,13 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     gallery_title = gallery_meta["title"]
     details["description"] = f"Latest Doujin: {creator_name} - {gallery_title}"
 
-    # Update genre counts
+    # Update genre counts (exclude artist, group, language, category)
     gallery_tags = meta.get("tags", [])
-    gallery_genres = [tag["name"] for tag in gallery_tags if "name" in tag]
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
+
     if os.path.exists(top_genres_file):
         with open(top_genres_file, "r", encoding="utf-8") as f:
             genre_counts = json.load(f)
@@ -416,10 +421,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
     for genre in gallery_genres:
         genre_counts[genre] = genre_counts.get(genre, 0) + 1
-
-    # Save updated genre counts
-    with open(top_genres_file, "w", encoding="utf-8") as f:
-        json.dump(genre_counts, f, ensure_ascii=False, indent=2)
 
     # Compute top 10 genres
     top_10 = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]
