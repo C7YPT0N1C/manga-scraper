@@ -370,7 +370,6 @@ def during_gallery_download_hook(gallery_id):
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
-    log_clarification()
     
     # Use unified metadata extraction
     gallery_meta = return_gallery_metas(meta)
@@ -424,6 +423,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
     # Compute top 10 genres
     most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+    log_clarification()
+    log(f"Most Popular Genres: {most_popular}")
     details["genre"] = [g for g, count in most_popular]
 
     # Save updated details.json
