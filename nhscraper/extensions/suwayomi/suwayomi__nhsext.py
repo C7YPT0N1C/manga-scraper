@@ -3,14 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, subprocess, json, requests
-
-import os
-import shutil
-import subprocess
-import logging
-import urllib.request
-import tarfile
+import os, time, subprocess, shutil, urllib.request, tarfile, json, requests
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -21,7 +14,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
-#DEDICATED_DOWNLOAD_PATH = None
+#DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -215,26 +208,23 @@ def install_extension():
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
-        # Ensure extension install path and image download path exists.
+        # Ensure install path and download path exist
         os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
 
         tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
 
-        # Download tarball if it doesn't exist or overwrite
+        # Download tarball
         logger.info(f"Downloading Suwayomi Server tarball from {SUWAYOMI_TARBALL_URL}...")
         urllib.request.urlretrieve(SUWAYOMI_TARBALL_URL, tarball_path)
 
-        # Extract tarball
+        # Extract all contents into EXTENSION_INSTALL_PATH
         logger.info(f"Extracting tarball to {EXTENSION_INSTALL_PATH}...")
         with tarfile.open(tarball_path, "r:gz") as tar:
             tar.extractall(path=EXTENSION_INSTALL_PATH)
 
-        # Remove tarball after extraction
+        # Remove tarball
         os.remove(tarball_path)
-
-        # Ensure image download path exists
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
 
         # Create systemd service
         service_file = "/etc/systemd/system/suwayomi-server.service"
