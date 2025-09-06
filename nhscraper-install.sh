@@ -367,8 +367,10 @@ start_install() {
             print_links
             echo -e "\nInstallation complete!"
 
-            # Run nhentai-scraper help after installation (also initialises config, files, etc)
+            # Run nhentai-scraper commands after installation to initialise config, files, etc
             nhentai-scraper --help
+            hentai-scraper --install-extension skeleton
+            hentai-scraper --install-extension suwayomi
 
             exit 0
             ;;
