@@ -50,6 +50,7 @@ def parse_args():
 
     # Extension selection / management
     parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
+    parser.add_argument("--install-extension", type=str, help="Install an extension by name")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
 
     # Gallery selection
@@ -276,6 +277,10 @@ def main():
     # ------------------------------
     # Handle extension uninstallation (--extension automatically installs extension)
     # ------------------------------
+    if args.install_extension:
+        install_selected_extension(args.install_extension)
+        return
+    
     if args.uninstall_extension:
         uninstall_selected_extension(args.uninstall_extension)
         return
