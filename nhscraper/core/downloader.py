@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # nhscraper/downloader.py
 
-import os, time, random
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os, time, random, concurrent.futures
 from tqdm import tqdm
-from tqdm.contrib.concurrent import thread_map
 
 from nhscraper.core.config import *
 from nhscraper.core import database as db
@@ -49,7 +47,9 @@ def load_extension():
 # UTILITIES
 ####################################################################################################
 def build_gallery_path(meta, iteration: dict = None):
-    """Build the folder path for a gallery based on SUBFOLDER_STRUCTURE."""
+    """
+    Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
+    """
     gallery_metas = active_extension.return_gallery_metas(meta)
 
     if iteration:
@@ -88,7 +88,9 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
         log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
-    """Decide whether to download a gallery or skip it."""
+    """
+    Decide whether to download a gallery or skip it.
+    """
     if not meta:
         update_skipped_galleries(False, meta, "Not Meta.")
         return False
@@ -103,6 +105,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         update_skipped_galleries(False, meta, "No Pages.")
         return False
 
+    # Skip only if NOT in dry-run
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
@@ -158,24 +161,23 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, saf
         )
         for page, urls, path, _ in creator_tasks
     ]
-    for _ in as_completed(futures):
+    for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
 
 ####################################################################################################
 # CORE
 ####################################################################################################
-def process_galleries(gallery_ids):
-    """Process one or more galleries (usually just one)."""
+def process_galleries(gallery_ids, worker_id=0):
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        prefix = f"[Gallery {gallery_id}] "  # prefix for logs
+        prefix = f"[Worker {worker_id}] "  # prefix for logs
 
         if not dry_run:
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
-            logger.info(f"{prefix}[DRY-RUN] Would mark gallery as started.")
+            logger.info(f"{prefix}[DRY-RUN] Would mark gallery {gallery_id} as started.")
 
         gallery_attempts = 0
         max_gallery_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
@@ -185,12 +187,12 @@ def process_galleries(gallery_ids):
             try:
                 log_clarification()
                 active_extension.pre_gallery_download_hook(gallery_id)
-                logger.info(f"{prefix}Starting (Attempt {gallery_attempts}/{max_gallery_attempts})")
+                logger.info(f"{prefix}Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
-                    logger.warning(f"{prefix}Failed to fetch metadata.")
+                    logger.warning(f"{prefix}Failed to fetch metadata for Gallery: {gallery_id}")
                     if not dry_run and gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
@@ -237,13 +239,13 @@ def process_galleries(gallery_ids):
                     if not dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
-                        logger.info(f"{prefix}[DRY-RUN] Would mark as skipped.")
+                        logger.info(f"{prefix}[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
                     break
                 else:
                     total_images = sum(len(t[1]) for t in grouped_tasks)
-                    with ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                         desc = f"{'[DRY-RUN] ' if dry_run else ''}Gallery: {gallery_id}"
-                        with tqdm(total=total_images, desc=desc, unit="img", leave=True) as pbar:
+                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
                             for safe_creator_name, creator_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Creator: {safe_creator_name}")
                                 if not dry_run:
@@ -254,18 +256,18 @@ def process_galleries(gallery_ids):
                                         pbar.update(1)
 
                     if gallery_failed:
-                        logger.warning(f"{prefix}Encountered issues, retrying...")
+                        logger.warning(f"{prefix}Gallery {gallery_id}: encountered issues, retrying...")
                         continue
 
                     if not dry_run:
                         active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                         db.mark_gallery_completed(gallery_id)
-                    logger.info(f"{prefix}Completed.")
+                    logger.info(f"{prefix}Completed Gallery: {gallery_id}")
                     log_clarification()
                     break
 
             except Exception as e:
-                logger.error(f"{prefix}Error: {e}")
+                logger.error(f"{prefix}Error processing Gallery {gallery_id}: {e}")
                 if not dry_run and gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
@@ -291,14 +293,15 @@ def start_downloader(gallery_list=None):
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
-    # ✅ Use thread_map for global gallery bar
-    thread_map(
-        lambda gid: process_galleries([gid]),
-        gallery_ids,
-        max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
-        desc="Processing galleries",
-        unit="gallery"
-    )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
+        # one gallery per worker thread
+        futures = [
+            executor.submit(process_galleries, [gid], worker_id=i+1)
+            for i, gid in enumerate(gallery_ids)
+        ]
+        concurrent.futures.wait(futures)
+        
+        
 
     log_clarification()
     logger.info("All galleries processed.")
