@@ -60,7 +60,7 @@ def return_gallery_metas(meta):
     
     id = str(meta.get("id", "Unknown ID"))
     
-    full_title = f"({id}) [{title}]"
+    full_title = f"({id}) {title}"
     
     language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
@@ -428,13 +428,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Save updated details.json
     with open(details_file, "w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=2)
-
-# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
-def after_gallery_download_hook(meta: dict, gallery_id):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
-    #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():

@@ -261,9 +261,6 @@ def process_galleries(gallery_ids):
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
                     break
                 else:
-                    db.mark_gallery_completed(gallery_id)
-                    active_extension.after_gallery_download_hook(meta, gallery_id)
-
                     total_images = sum(len(t[1]) for t in grouped_tasks)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                         desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
