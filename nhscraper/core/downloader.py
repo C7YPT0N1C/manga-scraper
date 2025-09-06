@@ -6,7 +6,7 @@ from tqdm import tqdm
 from functools import partial
 
 from nhscraper.core.config import *
-from nhscraper.core import db
+from nhscraper.core import database as db
 from nhscraper.core.api import session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
@@ -259,6 +259,7 @@ def process_galleries(gallery_ids):
                 
                 # If should_download_gallery() says the gallery should be skipped.
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                    db.mark_gallery_skipped(gallery_id)
                     break
                 else:
                     total_images = sum(len(t[1]) for t in grouped_tasks)
