@@ -387,13 +387,18 @@ def clean_title(meta):
     # Remove all content inside [] brackets, including the brackets themselves
     title = re.sub(r"\[.*?\]", "", title)
 
-    # Remove Dodgy Symbols
-    REMOVE_DODGY_SYMBOLS = DODGY_SYMBOLS
-    for symbol in REMOVE_DODGY_SYMBOLS:
-        title = title.replace(symbol, "")
+    # Replace blacklisted symbols with underscores
+    for symbol in DODGY_SYMBOL_BLACKLIST:
+        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
 
-    # Collapse multiple spaces
-    title = " ".join(title.split())
+    # Collapse multiple underscores/spaces
+    title = re.sub(r"_+", "_", title)   # collapse consecutive underscores
+    title = " ".join(title.split())     # collapse consecutive spaces
+    title = title.strip(" _")           # trim leading/trailing underscores/spaces
+
+    # If title is empty after cleanup, fallback to safe placeholder
+    if not title:
+        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
 
     return safe_name(title)
 

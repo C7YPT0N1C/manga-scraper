@@ -143,7 +143,8 @@ DEFAULT_GALLERIES=""
 DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
 DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
-DODGY_SYMBOLS = ["→", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•"]
+DODGY_SYMBOL_BLACKLIST = ["↑", "↓", "→", "←", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•"]
+
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
