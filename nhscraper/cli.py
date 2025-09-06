@@ -112,8 +112,8 @@ def parse_args():
         choices=["english","japanese","pretty"],
         default=DEFAULT_TITLE_TYPE,
         help=(
-            f"What title type to use."
-            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning. (default: {DEFAULT_TITLE_TYPE})"
+            f"What title type to use. (default: {DEFAULT_TITLE_TYPE})"
+            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning."
         )
     )
 
@@ -121,7 +121,15 @@ def parse_args():
     parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
     parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads to use for image downloads (default: {DEFAULT_THREADS_IMAGES})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
-    parser.add_argument("--no-sleep", action="store_true", default=DEFAULT_NO_SLEEP, help=f"Skips dynamically sleeping between galleries. May result in hitting API limits. (default: {DEFAULT_USE_TOR})")
+    parser.add_argument(
+        "--no-sleep",
+        action="store_true",
+        default=DEFAULT_NO_SLEEP,
+        help=(
+            f"Skips dynamically sleeping between galleries. May result in hitting API limits. (default: {DEFAULT_USE_TOR})"
+            "For a large number of galleries, using this flag in conjunction to a lower thread count MAY result in faster downloads."
+        )
+    )
     
     # Download / runtime options
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
