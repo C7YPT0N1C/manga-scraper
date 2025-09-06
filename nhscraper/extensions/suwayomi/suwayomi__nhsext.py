@@ -346,22 +346,22 @@ def pre_run_hook(gallery_list):
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
-    log_clarification()
-    log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
     return gallery_list
 
 def pre_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
-    log_clarification()
-    log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
-    log_clarification()
-    log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after each completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
@@ -397,10 +397,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
     # Update title and description from unified metadata
     details["title"] = creator_name
+    details["author"] = creator_name
+    details["artist"] = creator_name
     
-    gallery_title = {creator_name}
+    gallery_title = gallery_meta["title"]
     gallery_id_str = gallery_meta["id"]
-    details["description"] = f"{creator_name} - {gallery_title} ({gallery_id_str})"
+    details["description"] = f"Latest Doujin: {creator_name} - {gallery_title} ({gallery_id_str})"
 
     # Update genre counts
     gallery_tags = meta.get("tags", [])
@@ -430,16 +432,16 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 def after_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
-    log_clarification()
-    log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
     
-    log_clarification()
-    log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
     log_clarification()
     remove_empty_directories(True)
