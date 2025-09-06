@@ -169,6 +169,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
+    
+    sort = "date" # MOVE TO CLI AT SOME POINT # TEST
+    sort_lower = sort.lower()
 
     # Homepage
     if query_lower == "homepage":
@@ -180,7 +183,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
-        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
     
     # Search queries
     if query_lower == "search":
