@@ -5,6 +5,13 @@
 
 import os, time, subprocess, json, requests
 
+import os
+import shutil
+import subprocess
+import logging
+import urllib.request
+import tarfile
+
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 
@@ -192,6 +199,10 @@ def post_run_hook(config, completed_galleries):
 ####################################################################################################################
 # CORE
 ####################################################################################################################
+# Change this if a newer release tarball is needed
+SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
+TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
+
 def install_extension():
     """
     Install the extension and ensure the dedicated image download path exists.
@@ -204,6 +215,28 @@ def install_extension():
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
+        # Ensure extension install path and image download path exists.
+        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+
+        tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
+
+        # Download tarball if it doesn't exist or overwrite
+        logger.info(f"Downloading Suwayomi Server tarball from {SUWAYOMI_TARBALL_URL}...")
+        urllib.request.urlretrieve(SUWAYOMI_TARBALL_URL, tarball_path)
+
+        # Extract tarball
+        logger.info(f"Extracting tarball to {EXTENSION_INSTALL_PATH}...")
+        with tarfile.open(tarball_path, "r:gz") as tar:
+            tar.extractall(path=EXTENSION_INSTALL_PATH)
+
+        # Remove tarball after extraction
+        os.remove(tarball_path)
+
+        # Ensure image download path exists
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+
+        # Create systemd service
         service_file = "/etc/systemd/system/suwayomi-server.service"
         service_content = f"""[Unit]
 Description=Suwayomi Server
@@ -225,7 +258,7 @@ WantedBy=multi-user.target
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
         logger.info("Suwayomi systemd service created and started")
-        log("\nSuwayomi Web: http://$IP:4567/")
+        log(f"\nSuwayomi Web: http://$IP:4567/")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
         
         # Ensure image download path exists.
@@ -241,16 +274,28 @@ def uninstall_extension():
     """
     global DEDICATED_DOWNLOAD_PATH
     global EXTENSION_INSTALL_PATH
-    
+
     try:
-        # Ensure image download path is removed.
+        # Stop and disable systemd service
+        subprocess.run(["systemctl", "stop", "suwayomi-server"], check=False)
+        subprocess.run(["systemctl", "disable", "suwayomi-server"], check=False)
+        service_file = "/etc/systemd/system/suwayomi-server.service"
+        if os.path.exists(service_file):
+            os.remove(service_file)
+        subprocess.run(["systemctl", "daemon-reload"], check=False)
+
+        # Remove extracted files
+        if os.path.exists(EXTENSION_INSTALL_PATH):
+            shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
+
+        # Remove image download path
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
-    
+            shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
+
+        logger.info(f"Extension {EXTENSION_NAME}: Uninstalled successfully")
+
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+        logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
 
 def update_extension_download_path():
     log_clarification()

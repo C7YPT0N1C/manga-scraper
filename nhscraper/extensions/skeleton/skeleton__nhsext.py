@@ -206,8 +206,10 @@ def install_extension():
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
-        # Ensure image download path exists.
+        # Ensure extension install path and image download path exists.
+        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:
@@ -221,7 +223,9 @@ def uninstall_extension():
     global EXTENSION_INSTALL_PATH
     
     try:
-        # Ensure image download path is removed.
+        # Ensure extension install path and image download path is removed.
+        if os.path.exists(EXTENSION_INSTALL_PATH):
+            os.rmdir(EXTENSION_INSTALL_PATH)
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
