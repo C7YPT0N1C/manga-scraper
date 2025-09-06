@@ -85,22 +85,10 @@ GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"  # Change $IP if needed
 def graphql_request(query: str, variables: dict = None):
     """
     Send a GraphQL request to the Suwayomi server.
-    
-    Args:
-        query (str): The GraphQL query or mutation.
-        variables (dict): Optional variables for the query.
-
-    Returns:
-        dict: Parsed JSON response from the server.
+    Returns the JSON response or None on error.
     """
-    headers = {
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "query": query,
-        "variables": variables or {},
-    }
+    headers = {"Content-Type": "application/json"}
+    payload = {"query": query, "variables": variables or {}}
 
     try:
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
@@ -110,26 +98,33 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"GraphQL request failed: {e}")
         return None
 
-# Example usage to update local source path
-def update_local_source_path(path: str):
+def update_local_source_path(local_path: str):
     """
-    Update the Suwayomi 'local source path' setting via GraphQL.
+    Update the Suwayomi 'local source path' in settings.
     """
     query = """
-    mutation UpdateSettings($localPath: String!) {
-        updateSettings(input: {localSourcePath: $localPath}) {
+    mutation UpdateSettings($settings: SetSettingsInput!) {
+        setSettings(input: $settings) {
             settings {
                 localSourcePath
             }
         }
     }
     """
-    variables = {"localPath": path}
+
+    variables = {
+        "settings": {
+            "localSourcePath": local_path
+        }
+    }
+
     result = graphql_request(query, variables)
-    if result:
-        logger.info(f"Updated local source path to: {path}")
+    if result and "data" in result and "setSettings" in result["data"]:
+        logger.info(f"Successfully updated local source path to: {local_path}")
+        return True
     else:
-        logger.error("Failed to update local source path via GraphQL.")
+        logger.error(f"Failed to update local source path. Response: {result}")
+        return False
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
