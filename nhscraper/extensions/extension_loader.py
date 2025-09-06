@@ -99,7 +99,7 @@ def _reload_extensions():
 def sparse_clone(extension_name: str, url: str):
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
-    # Initialize empty repo
+    # Initialise empty repo
     subprocess.run(["git", "init", ext_folder], check=True)
     subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
     subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
@@ -179,7 +179,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     def sparse_clone(extension_name: str, url: str):
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
-        # Initialize empty repo
+        # Initialise empty repo
         subprocess.run(["git", "init", ext_folder], check=True)
         subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
         subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
