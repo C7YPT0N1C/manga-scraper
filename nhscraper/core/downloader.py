@@ -175,7 +175,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Filtered languages: {blocked_langs}"
         )
         update_skipped_galleries(
-            f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})",
+            f"Contains filtered tags: {blocked_tags}, filtered languages: {blocked_langs}",
             False
         )
         return False

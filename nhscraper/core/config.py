@@ -142,7 +142,7 @@ DEFAULT_GALLERIES=""
 # Filters
 DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
 DEFAULT_LANGUAGE="english"
-DEFAULT_TITLE_TYPE="english"
+DEFAULT_TITLE_TYPE="pretty"
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
