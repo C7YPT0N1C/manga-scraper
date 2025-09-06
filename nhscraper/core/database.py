@@ -2,7 +2,7 @@
 # nhscraper/core/db.py
 
 import os, sqlite3, threading
-import datetime
+from datetime import datetime, timezone
 
 from nhscraper.core.config import *
 
@@ -49,7 +49,7 @@ def mark_gallery_started(gallery_id, download_location=None, extension_used=None
 
 def mark_gallery_skipped(gallery_id):
     init_db()
-    now = datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -61,7 +61,7 @@ def mark_gallery_skipped(gallery_id):
 
 def mark_gallery_failed(gallery_id):
     init_db()
-    now = datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -73,7 +73,7 @@ def mark_gallery_failed(gallery_id):
 
 def mark_gallery_completed(gallery_id):
     init_db()
-    now = datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
