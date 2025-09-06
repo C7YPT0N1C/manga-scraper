@@ -373,7 +373,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     
-    if not dry_run:
+    if dry_run == False:
         # Use unified metadata extraction
         gallery_meta = return_gallery_metas(meta)
 
