@@ -271,7 +271,7 @@ def update_local_source_path(local_path: str):
 ####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook(meta: dict, config, gallery_list):
+def pre_run_hook(gallery_list):
     update_extension_download_path()
     
     log_clarification()
@@ -280,7 +280,7 @@ def pre_run_hook(meta: dict, config, gallery_list):
     log("") # <-------- ADD STUFF IN PLACE OF THIS
     return gallery_list
 
-def pre_gallery_download_hook(meta: dict, config, gallery_id):
+def pre_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
     log_clarification()
@@ -357,7 +357,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     return False
 
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
-def during_gallery_download_hook(meta: dict, gallery_id):
+def during_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
     log_clarification()
@@ -421,7 +421,7 @@ def after_gallery_download_hook(meta: dict, gallery_id):
         json.dump(details, f, ensure_ascii=False, indent=2)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
-def post_run_hook(meta: dict):
+def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
     

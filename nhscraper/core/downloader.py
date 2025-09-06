@@ -207,7 +207,7 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 log_clarification()
-                active_extension.pre_gallery_download_hook(meta, config, gallery_id)
+                active_extension.pre_gallery_download_hook(gallery_id)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
@@ -220,7 +220,7 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 gallery_failed = False
-                active_extension.during_gallery_download_hook(meta, config, gallery_id)
+                active_extension.during_gallery_download_hook(gallery_id)
 
                 gallery_metas = active_extension.return_gallery_metas(meta) # TEST
                 creators = gallery_metas["creator"]
@@ -297,7 +297,7 @@ def start_downloader():
     load_extension() # Load extension variables, etc
 
     gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
-    active_extension.pre_run_hook(meta, config, gallery_ids)
+    active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -315,4 +315,4 @@ def start_downloader():
     logger.info("All galleries processed.")
     update_skipped_galleries("", True)
     
-    active_extension.post_run_hook(meta, config, gallery_ids)
+    active_extension.post_run_hook()
