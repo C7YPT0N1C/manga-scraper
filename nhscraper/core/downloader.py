@@ -176,12 +176,10 @@ def process_galleries(gallery_ids, worker_id=0):
 
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        prefix = f"[Worker {worker_id}] "  # prefix for logs
-
         if not dry_run:
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
-            logger.info(f"{prefix}[DRY-RUN] Would mark gallery {gallery_id} as started.")
+            logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as started.")
 
         gallery_attempts = 0
         max_gallery_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
@@ -191,12 +189,12 @@ def process_galleries(gallery_ids, worker_id=0):
             try:
                 log_clarification()
                 active_extension.pre_gallery_download_hook(gallery_id)
-                logger.info(f"{prefix}Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
+                logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
-                    logger.warning(f"{prefix}Failed to fetch metadata for Gallery: {gallery_id}")
+                    logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
                     if not dry_run and gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
@@ -216,7 +214,7 @@ def process_galleries(gallery_ids, worker_id=0):
 
                     doujin_folder = build_gallery_path(meta, iteration)
                     if dry_run:
-                        log(f"{prefix}[DRY-RUN] Would create folder for {creator}: {doujin_folder}")
+                        log(f"[DRY-RUN] Would create folder for {creator}: {doujin_folder}")
                     else:
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -225,7 +223,7 @@ def process_galleries(gallery_ids, worker_id=0):
                         page = i + 1
                         img_urls = fetch_image_urls(meta, page)
                         if not img_urls:
-                            logger.warning(f"{prefix}Skipping Page {page} for {creator}: Failed to get URLs")
+                            logger.warning(f"Skipping Page {page} for {creator}: Failed to get URLs")
                             update_skipped_galleries(False, meta, "Failed to get URLs.")
                             gallery_failed = True
                             continue
@@ -243,7 +241,7 @@ def process_galleries(gallery_ids, worker_id=0):
                     if not dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
-                        logger.info(f"{prefix}[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
+                        logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
                     break
                 else:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
@@ -255,18 +253,18 @@ def process_galleries(gallery_ids, worker_id=0):
                                     time.sleep(0.01)  # fake delay
 
                     if gallery_failed:
-                        logger.warning(f"{prefix}Gallery {gallery_id}: encountered issues, retrying...")
+                        logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
                         continue
 
                     if not dry_run:
                         active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                         db.mark_gallery_completed(gallery_id)
-                    logger.info(f"{prefix}Completed Gallery: {gallery_id}")
+                    logger.info(f"Completed Gallery: {gallery_id}")
                     log_clarification()
                     break
 
             except Exception as e:
-                logger.error(f"{prefix}Error processing Gallery {gallery_id}: {e}")
+                logger.error(f"Error processing Gallery {gallery_id}: {e}")
                 if not dry_run and gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
