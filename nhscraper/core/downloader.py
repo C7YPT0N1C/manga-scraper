@@ -183,13 +183,20 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     return True
 
 def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
-    futures = [
-        executor.submit(
-            active_extension.download_images_hook,
-            gallery_id, page, urls, path, session, pbar, safe_creator_name
-        )
-        for page, urls, path, _ in creator_tasks
-    ]
+    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+    
+    futures = []
+    for page, urls, path, _ in creator_tasks:
+        if dry_run:
+            log(f"[DRY RUN] Would download Gallery {gallery_id}, Page {page}, Path: {path}")
+        else:
+            futures.append(
+                executor.submit(
+                    active_extension.download_images_hook,
+                    gallery_id, page, urls, path, session, pbar, safe_creator_name
+                )
+            )
+
     for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
 
