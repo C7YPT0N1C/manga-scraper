@@ -424,7 +424,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Compute top 10 genres
     most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
     log_clarification()
-    log(f"Most Popular Genres: {most_popular}")
+    log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
     details["genre"] = [g for g, count in most_popular]
 
     # Save updated details.json
