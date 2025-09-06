@@ -398,7 +398,8 @@ def after_gallery_download_hook(meta: dict):
     details["description"] = f"Latest Doujinshi: {gallery_title}"
 
     # Update genre counts
-    gallery_genres = meta.get("tags", [])  # list of strings
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [tag["name"] for tag in gallery_tags if "name" in tag]
     if os.path.exists(top_genres_file):
         with open(top_genres_file, "r", encoding="utf-8") as f:
             genre_counts = json.load(f)
