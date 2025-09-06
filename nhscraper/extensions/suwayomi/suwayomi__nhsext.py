@@ -14,6 +14,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
+DEDICATED_DOWNLOAD_PATH = None
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
