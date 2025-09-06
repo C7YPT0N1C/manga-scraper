@@ -379,92 +379,88 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     
-    if dry_run == False:
-        # Use unified metadata extraction
-        gallery_meta = return_gallery_metas(meta)
+    # Use unified metadata extraction
+    gallery_meta = return_gallery_metas(meta)
 
-        # Extract all creators (artists/groups) # NEW
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        if not creators:
-            return  # No creators → nothing to update
+    # Extract all creators (artists/groups) # NEW
+    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    if not creators:
+        return  # No creators → nothing to update
 
-        gallery_title = gallery_meta["title"]
+    gallery_title = gallery_meta["title"]
 
-        # Extract genres (exclude artist, group, language, category)
-        gallery_tags = meta.get("tags", [])
-        gallery_genres = [
-            tag["name"] for tag in gallery_tags
-            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-        ]
+    # Extract genres (exclude artist, group, language, category)
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
 
-        # Load global file that tracks per-creator genre counts
-        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        if os.path.exists(top_genres_file):
-            with open(top_genres_file, "r", encoding="utf-8") as f:
-                all_genre_counts = json.load(f)
-        else:
-            all_genre_counts = {}
-
-        # Process each creator # NEW
-        for creator_name in creators:
-            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            details_file = os.path.join(creator_folder, "details.json")
-            os.makedirs(creator_folder, exist_ok=True)
-
-            # Load existing details.json or create default
-            if os.path.exists(details_file):
-                with open(details_file, "r", encoding="utf-8") as f:
-                    details = json.load(f)
-            else:
-                details = {
-                    "title": "",
-                    "author": creator_name,
-                    "artist": creator_name,
-                    "description": "",
-                    "genre": [],
-                    "status": "1",
-                    "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-                }
-
-            # Update title/author/artist
-            details["title"] = creator_name
-            details["author"] = creator_name
-            details["artist"] = creator_name
-            details["description"] = f"Latest Doujin: {gallery_title}"
-
-            # Ensure this creator has a dict in global genre file
-            if creator_name not in all_genre_counts:
-                all_genre_counts[creator_name] = {}
-
-            creator_counts = all_genre_counts[creator_name]
-
-            # Update counts for this creator
-            for genre in gallery_genres:
-                creator_counts[genre] = creator_counts.get(genre, 0) + 1
-
-            # Compute top 15 for this creator
-            most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_DETAILS_JSON]
-            log_clarification()
-            log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
-            details["genre"] = [g for g, count in most_popular]
-
-            # Enforce cap only when saving
-            if len(creator_counts) > MAX_GENRES_PER_CREATOR:
-                creator_counts = dict(
-                    sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_CREATOR]
-                )
-                all_genre_counts[creator_name] = creator_counts
-
-            # Save updated details.json
-            with open(details_file, "w", encoding="utf-8") as f:
-                json.dump(details, f, ensure_ascii=False, indent=2)
-
-            # Save updated most_popular_genres.json (after all creators are updated)
-            with open(top_genres_file, "w", encoding="utf-8") as f:
-                json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
-        
+    # Load global file that tracks per-creator genre counts
+    top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
+    if os.path.exists(top_genres_file):
+        with open(top_genres_file, "r", encoding="utf-8") as f:
+            all_genre_counts = json.load(f)
     else:
-        log(f"[DRY RUN]: Would create details.json for {creator_name}")
+        all_genre_counts = {}
+
+    # Process each creator # NEW
+    for creator_name in creators:
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        details_file = os.path.join(creator_folder, "details.json")
+        os.makedirs(creator_folder, exist_ok=True)
+
+        # Load existing details.json or create default
+        if os.path.exists(details_file):
+            with open(details_file, "r", encoding="utf-8") as f:
+                details = json.load(f)
+        else:
+            details = {
+                "title": "",
+                "author": creator_name,
+                "artist": creator_name,
+                "description": "",
+                "genre": [],
+                "status": "1",
+                "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+            }
+
+        # Update title/author/artist
+        details["title"] = creator_name
+        details["author"] = creator_name
+        details["artist"] = creator_name
+        details["description"] = f"Latest Doujin: {gallery_title}"
+
+        # Ensure this creator has a dict in global genre file
+        if creator_name not in all_genre_counts:
+            all_genre_counts[creator_name] = {}
+
+        creator_counts = all_genre_counts[creator_name]
+
+        # Update counts for this creator
+        for genre in gallery_genres:
+            creator_counts[genre] = creator_counts.get(genre, 0) + 1
+
+        # Compute top 15 for this creator
+        most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_DETAILS_JSON]
+        log_clarification()
+        log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
+        details["genre"] = [g for g, count in most_popular]
+
+        # Enforce cap only when saving
+        if len(creator_counts) > MAX_GENRES_PER_CREATOR:
+            creator_counts = dict(
+                sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_CREATOR]
+            )
+            all_genre_counts[creator_name] = creator_counts
+
+        # Save updated details.json
+        with open(details_file, "w", encoding="utf-8") as f:
+            json.dump(details, f, ensure_ascii=False, indent=2)
+
+        # Save updated most_popular_genres.json (after all creators are updated)
+        with open(top_genres_file, "w", encoding="utf-8") as f:
+            json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():

@@ -19,6 +19,7 @@ gallery_threads = 2
 image_threads = 10
 meta = None
 skipped_galleries = []
+dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -108,7 +109,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         update_skipped_galleries("Not Meta.", False)
         return False
 
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta, iteration)  # use iteration if provided
 
@@ -183,8 +183,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     return True
 
 def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-    
     futures = []
     for page, urls, path, _ in creator_tasks:
         if dry_run:
@@ -286,10 +284,12 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
                         logger.warning(f"[Worker {worker_id}] Gallery: {gallery_id}: Encountered download issues, retrying...")
                         continue
 
-                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-                    db.mark_gallery_completed(gallery_id)
-                    logger.info(f"[Worker {worker_id}] Completed Gallery: {gallery_id}")
-                    log_clarification()
+                    if not dry_run:
+                        active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                        db.mark_gallery_completed(gallery_id)
+                        logger.info(f"[Worker {worker_id}] Completed Gallery: {gallery_id}")
+                        log_clarification()
+                                          
                     break
 
             except Exception as e:
