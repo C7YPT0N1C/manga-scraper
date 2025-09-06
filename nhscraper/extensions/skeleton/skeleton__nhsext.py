@@ -36,6 +36,8 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
+dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+
 ####################################################################################################################
 # CORE
 ####################################################################################################################
@@ -189,7 +191,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
+    if dry_run:
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")

@@ -34,6 +34,8 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
+dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+
 ####################################################################################################################
 # CORE
 ####################################################################################################################
@@ -295,7 +297,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if config.get("DRY_RUN", DEFAULT_DRY_RUN):
+    if dry_run:
         logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
@@ -371,69 +373,70 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     
-    # Use unified metadata extraction
-    gallery_meta = return_gallery_metas(meta)
+    if not dry_run:
+        # Use unified metadata extraction
+        gallery_meta = return_gallery_metas(meta)
 
-    # Use first creator (artist/group), fallback handled in return_gallery_metas
-    creator_name = safe_name(gallery_meta["creator"][0])
-    creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        # Use first creator (artist/group), fallback handled in return_gallery_metas
+        creator_name = safe_name(gallery_meta["creator"][0])
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
 
-    details_file = os.path.join(creator_folder, "details.json")
-    top_genres_file = os.path.join(creator_folder, "most_popular_genres.json")
-    os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
+        details_file = os.path.join(creator_folder, "details.json")
+        top_genres_file = os.path.join(creator_folder, "most_popular_genres.json")
+        os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
 
-    # Load existing details.json or create default
-    if os.path.exists(details_file):
-        with open(details_file, "r", encoding="utf-8") as f:
-            details = json.load(f)
-    else:
-        details = {
-            "title": "",
-            "author": creator_name,
-            "artist": creator_name,
-            "description": "",
-            "genre": [],
-            "status": "1",
-            "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-        }
+        # Load existing details.json or create default
+        if os.path.exists(details_file):
+            with open(details_file, "r", encoding="utf-8") as f:
+                details = json.load(f)
+        else:
+            details = {
+                "title": "",
+                "author": creator_name,
+                "artist": creator_name,
+                "description": "",
+                "genre": [],
+                "status": "1",
+                "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+            }
 
-    # Update title and description from unified metadata
-    details["title"] = creator_name
-    details["author"] = creator_name
-    details["artist"] = creator_name
-    
-    gallery_title = gallery_meta["title"]
-    details["description"] = f"Latest Doujin: {gallery_title}"
+        # Update title and description from unified metadata
+        details["title"] = creator_name
+        details["author"] = creator_name
+        details["artist"] = creator_name
+        
+        gallery_title = gallery_meta["title"]
+        details["description"] = f"Latest Doujin: {gallery_title}"
 
-    # Update genre counts (exclude artist, group, language, category)
-    gallery_tags = meta.get("tags", [])
-    gallery_genres = [
-        tag["name"] for tag in gallery_tags
-        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-    ]
+        # Update genre counts (exclude artist, group, language, category)
+        gallery_tags = meta.get("tags", [])
+        gallery_genres = [
+            tag["name"] for tag in gallery_tags
+            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+        ]
 
-    if os.path.exists(top_genres_file):
-        with open(top_genres_file, "r", encoding="utf-8") as f:
-            genre_counts = json.load(f)
-    else:
-        genre_counts = {}
+        if os.path.exists(top_genres_file):
+            with open(top_genres_file, "r", encoding="utf-8") as f:
+                genre_counts = json.load(f)
+        else:
+            genre_counts = {}
 
-    for genre in gallery_genres:
-        genre_counts[genre] = genre_counts.get(genre, 0) + 1
-    
-    # Save updated most_popular_genres.json
-    with open(top_genres_file, "w", encoding="utf-8") as f:
-        json.dump(genre_counts, f, ensure_ascii=False, indent=2)
+        for genre in gallery_genres:
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+        
+        # Save updated most_popular_genres.json
+        with open(top_genres_file, "w", encoding="utf-8") as f:
+            json.dump(genre_counts, f, ensure_ascii=False, indent=2)
 
-    # Compute top 10 genres
-    most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
-    log_clarification()
-    log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
-    details["genre"] = [g for g, count in most_popular]
+        # Compute top 10 genres
+        most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+        log_clarification()
+        log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
+        details["genre"] = [g for g, count in most_popular]
 
-    # Save updated details.json
-    with open(details_file, "w", encoding="utf-8") as f:
-        json.dump(details, f, ensure_ascii=False, indent=2)
+        # Save updated details.json
+        with open(details_file, "w", encoding="utf-8") as f:
+            json.dump(details, f, ensure_ascii=False, indent=2)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
