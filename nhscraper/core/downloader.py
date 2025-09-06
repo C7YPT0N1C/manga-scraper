@@ -204,7 +204,7 @@ def process_galleries(gallery_ids, worker_id=0, session=None):
     global meta
     
     if session is None:
-        session = build_session()  # fallback
+        session = build_session(worker_id)  # fallback
     
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")

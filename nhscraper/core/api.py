@@ -15,7 +15,7 @@ from nhscraper.core.config import *
 ################################################################################################################
 session = None
 
-def session_builder():
+def session_builder(worker_id):
     log_clarification()
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.")
@@ -33,7 +33,7 @@ def session_builder():
         "Referer": "https://nhentai.net/",
     })
     
-    log(f"Built HTTP session with cloudscraper")
+    log(f"Built HTTP session with cloudscraper for Worker {worker_id}")
     
     if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
@@ -44,13 +44,15 @@ def session_builder():
     
     return s
 
-def build_session():
+def build_session(worker_id):
     global session
     
     # Ensure session is ready
     # Uses cloudscraper session by default.
     if session is None:
-        session = session_builder()
+        session = session_builder(worker_id)
+    
+    return session
         
 ################################################################################################################
 # GLOBAL VARIABLES
