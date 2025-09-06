@@ -16,7 +16,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_INSTALL_PATH = "" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
-DEDICATED_DOWNLOAD_PATH = None
+#DEDICATED_DOWNLOAD_PATH = None
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -198,6 +198,7 @@ def install_extension():
     """
     Install the extension and ensure the dedicated image download path exists.
     """
+    global DEDICATED_DOWNLOAD_PATH
     global EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
@@ -217,6 +218,7 @@ def uninstall_extension():
     Remove the extension and related paths.
     """
     global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
     
     try:
         # Ensure image download path is removed.
