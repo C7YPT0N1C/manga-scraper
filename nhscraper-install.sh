@@ -365,6 +365,10 @@ start_install() {
             create_systemd_services
             print_links
             echo -e "\nInstallation complete!"
+
+            # Run nhentai-scraper help after installation (also initialises config, files, etc)
+            nhentai-scraper --help
+
             exit 0
             ;;
         *)
