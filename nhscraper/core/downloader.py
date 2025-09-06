@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import database as db
-from nhscraper.core.api import session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import build_session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
@@ -193,8 +193,11 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, saf
     for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
 
-def process_galleries(gallery_ids, worker_id=0):
+def process_galleries(gallery_ids, worker_id=0, session=None):
     global meta
+    
+    if session is None:
+        session = build_session()  # fallback
     
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
