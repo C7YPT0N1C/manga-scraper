@@ -372,8 +372,8 @@ def during_gallery_download_hook(gallery_id):
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
-    
-    if dry_run == False:
+
+    if not dry_run:
         # Use unified metadata extraction
         gallery_meta = return_gallery_metas(meta)
 
@@ -382,8 +382,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
 
         details_file = os.path.join(creator_folder, "details.json")
-        top_genres_file = os.path.join(creator_folder, "most_popular_genres.json")
-        os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
+        os.makedirs(creator_folder, exist_ok=True)
 
         # Load existing details.json or create default
         if os.path.exists(details_file):
@@ -404,35 +403,26 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         details["title"] = creator_name
         details["author"] = creator_name
         details["artist"] = creator_name
-        
+
         gallery_title = gallery_meta["title"]
         details["description"] = f"Latest Doujin: {gallery_title}"
 
-        # Update genre counts (exclude artist, group, language, category)
+        # Extract new genres (exclude artist, group, language, category)
         gallery_tags = meta.get("tags", [])
         gallery_genres = [
             tag["name"] for tag in gallery_tags
             if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
         ]
 
-        if os.path.exists(top_genres_file):
-            with open(top_genres_file, "r", encoding="utf-8") as f:
-                genre_counts = json.load(f)
-        else:
-            genre_counts = {}
+        # Merge new genres with existing ones
+        existing_genres = set(details.get("genre", []))
+        updated_genres = existing_genres.union(gallery_genres)
 
-        for genre in gallery_genres:
-            genre_counts[genre] = genre_counts.get(genre, 0) + 1
-        
-        # Save updated most_popular_genres.json
-        with open(top_genres_file, "w", encoding="utf-8") as f:
-            json.dump(genre_counts, f, ensure_ascii=False, indent=2)
+        # Limit to top N (latest genres get priority if overlap)
+        details["genre"] = sorted(updated_genres)[:15]
 
-        # Compute top 10 genres
-        most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
         log_clarification()
-        log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
-        details["genre"] = [g for g, count in most_popular]
+        log(f"Updated Genres for {creator_name}:\n{details['genre']}")
 
         # Save updated details.json
         with open(details_file, "w", encoding="utf-8") as f:
