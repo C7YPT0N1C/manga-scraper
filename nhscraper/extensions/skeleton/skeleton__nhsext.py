@@ -14,6 +14,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
+EXTENSION_INSTALL_PATH = "" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
@@ -194,27 +195,35 @@ def post_run_hook(config, completed_galleries):
 ####################################################################################################################
 def install_extension():
     """
-    Install the extension and ensure the dedicated download path exists.
+    Install the extension and ensure the dedicated image download path exists.
     """
-    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
+        # Ensure image download path exists.
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
 
 def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
     global DEDICATED_DOWNLOAD_PATH
+    
     try:
+        # Ensure image download path is removed.
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
         logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+    
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
 

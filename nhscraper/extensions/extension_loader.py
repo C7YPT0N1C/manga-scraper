@@ -301,8 +301,8 @@ def get_selected_extension(name: str = "skeleton"):
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
-            if hasattr(ext, "install_extension"):
-                ext.install_extension()
+            #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary # TEST
+            #    ext.install_extension()
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
             log_clarification()

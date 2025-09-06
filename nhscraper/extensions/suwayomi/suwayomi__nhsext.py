@@ -12,6 +12,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
+EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
@@ -192,29 +193,78 @@ def post_run_hook(config, completed_galleries):
 ####################################################################################################################
 def install_extension():
     """
-    Install the extension and ensure the dedicated download path exists.
+    Install the extension and ensure the dedicated image download path exists.
     """
-    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
     try:
+        service_file = "/etc/systemd/system/suwayomi-server.service"
+        service_content = f"""[Unit]
+Description=Suwayomi Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory={EXTENSION_INSTALL_PATH}
+ExecStart=/bin/bash ./suwayomi-server.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+        with open(service_file, "w") as f:
+            f.write(service_content)
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
+        logger.info("Suwayomi systemd service created and started")
+        log("\nSuwayomi Web: http://$IP:4567/")
+        log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
+        
+        # Ensure image download path exists.
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
 
 def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
     global DEDICATED_DOWNLOAD_PATH
+    
     try:
+        # Ensure image download path is removed.
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
         logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+    
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def update_extension_download_path():
     log_clarification()
