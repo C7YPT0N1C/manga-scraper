@@ -9,7 +9,7 @@ from dotenv import load_dotenv, set_key
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = "./logs"
+LOG_DIR = "/opt/nhentai-scraper/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log
