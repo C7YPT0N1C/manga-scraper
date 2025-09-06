@@ -259,28 +259,29 @@ def process_galleries(gallery_ids):
                 
                 # If should_download_gallery() says the gallery should be skipped.
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                    break
+                else:
                     db.mark_gallery_completed(gallery_id)
                     active_extension.after_gallery_download_hook(meta, gallery_id)
+
+                    total_images = sum(len(t[1]) for t in grouped_tasks)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                        desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
+
+                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
+                            for safe_creator_name, creator_tasks in grouped_tasks:
+                                pbar.set_postfix_str(f"Creator: {safe_creator_name}")
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
+
+                    if gallery_failed:
+                        logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
+                        continue
+
+                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    db.mark_gallery_completed(gallery_id)
+                    logger.info(f"Completed Gallery: {gallery_id}")
+                    log_clarification()
                     break
-
-                total_images = sum(len(t[1]) for t in grouped_tasks)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
-
-                    with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
-                        for safe_creator_name, creator_tasks in grouped_tasks:
-                            pbar.set_postfix_str(f"Creator: {safe_creator_name}")
-                            submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
-
-                if gallery_failed:
-                    logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
-                    continue
-
-                active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-                db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
-                break
 
             except Exception as e:
                 logger.error(f"Error processing Gallery: {gallery_id}: {e}")
