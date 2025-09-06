@@ -459,9 +459,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             with open(details_file, "w", encoding="utf-8") as f:
                 json.dump(details, f, ensure_ascii=False, indent=2)
 
-        # Save updated most_popular_genres.json (after all creators are updated)
-        with open(top_genres_file, "w", encoding="utf-8") as f:
-            json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
+            # Save updated most_popular_genres.json (after all creators are updated)
+            with open(top_genres_file, "w", encoding="utf-8") as f:
+                json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
+        
+    else:
+        log(f"[DRY RUN]: Would create details.json for {creator_name}")
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
