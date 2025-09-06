@@ -228,7 +228,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         resp = None
                         break
                     wait = dynamic_sleep("api", attempt)
-                    logger.warning(f"Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
+                    logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
                     time.sleep(wait)
 
             if resp is None:
