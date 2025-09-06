@@ -308,7 +308,8 @@ def start_downloader():
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
-        futures = [executor.submit(process_galleries, [gid]) for gid in gallery_ids]
+        futures = [executor.submit(process_galleries, gallery_ids)] # Run each gallery thread in serial
+        #futures = [executor.submit(process_galleries, [gid]) for gid in gallery_ids] # Run each gallery thread in parallel
         concurrent.futures.wait(futures)
 
     log_clarification()
