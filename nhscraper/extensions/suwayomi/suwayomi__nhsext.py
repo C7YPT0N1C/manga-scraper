@@ -403,7 +403,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     details["artist"] = creator_name
     
     gallery_title = gallery_meta["title"]
-    details["description"] = f"Latest Doujin: {creator_name} - {gallery_title}"
+    details["description"] = f"Latest Doujin: {gallery_title}"
 
     # Update genre counts (exclude artist, group, language, category)
     gallery_tags = meta.get("tags", [])
@@ -420,6 +420,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
     for genre in gallery_genres:
         genre_counts[genre] = genre_counts.get(genre, 0) + 1
+    
+    # Save updated most_popular_genres.json
+    with open(top_genres_file, "w", encoding="utf-8") as f:
+        json.dump(genre_counts, f, ensure_ascii=False, indent=2)
 
     # Compute top 10 genres
     most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
