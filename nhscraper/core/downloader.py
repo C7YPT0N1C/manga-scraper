@@ -166,7 +166,6 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, saf
 ####################################################################################################
 def process_galleries(gallery_ids):
     skipped_galleries_local = []
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
@@ -176,9 +175,7 @@ def process_galleries(gallery_ids):
         for attempt in range(1, max_gallery_attempts + 1):
             try:
                 log_clarification()
-                if not dry_run:
-                    active_extension.pre_gallery_download_hook(gallery_id)
-
+                active_extension.pre_gallery_download_hook(gallery_id)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {attempt}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
@@ -191,9 +188,7 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 gallery_failed = False
-
-                if not dry_run:
-                    active_extension.during_gallery_download_hook(gallery_id)
+                active_extension.during_gallery_download_hook(gallery_id)
 
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
@@ -205,7 +200,7 @@ def process_galleries(gallery_ids):
                     safe_creator_name = safe_name(creator)
                     doujin_folder = build_gallery_path(meta, iteration)
                     log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
-                    if not dry_run:
+                    if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
                     creator_tasks = []
@@ -232,20 +227,17 @@ def process_galleries(gallery_ids):
                 else:
                     total_images = sum(len(t[1]) for t in grouped_tasks)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                        desc = f"{'[DRY-RUN] ' if dry_run else ''}Gallery: {gallery_id}"
+                        desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
                         with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
                             for safe_creator_name, creator_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Creator: {safe_creator_name}")
-                                if not dry_run:
-                                    submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
 
                     if gallery_failed:
                         logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
                         continue
 
-                    if not dry_run:
-                        active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-
+                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
                     logger.info(f"Completed Gallery: {gallery_id}")
                     log_clarification()
@@ -268,11 +260,9 @@ def start_downloader(gallery_list=None):
     log("Downloader: Debugging Started.")
 
     load_extension()
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
-    if not dry_run:
-        active_extension.pre_run_hook(gallery_ids)
+    active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -293,5 +283,4 @@ def start_downloader(gallery_list=None):
     logger.info("All galleries processed.")
     update_skipped_galleries(True, all_skipped)
 
-    if not dry_run:
-        active_extension.post_run_hook()
+    active_extension.post_run_hook()
