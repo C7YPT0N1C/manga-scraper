@@ -366,7 +366,7 @@ def during_gallery_download_hook(gallery_id):
 # Hook for functionality after each completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     log_clarification()
     
     # Use unified metadata extraction
@@ -396,9 +396,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         }
 
     # Update title and description from unified metadata
-    gallery_title = gallery_meta["title"]
+    details["title"] = creator_name
+    
+    gallery_title = {creator_name}
     gallery_id_str = gallery_meta["id"]
-    details["title"] = gallery_title
     details["description"] = f"{creator_name} - {gallery_title} ({gallery_id_str})"
 
     # Update genre counts
