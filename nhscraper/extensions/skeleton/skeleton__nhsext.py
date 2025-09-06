@@ -14,7 +14,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 # Global variables
 ####################################################################################################################
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
-EXTENSION_INSTALL_PATH = "" # Use this if extension installs external programs (like Suwayomi-Server)
+EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 #DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
 
