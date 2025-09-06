@@ -155,6 +155,22 @@ def load_installed_extensions():
 # ------------------------------
 # Install / Uninstall Extension
 # ------------------------------
+def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
+    """
+    Compares semantic version strings (e.g., "1.2.3").
+    Returns True if remote_version > local_version.
+    """
+    def parse(v):
+        return [int(x) for x in v.split(".") if x.isdigit()]
+    
+    lv = parse(local_version or "0.0.0")
+    rv = parse(remote_version or "0.0.0")
+    # Pad shorter versions with zeros
+    length = max(len(lv), len(rv))
+    lv += [0] * (length - len(lv))
+    rv += [0] * (length - len(rv))
+    return rv > lv
+
 def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
@@ -168,8 +184,24 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     if reinstall and os.path.exists(ext_folder):
         shutil.rmtree(ext_folder)
 
-    if ext_entry.get("installed", False) and not reinstall:
-        logger.info(f"Extension '{extension_name}': Already installed")
+    # Determine if we should update based on remote version
+    update_needed = False
+    local_version = ext_entry.get("version")  # Version in local manifest
+    remote_manifest = fetch_remote_manifest()
+    remote_entry = next((e for e in remote_manifest.get("extensions", []) if e["name"] == extension_name), {})
+    remote_version = remote_entry.get("version")
+
+    if ext_entry.get("installed", False):
+        if remote_version and is_remote_version_newer(local_version, remote_version):
+            logger.info(f"Extension '{extension_name}': Remote version {remote_version} is newer than local {local_version}, updating...")
+            update_needed = True
+        elif reinstall:
+            update_needed = True
+    else:
+        update_needed = True  # Not installed, must install
+
+    if not update_needed:
+        logger.info(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
         return
 
     repo_url = ext_entry.get("repo_url", "")
