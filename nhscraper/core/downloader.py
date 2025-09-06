@@ -153,16 +153,20 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     return True
 
-def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
+def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name):
+    """
+    Submit download tasks for a single creator's pages.
+    """
     futures = [
         executor.submit(
             active_extension.download_images_hook,
-            gallery_id, page, urls, path, session, pbar, safe_creator_name
+            gallery_id, page, urls, path, session, None, safe_creator_name
         )
         for page, urls, path, _ in creator_tasks
     ]
+    # Just wait for completion
     for _ in concurrent.futures.as_completed(futures):
-        pbar.update(1)
+        pass
 
 ####################################################################################################
 # CORE
@@ -242,11 +246,10 @@ def process_galleries(gallery_ids, worker_id=0):
                         logger.info(f"{prefix}[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
                     break
                 else:
-                    total_images = sum(len(t[1]) for t in grouped_tasks)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                         for safe_creator_name, creator_tasks in grouped_tasks:
                             if not dry_run:
-                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, None, safe_creator_name)
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                             else:
                                 for _ in creator_tasks:
                                     time.sleep(0.01)  # fake delay
