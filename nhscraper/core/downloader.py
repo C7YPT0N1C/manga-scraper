@@ -85,7 +85,7 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     gallery_id = meta.get("id")
     gallery_title = clean_title(meta)
 
-    if not ReturnReport:
+    if not isinstance(meta, dict) or not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
         log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
@@ -323,7 +323,7 @@ def start_downloader(gallery_list=None):
     for i, chunk in enumerate(chunks):
         p = Process(target=process_galleries, args=(chunk, i+1))  # <-- pass worker ID
         p.start()
-        logger.info(f"Spawned worker {i+1} handling {len(chunk)} galleries")
+        logger.info(f"Spawned Worker {i+1}: Handling {len(chunk)} Galleries")
         processes.append(p)
 
     for p in processes:
@@ -331,6 +331,6 @@ def start_downloader(gallery_list=None):
 
     log_clarification()
     logger.info("All galleries processed.")
-    update_skipped_galleries("", True)
+    #update_skipped_galleries("", True)
     
     active_extension.post_run_hook()
