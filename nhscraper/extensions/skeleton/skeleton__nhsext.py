@@ -37,6 +37,83 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 ####################################################################################################################
+# CORE
+####################################################################################################################
+def update_extension_download_path():
+    log_clarification()
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
+def return_gallery_metas(meta):
+    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    title = clean_title(meta)
+    
+    id = str(meta.get("id", "Unknown ID"))
+    
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas",meta, "language") or ["Unknown Language"]
+    
+    log_clarification()
+
+    return {
+        "creator": creators,
+        "title": title,
+        "id": id,
+        "language": language,
+    }
+
+def install_extension():
+    """
+    Install the extension and ensure the dedicated image download path exists.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
+        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+
+    try:
+        # Ensure extension install path and image download path exists.
+        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        
+        update_extension_download_path()
+        
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
+
+def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
+    
+    try:
+        # Ensure extension install path and image download path is removed.
+        if os.path.exists(EXTENSION_INSTALL_PATH):
+            os.rmdir(EXTENSION_INSTALL_PATH)
+        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
+            os.rmdir(DEDICATED_DOWNLOAD_PATH)
+        
+        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+    
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+
+####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
 ####################################################################################################################
 
@@ -84,7 +161,7 @@ def test_hook():
     log_clarification()
 
 ####################################################################################################################
-# CORE HOOKS (Please add too the functions, try not to change or remove anything)
+# CORE HOOKS (Please add to the functions, try not to change or remove anything)
 ####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
@@ -94,12 +171,14 @@ def pre_run_hook(config, gallery_list):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
     log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
     return gallery_list
 
 def pre_gallery_download_hook(config, gallery_id, meta):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
     log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
@@ -176,94 +255,22 @@ def during_gallery_download_hook(config, gallery_id, gallery_metadata):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
     log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
 def after_gallery_download_hook(meta: dict):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook(config, completed_galleries):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    
+    log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
     log_clarification()
     remove_empty_directories(True)
-
-####################################################################################################################
-# CORE
-####################################################################################################################
-def install_extension():
-    """
-    Install the extension and ensure the dedicated image download path exists.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH:
-        # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-    try:
-        # Ensure extension install path and image download path exists.
-        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        
-        update_extension_download_path()
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
-    
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
-
-def uninstall_extension():
-    """
-    Remove the extension and related paths.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
-    
-    try:
-        # Ensure extension install path and image download path is removed.
-        if os.path.exists(EXTENSION_INSTALL_PATH):
-            os.rmdir(EXTENSION_INSTALL_PATH)
-        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
-    
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
-
-def update_extension_download_path():
-    log_clarification()
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-def return_gallery_metas(meta):
-    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    title = clean_title(meta)
-    
-    id = str(meta.get("id", "Unknown ID"))
-    
-    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas",meta, "language") or ["Unknown Language"]
-    
-    log_clarification()
-
-    return {
-        "creator": creators,
-        "title": title,
-        "id": id,
-        "language": language,
-    }
