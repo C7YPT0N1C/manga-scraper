@@ -368,9 +368,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     log_clarification()
-    # Determine creator folder
-    creators = meta.get("artist") or meta.get("group") or ["Unknown Creator"]
-    creator_name = safe_name(creators[0])
+    
+    # Use unified metadata extraction
+    gallery_meta = return_gallery_metas(meta)
+
+    # Use first creator (artist/group), fallback handled in return_gallery_metas
+    creator_name = safe_name(gallery_meta["creator"][0])
     creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
 
     details_file = os.path.join(creator_folder, "details.json")
@@ -392,10 +395,11 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
 
-    # Update title and description from current gallery
-    gallery_title = clean_title(meta)
+    # Update title and description from unified metadata
+    gallery_title = gallery_meta["title"]
+    gallery_id_str = gallery_meta["id"]
     details["title"] = gallery_title
-    details["description"] = f"Latest Doujinshi: ({gallery_id}) {gallery_title}"
+    details["description"] = f"{creator_name} - {gallery_title} ({gallery_id_str})"
 
     # Update genre counts
     gallery_tags = meta.get("tags", [])
