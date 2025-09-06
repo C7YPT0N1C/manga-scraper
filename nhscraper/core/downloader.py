@@ -7,7 +7,7 @@ from functools import partial
 
 from nhscraper.core.config import *
 from nhscraper.core import db
-from nhscraper.core.fetchers import session, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import session, dynamic_sleep, fetch_gallery_metadata, fetch_image_urls, get_meta_tags, safe_name, clean_title
 from nhscraper.extensions.extension_loader import get_selected_extension # Import active extension
 
 ####################################################################################################
@@ -42,36 +42,43 @@ def load_extension():
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
-logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
+#logger.info(f"DRY RUN = {config['DRY_RUN']} ({type(config['DRY_RUN'])})")
 
-def build_gallery_path(meta):
+def build_gallery_path(meta, iteration: dict = None):
+    """
+    Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
+    You can pass `iteration` to override specific variables (e.g., creator).
+    """
     # Ask extension for variables
-    subs = active_extension.build_gallery_subfolders(meta)
+    gallery_metas = active_extension.return_gallery_metas(meta)
+
+    # Apply any overrides for this iteration
+    if iteration:
+        for k, v in iteration.items():
+            gallery_metas[k] = v
 
     # Load template from extension (SUB1/SUB2/etc.)
-    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["artist", "title"])
+    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
 
     # Start with download base
     path_parts = [download_location]
 
     # Append resolved variables
     for key in template:
-        value = subs.get(key, "Unknown")
+        value = gallery_metas.get(key, "Unknown")
+
+        # If value is a list, take the first element (e.g., creators)
+        if isinstance(value, list):
+            value = value[0] if value else "Unknown"
+
+        # Ensure value is string for safe_name
+        if not isinstance(value, str):
+            value = str(value)
+
         path_parts.append(safe_name(value))
 
     return os.path.join(*path_parts)
 
-def dynamic_sleep(stage): # TEST
-    if stage=="gallery":
-        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-        total_load = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES) * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        base_min, base_max = (0.3, 0.5) if stage == "metadata" else (0.5, 1)
-        scale = min(max(1, total_load * min(num_galleries, 1000)/1000), 5)
-        sleep_time = random.uniform(base_min*scale, base_max*scale)
-        log_clarification()
-        logger.debug(f"{stage.capitalize()} sleep: {sleep_time:.2f}s (scale {scale:.1f})")
-        time.sleep(sleep_time)
-        
 def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: bool = False):
     global skipped_galleries
     
@@ -81,18 +88,21 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        logger.debug(f"Updated Skipped Galleries List with 'Gallery {gallery_id} ({gallery_title}): {Reason}'")
+        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
     else:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
-        logger.debug(f"All Skipped Galleries:\n{skipped_report}")
+        log(f"All Skipped Galleries:\n{skipped_report}")
 
-def should_download_gallery(meta, gallery_title, num_pages):
+def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
     Decide whether to download a gallery based on:
       - language requirements (must include requested language or "translated")
       - excluded tags (any tag in EXCLUDED_TAGS skips gallery)
       - existing files (skip if all pages exist)
+
+    Accepts an optional `iteration` dict to override gallery variables
+    (e.g., per-creator folder names) when building paths.
     """
     if not meta:
         update_skipped_galleries("Not Meta.", False)
@@ -100,7 +110,7 @@ def should_download_gallery(meta, gallery_title, num_pages):
 
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
-    doujin_folder = build_gallery_path(meta)
+    doujin_folder = build_gallery_path(meta, iteration)  # use iteration if provided
 
     # Skip if gallery has 0 pages
     if num_pages == 0:
@@ -128,17 +138,19 @@ def should_download_gallery(meta, gallery_title, num_pages):
                 f"Folder: {doujin_folder}\n"
                 "Reason: Already complete."
             )
-            update_skipped_galleries("Already complete.", False)
+            update_skipped_galleries("Already downloaded.", False)
             return False
 
     # Skip if gallery has excluded tags or doesn't meet language requirements
     excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)]
-    gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
+    gallery_tags = [t.lower() for t in get_meta_tags("Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
-    
+
     allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
-    gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
+    gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
+
+    log_clarification()  # TEST
 
     # Check tags
     for tag in gallery_tags:
@@ -162,18 +174,21 @@ def should_download_gallery(meta, gallery_title, num_pages):
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
-        update_skipped_galleries("Contains either filtered tags or languages (see logs).", False)
+        update_skipped_galleries(
+            f"Contains filtered tags: {blocked_tags}, filtered languages: {blocked_langs}",
+            False
+        )
         return False
 
     return True
 
-def submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist):
+def submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name):
     futures = [
         executor.submit(
             active_extension.download_images_hook,
-            gallery_id, page, urls, path, session, pbar, safe_artist
+            gallery_id, page, urls, path, session, pbar, safe_creator_name
         )
-        for page, urls, path, _ in artist_tasks
+        for page, urls, path, _ in creator_tasks
     ]
     for _ in concurrent.futures.as_completed(futures):
         pbar.update(1)
@@ -192,8 +207,9 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 log_clarification()
+                active_extension.pre_gallery_download_hook(gallery_id)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
-                dynamic_sleep("gallery")
+                time.sleep(dynamic_sleep("gallery"))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
@@ -204,60 +220,65 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 gallery_failed = False
-                active_extension.during_gallery_download_hook(config, gallery_id, meta)
+                active_extension.during_gallery_download_hook(gallery_id)
 
-                artists = get_meta_tags(meta, "artist") or ["Unknown Artist"]
-                gallery_title = clean_title(meta)
+                gallery_metas = active_extension.return_gallery_metas(meta) # TEST
+                creators = gallery_metas["creator"]
+                gallery_title = gallery_metas["title"]
 
                 grouped_tasks = []
-                for artist in artists:
-                    safe_artist = safe_name(artist)
-                    doujin_folder = os.path.join(download_location, safe_artist, gallery_title)
+                for creator in creators:
+                    iteration = {"creator": [creator]}  # override creator for this iteration
+                    safe_creator_name = safe_name(creator)
+                    
+                    # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
+                    doujin_folder = build_gallery_path(meta, iteration)
+                    log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
-                    artist_tasks = []
+                    creator_tasks = []
                     for i in range(num_pages):
                         page = i + 1
                         img_urls = fetch_image_urls(meta, page)
                         if not img_urls:
-                            logger.warning(f"Skipping Page {page} for artist {artist}: Failed to get URLs")
+                            logger.warning(f"Skipping Page {page} for creator {creator}: Failed to get URLs")
                             update_skipped_galleries("Failed to get URLs.", False)
                             gallery_failed = True
                             continue
 
-                        # Use extension of the first URL (all mirrors should have same filename)
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                         img_path = os.path.join(doujin_folder, img_filename)
 
-                        artist_tasks.append((page, img_urls, img_path, safe_artist))
+                        creator_tasks.append((page, img_urls, img_path, safe_creator_name))
 
-                    if artist_tasks:
-                        grouped_tasks.append((safe_artist, artist_tasks))
+                    if creator_tasks:
+                        grouped_tasks.append((safe_creator_name, creator_tasks))
+                    
+                    log_clarification()
                 
-                if not should_download_gallery(meta, gallery_title, num_pages):
-                    db.mark_gallery_completed(gallery_id)
-                    active_extension.after_gallery_download_hook(meta)
+                # If should_download_gallery() says the gallery should be skipped.
+                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
                     break
+                else:
+                    total_images = sum(len(t[1]) for t in grouped_tasks)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                        desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
 
-                total_images = sum(len(t[1]) for t in grouped_tasks)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
+                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
+                            for safe_creator_name, creator_tasks in grouped_tasks:
+                                pbar.set_postfix_str(f"Creator: {safe_creator_name}")
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
 
-                    with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
-                        for safe_artist, artist_tasks in grouped_tasks:
-                            pbar.set_postfix_str(f"Artist: {safe_artist}")
-                            submit_artist_tasks(executor, artist_tasks, gallery_id, session, pbar, safe_artist)
+                    if gallery_failed:
+                        logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
+                        continue
 
-                if gallery_failed:
-                    logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
-                    continue
-
-                active_extension.after_gallery_download_hook(meta)
-                db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
-                break
+                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    db.mark_gallery_completed(gallery_id)
+                    logger.info(f"Completed Gallery: {gallery_id}")
+                    log_clarification()
+                    break
 
             except Exception as e:
                 logger.error(f"Error processing Gallery: {gallery_id}: {e}")
@@ -270,12 +291,12 @@ def process_galleries(gallery_ids):
 def start_downloader():
     log_clarification()
     logger.info("Downloader: Ready.")
-    logger.debug("Downloader: Debugging Started.")
+    log("Downloader: Debugging Started.")
     
     load_extension() # Load extension variables, etc
 
     gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
-    active_extension.pre_run_hook(config, gallery_ids)
+    active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -293,4 +314,4 @@ def start_downloader():
     logger.info("All galleries processed.")
     update_skipped_galleries("", True)
     
-    active_extension.post_run_hook(config, gallery_ids)
+    active_extension.post_run_hook()

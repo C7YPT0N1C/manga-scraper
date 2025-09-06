@@ -39,7 +39,7 @@ def load_local_manifest():
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
-        #logger.debug("Local Manifest: {json_load}")
+        #log("Local Manifest: {json_load}")
         return json_load
 
 def save_local_manifest(manifest: dict):
@@ -79,7 +79,7 @@ def update_local_manifest_from_remote():
             remote_ext["installed"] = False  # new extension default
             local_manifest["extensions"].append(remote_ext)
             log_clarification()
-            logger.debug(f"Added new extension to local manifest: {remote_ext['name']}")
+            log(f"Added new extension to local manifest: {remote_ext['name']}")
 
     save_local_manifest(local_manifest)
     return local_manifest
@@ -99,7 +99,7 @@ def _reload_extensions():
 def sparse_clone(extension_name: str, url: str):
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
-    # Initialize empty repo
+    # Initialise empty repo
     subprocess.run(["git", "init", ext_folder], check=True)
     subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
     subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
@@ -119,7 +119,7 @@ def sparse_clone(extension_name: str, url: str):
             shutil.move(os.path.join(repo_folder, item), ext_folder)
         shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
 
-    logger.debug(f"Clone complete: {extension_name} -> {ext_folder}")
+    log(f"Clone complete: {extension_name} -> {ext_folder}")
 
 #######################################################################
 
@@ -146,15 +146,31 @@ def load_installed_extensions():
             try:
                 module = importlib.import_module(module_name)
                 INSTALLED_EXTENSIONS.append(module)
-                logger.debug(f"Extension: {ext['name']}: Loaded.")
+                log(f"Extension: {ext['name']}: Loaded.")
             except Exception as e:
-                logger.warning(f"Extension: {ext['name']}: Failed to load: {e}")
+                logger.warning(f"Extension: {ext['name']}: Failed to load: {e}. Is an external program managing it?")
         else:
             logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
 # ------------------------------
 # Install / Uninstall Extension
 # ------------------------------
+def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
+    """
+    Compares semantic version strings (e.g., "1.2.3").
+    Returns True if remote_version > local_version.
+    """
+    def parse(v):
+        return [int(x) for x in v.split(".") if x.isdigit()]
+    
+    lv = parse(local_version or "0.0.0")
+    rv = parse(remote_version or "0.0.0")
+    # Pad shorter versions with zeros
+    length = max(len(lv), len(rv))
+    lv += [0] * (length - len(lv))
+    rv += [0] * (length - len(rv))
+    return rv > lv
+
 def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
@@ -168,8 +184,24 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     if reinstall and os.path.exists(ext_folder):
         shutil.rmtree(ext_folder)
 
-    if ext_entry.get("installed", False) and not reinstall:
-        logger.info(f"Extension '{extension_name}': Already installed")
+    # Determine if we should update based on remote version
+    update_needed = False
+    local_version = ext_entry.get("version")  # Version in local manifest
+    remote_manifest = fetch_remote_manifest()
+    remote_entry = next((e for e in remote_manifest.get("extensions", []) if e["name"] == extension_name), {})
+    remote_version = remote_entry.get("version")
+
+    if ext_entry.get("installed", False):
+        if remote_version and is_remote_version_newer(local_version, remote_version):
+            logger.info(f"Extension '{extension_name}': Remote version {remote_version} is newer than local {local_version}, updating...")
+            update_needed = True
+        elif reinstall:
+            update_needed = True
+    else:
+        update_needed = True  # Not installed, must install
+
+    if not update_needed:
+        logger.info(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
         return
 
     repo_url = ext_entry.get("repo_url", "")
@@ -179,7 +211,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     def sparse_clone(extension_name: str, url: str):
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
-        # Initialize empty repo
+        # Initialise empty repo
         subprocess.run(["git", "init", ext_folder], check=True)
         subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
         subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
@@ -202,14 +234,14 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
         print(f"Clone complete: {extension_name} -> {ext_folder}")
 
     try:
-        logger.debug(f"Sparse cloning {extension_name} from {repo_url}...")
+        log(f"Sparse cloning {extension_name} from {repo_url}...")
         sparse_clone(extension_name, repo_url)
     except Exception as e:
         logger.warning(f"Failed to sparse-clone from primary repo: {e}")
         if BASE_REPO_BACKUP_URL:
             backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
             try:
-                logger.debug(f"Retrying sparse-clone with backup repo: {backup_url}")
+                log(f"Retrying sparse-clone with backup repo: {backup_url}")
                 # clean up half-baked folder before retry
                 shutil.rmtree(ext_folder, ignore_errors=True)
                 os.makedirs(ext_folder, exist_ok=True)
@@ -267,7 +299,7 @@ def get_selected_extension(name: str = "skeleton"):
 
     log_clarification()
     logger.info("Extension Loader: Ready.")
-    logger.debug("Extension Loader: Debugging Started.")
+    log("Extension Loader: Debugging Started.")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -301,8 +333,8 @@ def get_selected_extension(name: str = "skeleton"):
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
-            if hasattr(ext, "install_extension"):
-                ext.install_extension()
+            #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary # TEST
+            #    ext.install_extension()
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()
             log_clarification()
