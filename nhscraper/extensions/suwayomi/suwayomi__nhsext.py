@@ -375,6 +375,7 @@ def after_gallery_download_hook(meta: dict, gallery_id):
 
     details_file = os.path.join(creator_folder, "details.json")
     top_genres_file = os.path.join(creator_folder, "top_10_genres.json")
+    os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
 
     # Load existing details.json or create default
     if os.path.exists(details_file):
