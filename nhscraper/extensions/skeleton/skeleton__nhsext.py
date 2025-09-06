@@ -210,6 +210,8 @@ def install_extension():
         os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         
+        update_extension_download_path()
+        
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:

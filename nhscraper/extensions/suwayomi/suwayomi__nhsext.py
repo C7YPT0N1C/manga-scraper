@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, subprocess, shutil, urllib.request, tarfile, json, requests
+import os, time, subprocess, shutil, tarfile, json, requests
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -80,6 +80,56 @@ def test_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Test hook called.")
     log_clarification()
+
+GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"  # Change $IP if needed
+def graphql_request(query: str, variables: dict = None):
+    """
+    Send a GraphQL request to the Suwayomi server.
+    
+    Args:
+        query (str): The GraphQL query or mutation.
+        variables (dict): Optional variables for the query.
+
+    Returns:
+        dict: Parsed JSON response from the server.
+    """
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "query": query,
+        "variables": variables or {},
+    }
+
+    try:
+        response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        logger.error(f"GraphQL request failed: {e}")
+        return None
+
+# Example usage to update local source path
+def update_local_source_path(path: str):
+    """
+    Update the Suwayomi 'local source path' setting via GraphQL.
+    """
+    query = """
+    mutation UpdateSettings($localPath: String!) {
+        updateSettings(input: {localSourcePath: $localPath}) {
+            settings {
+                localSourcePath
+            }
+        }
+    }
+    """
+    variables = {"localPath": path}
+    result = graphql_request(query, variables)
+    if result:
+        logger.info(f"Updated local source path to: {path}")
+    else:
+        logger.error("Failed to update local source path via GraphQL.")
 
 ####################################################################################################################
 # CORE HOOKS (Please add too the functions, try not to change or remove anything)
@@ -259,6 +309,8 @@ WantedBy=multi-user.target
         log(f"\nSuwayomi Web: http://$IP:4567/")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
         
+        update_extension_download_path()
+        
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:
@@ -304,6 +356,8 @@ def update_extension_download_path():
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    
+    #update_local_source_path(DEDICATED_DOWNLOAD_PATH) # Use GraphQL to update local source path
 
 def return_gallery_metas(meta):
     artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
