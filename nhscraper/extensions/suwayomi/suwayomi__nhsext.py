@@ -363,8 +363,8 @@ def during_gallery_download_hook(gallery_id):
     log_clarification()
     log("") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
-def after_gallery_download_hook(meta: dict, gallery_id):
+# Hook for functionality after each completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
+def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     log_clarification()
@@ -395,7 +395,7 @@ def after_gallery_download_hook(meta: dict, gallery_id):
     # Update title and description from current gallery
     gallery_title = clean_title(meta)
     details["title"] = gallery_title
-    details["description"] = f"Latest Doujinshi: {gallery_id} {gallery_title}"
+    details["description"] = f"Latest Doujinshi: ({gallery_id}) {gallery_title}"
 
     # Update genre counts
     gallery_tags = meta.get("tags", [])
@@ -420,6 +420,13 @@ def after_gallery_download_hook(meta: dict, gallery_id):
     # Save updated details.json
     with open(details_file, "w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=2)
+
+# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
+def after_gallery_download_hook(meta: dict, gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
