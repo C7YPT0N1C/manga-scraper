@@ -245,7 +245,7 @@ def process_galleries(gallery_ids, worker_id=0):
                     total_images = sum(len(t[1]) for t in grouped_tasks)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                         desc = f"{'[DRY-RUN] ' if dry_run else ''}Gallery: {gallery_id}"
-                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
+                        with tqdm(total=total_images, desc=desc, unit="img", position=worker_id, leave=True) as pbar:
                             for safe_creator_name, creator_tasks in grouped_tasks:
                                 pbar.set_postfix_str(f"Creator: {safe_creator_name}")
                                 if not dry_run:
