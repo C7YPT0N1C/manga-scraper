@@ -171,7 +171,7 @@ def getenv_int(key, default):
 # Also change corresponding parser.add_argument in CLI
 
 # NHENTAI_MIRRORS: always a list
-MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+MIRRORS_ENV = getenv_int("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
 if isinstance(MIRRORS_ENV, str):
     MIRRORS_LIST = [m.strip() for m in MIRRORS_ENV.split(",") if m.strip()]
 else:
