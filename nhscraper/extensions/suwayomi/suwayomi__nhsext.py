@@ -215,16 +215,24 @@ def install_extension():
         tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
 
         # Download tarball
-        logger.info(f"Downloading Suwayomi Server tarball from {SUWAYOMI_TARBALL_URL}...")
-        urllib.request.urlretrieve(SUWAYOMI_TARBALL_URL, tarball_path)
+        if not os.path.exists(tarball_path):
+            logger.info(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...")
+            r = requests.get(SUWAYOMI_TARBALL_URL, stream=True)
+            with open(tarball_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-        # Extract all contents into EXTENSION_INSTALL_PATH
-        logger.info(f"Extracting tarball to {EXTENSION_INSTALL_PATH}...")
+        # Extract tarball, removing top-level folder
         with tarfile.open(tarball_path, "r:gz") as tar:
-            tar.extractall(path=EXTENSION_INSTALL_PATH)
-
-        # Remove tarball
-        os.remove(tarball_path)
+            members = tar.getmembers()
+            for member in members:
+                path_parts = member.name.split("/", 1)
+                if len(path_parts) > 1:
+                    member.name = path_parts[1]  # strip top folder
+                else:
+                    member.name = ""  # root-level file
+            tar.extractall(path=EXTENSION_INSTALL_PATH, members=members)
+        logger.info(f"Suwayomi-Server extracted to {EXTENSION_INSTALL_PATH}")
 
         # Create systemd service
         service_file = "/etc/systemd/system/suwayomi-server.service"
@@ -251,8 +259,6 @@ WantedBy=multi-user.target
         log(f"\nSuwayomi Web: http://$IP:4567/")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
         
-        # Ensure image download path exists.
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:

@@ -49,9 +49,9 @@ def parse_args():
     parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall nhentai-scraper")
 
     # Extension selection / management
-    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
     parser.add_argument("--install-extension", type=str, help="Install an extension by name")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
+    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
 
     # Gallery selection
     parser.add_argument(
@@ -224,12 +224,6 @@ def main():
     args = parse_args()
     
     normalise_config() # Populate config immediately.
-    
-    # If no gallery input is provided, default to homepage 1 1
-    gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                    args.group, args.tag, args.parody, args.search]
-    if not any(gallery_args):
-        args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(debug=args.debug)
@@ -239,10 +233,9 @@ def main():
     logger.info("                  nhentai-scraper                   ")
     logger.info("====================================================")
     
-    logger.info("CLI: Ready.")
-    log("CLI: Debugging Started.")
-    
-    # Installer / Updater
+    # ------------------------------
+    # Handle Installer / Updater
+    # ------------------------------
     if args.install:
         run_installer("--install")
     elif args.update:
@@ -251,6 +244,26 @@ def main():
         run_installer("--update-env")
     elif args.uninstall:
         run_installer("--uninstall")
+        
+    # ------------------------------
+    # Handle extension installation / uninstallation
+    # ------------------------------
+    if args.install_extension:
+        install_selected_extension(args.install_extension)
+        return
+    
+    if args.uninstall_extension:
+        uninstall_selected_extension(args.uninstall_extension)
+        return
+    
+    logger.info("CLI: Ready.")
+    log("CLI: Debugging Started.")
+    
+    # If no gallery input is provided, default to homepage 1 1
+    gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
+                    args.group, args.tag, args.parody, args.search]
+    if not any(gallery_args):
+        args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
     
     log_clarification()
     log("Updating Config...")
@@ -273,17 +286,6 @@ def main():
     
     log_clarification()
     log(f"Updated Config:\n{config}")
-
-    # ------------------------------
-    # Handle extension uninstallation (--extension automatically installs extension)
-    # ------------------------------
-    if args.install_extension:
-        install_selected_extension(args.install_extension)
-        return
-    
-    if args.uninstall_extension:
-        uninstall_selected_extension(args.uninstall_extension)
-        return
     
     # ------------------------------
     # Download galleries
