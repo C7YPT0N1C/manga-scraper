@@ -372,17 +372,34 @@ def safe_name(s: str) -> str:
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = title_obj.get(title_type) or title_obj.get("english") or title_obj.get("pretty") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
+    title = (
+        title_obj.get(title_type)
+        or title_obj.get("english")
+        or title_obj.get("pretty")
+        or title_obj.get("japanese")
+        or f"Gallery_{meta.get('id')}"
+    )
 
     # If there's a |, take the last part
     if "|" in title:
         title = title.split("|")[-1].strip()
 
-    # Remove all content inside [] brackets, including the brackets themselves
-    title = re.sub(r"\[.*?\]", "", title)
+    # Remove all content inside [] or {} brackets, including the brackets themselves
+    title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
 
-    # Collapse multiple spaces
-    title = " ".join(title.split())
+
+    # Replace blacklisted symbols with underscores
+    for symbol in DODGY_SYMBOL_BLACKLIST:
+        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
+
+    # Collapse multiple underscores/spaces
+    title = re.sub(r"_+", "_", title)   # collapse consecutive underscores
+    title = " ".join(title.split())     # collapse consecutive spaces
+    title = title.strip(" _")           # trim leading/trailing underscores/spaces
+
+    # If title is empty after cleanup, fallback to safe placeholder
+    if not title:
+        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
 
     return safe_name(title)
 

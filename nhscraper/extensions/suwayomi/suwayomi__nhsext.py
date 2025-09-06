@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, subprocess, shutil, urllib.request, tarfile, json, requests
+import os, time, subprocess, shutil, tarfile, json, requests
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -33,6 +33,149 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
     DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
+
+####################################################################################################################
+# CORE
+####################################################################################################################
+def update_extension_download_path():
+    log_clarification()
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    
+    #update_local_source_path(DEDICATED_DOWNLOAD_PATH) # Use GraphQL to update local source path
+
+def return_gallery_metas(meta):
+    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    title = clean_title(meta)
+    
+    id = str(meta.get("id", "Unknown ID"))
+    
+    full_title = f"({id}) {title}"
+    
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    
+    log_clarification()
+
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": language,
+    }
+
+# Change this if a newer release tarball is needed
+SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
+TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
+
+def install_extension():
+    """
+    Install the extension and ensure the dedicated image download path exists.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
+        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+
+    try:
+        # Ensure install path and download path exist
+        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+
+        tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
+
+        # Download tarball
+        if not os.path.exists(tarball_path):
+            logger.info(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...")
+            r = requests.get(SUWAYOMI_TARBALL_URL, stream=True)
+            with open(tarball_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+        # Extract tarball, removing top-level folder
+        with tarfile.open(tarball_path, "r:gz") as tar:
+            members = tar.getmembers()
+            for member in members:
+                path_parts = member.name.split("/", 1)
+                if len(path_parts) > 1:
+                    member.name = path_parts[1]  # strip top folder
+                else:
+                    member.name = ""  # root-level file
+            tar.extractall(path=EXTENSION_INSTALL_PATH, members=members)
+        logger.info(f"Suwayomi-Server extracted to {EXTENSION_INSTALL_PATH}")
+
+        # Create systemd service
+        service_file = "/etc/systemd/system/suwayomi-server.service"
+        service_content = f"""[Unit]
+Description=Suwayomi Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory={EXTENSION_INSTALL_PATH}
+ExecStart=/bin/bash ./suwayomi-server.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+        with open(service_file, "w") as f:
+            f.write(service_content)
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
+        logger.info("Suwayomi systemd service created and started")
+        log(f"\nSuwayomi Web: http://$IP:4567/")
+        log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
+        
+        update_extension_download_path()
+        
+        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+    
+    except Exception as e:
+        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
+
+def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
+    global DEDICATED_DOWNLOAD_PATH
+    global EXTENSION_INSTALL_PATH
+
+    try:
+        # Stop and disable systemd service
+        subprocess.run(["systemctl", "stop", "suwayomi-server"], check=False)
+        subprocess.run(["systemctl", "disable", "suwayomi-server"], check=False)
+        service_file = "/etc/systemd/system/suwayomi-server.service"
+        if os.path.exists(service_file):
+            os.remove(service_file)
+        subprocess.run(["systemctl", "daemon-reload"], check=False)
+
+        # Remove extracted files
+        if os.path.exists(EXTENSION_INSTALL_PATH):
+            shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
+
+        # Remove image download path
+        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
+            shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
+
+        logger.info(f"Extension {EXTENSION_NAME}: Uninstalled successfully")
+
+    except Exception as e:
+        logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
@@ -81,23 +224,54 @@ def test_hook():
     log(f"Extension: {EXTENSION_NAME}: Test hook called.")
     log_clarification()
 
-####################################################################################################################
-# CORE HOOKS (Please add too the functions, try not to change or remove anything)
-####################################################################################################################
+GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"  # Change $IP if needed
+def graphql_request(query: str, variables: dict = None):
+    """
+    Send a GraphQL request to the Suwayomi server.
+    Returns the JSON response or None on error.
+    """
+    headers = {"Content-Type": "application/json"}
+    payload = {"query": query, "variables": variables or {}}
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook(config, gallery_list):
-    update_extension_download_path()
-    
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
-    log_clarification()
-    return gallery_list
+    try:
+        response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        logger.error(f"GraphQL request failed: {e}")
+        return None
 
-def pre_gallery_download_hook(config, gallery_id, meta):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
-    log_clarification()
+def update_local_source_path(local_path: str):
+    """
+    Update the Suwayomi 'local source path' in settings.
+    """
+    query = """
+    mutation UpdateSettings($settings: SetSettingsInput!) {
+        setSettings(input: $settings) {
+            settings {
+                localSourcePath
+            }
+        }
+    }
+    """
+
+    variables = {
+        "settings": {
+            "localSourcePath": local_path
+        }
+    }
+
+    result = graphql_request(query, variables)
+    if result and "data" in result and "setSettings" in result["data"]:
+        logger.info(f"Successfully updated local source path to: {local_path}")
+        return True
+    else:
+        logger.error(f"Failed to update local source path. Response: {result}")
+        return False
+
+####################################################################################################################
+# CORE HOOKS (Please add to the functions, try not to change or remove anything)
+####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
@@ -169,158 +343,105 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
         pbar.set_postfix_str(f"Failed Creator: {creator}")
     return False
 
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook(gallery_list):
+    update_extension_download_path()
+    
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    return gallery_list
+
+def pre_gallery_download_hook(gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
-def during_gallery_download_hook(config, gallery_id, gallery_metadata):
+def during_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
-    log_clarification()
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
-def after_gallery_download_hook(meta: dict):
+# Hook for functionality after each completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
+def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    
+    # Use unified metadata extraction
+    gallery_meta = return_gallery_metas(meta)
+
+    # Use first creator (artist/group), fallback handled in return_gallery_metas
+    creator_name = safe_name(gallery_meta["creator"][0])
+    creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+
+    details_file = os.path.join(creator_folder, "details.json")
+    top_genres_file = os.path.join(creator_folder, "most_popular_genres.json")
+    os.makedirs(os.path.dirname(top_genres_file), exist_ok=True)
+
+    # Load existing details.json or create default
+    if os.path.exists(details_file):
+        with open(details_file, "r", encoding="utf-8") as f:
+            details = json.load(f)
+    else:
+        details = {
+            "title": "",
+            "author": creator_name,
+            "artist": creator_name,
+            "description": "",
+            "genre": [],
+            "status": "1",
+            "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+        }
+
+    # Update title and description from unified metadata
+    details["title"] = creator_name
+    details["author"] = creator_name
+    details["artist"] = creator_name
+    
+    gallery_title = gallery_meta["title"]
+    details["description"] = f"Latest Doujin: {gallery_title}"
+
+    # Update genre counts (exclude artist, group, language, category)
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
+
+    if os.path.exists(top_genres_file):
+        with open(top_genres_file, "r", encoding="utf-8") as f:
+            genre_counts = json.load(f)
+    else:
+        genre_counts = {}
+
+    for genre in gallery_genres:
+        genre_counts[genre] = genre_counts.get(genre, 0) + 1
+    
+    # Save updated most_popular_genres.json
+    with open(top_genres_file, "w", encoding="utf-8") as f:
+        json.dump(genre_counts, f, ensure_ascii=False, indent=2)
+
+    # Compute top 10 genres
+    most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:15]
     log_clarification()
+    log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
+    details["genre"] = [g for g, count in most_popular]
+
+    # Save updated details.json
+    with open(details_file, "w", encoding="utf-8") as f:
+        json.dump(details, f, ensure_ascii=False, indent=2)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
-def post_run_hook(config, completed_galleries):
+def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    
+    #log_clarification()
+    #log("") # <-------- ADD STUFF IN PLACE OF THIS
 
     log_clarification()
     remove_empty_directories(True)
-    
-####################################################################################################################
-# CORE
-####################################################################################################################
-# Change this if a newer release tarball is needed
-SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
-TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
-
-def install_extension():
-    """
-    Install the extension and ensure the dedicated image download path exists.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH:
-        # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-    try:
-        # Ensure install path and download path exist
-        os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-
-        tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
-
-        # Download tarball
-        if not os.path.exists(tarball_path):
-            logger.info(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...")
-            r = requests.get(SUWAYOMI_TARBALL_URL, stream=True)
-            with open(tarball_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-        # Extract tarball, removing top-level folder
-        with tarfile.open(tarball_path, "r:gz") as tar:
-            members = tar.getmembers()
-            for member in members:
-                path_parts = member.name.split("/", 1)
-                if len(path_parts) > 1:
-                    member.name = path_parts[1]  # strip top folder
-                else:
-                    member.name = ""  # root-level file
-            tar.extractall(path=EXTENSION_INSTALL_PATH, members=members)
-        logger.info(f"Suwayomi-Server extracted to {EXTENSION_INSTALL_PATH}")
-
-        # Create systemd service
-        service_file = "/etc/systemd/system/suwayomi-server.service"
-        service_content = f"""[Unit]
-Description=Suwayomi Server
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory={EXTENSION_INSTALL_PATH}
-ExecStart=/bin/bash ./suwayomi-server.sh
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-"""
-        with open(service_file, "w") as f:
-            f.write(service_content)
-        subprocess.run(["systemctl", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
-        logger.info("Suwayomi systemd service created and started")
-        log(f"\nSuwayomi Web: http://$IP:4567/")
-        log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
-        
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
-    
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
-
-def uninstall_extension():
-    """
-    Remove the extension and related paths.
-    """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
-
-    try:
-        # Stop and disable systemd service
-        subprocess.run(["systemctl", "stop", "suwayomi-server"], check=False)
-        subprocess.run(["systemctl", "disable", "suwayomi-server"], check=False)
-        service_file = "/etc/systemd/system/suwayomi-server.service"
-        if os.path.exists(service_file):
-            os.remove(service_file)
-        subprocess.run(["systemctl", "daemon-reload"], check=False)
-
-        # Remove extracted files
-        if os.path.exists(EXTENSION_INSTALL_PATH):
-            shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
-
-        # Remove image download path
-        if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
-
-        logger.info(f"Extension {EXTENSION_NAME}: Uninstalled successfully")
-
-    except Exception as e:
-        logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
-
-def update_extension_download_path():
-    log_clarification()
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
-    except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-def return_gallery_metas(meta):
-    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    title = clean_title(meta)
-    
-    id = str(meta.get("id", "Unknown ID"))
-    
-    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
-    
-    log_clarification()
-
-    return {
-        "creator": creators,
-        "title": title,
-        "id": id,
-        "language": language,
-    }

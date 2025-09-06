@@ -175,7 +175,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Filtered languages: {blocked_langs}"
         )
         update_skipped_galleries(
-            f"Contains filtered tags: ({blocked_tags}), filtered languages: ({blocked_langs})",
+            f"Contains filtered tags: {blocked_tags}, filtered languages: {blocked_langs}",
             False
         )
         return False
@@ -207,7 +207,7 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 log_clarification()
-                active_extension.pre_gallery_download_hook(config, gallery_id, meta)
+                active_extension.pre_gallery_download_hook(gallery_id)
                 logger.info(f"Starting Gallery: {gallery_id}: (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery"))
 
@@ -220,7 +220,7 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 gallery_failed = False
-                active_extension.during_gallery_download_hook(config, gallery_id, meta)
+                active_extension.during_gallery_download_hook(gallery_id)
 
                 gallery_metas = active_extension.return_gallery_metas(meta) # TEST
                 creators = gallery_metas["creator"]
@@ -257,29 +257,28 @@ def process_galleries(gallery_ids):
                     
                     log_clarification()
                 
+                # If should_download_gallery() says the gallery should be skipped.
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
-                    db.mark_gallery_completed(gallery_id)
-                    active_extension.after_gallery_download_hook(meta)
                     break
+                else:
+                    total_images = sum(len(t[1]) for t in grouped_tasks)
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                        desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
 
-                total_images = sum(len(t[1]) for t in grouped_tasks)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    desc = f"{'[DRY-RUN] ' if config.get('DRY_RUN', DEFAULT_DRY_RUN) else ''}Gallery: {gallery_id}"
+                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
+                            for safe_creator_name, creator_tasks in grouped_tasks:
+                                pbar.set_postfix_str(f"Creator: {safe_creator_name}")
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
 
-                    with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
-                        for safe_creator_name, creator_tasks in grouped_tasks:
-                            pbar.set_postfix_str(f"Creator: {safe_creator_name}")
-                            submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
+                    if gallery_failed:
+                        logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
+                        continue
 
-                if gallery_failed:
-                    logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
-                    continue
-
-                active_extension.after_gallery_download_hook(meta)
-                db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
-                break
+                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    db.mark_gallery_completed(gallery_id)
+                    logger.info(f"Completed Gallery: {gallery_id}")
+                    log_clarification()
+                    break
 
             except Exception as e:
                 logger.error(f"Error processing Gallery: {gallery_id}: {e}")
@@ -297,7 +296,7 @@ def start_downloader():
     load_extension() # Load extension variables, etc
 
     gallery_ids = config.get("GALLERIES", DEFAULT_GALLERIES)
-    active_extension.pre_run_hook(config, gallery_ids)
+    active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -315,4 +314,4 @@ def start_downloader():
     logger.info("All galleries processed.")
     update_skipped_galleries("", True)
     
-    active_extension.post_run_hook(config, gallery_ids)
+    active_extension.post_run_hook()

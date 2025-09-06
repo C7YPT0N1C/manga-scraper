@@ -76,7 +76,15 @@ def parse_args():
     # Filters
     parser.add_argument("--excluded-tags", type=str, default=None, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
     parser.add_argument("--language", type=str, default=DEFAULT_LANGUAGE, help=f"Comma-separated list of languages to include (default: '{DEFAULT_LANGUAGE}')")
-    parser.add_argument("--title-type", choices=["english","japanese","pretty"], default=DEFAULT_TITLE_TYPE, help=f"What title type to use (default: {DEFAULT_TITLE_TYPE})")
+    parser.add_argument(
+        "--title-type",
+        choices=["english","japanese","pretty"],
+        default=DEFAULT_TITLE_TYPE,
+        help=(
+            f"What title type to use."
+            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning. (default: {DEFAULT_TITLE_TYPE})"
+        )
+    )
 
     # Threads / concurrency
     parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
