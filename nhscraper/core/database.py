@@ -2,7 +2,7 @@
 # nhscraper/core/db.py
 
 import os, sqlite3, threading
-from datetime import datetime
+import datetime
 
 from nhscraper.core.config import *
 
