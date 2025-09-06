@@ -2,7 +2,7 @@
 # nhscraper/downloader.py
 
 import os, time, random, concurrent.futures
-from tqdm import tqdm
+from tqdm.contrib.concurrent import thread_map
 
 from nhscraper.core.config import *
 from nhscraper.core import database as db
@@ -244,16 +244,12 @@ def process_galleries(gallery_ids, worker_id=0):
                 else:
                     total_images = sum(len(t[1]) for t in grouped_tasks)
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                        desc = f"{'[DRY-RUN] ' if dry_run else ''}Gallery: {gallery_id}"
-                        with tqdm(total=total_images, desc=desc, unit="img", position=0, leave=True) as pbar:
-                            for safe_creator_name, creator_tasks in grouped_tasks:
-                                pbar.set_postfix_str(f"Creator: {safe_creator_name}")
-                                if not dry_run:
-                                    submit_creator_tasks(executor, creator_tasks, gallery_id, session, pbar, safe_creator_name)
-                                else:
-                                    for _ in creator_tasks:
-                                        time.sleep(0.01)  # fake progress
-                                        pbar.update(1)
+                        for safe_creator_name, creator_tasks in grouped_tasks:
+                            if not dry_run:
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, None, safe_creator_name)
+                            else:
+                                for _ in creator_tasks:
+                                    time.sleep(0.01)  # fake delay
 
                     if gallery_failed:
                         logger.warning(f"{prefix}Gallery {gallery_id}: encountered issues, retrying...")
@@ -293,13 +289,14 @@ def start_downloader(gallery_list=None):
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
-        # one gallery per worker thread
-        futures = [
-            executor.submit(process_galleries, [gid], worker_id=i+1)
-            for i, gid in enumerate(gallery_ids)
-        ]
-        concurrent.futures.wait(futures)
+    thread_map(
+        lambda gid: process_galleries([gid]),
+        gallery_ids,
+        max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
+        desc="Processing galleries",
+        unit="gallery"
+    )
+
         
         
 
