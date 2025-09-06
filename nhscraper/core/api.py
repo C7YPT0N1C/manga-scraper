@@ -372,7 +372,13 @@ def safe_name(s: str) -> str:
 def clean_title(meta):
     title_obj = meta.get("title", {}) or {}
     title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = title_obj.get(title_type) or title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Gallery_{meta.get('id')}"
+    title = (
+        title_obj.get(title_type)
+        or title_obj.get("english")
+        or title_obj.get("pretty")
+        or title_obj.get("japanese")
+        or f"Gallery_{meta.get('id')}"
+    )
 
     # If there's a |, take the last part
     if "|" in title:
@@ -380,6 +386,11 @@ def clean_title(meta):
 
     # Remove all content inside [] brackets, including the brackets themselves
     title = re.sub(r"\[.*?\]", "", title)
+
+    # Remove Dodgy Symbols
+    REMOVE_DODGY_SYMBOLS = DODGY_SYMBOLS
+    for symbol in REMOVE_DODGY_SYMBOLS:
+        title = title.replace(symbol, "")
 
     # Collapse multiple spaces
     title = " ".join(title.split())
