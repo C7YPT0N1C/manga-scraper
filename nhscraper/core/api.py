@@ -150,11 +150,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     #   - More galleries = more cumulative load
     #   - Cap scaling at ×5 to prevent excessive waiting
     #   - Galleries count capped at 1000 to avoid runaway scaling
-    scale = min(
-        max(1,
-            total_load * min(num_galleries, 1000)
-            / 1000),
-        5)
+    capped_galleries = min(num_galleries, 1000)
+    load_factor = total_load * capped_galleries / 1000
+    scale = min(max(1, load_factor), 5)
 
     # Choose a random sleep within the scaled range
     sleep_time = random.uniform(base_min * scale, base_max * scale)
