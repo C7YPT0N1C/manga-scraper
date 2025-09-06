@@ -60,13 +60,15 @@ def return_gallery_metas(meta):
     
     id = str(meta.get("id", "Unknown ID"))
     
+    full_title = f"({id}) [{title}]"
+    
     language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
     log_clarification()
 
     return {
         "creator": creators,
-        "title": title,
+        "title": full_title,
         "id": id,
         "language": language,
     }
@@ -401,8 +403,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     details["artist"] = creator_name
     
     gallery_title = gallery_meta["title"]
-    gallery_id_str = gallery_meta["id"]
-    details["description"] = f"Latest Doujin: {creator_name} - {gallery_title} ({gallery_id_str})"
+    details["description"] = f"Latest Doujin: {creator_name} - {gallery_title}"
 
     # Update genre counts
     gallery_tags = meta.get("tags", [])

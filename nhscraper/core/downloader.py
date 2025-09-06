@@ -257,9 +257,10 @@ def process_galleries(gallery_ids):
                     
                     log_clarification()
                 
+                # If should_download_gallery() says the gallery should be skipped.
                 if not should_download_gallery(meta, gallery_title, num_pages, iteration):
                     db.mark_gallery_completed(gallery_id)
-                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    active_extension.after_gallery_download_hook(meta, gallery_id)
                     break
 
                 total_images = sum(len(t[1]) for t in grouped_tasks)
@@ -275,7 +276,7 @@ def process_galleries(gallery_ids):
                     logger.warning(f"Gallery: {gallery_id}: Encountered download issues, retrying...")
                     continue
 
-                active_extension.after_gallery_download_hook(meta, gallery_id)
+                active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                 db.mark_gallery_completed(gallery_id)
                 logger.info(f"Completed Gallery: {gallery_id}")
                 log_clarification()
