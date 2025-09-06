@@ -119,7 +119,7 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 ################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
-def dynamic_sleep(stage, attempt: int = 1): # TEST 
+def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
     num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))# Number of galleries being processed; at least 1 to avoid division by zero

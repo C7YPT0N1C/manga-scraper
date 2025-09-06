@@ -150,7 +150,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
-    log_clarification()  # TEST
+    log_clarification()
 
     # Check tags
     for tag in gallery_tags:
@@ -222,7 +222,7 @@ def process_galleries(gallery_ids):
                 gallery_failed = False
                 active_extension.during_gallery_download_hook(gallery_id)
 
-                gallery_metas = active_extension.return_gallery_metas(meta) # TEST
+                gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
 
