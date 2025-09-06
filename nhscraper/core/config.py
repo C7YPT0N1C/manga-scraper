@@ -216,9 +216,12 @@ def update_env(key, value):
     config[key] = value
 
 # ------------------------------
-# Normalize config with defaults
+# Normalise config with defaults
 # ------------------------------
 def normalise_config():
+    log_clarification()
+    log("Populating Config...")
+    
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -249,7 +252,7 @@ def normalise_config():
             config[key] = default_val
             update_env(key, default_val)
 
-# Run normalization immediately so .env is populated
+# Run normalisation immediately so .env is populated
 normalise_config()
 
 # ------------------------------
