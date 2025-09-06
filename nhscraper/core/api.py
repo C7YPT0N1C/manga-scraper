@@ -384,8 +384,9 @@ def clean_title(meta):
     if "|" in title:
         title = title.split("|")[-1].strip()
 
-    # Remove all content inside [] brackets, including the brackets themselves
-    title = re.sub(r"\[.*?\]", "", title)
+    # Remove all content inside [] or {} brackets, including the brackets themselves
+    title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
+
 
     # Replace blacklisted symbols with underscores
     for symbol in DODGY_SYMBOL_BLACKLIST:
