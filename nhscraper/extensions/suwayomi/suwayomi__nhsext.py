@@ -364,16 +364,9 @@ def during_gallery_download_hook(meta: dict, gallery_id):
     log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
-def after_gallery_download_hook(meta: dict):
+def after_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
-    log_clarification()
-
-# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
-def post_run_hook(meta: dict):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
-    
     log_clarification()
     # Determine creator folder
     creators = meta.get("artist") or meta.get("group") or ["Unknown Creator"]
@@ -401,7 +394,7 @@ def post_run_hook(meta: dict):
     # Update title and description from current gallery
     gallery_title = clean_title(meta)
     details["title"] = gallery_title
-    details["description"] = f"Latest Doujinshi: {gallery_title}"
+    details["description"] = f"Latest Doujinshi: {gallery_id} {gallery_title}"
 
     # Update genre counts
     gallery_tags = meta.get("tags", [])
@@ -426,6 +419,14 @@ def post_run_hook(meta: dict):
     # Save updated details.json
     with open(details_file, "w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=2)
+
+# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
+def post_run_hook(meta: dict):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    
+    log_clarification()
+    log("") # <-------- ADD STUFF IN PLACE OF THIS
 
     log_clarification()
     remove_empty_directories(True)

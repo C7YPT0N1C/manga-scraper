@@ -258,7 +258,7 @@ def during_gallery_download_hook(meta: dict, config, gallery_id, gallery_metadat
     log("") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after each gallery download. Use active_extension.after_gallery_download_hook(ARGS) in downloader.
-def after_gallery_download_hook(meta: dict):
+def after_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
     log_clarification()
