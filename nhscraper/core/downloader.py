@@ -307,9 +307,15 @@ def start_downloader():
     logger.info(f"Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
                 if len(gallery_ids) > 1 else f"Galleries to process: {gallery_ids[0]}")
 
+    #with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
+    #    futures = [executor.submit(process_galleries, [gid]) for gid in gallery_ids]
+    #    concurrent.futures.wait(futures)
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)) as executor:
-        futures = [executor.submit(process_galleries, gallery_ids)]
-        concurrent.futures.wait(futures)
+        with tqdm(total=len(gallery_ids), desc="Galleries", unit="gallery") as gbar:
+            futures = [executor.submit(process_galleries, [gid]) for gid in gallery_ids]
+            for f in concurrent.futures.as_completed(futures):
+                gbar.update(1)
 
     log_clarification()
     logger.info("All galleries processed.")
