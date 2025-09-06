@@ -145,11 +145,11 @@ DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
 DODGY_SYMBOL_BLACKLIST = ["↑", "↓", "→", "←", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•", "…"]
 
-
 # Threads
 DEFAULT_THREADS_GALLERIES=2
 DEFAULT_THREADS_IMAGES=10
 DEFAULT_MAX_RETRIES=3
+DEFAULT_NO_SLEEP=False
 
 # Download Options
 DEFAULT_USE_TOR=True
@@ -201,6 +201,7 @@ config = {
     "THREADS_GALLERIES": getenv_int("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
+    "NO_SLEEP": str(os.getenv("USE_TOR", DEFAULT_NO_SLEEP)).lower() == "true",
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
@@ -251,6 +252,7 @@ def normalise_config():
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+        "NO_SLEEP": DEFAULT_NO_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "VERBOSE": DEFAULT_VERBOSE,

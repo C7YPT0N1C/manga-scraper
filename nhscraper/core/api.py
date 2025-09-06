@@ -35,7 +35,7 @@ def session_builder():
     
     log(f"Built HTTP session with cloudscraper")
     
-    if config.get("USE_TOR", True):
+    if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
@@ -122,46 +122,58 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
-    num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))# Number of galleries being processed; at least 1 to avoid division by zero
-    total_load = ( # Total parallel work = gallery threads × image threads
-        config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-    )
+    BYPASS_SLEEP = config.get("NO_SLEEP", DEFAULT_NO_SLEEP)
     
-    # ------------------------------
-    # Define a base sleep range depending on what stage of scraping we're in
-    # ------------------------------
-    if stage == "api":
-        # When calling the API, back off more with each retry attempt
-        base_min, base_max = (0.3 * attempt, 0.5 * attempt)
+    if BYPASS_SLEEP == False:
+        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES))) # Number of galleries being processed; at least 1 to avoid division by zero
+        total_load = ( # Total parallel work = gallery threads × image threads
+            config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+            * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+        )
+        
+        sleep_min = 0.3 # Minimum time to sleep
+        gallery_sleep_min_multiplier = 1.5 # Minimum time for a gallery to sleep (this value x sleep_min)
+        
+        sleep_max = 0.5 # Maximum time to sleep
+        gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
+        
+        # ------------------------------
+        # Define a base sleep range depending on what stage of scraping we're in
+        # ------------------------------
+        if stage == "api":
+            # When calling the API, back off more with each retry attempt
+            base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
 
-    elif stage == "metadata":
-        # Lightweight requests like fetching metadata (fixed short wait)
-        base_min, base_max = (0.3, 0.5)
+        elif stage == "metadata":
+            # Lightweight requests like fetching metadata (fixed short wait)
+            base_min, base_max = (sleep_min, sleep_max)
 
-    elif stage == "gallery":
-        # Heavier stage (fetching full galleries), so longer base wait
-        base_min, base_max = (0.5, 1)
+        elif stage == "gallery":
+            # Heavier stage (fetching full galleries), so longer base wait
+            base_min, base_max = ((sleep_min * gallery_sleep_min_multiplier), (sleep_max * gallery_sleep_max_multiplier))
 
-    # ------------------------------
-    # Scaling logic
-    # ------------------------------
-    # Scale grows with number of galleries and total concurrency
-    #   - More galleries = more cumulative load
-    #   - Cap scaling at ×5 to prevent excessive waiting
-    #   - Galleries count capped at 1000 to avoid runaway scaling
-    capped_galleries = min(num_galleries, 1000)
-    load_factor = total_load * capped_galleries / 1000
-    scale = min(max(1, load_factor), 5)
+        # ------------------------------
+        # Scaling logic
+        # ------------------------------
+        # Scale grows with number of galleries and total concurrency
+        #   - More galleries = more cumulative load
+        #   - Cap scaling at ×5 to prevent excessive waiting
+        #   - Galleries count capped at 1000 to avoid runaway scaling
+        capped_galleries = min(num_galleries, 1000)
+        load_factor = total_load * capped_galleries / 1000
+        scale = min(max(1, load_factor), 5)
 
-    # Choose a random sleep within the scaled range
-    sleep_time = random.uniform(base_min * scale, base_max * scale)
+        # Choose a random sleep within the scaled range
+        sleep_time = random.uniform(base_min * scale, base_max * scale)
 
-    # Debug logging for transparency
-    log_clarification()
-    log(
-        f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})"
-    )
+        # Debug logging for transparency
+        log_clarification()
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})"
+        )
+    
+    else: # TEST
+        sleep_time = 0.3
 
     return sleep_time
 

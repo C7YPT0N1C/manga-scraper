@@ -121,15 +121,16 @@ def parse_args():
     parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
     parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads to use for image downloads (default: {DEFAULT_THREADS_IMAGES})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
-
+    parser.add_argument("--no-sleep", action="store_true", default=DEFAULT_NO_SLEEP, help=f"Skips dynamically sleeping between galleries. May result in hitting API limits. (default: {DEFAULT_USE_TOR})")
+    
     # Download / runtime options
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
     
     # Make verbose/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--verbose", action="store_true", default=False, help="Enable verbose logging (print to stdout)")
-    group.add_argument("--debug", action="store_true", default=False, help="Enable debug logging (logger.debug)")
+    group.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help="Enable verbose logging (print to stdout)")
+    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging (logger.debug)")
 
     return parser.parse_args()
 
