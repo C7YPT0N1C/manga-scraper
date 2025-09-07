@@ -291,9 +291,9 @@ def main():
     logger = setup_logger(verbose=args.verbose, debug=args.debug)
     
     log_clarification()
-    logger.info("====================================================")
-    logger.info("                  nhentai-scraper                   ")
-    logger.info("====================================================")
+    log("====================================================")
+    log("                  nhentai-scraper                   ")
+    log("====================================================")
     
     # ------------------------------
     # Handle Installer / Updater

@@ -96,10 +96,11 @@ def log(message: str, log_type: str = "info"):
     if log_type == "debug":
         if debug_mode or verbose_mode:
             logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
-    else:
-        if debug_mode:
+    if log_type == "debug":
+        if debug_mode or verbose_mode:
             logger.info(message)   # Log info to file and terminal
-        elif verbose_mode:
+    else:
+        if verbose_mode:
             print(message)         # Only print to terminal
     
     # Otherwise do nothing (silent mode)
@@ -243,7 +244,7 @@ def update_env(key, value):
 # ------------------------------
 def normalise_config():
     log_clarification()
-    log("Populating Config...", "debug")
+    log("Populating Config...")
     
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
