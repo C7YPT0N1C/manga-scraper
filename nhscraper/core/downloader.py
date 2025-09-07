@@ -192,7 +192,6 @@ def process_galleries(gallery_ids):
                 logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery", gallery_attempts))
 
-                # Fetch metadata
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
@@ -201,22 +200,28 @@ def process_galleries(gallery_ids):
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                gallery_failed = False
+                active_extension.during_gallery_download_hook(gallery_id)
 
-                # Extract info from extension
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
 
-                # Check if gallery should be downloaded
-                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                # --- Decide if gallery should be skipped ---
+                skip_gallery = False
+                for creator in creators:
+                    iteration = {"creator": [creator]}
+                    if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                        skip_gallery = True
+                        break
+
+                if skip_gallery:
                     if not dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
                         logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
-                    break  # Skip this gallery entirely
+                    break  # exit retry loop, skip gallery
 
-                # Process each creator
+                # --- Prepare tasks per creator ---
                 grouped_tasks = []
                 for creator in creators:
                     iteration = {"creator": [creator]}
@@ -235,7 +240,6 @@ def process_galleries(gallery_ids):
                         if not img_urls:
                             logger.warning(f"Skipping Page {page} for {creator}: Failed to get URLs")
                             update_skipped_galleries(False, meta, "Failed to get URLs.")
-                            gallery_failed = True
                             continue
 
                         img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
@@ -245,27 +249,22 @@ def process_galleries(gallery_ids):
                     if creator_tasks:
                         grouped_tasks.append((safe_creator_name, creator_tasks))
 
-                # Submit tasks to thread pool
-                log_clarification()
+                # --- Download images per creator ---
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     for safe_creator_name, creator_tasks in grouped_tasks:
                         if not dry_run:
                             submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                         else:
                             for _ in creator_tasks:
-                                time.sleep(0.1)  # Fake delay in dry-run
+                                time.sleep(0.1)  # fake delay
 
-                if gallery_failed:
-                    logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
-                    continue
-
-                # Post hooks and mark completion
                 if not dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
+
                 logger.info(f"Completed Gallery: {gallery_id}")
                 log_clarification()
-                break  # Exit retry loop after successful download
+                break  # exit retry loop on success
 
             except Exception as e:
                 logger.error(f"Error processing Gallery {gallery_id}: {e}")
