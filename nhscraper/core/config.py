@@ -100,8 +100,7 @@ def log(message: str, log_type: str = None):
         if debug_mode or verbose_mode:
             logger.info(message)   # Log info to file and terminal
     elif log_type == "None":
-        if verbose_mode:
-            print(message)         # Only print to terminal
+        print(message)         # Only print to terminal
 
 ##########################################################################################
 # CONFIGS
