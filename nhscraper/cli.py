@@ -64,14 +64,45 @@ def parse_args():
             "If no path is given, uses the default file."
         )
     )
-    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_HOMEPAGE_RANGE_START}-{DEFAULT_HOMEPAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
+    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
     parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
-    parser.add_argument("--artist", nargs="+", metavar="ARGS", help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--group", nargs="+", metavar="ARGS", help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--tag", nargs="+", metavar="ARGS", help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--parody", nargs="+", metavar="ARGS", help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
-    parser.add_argument("--search", nargs="+", metavar="ARGS", help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. START_PAGE defaults to 1, END_PAGE fetches all pages if omitted.")
+    # Allow multiple --artist, --group, etc. each with their own arguments
+    parser.add_argument(
+        "--artist",
+        action="append",
+        nargs="+",  # All args after this flag are collected
+        metavar="ARGS",
+        help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--group",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--tag",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--parody",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
+        "--search",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. Can be repeated."
+    )
 
     # Filters
     parser.add_argument("--excluded-tags", type=str, default=None, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
@@ -81,34 +112,48 @@ def parse_args():
         choices=["english","japanese","pretty"],
         default=DEFAULT_TITLE_TYPE,
         help=(
-            f"What title type to use."
-            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning. (default: {DEFAULT_TITLE_TYPE})"
+            f"What title type to use. (default: {DEFAULT_TITLE_TYPE})"
+            "Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be filesystem compatible."
         )
     )
 
     # Threads / concurrency
-    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads to use for gallery downloads (default: {DEFAULT_THREADS_GALLERIES})")
-    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads to use for image downloads (default: {DEFAULT_THREADS_IMAGES})")
+    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})")
+    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
-
+    parser.add_argument(
+        "--no-sleep",
+        action="store_true",
+        default=DEFAULT_NO_SLEEP,
+        help=(
+            f"Skips dynamically sleeping between galleries. Not recommended for large downloads. (default: {DEFAULT_USE_TOR})"
+            "For a large number of galleries, using this flag in conjunction with a lower thread count MAY result in faster downloads, but is still not recommended."
+            f"May result in hitting API limits (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
+        )
+    )
+    
     # Download / runtime options
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
     
     # Make verbose/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--verbose", action="store_true", default=False, help="Enable verbose logging (print to stdout)")
-    group.add_argument("--debug", action="store_true", default=False, help="Enable debug logging (logger.debug)")
+    group.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help="Enable verbose logging (logger.info)")
+    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging (logger.info, logger.debug)")
 
     return parser.parse_args()
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
-    """Parse CLI args and call fetch_gallery_ids for any query type."""
+    """Parse CLI args and call fetch_gallery_ids for any query type.
+
+    Supports repeated flags like --tag "big boobs" --tag "big ass"
+    and optional page ranges. Defaults to start_page=1, end_page=None.
+    """
     if not arg_list:
         return set()
 
-    query_lower = query_type.lower()
     gallery_ids = set()
+    query_lower = query_type.lower()
 
     # --- File input ---
     if query_lower == "file":
@@ -130,16 +175,25 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- Homepage ---
     if query_lower == "homepage":
-        start_page = int(arg_list[0])
-        end_page = int(arg_list[1]) if len(arg_list) > 1 else start_page
+        # Use defaults if no pages are provided
+        start_page = int(arg_list[0]) if len(arg_list) > 0 else DEFAULT_PAGE_RANGE_START
+        end_page = int(arg_list[1]) if len(arg_list) > 1 else DEFAULT_PAGE_RANGE_END
         gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
-    # --- Other types ---
-    name = str(arg_list[0]).strip()
-    start_page = int(arg_list[1]) if len(arg_list) > 1 else 1
-    end_page = int(arg_list[2]) if len(arg_list) > 2 else None
-    gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
+    # --- Artist / Group / Tag / Parody / Search ---
+    for entry in arg_list:
+        # Each entry may already be a list from argparse 'append' + 'nargs'
+        if isinstance(entry, str):
+            entry = [entry]
+
+        name = str(entry[0]).strip()  # First element is always the query value
+
+        # Use homepage defaults if start/end not provided
+        start_page = int(entry[1]) if len(entry) > 1 else DEFAULT_PAGE_RANGE_START
+        end_page = int(entry[2]) if len(entry) > 2 else DEFAULT_PAGE_RANGE_END
+
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
 
     return gallery_ids
 
@@ -201,7 +255,7 @@ def build_gallery_list(args):
         )
     
     log_clarification()
-    log(f"Gallery List: {gallery_list}")
+    log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
 
@@ -220,6 +274,7 @@ def update_config(args): # Update config
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["MAX_RETRIES"] = args.max_retries
+    config["NO_SLEEP"] = args.no_sleep
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
@@ -229,17 +284,19 @@ def update_config(args): # Update config
 # Main
 # ------------------------------
 def main():
+    normalise_config() # Populate config immediately.
+    
     args = parse_args()
     
     normalise_config() # Populate config immediately.
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(debug=args.debug)
+    logger = setup_logger(verbose=args.verbose, debug=args.debug)
     
     log_clarification()
-    logger.info("====================================================")
-    logger.info("                  nhentai-scraper                   ")
-    logger.info("====================================================")
+    log("====================================================")
+    log("                  nhentai-scraper                   ")
+    log("====================================================")
     
     # ------------------------------
     # Handle Installer / Updater
@@ -265,16 +322,16 @@ def main():
         return
     
     logger.info("CLI: Ready.")
-    log("CLI: Debugging Started.")
+    log("CLI: Debugging Started.", "debug")
     
     # If no gallery input is provided, default to homepage 1 1
     gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
                     args.group, args.tag, args.parody, args.search]
     if not any(gallery_args):
-        args.homepage = [DEFAULT_HOMEPAGE_RANGE_START, DEFAULT_HOMEPAGE_RANGE_END] # Use defaults.
+        args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
     log_clarification()
-    log("Updating Config...")
+    log("Updating Config...", "debug")
     
     # Update Config
     # Allows session to use correct config values on creation
@@ -293,12 +350,12 @@ def main():
     update_env("GALLERIES", gallery_list)
     
     log_clarification()
-    log(f"Updated Config:\n{config}")
+    log(f"Updated Config:\n{config}", "debug")
     
     # ------------------------------
     # Download galleries
     # ------------------------------
-    start_downloader()
+    start_downloader(gallery_list)
 
 if __name__ == "__main__":
     main()

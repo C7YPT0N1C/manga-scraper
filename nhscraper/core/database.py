@@ -2,7 +2,7 @@
 # nhscraper/core/db.py
 
 import os, sqlite3, threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 from nhscraper.core.config import *
 
@@ -47,21 +47,21 @@ def mark_gallery_started(gallery_id, download_location=None, extension_used=None
         """, (gallery_id, "started", now, download_location, extension_used))
         conn.commit()
 
-def mark_gallery_completed(gallery_id):
+def mark_gallery_skipped(gallery_id):
     init_db()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
         UPDATE galleries
         SET status = ?, completed_at = ?
         WHERE id = ?
-        """, ("completed", now, gallery_id))
+        """, ("skipped", now, gallery_id))
         conn.commit()
 
 def mark_gallery_failed(gallery_id):
     init_db()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -69,6 +69,18 @@ def mark_gallery_failed(gallery_id):
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("failed", now, gallery_id))
+        conn.commit()
+
+def mark_gallery_completed(gallery_id):
+    init_db()
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE galleries
+        SET status = ?, completed_at = ?
+        WHERE id = ?
+        """, ("completed", now, gallery_id))
         conn.commit()
 
 def get_gallery_status(gallery_id):
