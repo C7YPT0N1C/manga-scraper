@@ -93,15 +93,14 @@ def log(message: str, log_type: str = None):
     debug_mode = config.get("DEBUG")
     verbose_mode = config.get("VERBOSE")
 
-    if log_type == "debug":
-        if debug_mode or verbose_mode:
+    if log_type == None:
+        print(message)         # Only print to terminal    
+    elif log_type == "debug":
+        if debug_mode:
             logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
     elif log_type == "info":
         if debug_mode or verbose_mode:
             logger.info(message)   # Log info to file and terminal
-    elif log_type == "None":
-        print(message)         # Only print to terminal
-
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
