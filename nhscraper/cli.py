@@ -254,7 +254,7 @@ def build_gallery_list(args):
         )
     
     log_clarification()
-    log(f"Gallery List: {gallery_list}")
+    log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
 
@@ -319,7 +319,7 @@ def main():
         return
     
     logger.info("CLI: Ready.")
-    log("CLI: Debugging Started.")
+    log("CLI: Debugging Started.", "debug")
     
     # If no gallery input is provided, default to homepage 1 1
     gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
@@ -328,7 +328,7 @@ def main():
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
     log_clarification()
-    log("Updating Config...")
+    log("Updating Config...", "debug")
     
     # Update Config
     # Allows session to use correct config values on creation
@@ -347,7 +347,7 @@ def main():
     update_env("GALLERIES", gallery_list)
     
     log_clarification()
-    log(f"Updated Config:\n{config}")
+    log(f"Updated Config:\n{config}", "debug")
     
     # ------------------------------
     # Download galleries

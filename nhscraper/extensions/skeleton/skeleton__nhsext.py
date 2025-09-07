@@ -50,7 +50,7 @@ def update_extension_download_path():
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
     
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def return_gallery_metas(meta):
@@ -129,7 +129,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 
     # Safety check
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
     if RemoveEmptyArtistFolder:  # Remove empty subdirectories, deepest first. Does not delete DEDICATED_DOWNLOAD_PATH.
@@ -162,7 +162,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
     log_clarification()
 
 ####################################################################################################################
@@ -186,7 +186,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
         retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
     if os.path.exists(path):
-        log(f"Already exists, skipping: {path}")
+        log(f"Already exists, skipping: {path}", "debug")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
@@ -218,7 +218,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
                         if chunk:
                             f.write(chunk)
 
-                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
                 if pbar and creator:
                     pbar.set_postfix_str(f"Creator: {creator}")
                 return True
@@ -244,38 +244,38 @@ def pre_run_hook(gallery_list):
     update_extension_download_path()
     
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
     #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
     return gallery_list
 
 def pre_gallery_download_hook(gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
     #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality during download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}", "debug")
     #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after each completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
     #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
     
     #log_clarification()
-    #log("") # <-------- ADD STUFF IN PLACE OF THIS
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
     log_clarification()
     remove_empty_directories(True)

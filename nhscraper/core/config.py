@@ -238,7 +238,7 @@ def update_env(key, value):
 # ------------------------------
 def normalise_config():
     log_clarification()
-    log("Populating Config...")
+    log("Populating Config...", "debug")
     
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,

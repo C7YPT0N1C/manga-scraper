@@ -75,7 +75,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
     if ReturnReport:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries)
-        log(f"All Skipped Galleries:\n{skipped_report}")
+        log(f"All Skipped Galleries:\n{skipped_report}", "debug")
     else:
         if not meta:
             logger.warning("update_skipped_galleries called without meta while ReturnReport is False.")
@@ -85,7 +85,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
         gallery_title = clean_title(meta)
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
+        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}, "debug"): {Reason}'")
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
@@ -214,7 +214,7 @@ def process_galleries(gallery_ids, worker_id=0):
 
                     doujin_folder = build_gallery_path(meta, iteration)
                     if dry_run:
-                        log(f"[DRY-RUN] Would create folder for {creator}: {doujin_folder}")
+                        log(f"[DRY-RUN] Would create folder for {creator}: {doujin_folder}", "debug")
                     else:
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -276,7 +276,7 @@ def start_downloader(gallery_list=None):
 
     log_clarification()
     logger.info("Downloader: Ready.")
-    log("Downloader: Debugging Started.")
+    log("Downloader: Debugging Started.", "debug")
     load_extension()
 
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)

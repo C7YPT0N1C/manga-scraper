@@ -52,7 +52,7 @@ def update_extension_download_path():
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def return_gallery_metas(meta):
@@ -131,8 +131,8 @@ WantedBy=multi-user.target
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
         logger.info("Suwayomi systemd service created and started")
-        log(f"\nSuwayomi Web: http://$IP:4567/")
-        log("Suwayomi GraphQL: http://$IP:4567/api/graphql")
+        log(f"\nSuwayomi Web: http://$IP:4567/", "debug")
+        log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
         
         update_extension_download_path()
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
@@ -172,7 +172,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.")
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
     if dry_run:
@@ -206,7 +206,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 
 def test_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Test hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
     log_clarification()
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
@@ -260,7 +260,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
         retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
     if os.path.exists(path):
-        log(f"Already exists, skipping: {path}")
+        log(f"Already exists, skipping: {path}", "debug")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
@@ -291,7 +291,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
                         if chunk:
                             f.write(chunk)
 
-                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}")
+                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
                 if pbar and creator:
                     pbar.set_postfix_str(f"Creator: {creator}")
                 return True
@@ -312,23 +312,23 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 def pre_run_hook(gallery_list):
     update_extension_download_path()
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
     return gallery_list
 
 def pre_gallery_download_hook(gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
 
 def during_gallery_download_hook(gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}")
+    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}", "debug")
 
 MAX_GENRES_PER_DETAILS_JSON = 15
 MAX_GENRES_PER_CREATOR = 100
 
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.")
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     if not dry_run:
         gallery_meta = return_gallery_metas(meta)
@@ -384,7 +384,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
                 most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_DETAILS_JSON]
                 log_clarification()
-                log(f"Most Popular Genres for {creator_name}:\n{most_popular}")
+                log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
                 details["genre"] = [g for g, count in most_popular]
 
                 if len(creator_counts) > MAX_GENRES_PER_CREATOR:
@@ -398,10 +398,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
     else:
-        log(f"[DRY RUN] Would creation details.json for {creator_name}")
+        log(f"[DRY RUN] Would creation details.json for {creator_name}", "debug")
 
 def post_run_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.")
+    log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
     log_clarification()
     remove_empty_directories(True)

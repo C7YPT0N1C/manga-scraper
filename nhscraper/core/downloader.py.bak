@@ -88,11 +88,11 @@ def update_skipped_galleries(Reason: str = "No Reason Given.", ReturnReport: boo
     if not ReturnReport:
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}'")
+        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}, "debug"): {Reason}'")
     else:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries) # Join each entry with a newline for cleaner printing
-        log(f"All Skipped Galleries:\n{skipped_report}")
+        log(f"All Skipped Galleries:\n{skipped_report}", "debug")
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
@@ -233,7 +233,7 @@ def process_galleries(gallery_ids):
                     
                     # Build full path using iteration, respecting SUBFOLDER_STRUCTURE
                     doujin_folder = build_gallery_path(meta, iteration)
-                    log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'")
+                    log(f"Initialising Doujin Folder for Creator '{creator}': '{doujin_folder}'", "debug")
                     if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
                         os.makedirs(doujin_folder, exist_ok=True)
 
@@ -292,7 +292,7 @@ def process_galleries(gallery_ids):
 def start_downloader(gallery_list=None):
     log_clarification()
     logger.info("Downloader: Ready.")
-    log("Downloader: Debugging Started.")
+    log("Downloader: Debugging Started.", "debug")
     
     load_extension() # Load extension variables, etc
 
