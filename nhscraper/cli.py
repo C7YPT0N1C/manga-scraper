@@ -113,7 +113,7 @@ def parse_args():
         default=DEFAULT_TITLE_TYPE,
         help=(
             f"What title type to use. (default: {DEFAULT_TITLE_TYPE})"
-            "Not using 'pretty' may lead to galleries being filesystem incompatible or not appearing in Suwayomi if the gallery contains unsupported symbols that escape cleaning."
+            "Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be filesystem compatible."
         )
     )
 
@@ -126,7 +126,8 @@ def parse_args():
         action="store_true",
         default=DEFAULT_NO_SLEEP,
         help=(
-            f"Skips dynamically sleeping between galleries. May result in hitting API limits. (default: {DEFAULT_USE_TOR})"
+            f"Skips dynamically sleeping between galleries. (default: {DEFAULT_USE_TOR})"
+            f"May result in hitting API limits (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
             "For a large number of galleries, using this flag in conjunction to a lower thread count MAY result in faster downloads."
         )
     )
