@@ -190,7 +190,7 @@ def process_galleries(gallery_ids, worker_id=0):
                 log_clarification()
                 active_extension.pre_gallery_download_hook(gallery_id)
                 logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
-                time.sleep(dynamic_sleep("gallery"))
+                time.sleep(dynamic_sleep("gallery", gallery_attempts))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
@@ -250,7 +250,7 @@ def process_galleries(gallery_ids, worker_id=0):
                                 submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                             else:
                                 for _ in creator_tasks:
-                                    time.sleep(0.01)  # fake delay
+                                    time.sleep(dynamic_sleep("gallery", gallery_attempts))
 
                     if gallery_failed:
                         logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
