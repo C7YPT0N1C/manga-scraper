@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, subprocess, shutil, tarfile, json, requests, threading
+import os, time, json, requests, threading, subprocess, shutil, tarfile
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
