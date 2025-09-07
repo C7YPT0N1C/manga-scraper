@@ -272,6 +272,8 @@ def process_galleries(gallery_ids):
 # MAIN
 ####################################################################################################
 def start_downloader(gallery_list=None):
+    start_time = time.perf_counter()  # Start timer
+    
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
     log_clarification()
@@ -298,8 +300,16 @@ def start_downloader(gallery_list=None):
         unit="gallery"
     )  
 
+    end_time = time.perf_counter()  # End timer
+    runtime = end_time - start_time
+
+    # Convert seconds to h:m:s
+    hours, rem = divmod(runtime, 3600)
+    minutes, seconds = divmod(rem, 60)
+    human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
+
     log_clarification()
-    logger.info(f"All ({len(gallery_ids)}) galleries processed.")
+    logger.info(f"All ({len(gallery_ids)}) galleries processed in {human_runtime}.")
     update_skipped_galleries(True)
 
     if not dry_run:
