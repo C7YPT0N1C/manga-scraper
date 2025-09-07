@@ -88,7 +88,7 @@ def setup_logger(verbose=False, debug=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str, log_type: str = "None"):
+def log(message: str, log_type: str = None):
     """Unified logging for CLI depending on verbose/debug flags."""
     debug_mode = config.get("DEBUG")
     verbose_mode = config.get("VERBOSE")
@@ -102,8 +102,6 @@ def log(message: str, log_type: str = "None"):
     elif log_type == "None":
         if verbose_mode:
             print(message)         # Only print to terminal
-    
-    # Otherwise do nothing (silent mode)
 
 ##########################################################################################
 # CONFIGS
