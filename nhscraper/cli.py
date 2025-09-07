@@ -283,9 +283,9 @@ def update_config(args): # Update config
 # Main
 # ------------------------------
 def main():
-    args = parse_args()
-    
     normalise_config() # Populate config immediately.
+    
+    args = parse_args()
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(verbose=args.verbose, debug=args.debug)
