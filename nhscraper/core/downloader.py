@@ -298,8 +298,13 @@ def start_downloader(gallery_list=None):
         max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
         desc="Processing galleries",
         unit="gallery"
-    )  
+    )
 
+    if not dry_run:
+        active_extension.post_run_hook()
+    else:
+        logger.info("[DRY-RUN] Would call post_run_hook()")
+    
     end_time = time.perf_counter()  # End timer
     runtime = end_time - start_time
 
@@ -309,10 +314,5 @@ def start_downloader(gallery_list=None):
     human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
 
     log_clarification()
-    logger.info(f"All ({len(gallery_ids)}) galleries processed in {human_runtime}.")
+    logger.info(f"All ({len(gallery_ids)}) Galleries Processed In {human_runtime}.")
     update_skipped_galleries(True)
-
-    if not dry_run:
-        active_extension.post_run_hook()
-    else:
-        logger.info("[DRY-RUN] Would call post_run_hook()")
