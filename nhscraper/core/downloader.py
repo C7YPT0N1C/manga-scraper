@@ -85,7 +85,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
         gallery_title = clean_title(meta)
         log_clarification()
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
-        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}, "debug"): {Reason}'")
+        log(f"Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
