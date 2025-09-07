@@ -169,7 +169,8 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         # Debug logging for transparency
         log_clarification()
         log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})"
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            "debug"
         )
     
     else: # TEST
@@ -247,7 +248,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log(f"Fetcher: Page {page}: Fetched {len(batch, "debug")} gallery IDs")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
 
             if not batch:
                 logger.info(f"Page {page}: No results, stopping early")
@@ -321,7 +322,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?', "debug")}: Page {page}")
+        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -351,7 +352,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?', "debug")}: Page {page}: {urls}")
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
