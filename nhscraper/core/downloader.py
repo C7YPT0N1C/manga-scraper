@@ -171,7 +171,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
 ####################################################################################################
 # CORE
 ####################################################################################################
-def process_galleries(gallery_ids, worker_id=0):
+def process_galleries(gallery_ids):
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
     for gallery_id in gallery_ids:
@@ -296,13 +296,10 @@ def start_downloader(gallery_list=None):
         max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
         desc="Processing galleries",
         unit="gallery"
-    )
-
-        
-        
+    )  
 
     log_clarification()
-    logger.info("All galleries processed.")
+    logger.info(f"All ({len(gallery_ids)}) galleries processed.")
     update_skipped_galleries(True)
 
     if not dry_run:

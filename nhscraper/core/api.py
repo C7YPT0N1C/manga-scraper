@@ -125,12 +125,6 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     BYPASS_SLEEP = config.get("NO_SLEEP", DEFAULT_NO_SLEEP)
     
     if BYPASS_SLEEP == False:
-        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES))) # Number of galleries being processed; at least 1 to avoid division by zero
-        total_load = ( # Total parallel work = gallery threads × image threads
-            config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-            * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        )
-        
         sleep_min = 0.3 # Minimum time to sleep
         gallery_sleep_min_multiplier = 1.5 # Minimum time for a gallery to sleep (this value x sleep_min)
         
@@ -159,6 +153,11 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         #   - More galleries = more cumulative load
         #   - Cap scaling at ×5 to prevent excessive waiting
         #   - Galleries count capped at 1000 to avoid runaway scaling
+        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES))) # Number of galleries being processed; at least 1 to avoid division by zero
+        total_load = ( # Total parallel work = gallery threads × image threads
+            config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+            * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+        )
         capped_galleries = min(num_galleries, 1000)
         load_factor = total_load * capped_galleries / 1000
         scale = min(max(1, load_factor), 5)
