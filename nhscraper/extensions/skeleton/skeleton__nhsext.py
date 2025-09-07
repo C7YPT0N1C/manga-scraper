@@ -10,6 +10,8 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 
 # This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
 
+# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE. 
+
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
