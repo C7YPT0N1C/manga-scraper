@@ -192,7 +192,6 @@ def process_galleries(gallery_ids):
                 logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery", gallery_attempts))
 
-                # Fetch metadata
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
@@ -202,27 +201,18 @@ def process_galleries(gallery_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 gallery_failed = False
+                active_extension.during_gallery_download_hook(gallery_id)
 
-                # Extract info from extension
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
 
-                # Check if gallery should be downloaded
-                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
-                    if not dry_run:
-                        db.mark_gallery_skipped(gallery_id)
-                    else:
-                        logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
-                    break  # Skip this gallery entirely
-
-                # Process each creator
                 grouped_tasks = []
                 for creator in creators:
                     iteration = {"creator": [creator]}
                     safe_creator_name = safe_name(creator)
-                    doujin_folder = build_gallery_path(meta, iteration)
 
+                    doujin_folder = build_gallery_path(meta, iteration)
                     if dry_run:
                         log(f"[DRY-RUN] Would create folder for {creator}: {doujin_folder}", "debug")
                     else:
@@ -245,27 +235,33 @@ def process_galleries(gallery_ids):
                     if creator_tasks:
                         grouped_tasks.append((safe_creator_name, creator_tasks))
 
-                # Submit tasks to thread pool
-                log_clarification()
-                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
-                    for safe_creator_name, creator_tasks in grouped_tasks:
-                        if not dry_run:
-                            submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
-                        else:
-                            for _ in creator_tasks:
-                                time.sleep(0.1)  # Fake delay in dry-run
+                    log_clarification()
 
-                if gallery_failed:
-                    logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
-                    continue
+                if not should_download_gallery(meta, gallery_title, num_pages, iteration):
+                    if not dry_run:
+                        db.mark_gallery_skipped(gallery_id)
+                    else:
+                        logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
+                    break
+                else:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                        for safe_creator_name, creator_tasks in grouped_tasks:
+                            if not dry_run:
+                                submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
+                            else:
+                                for _ in creator_tasks:
+                                    time.sleep(0.1) # Fake delay
 
-                # Post hooks and mark completion
-                if not dry_run:
-                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-                    db.mark_gallery_completed(gallery_id)
-                logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
-                break  # Exit retry loop after successful download
+                    if gallery_failed:
+                        logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
+                        continue
+
+                    if not dry_run:
+                        active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                        db.mark_gallery_completed(gallery_id)
+                    logger.info(f"Completed Gallery: {gallery_id}")
+                    log_clarification()
+                    break
 
             except Exception as e:
                 logger.error(f"Error processing Gallery {gallery_id}: {e}")
