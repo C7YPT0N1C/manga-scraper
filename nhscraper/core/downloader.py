@@ -314,6 +314,6 @@ def start_downloader(gallery_list=None):
     minutes, seconds = divmod(rem, 60)
     human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
 
+    update_skipped_galleries(True)
     log_clarification()
     logger.info(f"All ({len(gallery_ids)}) Galleries Processed In {human_runtime}.")
-    update_skipped_galleries(True)
