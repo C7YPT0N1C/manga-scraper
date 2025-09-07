@@ -250,7 +250,7 @@ def process_galleries(gallery_ids):
                                 submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                             else:
                                 for _ in creator_tasks:
-                                    time.sleep(dynamic_sleep("gallery", gallery_attempts))
+                                    time.sleep(0.1) # Fake delay
 
                     if gallery_failed:
                         logger.warning(f"Gallery {gallery_id}: encountered issues, retrying...")
