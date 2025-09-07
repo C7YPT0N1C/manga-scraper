@@ -18,9 +18,9 @@ session = None
 def session_builder():
     log_clarification()
     logger.info("Fetcher: Ready.")
-    log("Fetcher: Debugging Started.")
+    log("Fetcher: Debugging Started.", "debug")
 
-    log("Building HTTP session with cloudscraper")
+    log("Building HTTP session with cloudscraper", "debug")
 
     s = cloudscraper.create_scraper(
         browser={'browser': 'chrome', 'mobile': False, 'platform': 'windows'}
@@ -33,9 +33,9 @@ def session_builder():
         "Referer": "https://nhentai.net/",
     })
     
-    log(f"Built HTTP session with cloudscraper")
+    log(f"Built HTTP session with cloudscraper", "debug")
     
-    if config.get("USE_TOR", True):
+    if config.get("USE_TOR", DEFAULT_USE_TOR):
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
@@ -119,56 +119,76 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 ################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
-def dynamic_sleep(stage, attempt: int = 1): # TEST 
+def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
-    num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))# Number of galleries being processed; at least 1 to avoid division by zero
-    total_load = ( # Total parallel work = gallery threads × image threads
-        config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-    )
+    BYPASS_SLEEP = config.get("NO_SLEEP", DEFAULT_NO_SLEEP)
     
-    # ------------------------------
-    # Define a base sleep range depending on what stage of scraping we're in
-    # ------------------------------
-    if stage == "api":
-        # When calling the API, back off more with each retry attempt
-        base_min, base_max = (0.3 * attempt, 0.5 * attempt)
+    if BYPASS_SLEEP == False:
+        sleep_min = 0.3 # Minimum time to sleep
+        gallery_sleep_min_multiplier = 1.5 # Minimum time for a gallery to sleep (this value x sleep_min)
+        
+        sleep_max = 0.5 # Maximum time to sleep
+        gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
+        
+        # ------------------------------
+        # Define a base sleep range depending on what stage of scraping we're in
+        # ------------------------------
+        if stage == "api":
+            # When calling the API, back off more with each retry attempt
+            base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
 
-    elif stage == "metadata":
-        # Lightweight requests like fetching metadata (fixed short wait)
-        base_min, base_max = (0.3, 0.5)
+        elif stage == "metadata":
+            # Lightweight requests like fetching metadata (fixed short wait)
+            base_min, base_max = (sleep_min, sleep_max)
 
-    elif stage == "gallery":
-        # Heavier stage (fetching full galleries), so longer base wait
-        base_min, base_max = (0.5, 1)
+        elif stage == "gallery":
+            # Heavier stage (fetching full galleries), so longer base wait
+            base_min, base_max = ((sleep_min * gallery_sleep_min_multiplier), (sleep_max * gallery_sleep_max_multiplier))
 
-    # ------------------------------
-    # Scaling logic
-    # ------------------------------
-    # Scale grows with number of galleries and total concurrency
-    #   - More galleries = more cumulative load
-    #   - Cap scaling at ×5 to prevent excessive waiting
-    #   - Galleries count capped at 1000 to avoid runaway scaling
-    scale = min(
-        max(1,
-            total_load * min(num_galleries, 1000)
-            / 1000),
-        5)
+        # ------------------------------
+        # Scaling logic
+        # ------------------------------
+        # Scale grows with number of galleries and total concurrency
+        #   - More galleries = more cumulative load
+        #   - Cap scaling at ×5 to prevent excessive waiting
+        #   - Galleries count capped at 1000 to avoid runaway scaling
+        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES))) # Number of galleries being processed; at least 1 to avoid division by zero
+        total_load = ( # Total parallel work = gallery threads × image threads
+            config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+            * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+        )
+        capped_galleries = min(num_galleries, 1000)
+        load_factor = total_load * capped_galleries / 1000
+        scale = min(max(1, load_factor), 5)
 
-    # Choose a random sleep within the scaled range
-    sleep_time = random.uniform(base_min * scale, base_max * scale)
-
-    # Debug logging for transparency
-    log_clarification()
-    log(
-        f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})"
-    )
-
+        # Choose a random sleep within the scaled range
+        sleep_time = random.uniform(base_min * scale, base_max * scale)
+        
+        # Debug logging for transparency
+        log_clarification()
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            "debug"
+        )
+    
+    else:
+        sleep_time = 0.3
+        
+        # Debug logging for transparency
+        log_clarification()
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
+            "debug"
+        )
+    
     return sleep_time
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
+    
+    sort = "date" # MOVE TO CLI AT SOME POINT # TEST
+    sort_lower = sort.lower()
 
     # Homepage
     if query_lower == "homepage":
@@ -180,7 +200,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
-        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
     
     # Search queries
     if query_lower == "search":
@@ -206,7 +226,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 break
             
             url = build_url(query_type, query_value, page)
-            log(f"Fetcher: Requesting URL: {url}")
+            log(f"Fetcher: Requesting URL: {url}", "debug")
 
             resp = None
             for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
@@ -225,7 +245,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         resp = None
                         break
                     wait = dynamic_sleep("api", attempt)
-                    logger.warning(f"Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
+                    logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
                     time.sleep(wait)
 
             if resp is None:
@@ -234,7 +254,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             data = resp.json()
             batch = [g["id"] for g in data.get("result", [])]
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
 
             if not batch:
                 logger.info(f"Page {page}: No results, stopping early")
@@ -258,7 +278,7 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
         try:
             log_clarification()
-            log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}")
+            log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}", "debug")
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
@@ -269,7 +289,7 @@ def fetch_gallery_metadata(gallery_id: int):
             resp.raise_for_status()
             
             #log_clarification()
-            #log(f"Fetcher: Raw API response for Gallery: {gallery_id}: {resp.text}")
+            #log(f"Fetcher: Raw API response for Gallery: {gallery_id}: {resp.text}", "debug")
             
             data = resp.json()
 
@@ -279,7 +299,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}: {data}")
+            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}: {data}", "debug")
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
@@ -308,7 +328,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}")
+        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -338,7 +358,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}")
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
@@ -363,7 +383,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}")
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
     return names
 
 def safe_name(s: str) -> str:
@@ -497,7 +517,7 @@ def all_galleries_status():
 if __name__ == "__main__":
     log_clarification()
     logger.info("API: Ready.")
-    log("API: Debugging Started.")
+    log("API: Debugging Started.", "debug")
     
     app.run(
     host="0.0.0.0",

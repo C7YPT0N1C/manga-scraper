@@ -178,6 +178,7 @@ TITLE_TYPE=
 THREADS_GALLERIES=
 THREADS_IMAGES=
 MAX_RETRIES=
+NO_SLEEP=
 
 # Download Options
 USE_TOR=true
@@ -376,6 +377,12 @@ start_install() {
             create_systemd_services
             print_links
             echo -e "\nInstallation complete!"
+
+            # Run nhentai-scraper commands after installation to initialise config, files, etc
+            nhentai-scraper --help
+            hentai-scraper --install-extension skeleton
+            hentai-scraper --install-extension suwayomi
+
             exit 0
             ;;
         *)

@@ -39,7 +39,7 @@ def load_local_manifest():
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
-        #log("Local Manifest: {json_load}")
+        #log("Local Manifest: {json_load}", "debug")
         return json_load
 
 def save_local_manifest(manifest: dict):
@@ -79,7 +79,7 @@ def update_local_manifest_from_remote():
             remote_ext["installed"] = False  # new extension default
             local_manifest["extensions"].append(remote_ext)
             log_clarification()
-            log(f"Added new extension to local manifest: {remote_ext['name']}")
+            log(f"Added new extension to local manifest: {remote_ext['name']}", "debug")
 
     save_local_manifest(local_manifest)
     return local_manifest
@@ -119,7 +119,7 @@ def sparse_clone(extension_name: str, url: str):
             shutil.move(os.path.join(repo_folder, item), ext_folder)
         shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
 
-    log(f"Clone complete: {extension_name} -> {ext_folder}")
+    log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
 #######################################################################
 
@@ -146,7 +146,7 @@ def load_installed_extensions():
             try:
                 module = importlib.import_module(module_name)
                 INSTALLED_EXTENSIONS.append(module)
-                log(f"Extension: {ext['name']}: Loaded.")
+                log(f"Extension: {ext['name']}: Loaded.", "debug")
             except Exception as e:
                 logger.warning(f"Extension: {ext['name']}: Failed to load: {e}. Is an external program managing it?")
         else:
@@ -234,14 +234,14 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
         print(f"Clone complete: {extension_name} -> {ext_folder}")
 
     try:
-        log(f"Sparse cloning {extension_name} from {repo_url}...")
+        log(f"Sparse cloning {extension_name} from {repo_url}...", "debug")
         sparse_clone(extension_name, repo_url)
     except Exception as e:
         logger.warning(f"Failed to sparse-clone from primary repo: {e}")
         if BASE_REPO_BACKUP_URL:
             backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
             try:
-                log(f"Retrying sparse-clone with backup repo: {backup_url}")
+                log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
                 # clean up half-baked folder before retry
                 shutil.rmtree(ext_folder, ignore_errors=True)
                 os.makedirs(ext_folder, exist_ok=True)
@@ -299,7 +299,7 @@ def get_selected_extension(name: str = "skeleton"):
 
     log_clarification()
     logger.info("Extension Loader: Ready.")
-    log("Extension Loader: Debugging Started.")
+    log("Extension Loader: Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -333,7 +333,7 @@ def get_selected_extension(name: str = "skeleton"):
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
-            #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary # TEST
+            #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
             if hasattr(ext, "update_extension_download_path"):
                 ext.update_extension_download_path()

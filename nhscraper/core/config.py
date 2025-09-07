@@ -9,7 +9,7 @@ from dotenv import load_dotenv, set_key
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = "./logs"
+LOG_DIR = "/opt/nhentai-scraper/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log
@@ -21,12 +21,12 @@ logger = logging.getLogger("nhscraper")
 if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
     placeholder_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     placeholder_console = logging.StreamHandler()
-    placeholder_console.setLevel(logging.INFO)   # Default to INFO
+    placeholder_console.setLevel(logging.WARNING)   # Default to WARNING
     placeholder_console.setFormatter(placeholder_formatter)
     logger.addHandler(placeholder_console)
 
-    # Default logger level = INFO (so modules print their "Ready" messages)
-    logger.setLevel(logging.INFO)
+    # Default logger level = WARNING
+    logger.setLevel(logging.WARNING)
 
 # ------------------------------
 # LOG CLARIFICATION
@@ -34,14 +34,14 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
 # ------------------------------
 def log_clarification():
     if logger.getEffectiveLevel == 20:
-        print() # Only print new life if log level is INFO
+        print() # Only print new line if log level is INFO
     logger.debug("")
 
 log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(debug=False):
+def setup_logger(verbose=False, debug=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -59,9 +59,12 @@ def setup_logger(debug=False):
     if debug:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
-    else:
+    elif verbose:
         logger.setLevel(logging.INFO)
         ch.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.WARNING)
+        ch.setLevel(logging.WARNING)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
@@ -74,8 +77,10 @@ def setup_logger(debug=False):
     # Announce level
     if debug:
         logger.info("Log Level Set To DEBUG")
-    else:
+    elif verbose:
         logger.info("Log Level Set To INFO")
+    else:
+        logger.info("Log Level Set To WARNING")
 
     return logger
 
@@ -83,16 +88,17 @@ def setup_logger(debug=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str):
+def log(message: str, log_type: str = None):
     """Unified logging for CLI depending on verbose/debug flags."""
-    if config.get("DEBUG"):
-        logger.debug(message)   # Output message as a debug to terminal AND log file.
-    elif config.get("VERBOSE"):
-        print(message)          # Output message as a print to only terminal.
-    else:
-        logger.debug(message)    # Default
+    debug_mode = config.get("DEBUG")
+    verbose_mode = config.get("VERBOSE")
 
-
+    if log_type == None:
+        print(message)         # Only print to terminal    
+    elif log_type == "debug":
+        logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
+    elif log_type == "info":
+        logger.info(message)   # Log info to file and terminal
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
@@ -133,8 +139,8 @@ DEFAULT_NHENTAI_API_BASE="https://nhentai.net/api"
 DEFAULT_NHENTAI_MIRRORS="https://i.nhentai.net"
 
 # Gallery ID selection
-DEFAULT_HOMEPAGE_RANGE_START=1
-DEFAULT_HOMEPAGE_RANGE_END=3
+DEFAULT_PAGE_RANGE_START=1
+DEFAULT_PAGE_RANGE_END=2
 DEFAULT_RANGE_START=500000
 DEFAULT_RANGE_END=600000
 DEFAULT_GALLERIES=""
@@ -143,13 +149,14 @@ DEFAULT_GALLERIES=""
 DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
 DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
-DODGY_SYMBOL_BLACKLIST = ["↑", "↓", "→", "←", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•"]
-
+DODGY_SYMBOL_BLACKLIST = ["↑", "↓", "→", "←", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•", "●", "…", "@",
+                          "¤", "¢", "£", "¥", "§", "¶", "†", "‡", "‰", "µ", "¦", "°", "¬", "<", ">", "$", "^"]
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
-DEFAULT_THREADS_IMAGES=10
+DEFAULT_THREADS_IMAGES=8
 DEFAULT_MAX_RETRIES=3
+DEFAULT_NO_SLEEP=False
 
 # Download Options
 DEFAULT_USE_TOR=True
@@ -186,8 +193,8 @@ config = {
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "HOMEPAGE_RANGE_START": getenv_int("HOMEPAGE_RANGE_START", DEFAULT_HOMEPAGE_RANGE_START),
-    "HOMEPAGE_RANGE_END": getenv_int("HOMEPAGE_RANGE_END", DEFAULT_HOMEPAGE_RANGE_END),
+    "HOMEPAGE_RANGE_START": getenv_int("HOMEPAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "HOMEPAGE_RANGE_END": getenv_int("HOMEPAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
     "RANGE_START": getenv_int("RANGE_START", DEFAULT_RANGE_START),
     "RANGE_END": getenv_int("RANGE_END", DEFAULT_RANGE_END),
     "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
@@ -201,6 +208,7 @@ config = {
     "THREADS_GALLERIES": getenv_int("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
+    "NO_SLEEP": str(os.getenv("USE_TOR", DEFAULT_NO_SLEEP)).lower() == "true",
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
@@ -231,7 +239,7 @@ def update_env(key, value):
 # ------------------------------
 def normalise_config():
     log_clarification()
-    log("Populating Config...")
+    log("Populating Config...", "debug")
     
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
@@ -240,8 +248,8 @@ def normalise_config():
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
-        "HOMEPAGE_RANGE_START": DEFAULT_HOMEPAGE_RANGE_START,
-        "HOMEPAGE_RANGE_END": DEFAULT_HOMEPAGE_RANGE_END,
+        "HOMEPAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+        "HOMEPAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
         "RANGE_START": DEFAULT_RANGE_START,
         "RANGE_END": DEFAULT_RANGE_END,
         "GALLERIES": DEFAULT_GALLERIES,
@@ -251,6 +259,7 @@ def normalise_config():
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+        "NO_SLEEP": DEFAULT_NO_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "VERBOSE": DEFAULT_VERBOSE,
