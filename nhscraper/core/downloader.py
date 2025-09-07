@@ -303,6 +303,7 @@ def start_downloader(gallery_list=None):
     if not dry_run:
         active_extension.post_run_hook()
     else:
+        log_clarification()
         logger.info("[DRY-RUN] Would call post_run_hook()")
     
     end_time = time.perf_counter()  # End timer
