@@ -83,15 +83,21 @@ def setup_logger(debug=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str):
+def log(message: str, log_type: str = "info"):
     """Unified logging for CLI depending on verbose/debug flags."""
-    if config.get("DEBUG"):
-        logger.debug(message)   # Output message as a debug to terminal AND log file.
-    elif config.get("VERBOSE"):
-        print(message)          # Output message as a print to only terminal.
-    else:
-        logger.debug(message)    # Default
+    debug_mode = config.get("DEBUG")
+    verbose_mode = config.get("VERBOSE")
 
+    if log_type == "debug":
+        if debug_mode or verbose_mode:
+            logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
+    else:
+        if debug_mode:
+            logger.info(message)   # Log info to file and terminal
+        elif verbose_mode:
+            print(message)         # Only print to terminal
+    
+    # Otherwise do nothing (silent mode)
 
 ##########################################################################################
 # CONFIGS
