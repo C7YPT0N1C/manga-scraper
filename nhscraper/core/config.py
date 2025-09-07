@@ -59,7 +59,7 @@ def setup_logger(verbose=False, debug=False):
     if debug:
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
-    if verbose:
+    elif verbose:
         logger.setLevel(logging.INFO)
         ch.setLevel(logging.INFO)
     else:
