@@ -288,7 +288,7 @@ def main():
     normalise_config() # Populate config immediately.
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(debug=args.debug)
+    logger = setup_logger(verbose=args.verbose, debug=args.debug)
     
     log_clarification()
     logger.info("====================================================")

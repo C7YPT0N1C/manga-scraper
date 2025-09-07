@@ -21,12 +21,12 @@ logger = logging.getLogger("nhscraper")
 if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
     placeholder_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     placeholder_console = logging.StreamHandler()
-    placeholder_console.setLevel(logging.INFO)   # Default to INFO
+    placeholder_console.setLevel(logging.WARNING)   # Default to WARNING
     placeholder_console.setFormatter(placeholder_formatter)
     logger.addHandler(placeholder_console)
 
-    # Default logger level = INFO (so modules print their "Ready" messages)
-    logger.setLevel(logging.INFO)
+    # Default logger level = WARNING
+    logger.setLevel(logging.WARNING)
 
 # ------------------------------
 # LOG CLARIFICATION
@@ -41,7 +41,7 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
-def setup_logger(debug=False):
+def setup_logger(verbose=False, debug=False):
     """
     Configure the nhscraper logger.
     Ensures no duplicate handlers and sets levels based on flags/config.
@@ -60,8 +60,8 @@ def setup_logger(debug=False):
         logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     else:
-        logger.setLevel(logging.INFO)
-        ch.setLevel(logging.INFO)
+        logger.setLevel(logging.WARNING)
+        ch.setLevel(logging.WARNING)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
@@ -74,8 +74,10 @@ def setup_logger(debug=False):
     # Announce level
     if debug:
         logger.info("Log Level Set To DEBUG")
-    else:
+    if verbose:
         logger.info("Log Level Set To INFO")
+    else:
+        logger.info("Log Level Set To WARNING")
 
     return logger
 
