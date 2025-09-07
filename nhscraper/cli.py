@@ -137,8 +137,8 @@ def parse_args():
     
     # Make verbose/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help="Enable verbose logging (print to stdout)")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging (logger.debug)")
+    group.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help="Enable verbose logging (logger.info)")
+    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging (logger.info, logger.debug)")
 
     return parser.parse_args()
 

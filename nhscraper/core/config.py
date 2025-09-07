@@ -77,7 +77,7 @@ def setup_logger(verbose=False, debug=False):
     # Announce level
     if debug:
         logger.info("Log Level Set To DEBUG")
-    if verbose:
+    elif verbose:
         logger.info("Log Level Set To INFO")
     else:
         logger.info("Log Level Set To WARNING")
