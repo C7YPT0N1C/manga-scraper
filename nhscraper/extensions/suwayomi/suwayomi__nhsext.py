@@ -470,6 +470,80 @@ def add_creators_to_category():
     else:
         log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
+# ------------------------------------------------------------
+# Update creator's most popular genres
+# ------------------------------------------------------------
+def update_creator_popular_genres(meta):
+    if not dry_run:
+        gallery_meta = return_gallery_metas(meta)
+        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+        if not creators:
+            return
+        gallery_title = gallery_meta["title"]
+        gallery_tags = meta.get("tags", [])
+        gallery_genres = [
+            tag["name"] for tag in gallery_tags
+            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+        ]
+
+        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
+        with _file_lock:
+            if os.path.exists(top_genres_file):
+                with open(top_genres_file, "r", encoding="utf-8") as f:
+                    all_genre_counts = json.load(f)
+            else:
+                all_genre_counts = {}
+
+        for creator_name in creators:
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            details_file = os.path.join(creator_folder, "details.json")
+            os.makedirs(creator_folder, exist_ok=True)
+
+            with _file_lock:
+                if os.path.exists(details_file):
+                    with open(details_file, "r", encoding="utf-8") as f:
+                        details = json.load(f)
+                else:
+                    details = {
+                        "title": "",
+                        "author": creator_name,
+                        "artist": creator_name,
+                        "description": "",
+                        "genre": [],
+                        "status": "1",
+                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+                    }
+
+            details["title"] = creator_name
+            details["author"] = creator_name
+            details["artist"] = creator_name
+            details["description"] = f"Latest Doujin: {gallery_title}"
+
+            with _file_lock:
+                if creator_name not in all_genre_counts:
+                    all_genre_counts[creator_name] = {}
+                creator_counts = all_genre_counts[creator_name]
+                for genre in gallery_genres:
+                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
+
+                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+                log_clarification()
+                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
+                details["genre"] = [g for g, count in most_popular]
+
+                if len(creator_counts) > MAX_GENRES_PARSED:
+                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
+                    all_genre_counts[creator_name] = creator_counts
+
+                with open(details_file, "w", encoding="utf-8") as f:
+                    json.dump(details, f, ensure_ascii=False, indent=2)
+
+                with open(top_genres_file, "w", encoding="utf-8") as f:
+                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
+    
+    else:
+        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
+
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
 ####################################################################################################################
