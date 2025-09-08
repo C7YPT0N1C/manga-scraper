@@ -3,6 +3,12 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
+# This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
+
+
+# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE.
+
+
 import os, time, json, requests
 
 from nhscraper.core.config import *
@@ -12,12 +18,8 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 import nhscraper.extensions.skeleton.skeleton_backend as backend
 from nhscraper.extensions.skeleton.skeleton_backend import test_hook, remove_empty_directories
 
-# This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
-
-# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE. 
-
 ####################################################################################################################
-# Global variables
+# Global variables (SET THESE IN THE BACKEND FILE, IMPORT AS NEEDED)
 ####################################################################################################################
 EXTENSION_NAME = backend.EXTENSION_NAME
 EXTENSION_INSTALL_PATH = backend.EXTENSION_INSTALL_PATH

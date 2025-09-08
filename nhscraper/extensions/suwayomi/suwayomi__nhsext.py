@@ -3,6 +3,10 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
+
+# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE.
+
+
 import os, time, json, requests, subprocess, shutil, tarfile
 
 from nhscraper.core.config import *
@@ -13,7 +17,7 @@ import nhscraper.extensions.suwayomi.suwayomi_backend as backend
 from nhscraper.extensions.suwayomi.suwayomi_backend import test_hook, remove_empty_directories
 
 ####################################################################################################################
-# Global variables
+# Global variables (SET THESE IN THE BACKEND FILE, IMPORT AS NEEDED)
 ####################################################################################################################
 EXTENSION_NAME = backend.EXTENSION_NAME
 EXTENSION_INSTALL_PATH = backend.EXTENSION_INSTALL_PATH
@@ -231,8 +235,8 @@ def pre_run_hook(gallery_list):
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
     
     # Initialise globals
-    backend.get_local_source_id()
-    backend.ensure_category()
+    backend.LOCAL_SOURCE_ID = backend.get_local_source_id()
+    backend.CATEGORY_ID = backend.ensure_category(backend.SUWAYOMI_CATEGORY_NAME)
 
     return gallery_list
 

@@ -40,7 +40,8 @@ dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 _file_lock = threading.Lock()
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
+LOCAL_SOURCE_ID = "0"  # Set dynamically, Local source is usually "0"
+CATEGORY_ID = None # Set dynamically
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
 
 _collected_gallery_metas = []
@@ -294,7 +295,7 @@ def add_creators_to_category():
         update_mangas(new_ids)
         update_mangas_categories(new_ids, CATEGORY_ID)
     else:
-        log(f"[DRY-RUN] Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+        log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
 ############################################
 
@@ -375,4 +376,4 @@ def update_creator_popular_genres(meta):
                     json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
     else:
-        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Would create details.json for {creator_name}", "debug")
