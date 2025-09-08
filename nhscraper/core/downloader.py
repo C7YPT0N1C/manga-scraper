@@ -25,8 +25,7 @@ skipped_galleries = []
 # Select extension (skeleton fallback)
 ####################################################################################################
 def load_extension():
-    global active_extension
-    global download_location
+    global active_extension, download_location
 
     ext_name = config.get("EXTENSION", "skeleton")
     active_extension = get_selected_extension(ext_name)

@@ -84,8 +84,7 @@ def install_extension():
     """
     Install the extension and ensure the dedicated image download path exists.
     """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
+    global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
@@ -111,8 +110,7 @@ def uninstall_extension():
     """
     Remove the extension and related paths.
     """
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
+    global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     if dry_run:
         logger.info(f"[DRY-RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")

@@ -79,8 +79,7 @@ SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/dow
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
 def install_extension():
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
+    global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
@@ -141,8 +140,7 @@ WantedBy=multi-user.target
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
 
 def uninstall_extension():
-    global DEDICATED_DOWNLOAD_PATH
-    global EXTENSION_INSTALL_PATH
+    global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
     if dry_run:
         logger.info(f"[DRY-RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
@@ -176,12 +174,16 @@ def test_hook():
     log_clarification()
 
 ############################################
-_collected_gallery_metas = []
-_gallery_meta_lock = threading.Lock()
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
+
+_collected_gallery_metas = []
+_gallery_meta_lock = threading.Lock()
+
+_collected_manga_ids = set()
+_manga_ids_lock = threading.Lock()
 
 def graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
@@ -214,12 +216,14 @@ def get_local_source_id():
     """
     result = graphql_request(query)
     if not result:
+        log_clarification()
         logger.error("GraphQL: Failed to fetch sources")
         return LOCAL_SOURCE_ID
 
     for node in result["data"]["sources"]["nodes"]:
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
+            log_clarification()
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
@@ -255,75 +259,106 @@ def ensure_category(category_name=None):
     return int(result["data"]["createCategory"]["category"]["id"])
 
 # ----------------------------
-# Add Manga to Category
+# Store The IDs of Creators' Manga
 # ----------------------------
-def add_manga_to_category(manga_id: int, category_id: int):
+def store_creator_manga_IDs(meta: dict):
+    global LOCAL_SOURCE_ID
+    
+    if not LOCAL_SOURCE_ID:
+        logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
+        return
+
+    if not dry_run:
+        gallery_meta = return_gallery_metas(meta)
+        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+        for creator_name in creators:
+            query = """
+            query ($title: String!, $sourceId: String!) {
+            mangas(
+                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
+            ) {
+                nodes { id title }
+            }
+            }
+            """
+            result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            if not nodes:
+                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'")
+                continue
+
+            manga_id = int(nodes[0]["id"])
+            with _manga_ids_lock:
+                if manga_id not in _collected_manga_ids:
+                    _collected_manga_ids.add(manga_id)
+                    log(f"Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+    else:
+        log(f"[DRY-RUN] Would stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+
+# ----------------------------
+# Bulk Update Functions
+# ----------------------------
+def update_mangas(ids: list[int]):
+    if not ids:
+        return
     mutation = """
-    mutation ($id: Int!, $categoryId: Int!) {
-      updateMangaCategories(
-        input: { id: $id, patch: { addToCategories: [$categoryId] } }
-      ) {
-        manga { id title categories { nodes { id name } } }
+    mutation ($ids: [Int!]!) {
+      updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
+        clientMutationId
       }
     }
     """
-    graphql_request(mutation, {"id": manga_id, "categoryId": category_id})
-    logger.info(f"GraphQL: Added category {category_id} to manga {manga_id}")
+    graphql_request(mutation, {"ids": ids})
+    logger.info(f"GraphQL: Updated {len(ids)} mangas as inLibrary.")
 
-# ----------------------------
-# Add Creators (Manga Titles) to Category
-# ----------------------------
-def add_creator_to_category(meta):
-    if dry_run:
-        log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+def update_mangas_categories(ids: list[int], category_id: int):
+    if not ids:
         return
+    mutation = """
+    mutation ($ids: [Int!]!, $categoryId: Int!) {
+      updateMangasCategories(
+        input: { ids: $ids, patch: { addToCategories: [$categoryId] } }
+      ) {
+        mangas { id title }
+      }
+    }
+    """
+    graphql_request(mutation, {"ids": ids, "categoryId": category_id})
+    logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
 
-    # Get local source ID
-    local_source_id = get_local_source_id()
-    # Get category ID
-    category_id = ensure_category(SUWAYOMI_CATEGORY_NAME)
+# ----------------------------
+# Add Collected Creators to Category
+# ----------------------------
+def add_creators_to_category():
+    global CATEGORY_ID
     
-    if local_source_id is None:
-        logger.error("GraphQL: Cannot add gallery because Local source ID could not be resolved")
-        return
+    if not dry_run:
+        if CATEGORY_ID is None:
+            logger.error("GraphQL: CATEGORY_ID not set, cannot add creators.")
+            return
 
-    gallery_meta = return_gallery_metas(meta)
-    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-    if not creators:
-        log("No creators found for gallery, skipping category update", "debug")
-        return
-
-    # For each creator, fetch manga by title and add to category
-    for creator_name in creators:
+        # Get existing mangas in the category
         query = """
-        query ($title: String!, $sourceId: String!) {
-          mangas(
-            filter: {
-              sourceId: { equalTo: $sourceId },
-              title: { equalTo: $title }
-            }
-          ) {
-            nodes { id title categories { nodes { id name } } }
-          }
+        query ($categoryId: Int!) {
+        category(id: $categoryId) {
+            mangas { nodes { id title } }
+        }
         }
         """
-        result = graphql_request(query, {"title": creator_name, "sourceId": local_source_id})
-        if not result:
-            logger.warning(f"GraphQL: Failed to fetch manga for creator '{creator_name}'")
-            continue
+        result = graphql_request(query, {"categoryId": CATEGORY_ID})
+        existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
 
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
-        if not nodes:
-            logger.warning(f"GraphQL: No manga found in Local source with title '{creator_name}'")
-            continue
+        with _manga_ids_lock:
+            new_ids = list(_collected_manga_ids - existing_ids)
 
-        manga_id = int(nodes[0]["id"])
-        existing_categories = [c["name"] for c in nodes[0]["categories"]["nodes"]]
-        if SUWAYOMI_CATEGORY_NAME not in existing_categories:
-            logger.info(f"GraphQL: Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
-            add_manga_to_category(manga_id, category_id)
-        else:
-            log(f"GraphQL: Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+        if not new_ids:
+            logger.info("GraphQL: No new mangas to add to category.")
+            return
+
+        update_mangas(new_ids)
+        update_mangas_categories(new_ids, CATEGORY_ID)
+    else:
+        log(f"[DRY-RUN] Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
 ############################################
 
@@ -404,7 +439,6 @@ def update_creator_popular_genres(meta):
                     json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
     else:
-        log(f"[DRY RUN] Would add manga to for {creator_name}", "debug")
         log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
 
 ############################################
@@ -517,9 +551,16 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
+    global LOCAL_SOURCE_ID, CATEGORY_ID
+    
     update_extension_download_path()
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
+    
+    # Initialise globals
+    LOCAL_SOURCE_ID = get_local_source_id()
+    CATEGORY_ID = ensure_category(SUWAYOMI_CATEGORY_NAME)
+
     return gallery_list
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
@@ -541,32 +582,17 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
 
-    # Update creator's popular genres (thread safe)
+    # Update creator's popular genres and store creator's manga ID (thread safe)
     update_creator_popular_genres(meta)
-
-    if dry_run:
-        log(f"[DRY-RUN] Would collect gallery meta for post-run processing: {meta.get('title', 'Unknown')}", "debug")
+    store_creator_manga_IDs(meta)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
 
-    # Thread-safe copy and clear of collected metas
-    with _gallery_meta_lock:
-        metas_to_process = _collected_gallery_metas.copy()
-        _collected_gallery_metas.clear()
-
-    if not metas_to_process:
-        log("No gallery metas collected during run, skipping category updates.", "debug")
-    else:
-        log(f"Processing {len(metas_to_process)} collected gallery metas for Suwayomi category...", "debug")   
-        #log(f"Collected Metas:\n{metas_to_process}", "debug")
-        for meta in metas_to_process:
-            if dry_run:
-                log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
-            else:
-                add_creator_to_category(meta)
+    # Bulk add creators to Suwayomi category
+    add_creators_to_category()
 
     # Clean up empty directories
     remove_empty_directories(True)
