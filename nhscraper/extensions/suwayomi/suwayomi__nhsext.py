@@ -57,6 +57,8 @@ _gallery_meta_lock = threading.Lock()
 _collected_manga_ids = set()
 _manga_ids_lock = threading.Lock()
 
+_deferred_creators = set()
+_deferred_lock = threading.Lock()
 
 ####################################################################################################################
 # CORE
@@ -183,6 +185,7 @@ def uninstall_extension():
     except Exception as e:
         logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
 
+
 ####################################################################################################################
 # CUSTOM HOOKS (thread-safe)
 ####################################################################################################################
@@ -272,16 +275,16 @@ def get_local_source_id():
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log_clarification()
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
-            return LOCAL_SOURCE_ID   # ✅ stop here
+            return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
     LOCAL_SOURCE_ID = None
-    return None
 
 # ----------------------------
 # Ensure Category Exists
 # ----------------------------
 def ensure_category(category_name=None):
+    global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
     query = """
@@ -294,7 +297,8 @@ def ensure_category(category_name=None):
     result = graphql_request(query, {"name": name})
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
     if nodes:
-        return int(nodes[0]["id"])  # category ID for mutations must be int
+        CATEGORY_ID = int(nodes[0]["id"])
+        return CATEGORY_ID
 
     mutation = """
     mutation ($name: String!) {
@@ -304,7 +308,8 @@ def ensure_category(category_name=None):
     }
     """
     result = graphql_request(mutation, {"name": name})
-    return int(result["data"]["createCategory"]["category"]["id"])
+    CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
+    return CATEGORY_ID
 
 # ----------------------------
 # Store The IDs of Creators' Manga
@@ -312,7 +317,7 @@ def ensure_category(category_name=None):
 def store_creator_manga_IDs(meta: dict):
     global LOCAL_SOURCE_ID
     
-    if LOCAL_SOURCE_ID == None:
+    if not LOCAL_SOURCE_ID:
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
         return
 
@@ -322,17 +327,19 @@ def store_creator_manga_IDs(meta: dict):
         for creator_name in creators:
             query = """
             query ($title: String!, $sourceId: String!) {
-            mangas(
+              mangas(
                 filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-            ) {
+              ) {
                 nodes { id title }
-            }
+              }
             }
             """
             result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
-                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'") # TEST
+                logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
+                with _deferred_lock:
+                    _deferred_creators.add(creator_name)
                 continue
 
             manga_id = int(nodes[0]["id"])
@@ -341,7 +348,58 @@ def store_creator_manga_IDs(meta: dict):
                     _collected_manga_ids.add(manga_id)
                     log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
     else:
-        log(f"[DRY-RUN] GraphQL: Would store manga ID {manga_id} for creator '{creator_name}'", "debug")
+        log(f"[DRY-RUN] GraphQL: Would store manga ID for creators", "debug")
+
+# ----------------------------
+# Retry deferred creators
+# ----------------------------
+def retry_deferred_creators():
+    global LOCAL_SOURCE_ID
+    if not _deferred_creators:
+        return
+
+    max_attempts = 5
+    delay = 2
+
+    for attempt in range(1, max_attempts + 1):
+        with _deferred_lock:
+            creators_to_retry = list(_deferred_creators)
+
+        if not creators_to_retry:
+            return
+
+        logger.info(f"GraphQL: Retrying {len(creators_to_retry)} deferred creators (attempt {attempt}/{max_attempts})")
+
+        for creator_name in creators_to_retry:
+            query = """
+            query ($title: String!, $sourceId: String!) {
+              mangas(
+                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
+              ) {
+                nodes { id title }
+              }
+            }
+            """
+            result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            if nodes:
+                manga_id = int(nodes[0]["id"])
+                with _manga_ids_lock:
+                    if manga_id not in _collected_manga_ids:
+                        _collected_manga_ids.add(manga_id)
+                        log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
+                with _deferred_lock:
+                    _deferred_creators.discard(creator_name)
+
+        if not _deferred_creators:
+            logger.info("GraphQL: All deferred creators resolved.")
+            return
+
+        time.sleep(delay)
+        delay *= 2
+
+    if _deferred_creators:
+        logger.warning(f"GraphQL: Some creators could not be resolved after retries: {_deferred_creators}")
 
 # ----------------------------
 # Bulk Update Functions
@@ -382,15 +440,19 @@ def add_creators_to_category():
     
     if not dry_run:
         if CATEGORY_ID is None:
+            ensure_category()
+        if CATEGORY_ID is None:
             logger.error("GraphQL: CATEGORY_ID not set, cannot add creators.")
             return
+
+        retry_deferred_creators()
 
         # Get existing mangas in the category
         query = """
         query ($categoryId: Int!) {
-        category(id: $categoryId) {
+          category(id: $categoryId) {
             mangas { nodes { id title } }
-        }
+          }
         }
         """
         result = graphql_request(query, {"categoryId": CATEGORY_ID})
@@ -407,82 +469,6 @@ def add_creators_to_category():
         update_mangas_categories(new_ids, CATEGORY_ID)
     else:
         log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
-
-############################################
-
-# ------------------------------------------------------------
-# Update creator's most popular genres
-# ------------------------------------------------------------
-def update_creator_popular_genres(meta):
-    if not dry_run:
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        if not creators:
-            return
-        gallery_title = gallery_meta["title"]
-        gallery_tags = meta.get("tags", [])
-        gallery_genres = [
-            tag["name"] for tag in gallery_tags
-            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-        ]
-
-        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        with _file_lock:
-            if os.path.exists(top_genres_file):
-                with open(top_genres_file, "r", encoding="utf-8") as f:
-                    all_genre_counts = json.load(f)
-            else:
-                all_genre_counts = {}
-
-        for creator_name in creators:
-            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            details_file = os.path.join(creator_folder, "details.json")
-            os.makedirs(creator_folder, exist_ok=True)
-
-            with _file_lock:
-                if os.path.exists(details_file):
-                    with open(details_file, "r", encoding="utf-8") as f:
-                        details = json.load(f)
-                else:
-                    details = {
-                        "title": "",
-                        "author": creator_name,
-                        "artist": creator_name,
-                        "description": "",
-                        "genre": [],
-                        "status": "1",
-                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-                    }
-
-            details["title"] = creator_name
-            details["author"] = creator_name
-            details["artist"] = creator_name
-            details["description"] = f"Latest Doujin: {gallery_title}"
-
-            with _file_lock:
-                if creator_name not in all_genre_counts:
-                    all_genre_counts[creator_name] = {}
-                creator_counts = all_genre_counts[creator_name]
-                for genre in gallery_genres:
-                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
-
-                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
-                log_clarification()
-                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
-                details["genre"] = [g for g, count in most_popular]
-
-                if len(creator_counts) > MAX_GENRES_PARSED:
-                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-                    all_genre_counts[creator_name] = creator_counts
-
-                with open(details_file, "w", encoding="utf-8") as f:
-                    json.dump(details, f, ensure_ascii=False, indent=2)
-
-                with open(top_genres_file, "w", encoding="utf-8") as f:
-                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
-    
-    else:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Would create details.json for {creator_name}", "debug")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
