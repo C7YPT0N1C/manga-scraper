@@ -282,54 +282,33 @@ def add_manga_to_category(manga_id: int, new_category_id: int):
     graphql_request(mutation, {"mangaId": manga_id, "categoryIds": existing_ids + [new_category_id]})
     logger.info(f"GraphQL: Added category {new_category_id} to manga {manga_id}")
 
-def add_creator_to_category(creator_name):
-    # ------------------------------
-    # Ensure creator manga is in SUWAYOMI_CATEGORY_NAME category
-    # ------------------------------
+def add_creators_to_category():
+    log("Adding all Local source mangas to category", "debug")
     category_id = ensure_category()
     local_source_id = get_local_source_id()
-
     if local_source_id is None:
-        logger.error("GraphQL: Skipping because Local source ID could not be resolved")
-    else:
-        query = """
-        query ($title: String!, $sourceId: Int!) {
-        mangas(
-            filter: {
-            sourceId: { equalTo: $sourceId }
-            title: { equalTo: $title }
-            }
-        ) {
-            nodes {
-            id
-            title
-            sourceId
-            categories { nodes { id name } }
-            }
-        }
-        }
-        """
-        
-        log(f"GraphQL: Searching Local source for manga '{creator_name}'", "debug")
-        result = graphql_request(query, {"title": creator_name, "sourceId": int(local_source_id)})
-        if not result:
-            logger.warning(f"GraphQL: Query failed when searching for manga '{creator_name}'")
-        else:
-            nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
-            log(f"GraphQL: Query result for '{creator_name}': {json.dumps(nodes, indent=2, ensure_ascii=False)}", "debug")
+        logger.error("GraphQL: Cannot add mangas because Local source ID could not be resolved")
+        return
 
-            if not nodes:
-                logger.warning(f"GraphQL: No manga found in Local source with title exactly '{creator_name}'")
-            else:
-                manga_id = nodes[0]["id"]
-                existing_categories = [c["name"] for c in nodes[0]["categories"]["nodes"]]
-                log(f"GraphQL: Found manga ID={manga_id}, existing categories={existing_categories}", "debug")
+    query = """
+    query ($sourceId: Int!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId } }) {
+        nodes { id title categories { nodes { id name } } }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": local_source_id})
+    if not result:
+        logger.error("GraphQL: Failed to fetch mangas from Local source")
+        return
 
-                if SUWAYOMI_CATEGORY_NAME not in existing_categories:
-                    logger.info(f"GraphQL: Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
-                    add_manga_to_category(manga_id, category_id)
-                else:
-                    log(f"GraphQL: Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
+    for manga in nodes:
+        manga_id = manga["id"]
+        existing_categories = [c["name"] for c in manga["categories"]["nodes"]]
+        if SUWAYOMI_CATEGORY_NAME not in existing_categories:
+            logger.info(f"GraphQL: Adding manga '{manga['title']}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
+            add_manga_to_category(manga_id, category_id)
 
 def update_creator_popular_genres(meta):
     if not dry_run:
@@ -353,8 +332,6 @@ def update_creator_popular_genres(meta):
                 all_genre_counts = {}
 
         for creator_name in creators:
-            add_creator_to_category(creator_name)
-
             # ------------------------------
             # Update creator's most popular genres
             # ------------------------------   
@@ -546,3 +523,4 @@ def post_run_hook():
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
     log_clarification()
     remove_empty_directories(True)
+    add_creators_to_category()
