@@ -379,15 +379,24 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             }
             }
             """
+            log(f"Searching for manga with title '{creator_name}' in Suwayomi", "debug")
             result = graphql_request(query, {"title": creator_name})
-            if result:
+            if not result:
+                logger.warning(f"GraphQL query failed when searching for manga '{creator_name}'")
+            else:
                 nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
-                if nodes:
+                log(f"Query result for '{creator_name}': {json.dumps(nodes, indent=2, ensure_ascii=False)}", "debug")
+                if not nodes:
+                    logger.warning(f"No manga found in Suwayomi with title exactly '{creator_name}'")
+                else:
                     manga_id = nodes[0]["id"]
                     existing_categories = [c["name"] for c in nodes[0]["categories"]]
+                    log(f"Found manga ID={manga_id}, existing categories={existing_categories}", "debug")
                     if SUWAYOMI_CATEGORY_NAME not in existing_categories:
-                        log(f"Adding {creator_name} to {SUWAYOMI_CATEGORY_NAME} category", "debug")
+                        logger.info(f"Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
                         add_manga_to_category(manga_id, category_id)
+                    else:
+                        log(f"Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
             # ------------------------------
             # Update creator's most popular genres
