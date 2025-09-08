@@ -561,6 +561,8 @@ def post_run_hook():
         log("No gallery metas collected during run, skipping category updates.", "debug")
     else:
         log(f"Processing {len(metas_to_process)} collected gallery metas for Suwayomi category...", "debug")
+        
+        log(f"Collected Metas:\n{metas_to_process}", "debug")
         for meta in metas_to_process:
             if dry_run:
                 log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
