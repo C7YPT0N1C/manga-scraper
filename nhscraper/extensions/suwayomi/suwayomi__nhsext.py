@@ -35,8 +35,28 @@ SUBFOLDER_STRUCTURE = ["creator", "title"]
 
 dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
-# Thread lock for file operations
+############################################
+
+GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
+SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
+
+# Max number of genres stored in a creator's details.json
+MAX_GENRES_STORED = 15
+# Max number of genres parsed from a gallery and stored in a creator's "most_popular_genres.json" field.
+MAX_GENRES_PARSED = 100
+
+############################################
+
+# Thread locks for file operations
 _file_lock = threading.Lock()
+
+_collected_gallery_metas = []
+_gallery_meta_lock = threading.Lock()
+
+_collected_manga_ids = set()
+_manga_ids_lock = threading.Lock()
+
 
 ####################################################################################################################
 # CORE
@@ -170,27 +190,54 @@ def uninstall_extension():
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
+    log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
     log_clarification()
 
+# Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
+def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
+    global DEDICATED_DOWNLOAD_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
+        return
+
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+        return
+
+    if RemoveEmptyArtistFolder:
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue
+            try:
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+            except Exception as e:
+                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    else:
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue
+            if not dirnames and not filenames:
+                try:
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+                except Exception as e:
+                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+
+    logger.info(f"Removed empty directories.")
+    DEDICATED_DOWNLOAD_PATH = ""
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
 ############################################
-
-GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
-SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
-
-_collected_gallery_metas = []
-_gallery_meta_lock = threading.Lock()
-
-_collected_manga_ids = set()
-_manga_ids_lock = threading.Lock()
 
 def graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
     if dry_run:
-        logger.info(f"[DRY-RUN] Would make GraphQL request: {query} with variables {variables}")
+        logger.info(f"[DRY-RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
     try:
@@ -198,7 +245,7 @@ def graphql_request(query: str, variables: dict = None):
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"GraphQL request failed: {e}")
+        logger.error(f"GraphQL: Request failed: {e}")
         return None
 
 # ----------------------------
@@ -225,10 +272,9 @@ def get_local_source_id():
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log_clarification()
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
-            return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
-    return None
+    LOCAL_SOURCE_ID = None
 
 # ----------------------------
 # Ensure Category Exists
@@ -264,7 +310,7 @@ def ensure_category(category_name=None):
 def store_creator_manga_IDs(meta: dict):
     global LOCAL_SOURCE_ID
     
-    if not LOCAL_SOURCE_ID:
+    if LOCAL_SOURCE_ID == None:
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
         return
 
@@ -284,16 +330,16 @@ def store_creator_manga_IDs(meta: dict):
             result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
-                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'")
+                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'") # TEST
                 continue
 
             manga_id = int(nodes[0]["id"])
             with _manga_ids_lock:
                 if manga_id not in _collected_manga_ids:
                     _collected_manga_ids.add(manga_id)
-                    log(f"Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+                    log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
     else:
-        log(f"[DRY-RUN] Would stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+        log(f"[DRY-RUN] GraphQL: Would store manga ID {manga_id} for creator '{creator_name}'", "debug")
 
 # ----------------------------
 # Bulk Update Functions
@@ -309,7 +355,7 @@ def update_mangas(ids: list[int]):
     }
     """
     graphql_request(mutation, {"ids": ids})
-    logger.info(f"GraphQL: Updated {len(ids)} mangas as inLibrary.")
+    logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
 
 def update_mangas_categories(ids: list[int], category_id: int):
     if not ids:
@@ -358,14 +404,9 @@ def add_creators_to_category():
         update_mangas(new_ids)
         update_mangas_categories(new_ids, CATEGORY_ID)
     else:
-        log(f"[DRY-RUN] Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+        log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
 ############################################
-
-# Max number of genres stored in a creator's details.json
-MAX_GENRES_STORED = 15
-# Max number of genres parsed from a gallery and stored in a creator's "most_popular_genres.json" field.
-MAX_GENRES_PARSED = 100
 
 # ------------------------------------------------------------
 # Update creator's most popular genres
@@ -439,46 +480,7 @@ def update_creator_popular_genres(meta):
                     json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
     else:
-        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
-
-############################################
-
-# Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
-def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
-    global DEDICATED_DOWNLOAD_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
-        return
-
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
-        return
-
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    logger.info(f"Removed empty directories.")
-    DEDICATED_DOWNLOAD_PATH = ""
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Would create details.json for {creator_name}", "debug")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)

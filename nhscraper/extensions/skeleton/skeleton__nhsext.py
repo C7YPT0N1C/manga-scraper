@@ -40,7 +40,9 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
-# Thread lock for file operations
+############################################
+
+# Thread locks for file operations
 _file_lock = threading.Lock()
 
 ####################################################################################################################
