@@ -20,6 +20,7 @@ _file_lock = threading.Lock()
 ####################################################################################################################
 # CORE
 ####################################################################################################################
+# Remember to reflect in __nhsext file as well as backend.
 def return_gallery_metas(meta):
     artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
     groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")

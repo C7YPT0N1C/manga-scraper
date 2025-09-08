@@ -59,6 +59,27 @@ def update_extension_download_path():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
+# Remember to reflect in __nhsext file as well as backend.
+def return_gallery_metas(meta):
+    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    title = clean_title(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+    
+    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    
+    log_clarification()
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": language,
+    }
+
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
