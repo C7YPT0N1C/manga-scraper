@@ -227,24 +227,37 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"GraphQL request failed: {e}")
         return None
 
-def update_local_source_path(local_path: str):
+def ensure_category(name="NHentai Scraper"):
     query = """
-    mutation UpdateSettings($settings: SetSettingsInput!) {
-        setSettings(input: $settings) {
-            settings {
-                localSourcePath
-            }
-        }
+    query ($name: String!) {
+      categories(filter: { name: { equalTo: $name } }) {
+        nodes { id name }
+      }
     }
     """
-    variables = {"settings": {"localSourcePath": local_path}}
-    result = graphql_request(query, variables)
-    if result and "data" in result and "setSettings" in result["data"]:
-        logger.info(f"Successfully updated local source path to: {local_path}")
-        return True
-    else:
-        logger.error(f"Failed to update local source path. Response: {result}")
-        return False
+    result = graphql_request(query, {"name": name})
+    if result and result.get("data", {}).get("categories", {}).get("nodes"):
+        return result["data"]["categories"]["nodes"][0]["id"]
+
+    mutation = """
+    mutation ($name: String!) {
+      createCategory(input: { name: $name }) {
+        category { id name }
+      }
+    }
+    """
+    result = graphql_request(mutation, {"name": name})
+    return result["data"]["createCategory"]["category"]["id"]
+
+def add_manga_to_category(manga_id: int, category_id: int):
+    mutation = """
+    mutation ($mangaId: Int!, $categoryIds: [Int!]!) {
+      updateMangaCategories(input: { mangaId: $mangaId, categoryIds: $categoryIds }) {
+        manga { id title categories { id name } }
+      }
+    }
+    """
+    graphql_request(mutation, {"mangaId": manga_id, "categoryIds": [category_id]})
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -331,6 +344,29 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     if not dry_run:
+        # --- NEW: ensure creator manga is in NHentai Scraper category ---
+        category_id = ensure_category("NHentai Scraper")
+
+        # search the manga by title = creator_name
+        query = """
+        query ($title: String!) {
+          mangas(filter: { title: { equalTo: $title } }) {
+            nodes { id title categories { id name } }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name})
+        if result:
+            nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
+            if nodes:
+                manga_id = nodes[0]["id"]
+                existing_categories = [c["name"] for c in nodes[0]["categories"]]
+                if "NHentai Scraper" not in existing_categories:
+                    log(f"Adding {creator_name} to NHentai Scraper category", "debug")
+                    add_manga_to_category(manga_id, category_id)
+
+        #################################################################################################
+        
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
         if not creators:

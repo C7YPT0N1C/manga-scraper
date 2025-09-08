@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, json, re, requests
-from flask import Flask, jsonify, request
+import os, time, random, cloudscraper, request, requests, re, json
+from flask import Flask, jsonify
 from datetime import datetime
 import urllib.parse
 from urllib.parse import urljoin
