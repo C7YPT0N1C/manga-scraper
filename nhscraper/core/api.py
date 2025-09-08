@@ -131,9 +131,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_max = 0.5 # Maximum time to sleep
         gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
         
-        # ------------------------------
+        # ------------------------------------------------------------
         # Define a base sleep range depending on what stage of scraping we're in
-        # ------------------------------
+        # ------------------------------------------------------------
         if stage == "api":
             # When calling the API, back off more with each retry attempt
             base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
@@ -146,9 +146,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
             # Heavier stage (fetching full galleries), so longer base wait
             base_min, base_max = ((sleep_min * gallery_sleep_min_multiplier), (sleep_max * gallery_sleep_max_multiplier))
 
-        # ------------------------------
+        # ------------------------------------------------------------
         # Scaling logic
-        # ------------------------------
+        # ------------------------------------------------------------
         # Scale grows with number of galleries and total concurrency
         #   - More galleries = more cumulative load
         #   - Cap scaling at ×5 to prevent excessive waiting

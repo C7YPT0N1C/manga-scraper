@@ -176,6 +176,8 @@ def test_hook():
     log_clarification()
 
 ############################################
+_collected_gallery_metas = []
+_gallery_meta_lock = threading.Lock()
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
@@ -330,6 +332,9 @@ MAX_GENRES_STORED = 15
 # Max number of genres parsed from a gallery and stored in a creator's "most_popular_genres.json" field.
 MAX_GENRES_PARSED = 100
 
+# ------------------------------------------------------------
+# Update creator's most popular genres
+# ------------------------------------------------------------
 def update_creator_popular_genres(meta):
     if not dry_run:
         gallery_meta = return_gallery_metas(meta)
@@ -352,9 +357,6 @@ def update_creator_popular_genres(meta):
                 all_genre_counts = {}
 
         for creator_name in creators:
-            # ------------------------------
-            # Update creator's most popular genres
-            # ------------------------------   
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
@@ -533,17 +535,37 @@ def during_gallery_download_hook(gallery_id):
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
+    log(f"Extension: {EXTENSION_NAME}: Post-download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
 
-    # Add creator to Suwayomi category for scraped galleries.
-    add_creator_to_category(meta)
+    # Thread-safe append
+    with _gallery_meta_lock:
+        _collected_gallery_metas.append(meta)
 
-    # Update creator genres
+    # Update creator's popular genres (thread safe)
     update_creator_popular_genres(meta)
+
+    if dry_run:
+        log(f"[DRY-RUN] Would collect gallery meta for post-run processing: {meta.get('title', 'Unknown')}", "debug")
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
-    log_clarification()
+
+    # Thread-safe copy and clear of collected metas
+    with _gallery_meta_lock:
+        metas_to_process = _collected_gallery_metas.copy()
+        _collected_gallery_metas.clear()
+
+    if not metas_to_process:
+        log("No gallery metas collected during run, skipping category updates.", "debug")
+    else:
+        log(f"Processing {len(metas_to_process)} collected gallery metas for Suwayomi category...", "debug")
+        for meta in metas_to_process:
+            if dry_run:
+                log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+            else:
+                add_creator_to_category(meta)
+
+    # Clean up empty directories
     remove_empty_directories(True)

@@ -7,9 +7,9 @@ from urllib.request import urlopen
 from nhscraper.core.config import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
-# ------------------------------
+# ------------------------------------------------------------
 # Constants / Paths
-# ------------------------------
+# ------------------------------------------------------------
 EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
@@ -84,18 +84,18 @@ def update_local_manifest_from_remote():
     save_local_manifest(local_manifest)
     return local_manifest
 
-# ------------------------------
+# ------------------------------------------------------------
 # Refresh manifest and installed extensions
-# ------------------------------
+# ------------------------------------------------------------
 def _reload_extensions():
     """Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS."""
     update_local_manifest_from_remote()
     load_installed_extensions()
     return load_local_manifest()
 
-# ------------------------------
+# ------------------------------------------------------------
 # Sparse clone repo
-# ------------------------------
+# ------------------------------------------------------------
 def sparse_clone(extension_name: str, url: str):
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
@@ -123,9 +123,9 @@ def sparse_clone(extension_name: str, url: str):
 
 #######################################################################
 
-# ------------------------------
+# ------------------------------------------------------------
 # Extension Loader
-# ------------------------------
+# ------------------------------------------------------------
 def load_installed_extensions():
     """Load installed extensions dynamically; reinstall if missing."""
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
@@ -152,9 +152,9 @@ def load_installed_extensions():
         else:
             logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
-# ------------------------------
+# ------------------------------------------------------------
 # Install / Uninstall Extension
-# ------------------------------
+# ------------------------------------------------------------
 def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     """
     Compares semantic version strings (e.g., "1.2.3").
@@ -287,7 +287,7 @@ def uninstall_selected_extension(extension_name: str):
     ext_entry["installed"] = False
     save_local_manifest(manifest)
 
-# ------------------------------
+# ------------------------------------------------------------
 # Get selected extension (with skeleton fallback)
 def get_selected_extension(name: str = "skeleton"):
     """
@@ -345,7 +345,7 @@ def get_selected_extension(name: str = "skeleton"):
     logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
     return None
 
-# ------------------------------
+# ------------------------------------------------------------
 # Run on import
-# ------------------------------
+# ------------------------------------------------------------
 load_installed_extensions()
