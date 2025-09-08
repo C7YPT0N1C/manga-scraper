@@ -272,9 +272,11 @@ def get_local_source_id():
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log_clarification()
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
+            return LOCAL_SOURCE_ID   # ✅ stop here
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
     LOCAL_SOURCE_ID = None
+    return None
 
 # ----------------------------
 # Ensure Category Exists
