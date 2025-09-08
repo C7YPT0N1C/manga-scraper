@@ -168,42 +168,8 @@ def uninstall_extension():
 ####################################################################################################################
 # CUSTOM HOOKS (thread-safe)
 ####################################################################################################################
-def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
-    global DEDICATED_DOWNLOAD_PATH
 
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
-        return
-
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
-        return
-
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    logger.info(f"Removed empty directories.")
-    DEDICATED_DOWNLOAD_PATH = ""
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
+# Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
@@ -316,14 +282,14 @@ def add_manga_to_category(manga_id: int, new_category_id: int):
     graphql_request(mutation, {"mangaId": manga_id, "categoryIds": existing_ids + [new_category_id]})
     logger.info(f"GraphQL: Added category {new_category_id} to manga {manga_id}")
 
-def update_creator_category(creator_name):
+def add_creator_to_category(creator_name):
     # ------------------------------
     # Ensure creator manga is in SUWAYOMI_CATEGORY_NAME category
     # ------------------------------
     category_id = ensure_category()
     local_source_id = get_local_source_id()
 
-    if not local_source_id:
+    if local_source_id is None:
         logger.error("GraphQL: Skipping because Local source ID could not be resolved")
     else:
         query = """
@@ -365,87 +331,7 @@ def update_creator_category(creator_name):
                 else:
                     log(f"GraphQL: Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
-####################################################################################################################
-# CORE HOOKS (thread-safe)
-####################################################################################################################
-def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
-    if not urls:
-        logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
-        if pbar and creator:
-            pbar.set_postfix_str(f"Skipped Creator: {creator}")
-        return False
-
-    if retries is None:
-        retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
-
-    if os.path.exists(path):
-        log(f"Already exists, skipping: {path}", "debug")
-        if pbar and creator:
-            pbar.set_postfix_str(f"Creator: {creator}")
-        return True
-
-    if dry_run:
-        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
-        if pbar and creator:
-            pbar.set_postfix_str(f"Creator: {creator}")
-        return True
-
-    if not isinstance(session, requests.Session):
-        session = requests.Session()
-
-    for url in urls:
-        for attempt in range(1, retries + 1):
-            try:
-                r = session.get(url, timeout=30, stream=True)
-                if r.status_code == 429:
-                    wait = 2 ** attempt
-                    logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
-                    time.sleep(wait)
-                    continue
-                r.raise_for_status()
-
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-
-                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
-                if pbar and creator:
-                    pbar.set_postfix_str(f"Creator: {creator}")
-                return True
-
-            except Exception as e:
-                wait = 2 ** attempt
-                log_clarification()
-                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait}s")
-                time.sleep(wait)
-        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror")
-
-    log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
-    if pbar and creator:
-        pbar.set_postfix_str(f"Failed Creator: {creator}")
-    return False
-
-def pre_run_hook(gallery_list):
-    update_extension_download_path()
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
-    return gallery_list
-
-def pre_gallery_download_hook(gallery_id):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
-
-def during_gallery_download_hook(gallery_id):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}", "debug")
-
-def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
-    
+def update_creator_popular_genres(meta):
     if not dry_run:
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
@@ -467,7 +353,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                 all_genre_counts = {}
 
         for creator_name in creators:
-            update_creator_category(creator_name)
+            add_creator_to_category(creator_name)
 
             # ------------------------------
             # Update creator's most popular genres
@@ -505,7 +391,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
                 most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_DETAILS_JSON]
                 log_clarification()
-                log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
+                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
                 details["genre"] = [g for g, count in most_popular]
 
                 if len(creator_counts) > MAX_GENRES_PER_CREATOR:
@@ -522,6 +408,139 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         log(f"[DRY RUN] Would add manga to for {creator_name}", "debug")
         log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
 
+############################################
+
+# Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
+def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
+    global DEDICATED_DOWNLOAD_PATH
+
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
+        return
+
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+        return
+
+    if RemoveEmptyArtistFolder:
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue
+            try:
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+            except Exception as e:
+                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    else:
+        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+            if dirpath == DEDICATED_DOWNLOAD_PATH:
+                continue
+            if not dirnames and not filenames:
+                try:
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+                except Exception as e:
+                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+
+    logger.info(f"Removed empty directories.")
+    DEDICATED_DOWNLOAD_PATH = ""
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
+####################################################################################################################
+# CORE HOOKS (thread-safe)
+####################################################################################################################
+
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook(gallery_list):
+    update_extension_download_path()
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
+    return gallery_list
+
+# Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
+def pre_gallery_download_hook(gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
+
+# Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
+def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
+    if not urls:
+        logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Skipped Creator: {creator}")
+        return False
+
+    if retries is None:
+        retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+
+    if os.path.exists(path):
+        log(f"Already exists, skipping: {path}", "debug")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
+        return True
+
+    if dry_run:
+        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
+        if pbar and creator:
+            pbar.set_postfix_str(f"Creator: {creator}")
+        return True
+
+    if not isinstance(session, requests.Session):
+        session = requests.Session()
+
+    # Loop through mirrors
+    for url in urls:
+        for attempt in range(1, retries + 1):
+            try:
+                r = session.get(url, timeout=30, stream=True)
+                if r.status_code == 429:
+                    wait = 2 ** attempt
+                    logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                    time.sleep(wait)
+                    continue
+                r.raise_for_status()
+
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
+                if pbar and creator:
+                    pbar.set_postfix_str(f"Creator: {creator}")
+                return True
+
+            except Exception as e:
+                wait = 2 ** attempt
+                log_clarification()
+                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait}s")
+                time.sleep(wait)
+        
+        # If all retries for this mirror failed, move to next mirror
+        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror")
+
+    # If no mirrors succeeded
+    log_clarification()
+    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
+    if pbar and creator:
+        pbar.set_postfix_str(f"Failed Creator: {creator}")
+    return False
+
+# Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
+def during_gallery_download_hook(gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}", "debug")
+
+# Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
+def after_completed_gallery_download_hook(meta: dict, gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
+    
+    update_creator_popular_genres(meta)
+
+# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run hook called.", "debug")
