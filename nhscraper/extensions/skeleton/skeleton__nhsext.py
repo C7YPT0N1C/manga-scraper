@@ -49,6 +49,7 @@ _file_lock = threading.Lock()
 # CORE
 ####################################################################################################################
 def update_extension_download_path():
+    log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
