@@ -250,8 +250,10 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     # If no mirrors succeeded
     log_clarification()
     logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
+    
     if pbar and creator:
         pbar.set_postfix_str(f"Failed Creator: {creator}")
+    
     return False
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
@@ -260,14 +262,17 @@ def pre_run_hook(gallery_list):
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
+    
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
+    
     return gallery_list
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
+    
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
@@ -275,6 +280,7 @@ def pre_gallery_download_hook(gallery_id):
 def during_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
+    
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
@@ -282,6 +288,7 @@ def during_gallery_download_hook(gallery_id):
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 

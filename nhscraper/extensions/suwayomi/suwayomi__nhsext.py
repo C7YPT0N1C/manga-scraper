@@ -246,11 +246,11 @@ def graphql_request(query: str, variables: dict = None):
         return None
 
     try:
-        log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug")
+        #log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
-        log(f"GraphQL Response: {json.dumps(result, indent=2)}", "debug")
+        #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
         return result
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
@@ -656,17 +656,20 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     # If no mirrors succeeded
     log_clarification()
     logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {retries} retries each: {urls}")
+    
     if pbar and creator:
         pbar.set_postfix_str(f"Failed Creator: {creator}")
+    
     return False
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
-    global LOCAL_SOURCE_ID, CATEGORY_ID
-    
-    update_extension_download_path()
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
+    
+    global LOCAL_SOURCE_ID, CATEGORY_ID  
+    
+    update_extension_download_path()
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()
