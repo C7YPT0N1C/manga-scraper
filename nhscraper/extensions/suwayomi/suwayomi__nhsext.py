@@ -357,7 +357,7 @@ def store_creator_manga_IDs(meta: dict):
             logger.debug(f"GraphQL: Looking up manga for creator '{creator_name}' in source {LOCAL_SOURCE_ID}")
             result = graphql_request(query, {
                 "title": creator_name,
-                "sourceId": int(LOCAL_SOURCE_ID)
+                "sourceId": str(LOCAL_SOURCE_ID)
             })
             
             logger.debug(f"GraphQL: Manga lookup result for '{creator_name}': {result}")
@@ -410,7 +410,7 @@ def retry_deferred_creators():
             """
             result = graphql_request(query, {
                 "title": creator_name,
-                "sourceId": int(LOCAL_SOURCE_ID)
+                "sourceId": str(LOCAL_SOURCE_ID)
             })
             logger.debug(f"GraphQL: Retry result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
@@ -498,7 +498,7 @@ def add_creators_to_category():
         result = graphql_request(query, {
             "categoryId": CATEGORY_ID
         })
-        logger.debug(f"GraphQL: Existing mangas in category {CATEGORY_ID}: {result}")
+        logger.debug(f"GraphQL: Existing mangas in {SUWAYOMI_CATEGORY_NAME} (category {CATEGORY_ID}): {result}")
         existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
 
         with _manga_ids_lock:
