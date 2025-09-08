@@ -201,7 +201,7 @@ def ensure_category(category_name=None):
 def store_creator_manga_IDs(meta: dict):
     global LOCAL_SOURCE_ID
     
-    if not LOCAL_SOURCE_ID:
+    if LOCAL_SOURCE_ID == None:
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
         return
 
