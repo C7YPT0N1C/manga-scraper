@@ -162,10 +162,9 @@ def get_local_source_id():
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log_clarification()
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
-            return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
-    return None
+    LOCAL_SOURCE_ID = None
 
 # ----------------------------
 # Ensure Category Exists
@@ -221,7 +220,7 @@ def store_creator_manga_IDs(meta: dict):
             result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
-                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'")
+                logger.warning(f"GraphQL: No manga found for creator '{creator_name}'") # TEST
                 continue
 
             manga_id = int(nodes[0]["id"])

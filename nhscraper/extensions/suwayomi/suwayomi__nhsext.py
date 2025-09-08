@@ -226,15 +226,13 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
-    global LOCAL_SOURCE_ID, CATEGORY_ID
-    
     update_extension_download_path()
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
     
     # Initialise globals
-    LOCAL_SOURCE_ID = backend.get_local_source_id()
-    CATEGORY_ID = backend.ensure_category(backend.SUWAYOMI_CATEGORY_NAME)
+    backend.get_local_source_id()
+    backend.ensure_category()
 
     return gallery_list
 
