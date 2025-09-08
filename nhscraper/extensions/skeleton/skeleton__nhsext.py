@@ -3,10 +3,14 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, json, requests, threading
+import os, time, json, requests
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
+
+# Make sure this is correct.
+import nhscraper.extensions.skeleton.skeleton_backend as backend
+from nhscraper.extensions.skeleton.skeleton_backend import test_hook, remove_empty_directories
 
 # This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
 
@@ -15,7 +19,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
-EXTENSION_NAME = "skeleton" # Must be fully lowercase
+EXTENSION_NAME = "skeleton" # Must be fully lowercase, also update in custom_hooks
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 #DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
@@ -40,45 +44,25 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
-# Thread lock for file operations
-_file_lock = threading.Lock()
-
 ####################################################################################################################
 # CORE
 ####################################################################################################################
 def update_extension_download_path():
     log_clarification()
     if dry_run:
-        logger.info(f"[DRY-RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
+        logger.info(f"[DRY-RUN] Extension: {EXTENSION_NAME}: Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
+    
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+    
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+    
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-def return_gallery_metas(meta):
-    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    title = clean_title(meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-    
-    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
-    
-    log_clarification()
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": language,
-    }
 
 def install_extension():
     """
@@ -91,7 +75,7 @@ def install_extension():
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
     
     if dry_run:
-        logger.info(f"[DRY-RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+        logger.info(f"[DRY-RUN] Extension: {EXTENSION_NAME}: Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
     try:
@@ -113,7 +97,7 @@ def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     if dry_run:
-        logger.info(f"[DRY-RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+        logger.info(f"[DRY-RUN] Extension: {EXTENSION_NAME}: Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
     
     try:
@@ -123,57 +107,10 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled.")
     
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
-
-####################################################################################################################
-# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
-####################################################################################################################
-
-# Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
-def test_hook():
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
-    log_clarification()
-
-# Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
-def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
-    global DEDICATED_DOWNLOAD_PATH
-
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
-        return
-
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
-        return
-
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    logger.info(f"Removed empty directories.")
-    DEDICATED_DOWNLOAD_PATH = ""
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 ####################################################################################################################
 # CORE HOOKS (Please add to the functions, try not to change or remove anything)
