@@ -188,8 +188,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current creator.
     """
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
+    #log_clarification()
+    #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")

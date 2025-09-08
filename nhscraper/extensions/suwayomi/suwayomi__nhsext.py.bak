@@ -39,7 +39,7 @@ dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
-SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
+SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
 
 # Max number of genres stored in a creator's details.json
 MAX_GENRES_STORED = 15
@@ -246,11 +246,11 @@ def graphql_request(query: str, variables: dict = None):
         return None
 
     try:
-        log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug")
+        logger.debug(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
-        log(f"GraphQL Response: {json.dumps(result, indent=2)}", "debug")
+        logger.debug(f"GraphQL Response: {json.dumps(result, indent=2)}")
         return result
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
@@ -266,7 +266,7 @@ def graphql_request(query: str, variables: dict = None):
 def get_local_source_id():
     global LOCAL_SOURCE_ID
 
-    log("GraphQL: Fetching Local source ID", "debug")
+    logger.debug("GraphQL: Fetching Local source ID...")
     query = """
     query {
       sources {
@@ -281,11 +281,11 @@ def get_local_source_id():
         return LOCAL_SOURCE_ID
 
     for node in result["data"]["sources"]["nodes"]:
-        #log(f"GraphQL: Checking source node {node}", "debug")
+        logger.debug(f"GraphQL: Checking source node {node}")
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log_clarification()
-            #log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
+            log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
@@ -298,7 +298,7 @@ def ensure_category(category_name=None):
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
-    log(f"GraphQL: Ensuring '{name}' category exists", "debug")
+    logger.debug(f"GraphQL: Ensuring '{name}' category exists")
     query = """
     query ($name: String!) {
       categories(filter: { name: { equalTo: $name } }) {
@@ -310,14 +310,14 @@ def ensure_category(category_name=None):
         "name": name
     })
     
-    #log(f"GraphQL: Category query result: {result}", "debug")
+    logger.debug(f"GraphQL: Category query result: {result}")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
     if nodes:
         CATEGORY_ID = int(nodes[0]["id"])
-        log(f"GraphQL: Found existing category {nodes[0]}", "debug")
+        logger.debug(f"GraphQL: Found existing category {nodes[0]}")
         return CATEGORY_ID
 
-    log(f"GraphQL: Creating new category {name}", "debug")
+    logger.debug(f"GraphQL: Creating new category {name}")
     mutation = """
     mutation ($name: String!) {
       createCategory(input: { name: $name }) {
@@ -326,7 +326,7 @@ def ensure_category(category_name=None):
     }
     """
     result = graphql_request(mutation, {"name": name})
-    log(f"GraphQL: Create category result: {result}", "debug")
+    logger.debug(f"GraphQL: Create category result: {result}")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
     return CATEGORY_ID
 
@@ -343,7 +343,7 @@ def store_creator_manga_IDs(meta: dict):
     if not dry_run:
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"GraphQL: Gallery Metadata:{gallery_meta}\nProcessing creators {creators}", "debug")
+        logger.debug(f"GraphQL: Processing creators {creators} from gallery meta {gallery_meta}")
         for creator_name in creators:
             query = """
             query ($title: String!, $sourceId: LongString!) {
@@ -354,13 +354,13 @@ def store_creator_manga_IDs(meta: dict):
               }
             }
             """
-            log(f"GraphQL: Looking up manga ID for creator '{creator_name}' in source {LOCAL_SOURCE_ID}", "debug")
+            logger.debug(f"GraphQL: Looking up manga for creator '{creator_name}' in source {LOCAL_SOURCE_ID}")
             result = graphql_request(query, {
                 "title": creator_name,
                 "sourceId": LOCAL_SOURCE_ID
             })
             
-            #log(f"GraphQL: Manga lookup result for '{creator_name}': {result}", "debug")
+            logger.debug(f"GraphQL: Manga lookup result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
                 logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
@@ -369,7 +369,7 @@ def store_creator_manga_IDs(meta: dict):
                 continue
 
             manga_id = int(nodes[0]["id"])
-            log(f"GraphQL: Found manga for creator '{creator_name}': {nodes[0]}", "debug")
+            logger.debug(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}'")
             with _manga_ids_lock:
                 if manga_id not in _collected_manga_ids:
                     _collected_manga_ids.add(manga_id)
@@ -398,7 +398,7 @@ def retry_deferred_creators():
         logger.info(f"GraphQL: Retrying {len(creators_to_retry)} deferred creators (attempt {attempt}/{max_attempts})")
 
         for creator_name in creators_to_retry:
-            log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
+            logger.debug(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}")
             query = """
             query ($title: String!, $sourceId: LongString!) {
               mangas(
@@ -412,11 +412,11 @@ def retry_deferred_creators():
                 "title": creator_name,
                 "sourceId": LOCAL_SOURCE_ID
             })
-            log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
+            logger.debug(f"GraphQL: Retry result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if nodes:
                 manga_id = int(nodes[0]["id"])
-                log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
+                logger.debug(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry")
                 with _manga_ids_lock:
                     if manga_id not in _collected_manga_ids:
                         _collected_manga_ids.add(manga_id)
@@ -440,7 +440,7 @@ def retry_deferred_creators():
 def update_mangas(ids: list[int]):
     if not ids:
         return
-    log(f"GraphQL: Updating mangas {ids} as 'In Library", "debug")
+    logger.debug(f"GraphQL: Updating mangas {ids} as inLibrary=true")
     mutation = """
     mutation ($ids: [Int!]!) {
       updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
@@ -449,13 +449,13 @@ def update_mangas(ids: list[int]):
     }
     """
     result = graphql_request(mutation, {"ids": ids})
-    log(f"GraphQL: updateMangas result: {result}", "debug")
+    logger.debug(f"GraphQL: updateMangas result: {result}")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
 
 def update_mangas_categories(ids: list[int], category_id: int):
     if not ids:
         return
-    log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
+    logger.debug(f"GraphQL: Adding mangas {ids} to category {category_id}")
     mutation = """
     mutation ($ids: [Int!]!, $categoryId: Int!) {
       updateMangasCategories(
@@ -466,7 +466,7 @@ def update_mangas_categories(ids: list[int], category_id: int):
     }
     """
     result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
-    log(f"GraphQL: updateMangasCategories result: {result}", "debug")
+    logger.debug(f"GraphQL: updateMangasCategories result: {result}")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
 
 # ----------------------------
@@ -476,7 +476,7 @@ def add_creators_to_category():
     global CATEGORY_ID
     
     log_clarification()
-    log(f"GraphQL: Adding collected creators to category {CATEGORY_ID}", "debug")
+    logger.debug(f"GraphQL: Adding collected creators to category {CATEGORY_ID}")
     
     if not dry_run:
         if CATEGORY_ID is None:
@@ -498,13 +498,13 @@ def add_creators_to_category():
         result = graphql_request(query, {
             "categoryId": CATEGORY_ID
         })
-        #log(f"GraphQL: Existing mangas in Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}):\n{result}", "debug")
+        logger.debug(f"GraphQL: Existing mangas in {SUWAYOMI_CATEGORY_NAME} (category {CATEGORY_ID}): {result}")
         existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
 
         with _manga_ids_lock:
             new_ids = list(_collected_manga_ids - existing_ids)
 
-        log(f"GraphQL: New manga IDs to add to Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}):\nIDs: {new_ids}", "debug")
+        logger.debug(f"GraphQL: New manga IDs to add: {new_ids}")
         if not new_ids:
             logger.info("GraphQL: No new mangas to add to category.")
             return
@@ -512,7 +512,7 @@ def add_creators_to_category():
         update_mangas(new_ids)
         update_mangas_categories(new_ids, CATEGORY_ID)
     else:
-        log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+        log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
 # ------------------------------------------------------------
 # Update creator's most popular genres
@@ -594,8 +594,8 @@ def update_creator_popular_genres(meta):
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
-    #log_clarification()
-    #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")

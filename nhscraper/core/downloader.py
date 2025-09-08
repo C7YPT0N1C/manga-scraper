@@ -100,7 +100,11 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     if num_pages == 0:
         log_clarification()
-        logger.warning(f"Skipping Gallery: {gallery_id} (Reason: No pages)")
+        logger.warning(
+            f"Skipping Gallery: {gallery_id}\n"
+            "Reason: No Pages.\n"
+            f"Title: {gallery_title}\n"
+        )
         update_skipped_galleries(False, meta, "No Pages.")
         return False
 
@@ -114,8 +118,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if all_exist:
             log_clarification()
             logger.info(
-                f"Skipping Gallery: {gallery_id} (Reason: Already complete)\n"
-                f"Title: {gallery_title}\nFolder: {doujin_folder}"
+                f"Skipping Gallery: {gallery_id}\n"
+                "Reason: Already Downloaded.\n"
+                f"Title: {gallery_title}\n"
+                f"Folder: {doujin_folder}"
             )
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
@@ -128,7 +134,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
-    log_clarification()
     for tag in gallery_tags:
         if tag in excluded_tags:
             blocked_tags.append(tag)
@@ -143,6 +148,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         log_clarification()
         logger.info(
             f"Skipping Gallery: {gallery_id}\n"
+            "Reason: Blocked Tags In Metadata.\n"
             f"Title: {gallery_title}\n"
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
@@ -199,8 +205,8 @@ def process_galleries(gallery_ids):
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
+                log_clarification()
                 active_extension.during_gallery_download_hook(gallery_id)
-
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
@@ -258,11 +264,11 @@ def process_galleries(gallery_ids):
                                 time.sleep(0.1)  # fake delay
 
                 if not dry_run:
+                    log_clarification()
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
 
                 logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
                 break  # exit retry loop on success
 
             except Exception as e:
@@ -284,6 +290,7 @@ def start_downloader(gallery_list=None):
     load_extension()
 
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
+    log_clarification()
     active_extension.pre_run_hook(gallery_ids)
 
     if not gallery_ids:
@@ -303,6 +310,7 @@ def start_downloader(gallery_list=None):
     )
 
     if not dry_run:
+        log_clarification()
         active_extension.post_run_hook()
     else:
         log_clarification()
