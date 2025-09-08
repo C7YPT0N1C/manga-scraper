@@ -298,7 +298,7 @@ def ensure_category(category_name=None):
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
-    logger.debug(f"GraphQL: Ensuring category exists: {name}")
+    logger.debug(f"GraphQL: Ensuring '{name}' category exists")
     query = """
     query ($name: String!) {
       categories(filter: { name: { equalTo: $name } }) {
@@ -306,7 +306,10 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(query, {"name": name})
+    result = graphql_request(query, {
+        "name": name
+    })
+    
     logger.debug(f"GraphQL: Category query result: {result}")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
     if nodes:
@@ -352,7 +355,11 @@ def store_creator_manga_IDs(meta: dict):
             }
             """
             logger.debug(f"GraphQL: Looking up manga for creator '{creator_name}' in source {LOCAL_SOURCE_ID}")
-            result = graphql_request(query, {"title": creator_name, "sourceId": int(LOCAL_SOURCE_ID)})
+            result = graphql_request(query, {
+                "title": creator_name,
+                "sourceId": int(LOCAL_SOURCE_ID)
+            })
+            
             logger.debug(f"GraphQL: Manga lookup result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
@@ -378,7 +385,7 @@ def retry_deferred_creators():
     if not _deferred_creators:
         return
 
-    max_attempts = 5
+    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
     delay = 2
 
     for attempt in range(1, max_attempts + 1):
@@ -401,7 +408,10 @@ def retry_deferred_creators():
               }
             }
             """
-            result = graphql_request(query, {"title": creator_name, "sourceId": int(LOCAL_SOURCE_ID)})
+            result = graphql_request(query, {
+                "title": creator_name,
+                "sourceId": int(LOCAL_SOURCE_ID)
+            })
             logger.debug(f"GraphQL: Retry result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if nodes:
@@ -485,7 +495,9 @@ def add_creators_to_category():
           }
         }
         """
-        result = graphql_request(query, {"categoryId": CATEGORY_ID})
+        result = graphql_request(query, {
+            "categoryId": CATEGORY_ID
+        })
         logger.debug(f"GraphQL: Existing mangas in category {CATEGORY_ID}: {result}")
         existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
 

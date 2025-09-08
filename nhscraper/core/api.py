@@ -455,7 +455,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
     # Unified function to update gallery state per stage.
     # stage: 'download' or 'graphql'
     # success: True if stage completed, False if failed
-    max_attempts = config.get("MAX_ATTEMPTS", DEFAULT_MAX_RETRIES)
+    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
     
     with state_lock:
         entry = gallery_metadata.setdefault(gallery_id, {"meta": None})
