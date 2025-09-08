@@ -181,23 +181,6 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # CORE HOOKS (Please add to the functions, try not to change or remove anything)
 ####################################################################################################################
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook(gallery_list):
-    update_extension_download_path()
-    
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
-    #log_clarification()
-    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
-    return gallery_list
-
-# Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
-def pre_gallery_download_hook(gallery_id):
-    log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
-    #log_clarification()
-    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
-
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
     """
@@ -267,6 +250,23 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     if pbar and creator:
         pbar.set_postfix_str(f"Failed Creator: {creator}")
     return False
+
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook(gallery_list):
+    update_extension_download_path()
+    
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-run hook called.", "debug")
+    #log_clarification()
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
+    return gallery_list
+
+# Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
+def pre_gallery_download_hook(gallery_id):
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Pre-download hook called: Gallery: {gallery_id}", "debug")
+    #log_clarification()
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
