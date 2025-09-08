@@ -210,6 +210,9 @@ def test_hook():
     log_clarification()
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+SUWAYOMI_CATEGORY_NAME="NHentai Scraper"
+MAX_GENRES_PER_DETAILS_JSON = 15
+MAX_GENRES_PER_CREATOR = 100
 
 def graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
@@ -227,7 +230,9 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"GraphQL request failed: {e}")
         return None
 
-def ensure_category(name="NHentai Scraper"):
+def ensure_category():
+    name=SUWAYOMI_CATEGORY_NAME
+    
     query = """
     query ($name: String!) {
       categories(filter: { name: { equalTo: $name } }) {
@@ -336,37 +341,11 @@ def during_gallery_download_hook(gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download hook called: Gallery: {gallery_id}", "debug")
 
-MAX_GENRES_PER_DETAILS_JSON = 15
-MAX_GENRES_PER_CREATOR = 100
-
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download hook called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     if not dry_run:
-        # --- NEW: ensure creator manga is in NHentai Scraper category ---
-        category_id = ensure_category("NHentai Scraper")
-
-        # search the manga by title = creator_name
-        query = """
-        query ($title: String!) {
-          mangas(filter: { title: { equalTo: $title } }) {
-            nodes { id title categories { id name } }
-          }
-        }
-        """
-        result = graphql_request(query, {"title": creator_name})
-        if result:
-            nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
-            if nodes:
-                manga_id = nodes[0]["id"]
-                existing_categories = [c["name"] for c in nodes[0]["categories"]]
-                if "NHentai Scraper" not in existing_categories:
-                    log(f"Adding {creator_name} to NHentai Scraper category", "debug")
-                    add_manga_to_category(manga_id, category_id)
-
-        #################################################################################################
-        
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
         if not creators:
@@ -387,6 +366,32 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                 all_genre_counts = {}
 
         for creator_name in creators:
+            # ------------------------------
+            # Ensure creator manga is in SUWAYOMI_CATEGORY_NAME category
+            # ------------------------------
+            category_id = ensure_category()
+
+            # search the manga by title = creator_name
+            query = """
+            query ($title: String!) {
+            mangas(filter: { title: { equalTo: $title } }) {
+                nodes { id title categories { id name } }
+            }
+            }
+            """
+            result = graphql_request(query, {"title": creator_name})
+            if result:
+                nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
+                if nodes:
+                    manga_id = nodes[0]["id"]
+                    existing_categories = [c["name"] for c in nodes[0]["categories"]]
+                    if SUWAYOMI_CATEGORY_NAME not in existing_categories:
+                        log(f"Adding {creator_name} to {SUWAYOMI_CATEGORY_NAME} category", "debug")
+                        add_manga_to_category(manga_id, category_id)
+
+            # ------------------------------
+            # Update creator's most popular genres
+            # ------------------------------   
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
@@ -434,7 +439,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
     else:
-        log(f"[DRY RUN] Would creation details.json for {creator_name}", "debug")
+        log(f"[DRY RUN] Would add manga to for {creator_name}", "debug")
+        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
 
 def post_run_hook():
     log_clarification()
