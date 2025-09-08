@@ -202,7 +202,7 @@ def graphql_request(query: str, variables: dict = None):
 def get_local_source_id():
     global LOCAL_SOURCE_ID
     if LOCAL_SOURCE_ID is not None:
-        return LOCAL_SOURCE_ID
+        return str(LOCAL_SOURCE_ID)
 
     query = """
     query {
@@ -220,7 +220,7 @@ def get_local_source_id():
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
-            return LOCAL_SOURCE_ID
+            return str(LOCAL_SOURCE_ID)
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
     return None
@@ -266,7 +266,7 @@ def add_creator_to_category(meta):
         log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
     else:
         # Get local source ID
-        local_source_id = get_local_source_id()
+        local_source_id = str(get_local_source_id())
         
         # Get category ID
         category_id = ensure_category(SUWAYOMI_CATEGORY_NAME)
