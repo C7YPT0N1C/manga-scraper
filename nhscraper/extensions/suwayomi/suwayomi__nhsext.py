@@ -178,10 +178,8 @@ def test_hook():
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-LOCAL_SOURCE_ID = "0" # "Local source" is usually source 0
+LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
-MAX_GENRES_PER_DETAILS_JSON = 15
-MAX_GENRES_PER_CREATOR = 100
 
 def graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
@@ -199,6 +197,9 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"GraphQL request failed: {e}")
         return None
 
+# ----------------------------
+# Get Local Source ID
+# ----------------------------
 def get_local_source_id():
     global LOCAL_SOURCE_ID
 
@@ -216,15 +217,18 @@ def get_local_source_id():
 
     for node in result["data"]["sources"]["nodes"]:
         if node["name"].lower() == "local source":
-            LOCAL_SOURCE_ID = str(node["id"])  # must be a string
+            LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
-            return str(LOCAL_SOURCE_ID)
+            return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
     return None
 
-def ensure_category(CATEGORY_NAME):
-    name = CATEGORY_NAME or SUWAYOMI_CATEGORY_NAME
+# ----------------------------
+# Ensure Category Exists
+# ----------------------------
+def ensure_category(category_name=None):
+    name = category_name or SUWAYOMI_CATEGORY_NAME
 
     query = """
     query ($name: String!) {
@@ -236,7 +240,7 @@ def ensure_category(CATEGORY_NAME):
     result = graphql_request(query, {"name": name})
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
     if nodes:
-        return nodes[0]["id"]
+        return int(nodes[0]["id"])  # category ID for mutations must be int
 
     mutation = """
     mutation ($name: String!) {
@@ -246,12 +250,17 @@ def ensure_category(CATEGORY_NAME):
     }
     """
     result = graphql_request(mutation, {"name": name})
-    return result["data"]["createCategory"]["category"]["id"]
+    return int(result["data"]["createCategory"]["category"]["id"])
 
+# ----------------------------
+# Add Manga to Category
+# ----------------------------
 def add_manga_to_category(manga_id: int, category_id: int):
     mutation = """
     mutation ($id: Int!, $categoryId: Int!) {
-      updateMangaCategories(input: { id: $id, patch: { addToCategories: [$categoryId] } }) {
+      updateMangaCategories(
+        input: { id: $id, patch: { addToCategories: [$categoryId] } }
+      ) {
         manga { id title categories { nodes { id name } } }
       }
     }
@@ -259,55 +268,67 @@ def add_manga_to_category(manga_id: int, category_id: int):
     graphql_request(mutation, {"id": manga_id, "categoryId": category_id})
     logger.info(f"GraphQL: Added category {category_id} to manga {manga_id}")
 
+# ----------------------------
+# Add Creators (Manga Titles) to Category
+# ----------------------------
 def add_creator_to_category(meta):
     if dry_run:
         log(f"[DRY-RUN] Would add gallery '{meta.get('title', 'Unknown')}' to category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
-    else:
-        # Get local source ID
-        local_source_id = str(get_local_source_id())
-        
-        # Get category ID
-        category_id = ensure_category(SUWAYOMI_CATEGORY_NAME)
-        
-        if local_source_id is None:
-            logger.error("GraphQL: Cannot add gallery because Local source ID could not be resolved")
+        return
+
+    # Get local source ID
+    local_source_id = get_local_source_id()
+    # Get category ID
+    category_id = ensure_category(SUWAYOMI_CATEGORY_NAME)
+    
+    if local_source_id is None:
+        logger.error("GraphQL: Cannot add gallery because Local source ID could not be resolved")
+        return
+
+    gallery_meta = return_gallery_metas(meta)
+    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    if not creators:
+        log("No creators found for gallery, skipping category update", "debug")
+        return
+
+    # For each creator, fetch manga by title and add to category
+    for creator_name in creators:
+        query = """
+        query ($title: String!, $sourceId: String!) {
+          mangas(
+            filter: {
+              sourceId: { equalTo: $sourceId },
+              title: { equalTo: $title }
+            }
+          ) {
+            nodes { id title categories { nodes { id name } } }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name, "sourceId": local_source_id})
+        if not result:
+            logger.warning(f"GraphQL: Failed to fetch manga for creator '{creator_name}'")
+            continue
+
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
+        if not nodes:
+            logger.warning(f"GraphQL: No manga found in Local source with title '{creator_name}'")
+            continue
+
+        manga_id = int(nodes[0]["id"])
+        existing_categories = [c["name"] for c in nodes[0]["categories"]["nodes"]]
+        if SUWAYOMI_CATEGORY_NAME not in existing_categories:
+            logger.info(f"GraphQL: Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
+            add_manga_to_category(manga_id, category_id)
         else:
-            gallery_meta = return_gallery_metas(meta)
-            creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-            if not creators:
-                log("No creators found for gallery, skipping category update", "debug")
-            else:
-                # For each creator, try to find the corresponding manga in Local source
-                for creator_name in creators:
-                    query = """
-                    query ($title: String!, $sourceId: String!) {
-                      mangas(
-                        filter: {
-                          sourceId: { equalTo: $sourceId },
-                          title: { equalTo: $title }
-                        }
-                      ) {
-                        nodes { id title categories { nodes { id name } } }
-                      }
-                    }
-                    """
-                    result = graphql_request(query, {"title": creator_name, "sourceId": local_source_id})
-                    if not result:
-                        logger.warning(f"GraphQL: Failed to fetch manga for creator '{creator_name}'")
-                        continue
+            log(f"GraphQL: Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
 
-                    nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
-                    if not nodes:
-                        logger.warning(f"GraphQL: No manga found in Local source with title '{creator_name}'")
-                        continue
+############################################
 
-                    manga_id = nodes[0]["id"]
-                    existing_categories = [c["name"] for c in nodes[0]["categories"]["nodes"]]
-                    if SUWAYOMI_CATEGORY_NAME not in existing_categories:
-                        logger.info(f"GraphQL: Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
-                        add_manga_to_category(manga_id, category_id)
-                    else:
-                        log(f"GraphQL: Manga '{creator_name}' already in category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
+# Max number of genres stored in a creator's details.json
+MAX_GENRES_STORED = 15
+# Max number of genres parsed from a gallery and stored in a creator's "most_popular_genres.json" field.
+MAX_GENRES_PARSED = 100
 
 def update_creator_popular_genres(meta):
     if not dry_run:
@@ -365,13 +386,13 @@ def update_creator_popular_genres(meta):
                 for genre in gallery_genres:
                     creator_counts[genre] = creator_counts.get(genre, 0) + 1
 
-                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_DETAILS_JSON]
+                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
                 log_clarification()
                 #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
                 details["genre"] = [g for g, count in most_popular]
 
-                if len(creator_counts) > MAX_GENRES_PER_CREATOR:
-                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PER_CREATOR])
+                if len(creator_counts) > MAX_GENRES_PARSED:
+                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
                     all_genre_counts[creator_name] = creator_counts
 
                 with open(details_file, "w", encoding="utf-8") as f:
