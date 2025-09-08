@@ -178,7 +178,7 @@ def test_hook():
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-LOCAL_SOURCE_ID = None
+LOCAL_SOURCE_ID = "0" # "Local source" is usually source 0
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
 MAX_GENRES_PER_DETAILS_JSON = 15
 MAX_GENRES_PER_CREATOR = 100
@@ -201,8 +201,6 @@ def graphql_request(query: str, variables: dict = None):
 
 def get_local_source_id():
     global LOCAL_SOURCE_ID
-    if LOCAL_SOURCE_ID is not None:
-        return str(LOCAL_SOURCE_ID)
 
     query = """
     query {
@@ -214,7 +212,7 @@ def get_local_source_id():
     result = graphql_request(query)
     if not result:
         logger.error("GraphQL: Failed to fetch sources")
-        return None
+        return LOCAL_SOURCE_ID
 
     for node in result["data"]["sources"]["nodes"]:
         if node["name"].lower() == "local source":
