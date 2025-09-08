@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, threading
+import os, json, threading
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -11,7 +11,29 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
-EXTENSION_NAME = "skeleton"
+EXTENSION_NAME = "skeleton" # Must be fully lowercase, also update in custom_hooks
+EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
+REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+#DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
+
+LOCAL_MANIFEST_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "local_manifest.json"
+)
+
+with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
+    manifest = json.load(f)
+
+for ext in manifest.get("extensions", []):
+    if ext.get("name") == EXTENSION_NAME:
+        DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
+        break
+
+# Optional fallback
+if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
+    DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+
+SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
+
 dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
 # Thread lock for file operations

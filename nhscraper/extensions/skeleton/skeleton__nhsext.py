@@ -19,28 +19,14 @@ from nhscraper.extensions.skeleton.skeleton_backend import test_hook, remove_emp
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
-EXTENSION_NAME = "skeleton" # Must be fully lowercase, also update in custom_hooks
-EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
-REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
-#DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
+EXTENSION_NAME = backend.EXTENSION_NAME
+EXTENSION_INSTALL_PATH = backend.EXTENSION_INSTALL_PATH
+REQUESTED_DOWNLOAD_PATH = backend.REQUESTED_DOWNLOAD_PATH
+DEDICATED_DOWNLOAD_PATH = backend.DEDICATED_DOWNLOAD_PATH
 
-LOCAL_MANIFEST_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "local_manifest.json"
-)
+LOCAL_MANIFEST_PATH = backend.LOCAL_MANIFEST_PATH
 
-with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
-    manifest = json.load(f)
-
-for ext in manifest.get("extensions", []):
-    if ext.get("name") == EXTENSION_NAME:
-        DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
-        break
-
-# Optional fallback
-if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
-    DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
+SUBFOLDER_STRUCTURE = backend.SUBFOLDER_STRUCTURE
 
 dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 
