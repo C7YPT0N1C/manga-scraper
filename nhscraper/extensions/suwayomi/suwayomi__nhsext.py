@@ -357,7 +357,7 @@ def store_creator_manga_IDs(meta: dict):
             logger.debug(f"GraphQL: Looking up manga for creator '{creator_name}' in source {LOCAL_SOURCE_ID}")
             result = graphql_request(query, {
                 "title": creator_name,
-                "sourceId": str(LOCAL_SOURCE_ID)
+                "sourceId": LOCAL_SOURCE_ID
             })
             
             logger.debug(f"GraphQL: Manga lookup result for '{creator_name}': {result}")
@@ -410,7 +410,7 @@ def retry_deferred_creators():
             """
             result = graphql_request(query, {
                 "title": creator_name,
-                "sourceId": str(LOCAL_SOURCE_ID)
+                "sourceId": LOCAL_SOURCE_ID
             })
             logger.debug(f"GraphQL: Retry result for '{creator_name}': {result}")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
