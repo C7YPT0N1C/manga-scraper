@@ -346,7 +346,7 @@ def store_creator_manga_IDs(meta: dict):
         logger.debug(f"GraphQL: Processing creators {creators} from gallery meta {gallery_meta}")
         for creator_name in creators:
             query = """
-            query ($title: String!, $sourceId: String!) {
+            query ($title: String!, $sourceId: LongString!) {
               mangas(
                 filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
               ) {
@@ -400,7 +400,7 @@ def retry_deferred_creators():
         for creator_name in creators_to_retry:
             logger.debug(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}")
             query = """
-            query ($title: String!, $sourceId: String!) {
+            query ($title: String!, $sourceId: LongString!) {
               mangas(
                 filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
               ) {
