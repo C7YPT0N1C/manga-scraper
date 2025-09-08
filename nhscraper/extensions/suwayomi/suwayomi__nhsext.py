@@ -38,7 +38,7 @@ dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-LOCAL_SOURCE_ID = "0"  # Local source is usually "0"
+LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraper"
 
 # Max number of genres stored in a creator's details.json
