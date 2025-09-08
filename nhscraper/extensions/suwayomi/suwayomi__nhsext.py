@@ -64,7 +64,10 @@ _deferred_lock = threading.Lock()
 # CORE
 ####################################################################################################################
 def update_extension_download_path():
-    log_clarification()
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    
     if dry_run:
         logger.info(f"[DRY-RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
@@ -73,9 +76,6 @@ def update_extension_download_path():
         logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def return_gallery_metas(meta):
     artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
@@ -476,13 +476,13 @@ def add_creators_to_category():
     global CATEGORY_ID
     
     log_clarification()
-    log(f"GraphQL: Adding collected creators to category {CATEGORY_ID}", "debug")
+    log(f"GraphQL: Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}): Adding collected creators", "debug")
     
     if not dry_run:
         if CATEGORY_ID is None:
             ensure_category()
         if CATEGORY_ID is None:
-            logger.error("GraphQL: CATEGORY_ID not set, cannot add creators.")
+            logger.error(f"GraphQL: Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}': CATEGORY_ID not set, cannot add creators.")
             return
 
         retry_deferred_creators()
@@ -504,9 +504,9 @@ def add_creators_to_category():
         with _manga_ids_lock:
             new_ids = list(_collected_manga_ids - existing_ids)
 
-        log(f"GraphQL: New manga IDs to add to Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}):\nIDs: {new_ids}", "debug")
+        log(f"GraphQL: Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}): New manga IDs to add:\nIDs: {new_ids}", "debug")
         if not new_ids:
-            logger.info("GraphQL: No new mangas to add to category.")
+            logger.info(f"GraphQL: Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}' (ID {CATEGORY_ID}): No new mangas to add to category.")
             return
 
         update_mangas(new_ids)

@@ -74,7 +74,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
     if ReturnReport:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries)
-        log(f"All Skipped Galleries:\n{skipped_report}", "debug")
+        log(f"All Skipped Galleries:\n{skipped_report}")
     else:
         if not meta:
             logger.warning("update_skipped_galleries called without meta while ReturnReport is False.")
@@ -193,6 +193,7 @@ def process_galleries(gallery_ids):
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
+                log_clarification()
                 logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery", gallery_attempts))
 

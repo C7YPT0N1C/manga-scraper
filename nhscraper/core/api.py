@@ -166,7 +166,6 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_time = random.uniform(base_min * scale, base_max * scale)
         
         # Debug logging for transparency
-        log_clarification()
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
@@ -176,7 +175,6 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_time = 0.3
         
         # Debug logging for transparency
-        log_clarification()
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
             "debug"

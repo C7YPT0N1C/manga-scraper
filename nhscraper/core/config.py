@@ -94,9 +94,16 @@ def log(message: str, log_type: str = None):
     verbose_mode = config.get("VERBOSE")
 
     if log_type == None:
-        print(message)         # Only print to terminal    
+        if logger.getEffectiveLevel == 10: # Only log if log level is DEBUG
+            logger.debug(message)  # Log as debug
+        if logger.getEffectiveLevel == 20: # Only log if log level is INFO
+            logger.info(message)  # Log as debug
+        else:
+            print(message)         # Always print to terminal
+    
     elif log_type == "debug":
         logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
+    
     elif log_type == "info":
         logger.info(message)   # Log info to file and terminal
 ##########################################################################################

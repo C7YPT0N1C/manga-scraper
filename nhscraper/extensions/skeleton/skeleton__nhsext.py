@@ -49,7 +49,10 @@ _file_lock = threading.Lock()
 # CORE
 ####################################################################################################################
 def update_extension_download_path():
-    log_clarification()
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    
     if dry_run:
         logger.info(f"[DRY-RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
@@ -58,9 +61,6 @@ def update_extension_download_path():
         logger.info(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
     except Exception as e:
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
-    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 def return_gallery_metas(meta):
     artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")

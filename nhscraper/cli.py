@@ -255,7 +255,7 @@ def build_gallery_list(args):
         )
     
     log_clarification()
-    log(f"Gallery List: {gallery_list}", "debug")
+    #log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
 
