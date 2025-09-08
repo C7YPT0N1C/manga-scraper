@@ -241,10 +241,7 @@ def get_local_source_id():
     query = """
     query {
       sources {
-        nodes {
-          id
-          name
-        }
+        nodes { id name }
       }
     }
     """
@@ -253,10 +250,9 @@ def get_local_source_id():
         logger.error("GraphQL: Failed to fetch sources")
         return None
 
-    nodes = result.get("data", {}).get("sources", {}).get("nodes", [])
-    for node in nodes:
+    for node in result["data"]["sources"]["nodes"]:
         if node["name"].lower() == "local source":
-            LOCAL_SOURCE_ID = node["id"]
+            LOCAL_SOURCE_ID = int(node["id"])
             log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
@@ -287,15 +283,38 @@ def ensure_category():
     result = graphql_request(mutation, {"name": name})
     return result["data"]["createCategory"]["category"]["id"]
 
-def add_manga_to_category(manga_id: int, category_id: int):
-    mutation = """
-    mutation ($mangaId: Int!, $categoryIds: [Int!]!) {
-      updateMangaCategories(input: { mangaId: $mangaId, categoryIds: $categoryIds }) {
-        manga { id title categories { id name } }
+def add_manga_to_category(manga_id: int, new_category_id: int):
+    # First fetch existing categories
+    query = """
+    query ($id: Int!) {
+      manga(id: $id) {
+        id
+        categories { nodes { id name } }
       }
     }
     """
-    graphql_request(mutation, {"mangaId": manga_id, "categoryIds": [category_id]})
+    result = graphql_request(query, {"id": manga_id})
+    if not result:
+        logger.error(f"GraphQL: Failed to fetch categories for manga {manga_id}")
+        return
+
+    existing_nodes = result.get("data", {}).get("manga", {}).get("categories", {}).get("nodes", [])
+    existing_ids = [c["id"] for c in existing_nodes]
+
+    # Avoid duplicates
+    if new_category_id in existing_ids:
+        log(f"GraphQL: Manga {manga_id} already has category {new_category_id}, skipping update", "debug")
+        return
+
+    mutation = """
+    mutation ($mangaId: Int!, $categoryIds: [Int!]!) {
+      updateMangaCategories(input: { mangaId: $mangaId, categoryIds: $categoryIds }) {
+        manga { id title categories { nodes { id name } } }
+      }
+    }
+    """
+    graphql_request(mutation, {"mangaId": manga_id, "categoryIds": existing_ids + [new_category_id]})
+    logger.info(f"GraphQL: Added category {new_category_id} to manga {manga_id}")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -419,27 +438,28 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     nodes {
                     id
                     title
-                    categories {
-                        nodes { id name }
-                    }
+                    sourceId
+                    categories { nodes { id name } }
                     }
                 }
                 }
                 """
+                
                 log(f"GraphQL: Searching Local source for manga '{creator_name}'", "debug")
                 result = graphql_request(query, {"title": creator_name, "sourceId": int(local_source_id)})
-
                 if not result:
                     logger.warning(f"GraphQL: Query failed when searching for manga '{creator_name}'")
                 else:
                     nodes = result.get("data", {}).get("mangas", {}).get("nodes", [])
                     log(f"GraphQL: Query result for '{creator_name}': {json.dumps(nodes, indent=2, ensure_ascii=False)}", "debug")
+
                     if not nodes:
                         logger.warning(f"GraphQL: No manga found in Local source with title exactly '{creator_name}'")
                     else:
                         manga_id = nodes[0]["id"]
                         existing_categories = [c["name"] for c in nodes[0]["categories"]["nodes"]]
                         log(f"GraphQL: Found manga ID={manga_id}, existing categories={existing_categories}", "debug")
+
                         if SUWAYOMI_CATEGORY_NAME not in existing_categories:
                             logger.info(f"GraphQL: Adding manga '{creator_name}' (ID={manga_id}) to category '{SUWAYOMI_CATEGORY_NAME}'")
                             add_manga_to_category(manga_id, category_id)
