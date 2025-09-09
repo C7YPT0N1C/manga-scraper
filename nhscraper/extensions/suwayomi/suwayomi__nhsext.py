@@ -207,8 +207,6 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
-    
-    log_clarification()
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
