@@ -320,6 +320,6 @@ def get_mirrors():
 
 MIRRORS = get_mirrors()
 
-global_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-if global_dry_run:
+dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+if dry_run:
     log("Logger: [DRY RUN] IN EFFECT.")
