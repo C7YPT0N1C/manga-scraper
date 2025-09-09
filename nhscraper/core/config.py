@@ -28,10 +28,10 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
     # Default logger level = WARNING
     logger.setLevel(logging.WARNING)
 
-# ------------------------------
+# ------------------------------------------------------------
 # LOG CLARIFICATION
 # Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------
+# ------------------------------------------------------------
 def log_clarification():
     if logger.getEffectiveLevel == 20:
         print() # Only print new line if log level is INFO
@@ -94,18 +94,25 @@ def log(message: str, log_type: str = None):
     verbose_mode = config.get("VERBOSE")
 
     if log_type == None:
-        print(message)         # Only print to terminal    
+        if logger.getEffectiveLevel == 10: # Only log if log level is DEBUG
+            logger.debug(message)  # Log as debug
+        if logger.getEffectiveLevel == 20: # Only log if log level is INFO
+            logger.info(message)  # Log as debug
+        else:
+            print(message)         # Always print to terminal
+    
     elif log_type == "debug":
         logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
+    
     elif log_type == "info":
         logger.info(message)   # Log info to file and terminal
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
 
-# ------------------------------
+# ------------------------------------------------------------
 # Paths & Env
-# ------------------------------
+# ------------------------------------------------------------
 NHENTAI_DIR = "/opt/nhentai-scraper"
 ENV_FILE = os.path.join(NHENTAI_DIR, "nhentai-scraper.env")
 
@@ -164,9 +171,9 @@ DEFAULT_DRY_RUN=False
 DEFAULT_VERBOSE=False
 DEFAULT_DEBUG=False
 
-# ------------------------------
+# ------------------------------------------------------------
 # Helper: safe int from env
-# ------------------------------
+# ------------------------------------------------------------
 def getenv_int(key, default):
     val = os.getenv(key)
     if val is None or val.strip() == "":
@@ -215,9 +222,9 @@ config = {
     "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
 }
 
-# ------------------------------
+# ------------------------------------------------------------
 # Update .env safely
-# ------------------------------
+# ------------------------------------------------------------
 def update_env(key, value):
     """
     Update a single variable in the .env file.
@@ -234,9 +241,9 @@ def update_env(key, value):
     # Update runtime config
     config[key] = value
     
-# ------------------------------
+# ------------------------------------------------------------
 # Normalise config with defaults
-# ------------------------------
+# ------------------------------------------------------------
 def normalise_config():
     log_clarification()
     log("Populating Config...", "debug")
@@ -275,9 +282,9 @@ def normalise_config():
 # Run normalisation immediately so .env is populated
 normalise_config()
 
-# ------------------------------
+# ------------------------------------------------------------
 # Dynamic download path
-# ------------------------------
+# ------------------------------------------------------------
 def get_download_path():
     """
     Returns the path to use for downloads.
@@ -290,9 +297,9 @@ def get_download_path():
         return ext_path
     return config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
 
-# ------------------------------
+# ------------------------------------------------------------
 # Get mirrors list
-# ------------------------------
+# ------------------------------------------------------------
 def get_mirrors():
     env_mirrors = config.get("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
     mirrors = []
@@ -312,3 +319,5 @@ def get_mirrors():
     return mirrors
 
 MIRRORS = get_mirrors()
+
+global_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)

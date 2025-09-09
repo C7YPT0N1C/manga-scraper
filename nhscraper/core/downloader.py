@@ -25,8 +25,7 @@ skipped_galleries = []
 # Select extension (skeleton fallback)
 ####################################################################################################
 def load_extension():
-    global active_extension
-    global download_location
+    global active_extension, download_location
 
     ext_name = config.get("EXTENSION", "skeleton")
     active_extension = get_selected_extension(ext_name)
@@ -75,7 +74,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
     if ReturnReport:
         log_clarification()
         skipped_report = "\n".join(skipped_galleries)
-        log(f"All Skipped Galleries:\n{skipped_report}", "debug")
+        log(f"All Skipped Galleries:\n{skipped_report}")
     else:
         if not meta:
             logger.warning("update_skipped_galleries called without meta while ReturnReport is False.")
@@ -95,19 +94,22 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         update_skipped_galleries(False, meta, "Not Meta.")
         return False
 
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
     gallery_id = meta.get("id")
     doujin_folder = build_gallery_path(meta, iteration)
 
     # Skip if gallery has 0 pages
     if num_pages == 0:
         log_clarification()
-        logger.warning(f"Skipping Gallery: {gallery_id} (Reason: No pages)")
+        logger.warning(
+            f"Skipping Gallery: {gallery_id}\n"
+            "Reason: No Pages.\n"
+            f"Title: {gallery_title}\n"
+        )
         update_skipped_galleries(False, meta, "No Pages.")
         return False
 
     # Skip only if NOT in dry-run
-    if not dry_run and os.path.exists(doujin_folder):
+    if not global_dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
                 for ext in ("jpg", "png", "gif", "webp"))
@@ -116,8 +118,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if all_exist:
             log_clarification()
             logger.info(
-                f"Skipping Gallery: {gallery_id} (Reason: Already complete)\n"
-                f"Title: {gallery_title}\nFolder: {doujin_folder}"
+                f"Skipping Gallery: {gallery_id}\n"
+                "Reason: Already Downloaded.\n"
+                f"Title: {gallery_title}\n"
+                f"Folder: {doujin_folder}"
             )
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
@@ -130,7 +134,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
-    log_clarification()
     for tag in gallery_tags:
         if tag in excluded_tags:
             blocked_tags.append(tag)
@@ -145,6 +148,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         log_clarification()
         logger.info(
             f"Skipping Gallery: {gallery_id}\n"
+            "Reason: Blocked Tags In Metadata.\n"
             f"Title: {gallery_title}\n"
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
@@ -173,11 +177,9 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
 # CORE
 ####################################################################################################
 def process_galleries(gallery_ids):
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        if not dry_run:
+        if not global_dry_run:
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as started.")
@@ -188,21 +190,22 @@ def process_galleries(gallery_ids):
         while gallery_attempts < max_gallery_attempts:
             gallery_attempts += 1
             try:
-                log_clarification()
                 active_extension.pre_gallery_download_hook(gallery_id)
+                log_clarification()
+                logger.info("######################## GALLERY START ########################")
+                log_clarification()
                 logger.info(f"Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_gallery_attempts})")
                 time.sleep(dynamic_sleep("gallery", gallery_attempts))
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id}")
-                    if not dry_run and gallery_attempts >= max_gallery_attempts:
+                    if not global_dry_run and gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 active_extension.during_gallery_download_hook(gallery_id)
-
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
@@ -216,7 +219,7 @@ def process_galleries(gallery_ids):
                         break
 
                 if skip_gallery:
-                    if not dry_run:
+                    if not global_dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
                         logger.info(f"[DRY-RUN] Would mark gallery {gallery_id} as skipped.")
@@ -229,7 +232,7 @@ def process_galleries(gallery_ids):
                     safe_creator_name = safe_name(creator)
                     doujin_folder = build_gallery_path(meta, iteration)
 
-                    if dry_run:
+                    if global_dry_run:
                         log(f"[DRY-RUN] Would create folder for {creator}: {doujin_folder}", "debug")
                     else:
                         os.makedirs(doujin_folder, exist_ok=True)
@@ -253,23 +256,22 @@ def process_galleries(gallery_ids):
                 # --- Download images per creator ---
                 with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                     for safe_creator_name, creator_tasks in grouped_tasks:
-                        if not dry_run:
+                        if not global_dry_run:
                             submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                         else:
                             for _ in creator_tasks:
                                 time.sleep(0.1)  # fake delay
 
-                if not dry_run:
+                if not global_dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
 
                 logger.info(f"Completed Gallery: {gallery_id}")
-                log_clarification()
                 break  # exit retry loop on success
 
             except Exception as e:
                 logger.error(f"Error processing Gallery {gallery_id}: {e}")
-                if not dry_run and gallery_attempts >= max_gallery_attempts:
+                if not global_dry_run and gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
@@ -278,8 +280,6 @@ def process_galleries(gallery_ids):
 def start_downloader(gallery_list=None):
     start_time = time.perf_counter()  # Start timer
     
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-
     log_clarification()
     logger.info("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
@@ -304,7 +304,7 @@ def start_downloader(gallery_list=None):
         unit="gallery"
     )
 
-    if not dry_run:
+    if not global_dry_run:
         active_extension.post_run_hook()
     else:
         log_clarification()

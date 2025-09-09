@@ -10,9 +10,9 @@ from nhscraper.extensions.extension_loader import *
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
-# ------------------------------
+# ------------------------------------------------------------
 # Delegate to installer
-# ------------------------------
+# ------------------------------------------------------------
 INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
 
 def run_installer(flag: str):
@@ -200,29 +200,29 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 def build_gallery_list(args):
     gallery_ids = set()
 
-    # ------------------------------
+    # ------------------------------------------------------------
     # File input (overrides .env galleries)
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.file:
         gallery_ids.update(_handle_gallery_args(args.file, "file"))
 
-    # ------------------------------
+    # ------------------------------------------------------------
     # Range
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.range:
         start, end = args.range
         gallery_ids.update(range(start, end + 1))
 
-    # ------------------------------
+    # ------------------------------------------------------------
     # Explicit galleries
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.galleries:
         ids = [int(x.strip()) for x in args.galleries.split(",") if x.strip().isdigit()]
         gallery_ids.update(ids)
     
-    # ------------------------------
+    # ------------------------------------------------------------
     # Artist / Group / Tag / Parody / Search
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.homepage:
         gallery_ids.update(_handle_gallery_args(args.homepage, "homepage"))
     
@@ -241,9 +241,9 @@ def build_gallery_list(args):
     if args.search:
         gallery_ids.update(_handle_gallery_args(args.search, "search"))
 
-    # ------------------------------
+    # ------------------------------------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
-    # ------------------------------
+    # ------------------------------------------------------------
     gallery_list = list( # Convert to list
         reversed( # Highest ID first
             sorted( # Sort list so it can be reversed.
@@ -255,7 +255,7 @@ def build_gallery_list(args):
         )
     
     log_clarification()
-    log(f"Gallery List: {gallery_list}", "debug")
+    #log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
 
@@ -280,9 +280,9 @@ def update_config(args): # Update config
     config["VERBOSE"] = args.verbose
     config["DEBUG"] = args.debug
 
-# ------------------------------
+# ------------------------------------------------------------
 # Main
-# ------------------------------
+# ------------------------------------------------------------
 def main():
     normalise_config() # Populate config immediately.
     
@@ -298,9 +298,9 @@ def main():
     log("                  nhentai-scraper                   ")
     log("====================================================")
     
-    # ------------------------------
+    # ------------------------------------------------------------
     # Handle Installer / Updater
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.install:
         run_installer("--install")
     elif args.update:
@@ -310,9 +310,9 @@ def main():
     elif args.uninstall:
         run_installer("--uninstall")
         
-    # ------------------------------
+    # ------------------------------------------------------------
     # Handle extension installation / uninstallation
-    # ------------------------------
+    # ------------------------------------------------------------
     if args.install_extension:
         install_selected_extension(args.install_extension)
         return
@@ -352,9 +352,9 @@ def main():
     log_clarification()
     log(f"Updated Config:\n{config}", "debug")
     
-    # ------------------------------
+    # ------------------------------------------------------------
     # Download galleries
-    # ------------------------------
+    # ------------------------------------------------------------
     start_downloader(gallery_list)
 
 if __name__ == "__main__":
