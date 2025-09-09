@@ -76,8 +76,8 @@ def update_extension_download_path():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
     
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
@@ -114,8 +114,8 @@ def install_extension():
     if not DEDICATED_DOWNLOAD_PATH:
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
     try:
@@ -172,8 +172,8 @@ WantedBy=multi-user.target
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
     try:
@@ -212,8 +212,8 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
     if RemoveEmptyArtistFolder:
@@ -245,7 +245,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
 # Update creator's most popular genres
 # ------------------------------------------------------------
 def update_creator_popular_genres(meta):
-    if not dry_run:
+    if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
         if not creators:
@@ -318,7 +318,7 @@ def update_creator_popular_genres(meta):
     # ----------------------------
     # Save page 1 as cover.[ext]
     # ----------------------------
-    if not dry_run:
+    if not config.get("DRY_RUN"):
         try:
             gallery_meta = return_gallery_metas(meta)
             creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
@@ -359,8 +359,8 @@ def graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] GraphQL: Would make request: {query} with variables {variables}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
     try:
@@ -385,8 +385,8 @@ def new_graphql_request(query: str, variables: dict = None):
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] GraphQL: Would make request: {query} with variables {variables}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
     try:
@@ -507,7 +507,7 @@ def store_creator_manga_IDs(meta: dict):
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
         return
 
-    if not dry_run:
+    if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
         log(f"GraphQL: Gallery Metadata:{gallery_meta}\nProcessing creators {creators}", "debug")
@@ -542,7 +542,7 @@ def store_creator_manga_IDs(meta: dict):
                     _collected_manga_ids.add(manga_id)
                     log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
     else:
-        log(f"[DRY-RUN] GraphQL: Would store manga ID for creators", "debug")
+        log(f"[DRY RUN] GraphQL: Would store manga ID for creators", "debug")
 
 # ----------------------------
 # Retry deferred creators
@@ -738,8 +738,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if dry_run:
-        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
@@ -790,8 +790,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
-    if dry_run:
-        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
+    if config.get("DRY_RUN"):
+        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
         return
     
     log_clarification()
@@ -809,8 +809,8 @@ def pre_run_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
-    if dry_run:
-        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Skipped.")
+    if config.get("DRY_RUN"):
+        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Skipped.")
         return
     
     log_clarification()
@@ -818,8 +818,8 @@ def pre_gallery_download_hook(gallery_id):
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
-    if dry_run:
-        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: During-download Hook Skipped.")
+    if config.get("DRY_RUN"):
+        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Skipped.")
         return
     
     log_clarification()
@@ -827,8 +827,8 @@ def during_gallery_download_hook(gallery_id):
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    if dry_run:
-        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-download Hook Skipped.")
+    if config.get("DRY_RUN"):
+        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Skipped.")
         return
     
     log_clarification()
@@ -847,8 +847,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
-    if dry_run:
-        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
+    if config.get("DRY_RUN"):
+        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
         return
     
     log_clarification()
