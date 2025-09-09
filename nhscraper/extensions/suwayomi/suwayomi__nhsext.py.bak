@@ -545,44 +545,6 @@ def store_creator_manga_IDs(meta: dict):
 # ----------------------------
 # Retry deferred creators
 # ----------------------------
-def quick_retry_deferred_creators():
-    """
-    Immediate retry for deferred creators (once)
-    """
-    with _deferred_lock:
-        creators_to_retry = list(_deferred_creators)
-
-    for creator_name in creators_to_retry:
-        log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
-        query = """
-        query ($title: String!, $sourceId: LongString!) {
-        mangas(
-            filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-        ) {
-            nodes { id title }
-        }
-        }
-        """
-        result = graphql_request(query, {
-            "title": creator_name,
-            "sourceId": LOCAL_SOURCE_ID
-        })
-        log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-        
-        if nodes:
-            manga_id = int(nodes[0]["id"])
-            log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
-            with _manga_ids_lock:
-                if manga_id not in _collected_manga_ids:
-                    _collected_manga_ids.add(manga_id)
-                    log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
-            with _deferred_lock:
-                _deferred_creators.discard(creator_name)
-    
-    if _deferred_creators:
-        logger.warning(f"GraphQL: {_deferred_creators} could not be resolved after quick retry, deferring till later...")
-
 def retry_deferred_creators():
     global LOCAL_SOURCE_ID
     if not _deferred_creators:
@@ -617,7 +579,6 @@ def retry_deferred_creators():
             })
             log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-            
             if nodes:
                 manga_id = int(nodes[0]["id"])
                 log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
@@ -885,9 +846,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
     store_creator_manga_IDs(meta)
     add_creator_to_category(meta)
-    
-    # Immediately retry processing deferred creators
-    quick_retry_deferred_creators()
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
