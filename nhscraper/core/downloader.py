@@ -226,7 +226,7 @@ def process_galleries(gallery_ids):
                         logger.info(f"[DRY RUN] Would mark gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
-                # --- Prepare folders and symlinks ---
+                # --- Prepare primary folder (first creator only) ---
                 primary_creator = safe_name(creators[0]) if creators else "Unknown"
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
@@ -235,7 +235,7 @@ def process_galleries(gallery_ids):
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
 
-                # Create symlinks for all additional creators
+                # --- Symlink all additional creators to the primary folder ---
                 for extra_creator in creators[1:]:
                     extra_safe = safe_name(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator]})
@@ -244,11 +244,11 @@ def process_galleries(gallery_ids):
                         log(f"[DRY RUN] Would symlink {extra_folder} -> {primary_folder}", "debug")
                     else:
                         if os.path.islink(extra_folder) or os.path.exists(extra_folder):
-                            os.unlink(extra_folder)  # remove old symlink/folder
+                            os.unlink(extra_folder)  # 🔑 ensure no old content conflicts
                         os.symlink(primary_folder, extra_folder)
                         logger.info(f"Symlinked {extra_creator} -> {primary_creator}")
 
-                # --- Prepare download tasks (only for primary creator) ---
+                # --- Prepare download tasks (only once, for primary creator) ---
                 tasks = []
                 for i in range(num_pages):
                     page = i + 1
@@ -262,7 +262,7 @@ def process_galleries(gallery_ids):
                     img_path = os.path.join(primary_folder, img_filename)
                     tasks.append((page, img_urls, img_path, primary_creator))
 
-                # --- Download images (only once, in primary creator's folder) ---
+                # --- Download images (once, in primary creator’s folder) ---
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
                         if not config.get("DRY_RUN"):
