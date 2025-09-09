@@ -196,6 +196,10 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_max = 0.5 # Maximum time to sleep
         gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
         
+        scale_min = 1 # Minimum scale value
+        #scale_max = 5 # Maximum scale value # Old
+        scale_max = 60 # Maximum scale value
+        
         # ------------------------------------------------------------
         # Define a base sleep range depending on what stage of scraping we're in
         # ------------------------------------------------------------
@@ -225,7 +229,7 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         )
         capped_galleries = min(num_galleries, 1000)
         load_factor = total_load * capped_galleries / 1000
-        scale = min(max(1, load_factor), 5)
+        scale = min(max(scale_min, load_factor), scale_max)
 
         # Choose a random sleep within the scaled range
         sleep_time = random.uniform(base_min * scale, base_max * scale)
