@@ -548,7 +548,7 @@ def store_creator_manga_IDs(meta: dict):
 def update_mangas(ids: list[int]):
     if not ids:
         return
-    log(f"GraphQL: Updating mangas {ids} as 'In Library", "debug")
+    log(f"GraphQL: Updating mangas {ids} as 'In Library'", "debug")
     mutation = """
     mutation ($ids: [Int!]!) {
       updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
@@ -574,7 +574,7 @@ def update_mangas_categories(ids: list[int], category_id: int):
     }
     """
     result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
-    log(f"GraphQL: updateMangasCategories result: {result}", "debug")
+    #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
 
 # ----------------------------
@@ -745,7 +745,7 @@ def add_deferred_creators_to_category(type: str = "quick"):
         new_ids = list(_collected_manga_ids - existing_ids)
 
     if not new_ids:
-        logger.info(f"GraphQL: No new mangas to add to category '{SUWAYOMI_CATEGORY_NAME}'.")
+        logger.info(f"GraphQL: No new mangas to add to Category '{SUWAYOMI_CATEGORY_NAME}'.")
         return
 
     update_mangas(new_ids)
