@@ -4,6 +4,7 @@
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
+from requests.auth import HTTPBasicAuth
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -36,6 +37,9 @@ SUBFOLDER_STRUCTURE = ["creator", "title"]
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+BASIC_AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now. # TEST
+BASIC_AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
+
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
 
@@ -45,6 +49,9 @@ MAX_GENRES_STORED = 15
 MAX_GENRES_PARSED = 100
 
 ############################################
+
+# Keep a persistent session for cookie-based login
+_session = None
 
 # Thread locks for file operations
 _file_lock = threading.Lock()
@@ -347,6 +354,8 @@ def update_creator_popular_genres(meta):
 ############################################
 
 def graphql_request(query: str, variables: dict = None):
+    """Framework for making requests to GraphQL"""
+    
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
@@ -361,6 +370,55 @@ def graphql_request(query: str, variables: dict = None):
         result = response.json()
         #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
         return result
+    except requests.RequestException as e:
+        logger.error(f"GraphQL: Request failed: {e}")
+        return None
+    except ValueError as e:
+        logger.error(f"GraphQL: Failed to decode JSON response: {e}")
+        logger.error(f"Raw response: {response.text if response else 'No response'}")
+        return None
+
+def new_graphql_request(query: str, variables: dict = None):
+    """New framework for making requests to GraphQL. Allows for authentication with the server."""
+    
+    global _session
+    headers = {"Content-Type": "application/json"}
+    payload = {"query": query, "variables": variables or {}}
+
+    if global_dry_run:
+        logger.info(f"[DRY-RUN] GraphQL: Would make request: {query} with variables {variables}")
+        return None
+
+    try:
+        if _session is None:
+            # Initialise session and login once
+            _session = requests.Session()
+            login_payload = {
+                "username": BASIC_AUTH_USERNAME,
+                "password": BASIC_AUTH_PASSWORD,
+            }
+            
+            login_url = GRAPHQL_URL.replace("/graphql", "/auth/login")
+            
+            resp = _session.post(login_url, json=login_payload, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+            if resp.status_code != 200:
+                logger.error(f"GraphQL: Login failed with status {resp.status_code}: {resp.text}")
+                return None
+            
+            logger.info("GraphQL: Successfully logged in and obtained session cookie.")
+
+        #logger.debug(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+        response = _session.post(
+            GRAPHQL_URL,
+            headers=headers,
+            json=payload
+        )
+        response.raise_for_status()
+        result = response.json()
+        #logger.debug(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+        return result
+
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
         return None

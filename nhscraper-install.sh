@@ -126,6 +126,9 @@ install_scraper() {
     # Symlink CLI
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
+    # Symlink Local Manifest
+    ln -sf "$NHENTAI_DIR/nhscraper/extensions/local_manifest.json" $NHENTAI_DIR/local_manifest.json
+
     echo -e "\nnhentai-scraper (branch: $branch) installed at $NHENTAI_DIR"
 }
 
@@ -135,6 +138,10 @@ create_env_file() {
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
+
+# Custom (Username and Password must be manually set for now) # TEST
+BASIC_AUTH_USERNAME = "Username"
+BASIC_AUTH_PASSWORD = "Password"
 
 # Directories
 NHENTAI_DIR=/opt/nhentai-scraper
