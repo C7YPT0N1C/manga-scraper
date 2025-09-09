@@ -39,8 +39,8 @@ dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
-BASIC_AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now. # TEST
-BASIC_AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
+AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now. # TEST
+AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
 
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
@@ -396,8 +396,8 @@ def new_graphql_request(query: str, variables: dict = None):
             # Initialise session and login once
             _session = requests.Session()
             login_payload = {
-                "username": BASIC_AUTH_USERNAME,
-                "password": BASIC_AUTH_PASSWORD,
+                "username": AUTH_USERNAME,
+                "password": AUTH_PASSWORD,
             }
             
             login_url = GRAPHQL_URL.replace("/graphql", "/auth/login")
@@ -792,6 +792,10 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
+    if dry_run:
+        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
     
@@ -807,16 +811,28 @@ def pre_run_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
+    if dry_run:
+        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Skipped.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
+    if dry_run:
+        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: During-download Hook Skipped.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
+    if dry_run:
+        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-download Hook Skipped.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
 
@@ -833,6 +849,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
+    if dry_run:
+        logger.info("[DRY-RUN] Extension: {EXTENSION_NAME}: Post-run Hook Skipped.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
