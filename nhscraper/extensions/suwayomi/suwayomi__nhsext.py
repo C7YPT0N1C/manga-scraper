@@ -843,7 +843,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook(gallery_list):
     if config.get("DRY_RUN"):
-        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
     log_clarification()
@@ -862,7 +862,7 @@ def pre_run_hook(gallery_list):
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
     if config.get("DRY_RUN"):
-        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
@@ -870,7 +870,7 @@ def pre_gallery_download_hook(gallery_id):
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
     if config.get("DRY_RUN"):
-        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
     log_clarification()
@@ -879,7 +879,7 @@ def during_gallery_download_hook(gallery_id):
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     if config.get("DRY_RUN"):
-        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
     log_clarification()
@@ -904,7 +904,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     if config.get("DRY_RUN"):
-        logger.info("[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
     log_clarification()
