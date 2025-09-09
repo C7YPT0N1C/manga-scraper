@@ -239,12 +239,17 @@ def process_galleries(gallery_ids):
                 for extra_creator in creators[1:]:
                     extra_safe = safe_name(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator]})
+                    parent_dir = os.path.dirname(extra_folder)
+                    os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
                     if config.get("DRY_RUN"):
                         log(f"[DRY RUN] Would symlink {extra_folder} -> {primary_folder}", "debug")
                     else:
-                        if os.path.islink(extra_folder) or os.path.exists(extra_folder):
-                            os.unlink(extra_folder)  # 🔑 ensure no old content conflicts
+                        if os.path.islink(extra_folder):
+                            os.unlink(extra_folder)  # remove old symlink only
+                        elif os.path.exists(extra_folder):
+                            logger.warning(f"Extra folder already exists and is not a symlink: {extra_folder}")
+                            continue  # skip creating symlink if real folder exists
                         os.symlink(primary_folder, extra_folder)
                         logger.info(f"Symlinked {extra_creator} -> {primary_creator}")
 
