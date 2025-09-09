@@ -518,7 +518,7 @@ def store_creator_manga_IDs(meta: dict):
     if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"GraphQL: Gallery Metadata:{gallery_meta}\n\nProcessing creators {creators}", "debug")
+        log(f"GraphQL: Gallery Metadata:{gallery_meta}\n\nProcessing creators {creators}\n", "debug")
         for creator_name in creators:
             query = """
             query ($title: String!, $sourceId: LongString!) {
