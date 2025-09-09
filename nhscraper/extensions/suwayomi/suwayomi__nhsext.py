@@ -328,13 +328,13 @@ def update_creator_popular_genres(meta):
                 gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
 
                 if not os.path.exists(gallery_folder):
-                    logger.warning(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
                     continue
 
                 # Look for page 1 file (assume starts with 1.)
                 candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
                 if not candidates:
-                    logger.warning(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
+                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
                     continue
 
                 page1_file = os.path.join(gallery_folder, candidates[0])
@@ -347,7 +347,7 @@ def update_creator_popular_genres(meta):
                             os.remove(os.path.join(creator_folder, f))
                             log(f"Removed old cover file: {f}")
                         except Exception as e:
-                            logger.warning(f"Failed to remove old cover file {f}: {e}")
+                            logger.info(f"Failed to remove old cover file {f}: {e}")
 
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
 
@@ -538,7 +538,7 @@ def store_creator_manga_IDs(meta: dict):
             #log(f"GraphQL: Manga lookup result for '{creator_name}': {result}", "debug")
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
-                logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
+                logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
                 with _deferred_lock:
                     _deferred_creators.add(creator_name)
                 continue
@@ -619,7 +619,7 @@ def add_creator_to_category(meta: dict):
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not nodes:
-            logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
+            logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
             with _deferred_lock:
                 _deferred_creators.add(creator_name)
             continue
@@ -669,7 +669,7 @@ def quick_retry_deferred_creators():
                 _deferred_creators.discard(creator_name)
     
     if _deferred_creators:
-        logger.warning(f"GraphQL: {_deferred_creators} could not be resolved after quick retry, deferring till later...")
+        logger.info(f"GraphQL: {_deferred_creators} could not be resolved after quick retry, deferring till later...")
 
 def retry_deferred_creators():
     global LOCAL_SOURCE_ID
@@ -724,7 +724,7 @@ def retry_deferred_creators():
         delay *= 2
 
     if _deferred_creators:
-        logger.warning(f"GraphQL: Some creators could not be resolved after retries: {_deferred_creators}")
+        logger.info(f"GraphQL: Some creators could not be resolved after retries: {_deferred_creators}")
 
 def add_deferred_creators_to_category(type: str = "quick"):
     global CATEGORY_ID
