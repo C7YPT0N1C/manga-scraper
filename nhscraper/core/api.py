@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, json, re, requests
+import os, time, random, cloudscraper, requests, re, json
 from flask import Flask, jsonify, request
 from datetime import datetime
 import urllib.parse
@@ -131,9 +131,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_max = 0.5 # Maximum time to sleep
         gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
         
-        # ------------------------------
+        # ------------------------------------------------------------
         # Define a base sleep range depending on what stage of scraping we're in
-        # ------------------------------
+        # ------------------------------------------------------------
         if stage == "api":
             # When calling the API, back off more with each retry attempt
             base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
@@ -146,9 +146,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
             # Heavier stage (fetching full galleries), so longer base wait
             base_min, base_max = ((sleep_min * gallery_sleep_min_multiplier), (sleep_max * gallery_sleep_max_multiplier))
 
-        # ------------------------------
+        # ------------------------------------------------------------
         # Scaling logic
-        # ------------------------------
+        # ------------------------------------------------------------
         # Scale grows with number of galleries and total concurrency
         #   - More galleries = more cumulative load
         #   - Cap scaling at ×5 to prevent excessive waiting
@@ -166,7 +166,6 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_time = random.uniform(base_min * scale, base_max * scale)
         
         # Debug logging for transparency
-        log_clarification()
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
@@ -176,7 +175,6 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         sleep_time = 0.3
         
         # Debug logging for transparency
-        log_clarification()
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
             "debug"
@@ -455,7 +453,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
     # Unified function to update gallery state per stage.
     # stage: 'download' or 'graphql'
     # success: True if stage completed, False if failed
-    max_attempts = config.get("MAX_ATTEMPTS", DEFAULT_MAX_RETRIES)
+    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
     
     with state_lock:
         entry = gallery_metadata.setdefault(gallery_id, {"meta": None})
