@@ -44,68 +44,65 @@ logger.debug("Logger: Debugging Started.")
 def setup_logger(verbose=False, debug=False):
     """
     Configure the nhscraper logger.
-    Ensures no duplicate handlers and sets levels based on flags/config.
+    File logs always DEBUG.
+    Console respects verbose/debug flags.
     """
-
-    # Always get the same logger
     logger = logging.getLogger("nhscraper")
-    logger.handlers.clear()
+    logger.handlers.clear()  # remove previous handlers
 
-    # --- Formatter ---
+    # Formatter
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
-    # --- Console handler ---
+    # Console handler
     ch = logging.StreamHandler()
     if debug:
-        logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     elif verbose:
-        logger.setLevel(logging.INFO)
         ch.setLevel(logging.INFO)
     else:
-        logger.setLevel(logging.WARNING)
         ch.setLevel(logging.WARNING)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # Runtime log (new file per run, timestamped)
+    # File handler: always DEBUG
     fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
     fh_runtime.setLevel(logging.DEBUG)
     fh_runtime.setFormatter(formatter)
     logger.addHandler(fh_runtime)
 
-    # Announce level
-    if debug:
-        logger.info("Log Level Set To DEBUG")
-    elif verbose:
-        logger.info("Log Level Set To INFO")
-    else:
-        logger.info("Log Level Set To WARNING")
+    # Logger level: always DEBUG so all messages reach file
+    logger.setLevel(logging.DEBUG)
 
+    logger.info("Logger initialized. Console level: %s", 
+                "DEBUG" if debug else "INFO" if verbose else "WARNING")
+    
     return logger
 
 # --- Placeholder logger so imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str, log_type: str = None):
-    """Unified logging for CLI depending on verbose/debug flags."""
-    debug_mode = config.get("DEBUG")
-    verbose_mode = config.get("VERBOSE")
+def log(message: str, log_type: str = "info"):
+    """
+    Unified logging function.
+    All logs go to file (DEBUG+), console respects setup_logger flags.
+    
+    log_type: "debug", "info", "warning", "error", "critical"
+    """
+    logger = logging.getLogger("nhscraper")
 
-    if log_type == None:
-        if logger.getEffectiveLevel == 10: # Only log if log level is DEBUG
-            logger.debug(message)  # Log as debug
-        if logger.getEffectiveLevel == 20: # Only log if log level is INFO
-            logger.info(message)  # Log as debug
-        else:
-            print(message)         # Always print to terminal
-    
-    elif log_type == "debug":
-        logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
-    
-    elif log_type == "info":
-        logger.info(message)   # Log info to file and terminal
+    # Map string to logging function
+    log_map = {
+        "debug": logger.debug,
+        "info": logger.info,
+        "warning": logger.warning,
+        "error": logger.error,
+        "critical": logger.critical,
+    }
+
+    log_func = log_map.get(log_type.lower(), logger.info)
+    log_func(message)
+
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
