@@ -332,6 +332,12 @@ start_update() {
     pip install --upgrade pip setuptools wheel
     pip install --editable "$NHENTAI_DIR"
 
+    check_python_version
+    install_system_packages
+    create_env_file
+    create_systemd_services
+    print_links
+
     echo "Update complete (branch: $branch)"
 }
 
