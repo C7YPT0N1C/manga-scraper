@@ -226,49 +226,41 @@ def process_galleries(gallery_ids):
                         logger.info(f"[DRY RUN] Would mark gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
-                # --- Prepare folders and symlinks ---
-                primary_creator = safe_name(creators[0]) if creators else "Unknown"
-                primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
-
-                if config.get("DRY_RUN"):
-                    log(f"[DRY RUN] Would create primary folder for {creators[0]}: {primary_folder}", "debug")
-                else:
-                    os.makedirs(primary_folder, exist_ok=True)
-
-                # Create symlinks for all additional creators
-                for extra_creator in creators[1:]:
-                    extra_safe = safe_name(extra_creator)
-                    extra_folder = build_gallery_path(meta, {"creator": [extra_creator]})
+                # --- Prepare tasks per creator ---
+                grouped_tasks = []
+                for creator in creators:
+                    iteration = {"creator": [creator]}
+                    safe_creator_name = safe_name(creator)
+                    doujin_folder = build_gallery_path(meta, iteration)
 
                     if config.get("DRY_RUN"):
-                        log(f"[DRY RUN] Would symlink {extra_folder} -> {primary_folder}", "debug")
+                        log(f"[DRY RUN] Would create folder for {creator}: {doujin_folder}", "debug")
                     else:
-                        if os.path.islink(extra_folder) or os.path.exists(extra_folder):
-                            os.unlink(extra_folder)  # remove old symlink/folder
-                        os.symlink(primary_folder, extra_folder)
-                        logger.info(f"Symlinked {extra_creator} -> {primary_creator}")
+                        os.makedirs(doujin_folder, exist_ok=True)
 
-                # --- Prepare download tasks (only for primary creator) ---
-                tasks = []
-                for i in range(num_pages):
-                    page = i + 1
-                    img_urls = fetch_image_urls(meta, page)
-                    if not img_urls:
-                        logger.warning(f"Skipping Page {page} for {primary_creator}: Failed to get URLs")
-                        update_skipped_galleries(False, meta, "Failed to get URLs.")
-                        continue
+                    creator_tasks = []
+                    for i in range(num_pages):
+                        page = i + 1
+                        img_urls = fetch_image_urls(meta, page)
+                        if not img_urls:
+                            logger.warning(f"Skipping Page {page} for {creator}: Failed to get URLs")
+                            update_skipped_galleries(False, meta, "Failed to get URLs.")
+                            continue
 
-                    img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
-                    img_path = os.path.join(primary_folder, img_filename)
-                    tasks.append((page, img_urls, img_path, primary_creator))
+                        img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
+                        img_path = os.path.join(doujin_folder, img_filename)
+                        creator_tasks.append((page, img_urls, img_path, safe_creator_name))
 
-                # --- Download images (only once, in primary creator's folder) ---
-                if tasks:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    if creator_tasks:
+                        grouped_tasks.append((safe_creator_name, creator_tasks))
+
+                # --- Download images per creator ---
+                with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    for safe_creator_name, creator_tasks in grouped_tasks:
                         if not config.get("DRY_RUN"):
-                            submit_creator_tasks(executor, tasks, gallery_id, session, primary_creator)
+                            submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name)
                         else:
-                            for _ in tasks:
+                            for _ in creator_tasks:
                                 time.sleep(0.1)  # fake delay
 
                 if not config.get("DRY_RUN"):

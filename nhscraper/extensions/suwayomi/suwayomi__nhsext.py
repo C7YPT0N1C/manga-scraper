@@ -339,6 +339,16 @@ def update_creator_popular_genres(meta):
 
                 page1_file = os.path.join(gallery_folder, candidates[0])
                 _, ext = os.path.splitext(page1_file)
+
+                # Remove any existing cover.* file regardless of extension
+                for f in os.listdir(creator_folder):
+                    if f.startswith("cover."):
+                        try:
+                            os.remove(os.path.join(creator_folder, f))
+                            logger.debug(f"Removed old cover file: {f}")
+                        except Exception as e:
+                            logger.warning(f"Failed to remove old cover file {f}: {e}")
+
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
 
                 shutil.copy2(page1_file, cover_file)

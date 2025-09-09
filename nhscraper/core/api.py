@@ -117,8 +117,71 @@ API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 # - Image URLs are usually served via https://i.nhentai.net/galleries/{media_id}/{page}.{ext}
     
 ################################################################################################################
+# METADATA CLEANING
+################################################################################################################
+
+def get_meta_tags(referrer: str, meta, tag_type):
+    """
+    Extract all tag names of a given type (artist, group, parody, language, etc.).
+    - Splits names on "|".
+    - Returns [] if none found.
+    """
+    if not meta or "tags" not in meta:
+        return []
+
+    names = []
+    for tag in meta["tags"]:
+        if tag.get("type") == tag_type and tag.get("name"):
+            parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
+            names.extend(parts)
+    
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
+    return names
+
+def safe_name(s: str) -> str:
+    return s.replace("/", "-").replace("\\", "-").strip()
+
+def clean_title(meta):
+    title_obj = meta.get("title", {}) or {}
+    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
+    title = (
+        title_obj.get(title_type)
+        or title_obj.get("english")
+        or title_obj.get("pretty")
+        or title_obj.get("japanese")
+        or f"Gallery_{meta.get('id')}"
+    )
+
+    # If there's a |, take the last part
+    if "|" in title:
+        title = title.split("|")[-1].strip()
+
+    # Remove all content inside [] or {} brackets, including the brackets themselves
+    title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
+
+    # Replace using explicit replacement map
+    for symbol, replacement in DODGY_SYMBOL_REPLACEMENTS.items():
+        title = title.replace(symbol, replacement)
+
+    # Replace blacklisted symbols with underscores
+    for symbol in DODGY_SYMBOL_BLACKLIST:
+        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
+
+    # Collapse multiple underscores/spaces
+    title = re.sub(r"_+", "_", title)   # collapse consecutive underscores
+    title = " ".join(title.split())     # collapse consecutive spaces
+    title = title.strip(" _")           # trim leading/trailing underscores/spaces
+
+    # If title is empty after cleanup, fallback to safe placeholder
+    if not title:
+        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
+
+    return safe_name(title)
+
+################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
+
 def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
@@ -362,64 +425,6 @@ def fetch_image_urls(meta: dict, page: int):
     except Exception as e:
         logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
         return None
-
-# ===============================
-# METADATA CLEANING
-# ===============================
-def get_meta_tags(referrer: str, meta, tag_type):
-    """
-    Extract all tag names of a given type (artist, group, parody, language, etc.).
-    - Splits names on "|".
-    - Returns [] if none found.
-    """
-    if not meta or "tags" not in meta:
-        return []
-
-    names = []
-    for tag in meta["tags"]:
-        if tag.get("type") == tag_type and tag.get("name"):
-            parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
-            names.extend(parts)
-    
-    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
-    return names
-
-def safe_name(s: str) -> str:
-    return s.replace("/", "-").replace("\\", "-").strip()
-
-def clean_title(meta):
-    title_obj = meta.get("title", {}) or {}
-    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = (
-        title_obj.get(title_type)
-        or title_obj.get("english")
-        or title_obj.get("pretty")
-        or title_obj.get("japanese")
-        or f"Gallery_{meta.get('id')}"
-    )
-
-    # If there's a |, take the last part
-    if "|" in title:
-        title = title.split("|")[-1].strip()
-
-    # Remove all content inside [] or {} brackets, including the brackets themselves
-    title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
-
-
-    # Replace blacklisted symbols with underscores
-    for symbol in DODGY_SYMBOL_BLACKLIST:
-        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
-
-    # Collapse multiple underscores/spaces
-    title = re.sub(r"_+", "_", title)   # collapse consecutive underscores
-    title = " ".join(title.split())     # collapse consecutive spaces
-    title = title.strip(" _")           # trim leading/trailing underscores/spaces
-
-    # If title is empty after cleanup, fallback to safe placeholder
-    if not title:
-        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
-
-    return safe_name(title)
 
 ##################################################################################################################################
 ##################################################################################################################################
