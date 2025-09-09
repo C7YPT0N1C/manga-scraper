@@ -139,7 +139,8 @@ create_env_file() {
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
 
-# Custom (Username and Password must be manually set for now) # TEST
+# Custom (Username and Password must be manually set for now)
+# TEST
 BASIC_AUTH_USERNAME = "Username"
 BASIC_AUTH_PASSWORD = "Password"
 
