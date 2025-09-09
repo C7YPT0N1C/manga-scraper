@@ -319,3 +319,5 @@ def get_mirrors():
     return mirrors
 
 MIRRORS = get_mirrors()
+
+global_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
