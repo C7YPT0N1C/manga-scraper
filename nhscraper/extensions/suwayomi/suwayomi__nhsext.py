@@ -518,7 +518,7 @@ def store_creator_manga_IDs(meta: dict):
     if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"GraphQL: Gallery Metadata:{gallery_meta}\nProcessing creators {creators}", "debug")
+        log(f"GraphQL: Gallery Metadata:{gallery_meta}\n\nProcessing creators {creators}", "debug")
         for creator_name in creators:
             query = """
             query ($title: String!, $sourceId: LongString!) {
@@ -889,6 +889,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
 
+    log_clarification()
+    
     # Update creator's popular genres
     update_creator_popular_genres(meta)
     
@@ -908,6 +910,8 @@ def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
+    log_clarification()
+    
     # Add deferred creators to Suwayomi category
     add_deferred_creators_to_category("thorough")
 

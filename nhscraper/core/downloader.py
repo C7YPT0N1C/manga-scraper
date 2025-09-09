@@ -252,7 +252,7 @@ def process_galleries(gallery_ids):
                             logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
                             continue  # skip creating symlink if real folder exists
                         os.symlink(primary_folder, extra_folder)
-                        logger.info(f"Downloader: Symlinked {extra_creator} -> {primary_creator}")
+                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator}")
 
                 # --- Prepare download tasks (only once, for primary creator) ---
                 tasks = []
@@ -281,6 +281,7 @@ def process_galleries(gallery_ids):
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
 
+                log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")
                 break  # exit retry loop on success
 
