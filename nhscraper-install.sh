@@ -210,7 +210,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$NHENTAI_DIR
-ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhscraper/api.py
+ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhscraper/core/api.py
 Restart=always
 EnvironmentFile=$ENV_FILE
 
