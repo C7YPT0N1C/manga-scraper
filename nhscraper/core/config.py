@@ -319,7 +319,3 @@ def get_mirrors():
     return mirrors
 
 MIRRORS = get_mirrors()
-
-dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-if dry_run:
-    log("Logger: [DRY RUN] IN EFFECT.")
