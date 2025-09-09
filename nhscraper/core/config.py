@@ -176,7 +176,6 @@ DODGY_SYMBOL_BLACKLIST = [
     "ð", "§", "¶", "†", "‡", "‰", "µ", "¦"
 ]
 
-
 # Threads
 DEFAULT_THREADS_GALLERIES=2
 DEFAULT_THREADS_IMAGES=8
