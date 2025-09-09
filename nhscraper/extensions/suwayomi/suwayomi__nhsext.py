@@ -345,7 +345,7 @@ def update_creator_popular_genres(meta):
                     if f.startswith("cover."):
                         try:
                             os.remove(os.path.join(creator_folder, f))
-                            logger.debug(f"Removed old cover file: {f}")
+                            log(f"Removed old cover file: {f}")
                         except Exception as e:
                             logger.warning(f"Failed to remove old cover file {f}: {e}")
 
@@ -416,7 +416,7 @@ def new_graphql_request(query: str, variables: dict = None):
             
             logger.info("GraphQL: Successfully logged in and obtained session cookie.")
 
-        #logger.debug(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+        #log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
         response = _session.post(
             GRAPHQL_URL,
             headers=headers,
@@ -424,7 +424,7 @@ def new_graphql_request(query: str, variables: dict = None):
         )
         response.raise_for_status()
         result = response.json()
-        #logger.debug(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+        #log(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
         return result
 
     except requests.RequestException as e:
