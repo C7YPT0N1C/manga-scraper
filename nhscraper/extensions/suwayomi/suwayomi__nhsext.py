@@ -79,15 +79,15 @@ def update_extension_download_path():
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
 def return_gallery_metas(meta):
-    artists = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    artists = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
     title = clean_title(meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
-    language = get_meta_tags(f"{EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
     log_clarification()
     return {
@@ -235,6 +235,116 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
     logger.info(f"Removed empty directories.")
     DEDICATED_DOWNLOAD_PATH = ""
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+
+# ------------------------------------------------------------
+# Update creator's most popular genres
+# ------------------------------------------------------------
+def update_creator_popular_genres(meta):
+    if not dry_run:
+        gallery_meta = return_gallery_metas(meta)
+        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+        if not creators:
+            return
+        gallery_title = gallery_meta["title"]
+        gallery_tags = meta.get("tags", [])
+        gallery_genres = [
+            tag["name"] for tag in gallery_tags
+            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+        ]
+
+        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
+        with _file_lock:
+            if os.path.exists(top_genres_file):
+                with open(top_genres_file, "r", encoding="utf-8") as f:
+                    all_genre_counts = json.load(f)
+            else:
+                all_genre_counts = {}
+
+        for creator_name in creators:
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            details_file = os.path.join(creator_folder, "details.json")
+            os.makedirs(creator_folder, exist_ok=True)
+
+            with _file_lock:
+                if os.path.exists(details_file):
+                    with open(details_file, "r", encoding="utf-8") as f:
+                        details = json.load(f)
+                else:
+                    details = {
+                        "title": "",
+                        "author": creator_name,
+                        "artist": creator_name,
+                        "description": "",
+                        "genre": [],
+                        "status": "1",
+                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+                    }
+
+            details["title"] = creator_name
+            details["author"] = creator_name
+            details["artist"] = creator_name
+            details["description"] = f"Latest Doujin: {gallery_title}"
+
+            with _file_lock:
+                if creator_name not in all_genre_counts:
+                    all_genre_counts[creator_name] = {}
+                creator_counts = all_genre_counts[creator_name]
+                for genre in gallery_genres:
+                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
+
+                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+                log_clarification()
+                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
+                details["genre"] = [g for g, count in most_popular]
+
+                if len(creator_counts) > MAX_GENRES_PARSED:
+                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
+                    all_genre_counts[creator_name] = creator_counts
+
+                with open(details_file, "w", encoding="utf-8") as f:
+                    json.dump(details, f, ensure_ascii=False, indent=2)
+
+                with open(top_genres_file, "w", encoding="utf-8") as f:
+                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
+    
+    else:
+        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
+    
+    # ----------------------------
+    # Save page 1 as cover.[ext]
+    # ----------------------------
+    if not dry_run:
+        try:
+            gallery_meta = return_gallery_metas(meta)
+            creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+            if not creators:
+                creators = ["Unknown Creator"]
+
+            for creator_name in creators:
+                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
+
+                if not os.path.exists(gallery_folder):
+                    logger.warning(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+                    continue
+
+                # Look for page 1 file (assume starts with 1.)
+                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
+                if not candidates:
+                    logger.warning(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
+                    continue
+
+                page1_file = os.path.join(gallery_folder, candidates[0])
+                _, ext = os.path.splitext(page1_file)
+                cover_file = os.path.join(creator_folder, f"cover{ext}")
+
+                shutil.copy2(page1_file, cover_file)
+                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
+
+        except Exception as e:
+            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
+    else:
+        log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
 
 ############################################
 
@@ -514,80 +624,6 @@ def add_creators_to_category():
         update_mangas_categories(new_ids, CATEGORY_ID)
     else:
         log(f"[DRY-RUN] GraphQL: Would add creators to Suwayomi Category '{SUWAYOMI_CATEGORY_NAME}'", "debug")
-
-# ------------------------------------------------------------
-# Update creator's most popular genres
-# ------------------------------------------------------------
-def update_creator_popular_genres(meta):
-    if not dry_run:
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        if not creators:
-            return
-        gallery_title = gallery_meta["title"]
-        gallery_tags = meta.get("tags", [])
-        gallery_genres = [
-            tag["name"] for tag in gallery_tags
-            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-        ]
-
-        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        with _file_lock:
-            if os.path.exists(top_genres_file):
-                with open(top_genres_file, "r", encoding="utf-8") as f:
-                    all_genre_counts = json.load(f)
-            else:
-                all_genre_counts = {}
-
-        for creator_name in creators:
-            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            details_file = os.path.join(creator_folder, "details.json")
-            os.makedirs(creator_folder, exist_ok=True)
-
-            with _file_lock:
-                if os.path.exists(details_file):
-                    with open(details_file, "r", encoding="utf-8") as f:
-                        details = json.load(f)
-                else:
-                    details = {
-                        "title": "",
-                        "author": creator_name,
-                        "artist": creator_name,
-                        "description": "",
-                        "genre": [],
-                        "status": "1",
-                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-                    }
-
-            details["title"] = creator_name
-            details["author"] = creator_name
-            details["artist"] = creator_name
-            details["description"] = f"Latest Doujin: {gallery_title}"
-
-            with _file_lock:
-                if creator_name not in all_genre_counts:
-                    all_genre_counts[creator_name] = {}
-                creator_counts = all_genre_counts[creator_name]
-                for genre in gallery_genres:
-                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
-
-                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
-                log_clarification()
-                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
-                details["genre"] = [g for g, count in most_popular]
-
-                if len(creator_counts) > MAX_GENRES_PARSED:
-                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-                    all_genre_counts[creator_name] = creator_counts
-
-                with open(details_file, "w", encoding="utf-8") as f:
-                    json.dump(details, f, ensure_ascii=False, indent=2)
-
-                with open(top_genres_file, "w", encoding="utf-8") as f:
-                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
-    
-    else:
-        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
