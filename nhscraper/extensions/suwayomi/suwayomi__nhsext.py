@@ -718,6 +718,11 @@ def add_deferred_creators_to_category():
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
+    """
+    Downloads an image from one of the provided URLs to the given path.
+    Tries mirrors in order until one succeeds, with retries per mirror.
+    Updates tqdm progress bar with current creator.
+    """
     #log_clarification()
     #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
