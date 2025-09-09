@@ -38,8 +38,6 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
-dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-
 ############################################
 
 # Thread locks for file operations
@@ -54,7 +52,7 @@ def update_extension_download_path():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
     
-    if dry_run:
+    if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
@@ -93,7 +91,7 @@ def install_extension():
         # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
     
-    if dry_run:
+    if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -115,7 +113,7 @@ def uninstall_extension():
     """
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
-    if dry_run:
+    if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
     
@@ -149,7 +147,7 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if dry_run:
+    if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -207,7 +205,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if dry_run:
+    if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
