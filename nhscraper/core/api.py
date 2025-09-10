@@ -206,9 +206,9 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     log(f"scale_min={scale_min}, scale_max={scale_max}", "debug") # TEST
 
     # Minimum time to sleep
-    sleep_min = 1 # 1
+    sleep_min = 0.5 # 1
     # Maximum time to sleep
-    sleep_max = 2.5 # 2.5
+    sleep_max = 1 # 2.5
     log(f"sleep_min={sleep_min}, sleep_max={sleep_max}", "debug") # TEST
     
     # Minimum time to sleep
