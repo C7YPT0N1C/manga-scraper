@@ -216,6 +216,7 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     
     if stage == "api":
         # Make sure API sleep time scale sensibly in relation to number of attempts
+        log(f"ATTEMPT: {attempt}") # TEST
         attempt_scale = (attempt + attempt) ^ 2
         log(f"ATTEMPT SCALE: {attempt_scale}") # TEST
 
