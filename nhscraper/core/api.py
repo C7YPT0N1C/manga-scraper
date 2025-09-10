@@ -362,7 +362,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 try:
                     resp = session.get(url, timeout=30)
                     if resp.status_code == 429:
-                        wait = dynamic_sleep("api", attempt=(attempt+1))
+                        wait = dynamic_sleep("api", attempt=(attempt))
                         logger.warning(f"Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
                         time.sleep(wait)
                         continue
@@ -373,7 +373,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         break
-                    wait = dynamic_sleep("api", attempt=(attempt+1))
+                    wait = dynamic_sleep("api", attempt=(attempt))
                     logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
                     time.sleep(wait)
 
@@ -414,8 +414,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
-                log(f"ATTEMPT: {attempt}") # TEST
-                wait = dynamic_sleep("api", attempt=(attempt+1))
+                wait = dynamic_sleep("api", attempt=(attempt))
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
                 continue
@@ -442,7 +441,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             log_clarification()
-            wait = dynamic_sleep("api", attempt=(attempt+1))
+            wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
@@ -450,7 +449,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
             log_clarification()
-            wait = dynamic_sleep("api", attempt=(attempt+1))
+            wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
