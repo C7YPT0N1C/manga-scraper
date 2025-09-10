@@ -126,7 +126,7 @@ def parse_args():
         type=int,
         default=DEFAULT_MAX_SLEEP,
         help=(
-            f"Max time to dynamically sleeping between galleries. (default: {DEFAULT_USE_TOR})"
+            f"Approximate max time to dynamically sleep between galleries. (default: {DEFAULT_MAX_SLEEP})"
             f"Lower numbers may result in hitting API limits. (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
         )
     )

@@ -184,156 +184,150 @@ def clean_title(meta):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, attempt: int = 1): # HOLY FUCKING SHTI FIGURE OUT HOW THIS WORKS CUZ I DO NOT REMEMBER # TEST
+def dynamic_sleep(stage, attempt: int = 1):
     """Adaptive sleep timing based on load and stage"""
     
-    DYNAMIC_SLEEP_DEBUG = True # Debugging
+    DYNAMIC_SLEEP_DEBUG = True  # Debugging
     
     # ------------------------------------------------------------
-    # Scaling logic
+    # Configurable parameters
     # ------------------------------------------------------------
-    # Scale grows with number of galleries and total concurrency
-    #   - More galleries / pages in current gallery = more cumulative load = wait longer
-    #   - Cap scaling at value of DEFAULT_MAX_SLEEP to prevent excessive waiting
-    #   - Galleries count capped at 1000 to avoid runaway scaling
+    # Max galleries considered for scaling
+    gallery_cap = 1250  # ~ 50 Pages of Galleries
     
-    # ------------------------------------------------------------
-    # Define a base sleep range depending on what stage of scraping we're in
-    # ------------------------------------------------------------
+    # API sleep ranges
+    api_sleep_min = 0.5
+    api_sleep_max = 0.75
     
-    # Minimum scale value
-    scale_min = 0.25
-    # Maximum scale value
-    scale_max = 60
     if DYNAMIC_SLEEP_DEBUG:
-        log(f"scale_min={scale_min}, scale_max={scale_max}", "debug")
-
-    # Minimum time to sleep
-    sleep_min = 0.5 # 1
-    # Maximum time to sleep
-    sleep_max = 1 # 2.5
-    if DYNAMIC_SLEEP_DEBUG:
-        log(f"sleep_min={sleep_min}, sleep_max={sleep_max}", "debug")
+        print("")
+        print("------------------------------")
+        print(f"{stage.capitalize()} Attempt: {attempt}")
     
-    # Minimum time to sleep
-    gallery_sleep_min = 5
-    # Maximum time to sleep
-    #gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
-    gallery_sleep_max = 60 # TEST
-    if DYNAMIC_SLEEP_DEBUG:
-        log(f"gallery_sleep_min={gallery_sleep_min}, gallery_sleep_max={gallery_sleep_max}", "debug")
-    
-    if stage == "api":
-        # Make sure API sleep time scale sensibly in relation to number of attempts
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"ATTEMPT: {attempt}")
-        attempt_scale = attempt ** 2
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"ATTEMPT SCALE: {attempt_scale}")
-
-        # When calling the API, back off more with each retry attempt
-        base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"API base_min={base_min}, base_max={base_max}", "debug")
-        
-        sleep_time = random.uniform(base_min, base_max)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"API random sleep_time candidate={sleep_time:.2f}", "debug")
-        
-        # Debug logging for transparency
-        log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
-            "debug"
-        )     
-        return sleep_time
-
-    elif stage == "gallery":
-        # Heavier stage (fetching full galleries), so longer base wait
-        base_min, base_max = (gallery_sleep_min, gallery_sleep_max)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"GALLERY base_min={base_min}, base_max={base_max}", "debug")
-
-        # ------------------------------------------------------------
-        # GALLERIES
-        # ------------------------------------------------------------
-        
-        # Max amount of galleries to scale dynamic sleep for before capping out.
-        gallery_cap = 3000
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"gallery_cap={gallery_cap}", "debug")
-        
-        # The total number of galleries to be processed; at least 1 to avoid division by zero
+# ------------------------------------------------------------
+# GALLERY STAGE
+# ------------------------------------------------------------
+    if stage == "gallery":
         num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"num_of_galleries={num_of_galleries}", "debug")
-        
-        # The number of total galleries to process
-        gallery_weight = min(num_of_galleries, gallery_cap)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"gallery_weight={gallery_weight}", "debug")
-        
-        # ------------------------------------------------------------
-        # THREADS
-        # ------------------------------------------------------------
-        
-        # The number of threads used to process galleries at once.
         gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"gallery_threads={gallery_threads}", "debug")
-        
-        # The number of threads used to process images in a gallery at once.
         image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"image_threads={image_threads}", "debug")
         
-        # Total Threads Used
-        #total_threads = (gallery_threads + (gallery_threads * image_threads))
-        total_threads = (gallery_threads * image_threads)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"total_threads={total_threads}", "debug")
+        # The total number of galleries to use for scaling
+        gallery_weight = min(num_of_galleries, gallery_cap)
+        
+        # Gallery Weight Factor = scaled fraction [0..1] of cap
+        gallery_factor = gallery_weight / gallery_cap
+        
+        # TARGETED SCALING
+        # ------------------------------------------------------------
+        # Anchors:
+        #   - 25 galleries → ~4s sleep
+        #   - 1250 galleries → ~10s sleep
 
-        # ------------------------------------------------------------
-        # LOAD
-        # ------------------------------------------------------------
+        # Linear interpolation based on gallery_weight
+        anchor_low_galleries = 25 # ~ 1 Page of Galleries
+        anchor_low_sleep = 4.0
+        anchor_high_galleries = gallery_cap # ~ 50 Pages of Galleries
+        anchor_high_sleep = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
         
-        # Total Load = No of galleries needing processing / number of threads processing them
-        total_load = (gallery_weight / total_threads) * attempt
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"total_load={total_load}", "debug")
+            print(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}), Gallery 'Weight' = {gallery_weight}")
+            print(f"→ Gallery Threads = {gallery_threads}, Image Threads = {image_threads}")
+        
+        # Concurrency = how many requests can hit the server at once
+        concurrency = gallery_threads * image_threads
+        
+        # Effective load = concurrency adjusted by gallery_factor
+        total_load = concurrency * (1 + gallery_factor)
+        if DYNAMIC_SLEEP_DEBUG:
+            print(f"→ Total Load ({total_load:.2f} Units) = "
+                  f"Concurrency ({concurrency}) * (1 + Gallery Factor ({gallery_factor:.3f}))")
         
         # Scale things down
         load_floor = 10
+        load_factor = (total_load / load_floor) * attempt
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"load_floor={load_floor}", "debug")
-        
-        # Total Load / Load Floor
-        load_factor = (
-            total_load /
-            load_floor
-        )
+            print(f"→ Load Factor ({load_factor:.2f} Units) = "
+                  f"Total Load ({total_load:.2f}) / Load Floor ({load_floor}) * Attempt ({attempt})")
+
+        # Clamp weight between anchor_low and anchor_high
+        g = max(anchor_low_galleries,
+                min(gallery_weight, anchor_high_galleries))
+
+        # Fraction along gallery range
+        frac = ((g - anchor_low_galleries) /
+                (anchor_high_galleries - anchor_low_galleries))
+
+        # Base sleep before thread scaling
+        base_sleep = anchor_low_sleep + frac * (anchor_high_sleep - anchor_low_sleep)
+
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"load_factor={load_factor}", "debug")
+            print("")
+            print(f"→ Interpolated Base Sleep = {base_sleep:.2f}s "
+                  f"(Fraction {frac:.3f} between {anchor_low_sleep}s and {anchor_high_sleep}s)")
 
         # ------------------------------------------------------------
-        # SCALING AND SLEEP
+        # THREAD SCALING
         # ------------------------------------------------------------
-        
-        # Calculate Scale
-        scale = min(max(scale_min, load_factor), scale_max)
+        # Gallery threads scale stronger than image threads
+        thread_factor = (1 + (gallery_threads - 2) * 0.25) * (1 + (image_threads - 10) * 0.05)
+
+        scaled_sleep = base_sleep * thread_factor * attempt
+
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"scale={scale}", "debug")
-        
-        # Choose a random sleep within the scaled range
-        sleep_time = random.uniform(base_min * scale, base_max * scale)
+            print(f"→ Thread Factor = {thread_factor:.2f} "
+                  f"(Gallery Threads {gallery_threads}, Image Threads {image_threads})")
+            print(f"→ Scaled Sleep (with attempt {attempt}) = {scaled_sleep:.2f}s")
+
+        # ------------------------------------------------------------
+        # FINAL RANDOMISATION
+        # ------------------------------------------------------------
+        jitter_min = 0.9
+        jitter_max = 1.1
+        sleep_time = random.uniform(scaled_sleep * jitter_min,
+                                    scaled_sleep * jitter_max)
+
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"GALLERY random sleep_time candidate={sleep_time:.2f}", "debug")
-        
-        # Debug logging for transparency
-        log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
-            "debug"
+            print("")
+            print(f"→ Final Sleep Candidate = {sleep_time:.2f}s "
+                  f"(Jitter {jitter_min*100:.0f}% - {jitter_max*100:.0f}%) "
+            )
+
+        print(
+            f"\n{stage.capitalize()}: Sleep: {sleep_time:.2f}s "
+            f"(Load: {total_load} Units)\n------------------------------"
         )
         return sleep_time
+
+# ------------------------------------------------------------
+# API STAGE
+# ------------------------------------------------------------
+    if stage == "api":
+        if DYNAMIC_SLEEP_DEBUG:
+            print(f"→ API Sleep Min = {api_sleep_min}, API Sleep Max = {api_sleep_max}")    
+        
+        attempt_scale = attempt ** 2
+        if DYNAMIC_SLEEP_DEBUG:
+            print(f"→ API Attempt Scale: {attempt_scale}")
+        
+        base_min, base_max = (api_sleep_min * attempt_scale, api_sleep_max * attempt_scale)
+        if DYNAMIC_SLEEP_DEBUG:
+            print("")
+            print(f"→ API Base Min = {base_min}s, API Base Max = {base_max}s")
+        
+        sleep_time = random.uniform(base_min, base_max)
+        if DYNAMIC_SLEEP_DEBUG:
+            print("")
+            print(f"→ Sleep Time Candidate = {sleep_time:.2f}s\n"
+                  f"  → (Min = {base_min}s)\n"
+                  f"  → (Max = {base_max}s)")
+        
+        print(
+            f"\n{stage.capitalize()}: Sleep: {sleep_time:.2f}s\n------------------------------"
+        )
+        return sleep_time
+
+#####################################################################################################################################################################
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
