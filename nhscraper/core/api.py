@@ -331,7 +331,7 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
-        )        
+        )
         return sleep_time
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
