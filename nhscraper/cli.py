@@ -126,9 +126,8 @@ def parse_args():
         type=int,
         default=DEFAULT_MAX_SLEEP,
         help=(
-            f"Skips dynamically sleeping between galleries. Not recommended for large downloads. (default: {DEFAULT_USE_TOR})"
-            "For a large number of galleries, using this flag in conjunction with a lower thread count MAY result in faster downloads, but is still not recommended."
-            f"May result in hitting API limits (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
+            f"Max time to dynamically sleeping between galleries. (default: {DEFAULT_USE_TOR})"
+            f"Lower numbers may result in hitting API limits. (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
         )
     )
     

@@ -205,21 +205,19 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     scale_max = 60
     
     # Minimum time to sleep
-    sleep_min = 0.25
+    sleep_min = 0.1
     # Maximum time to sleep
-    sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    sleep_max = 0.5
     
-    # How much to multiply sleep time to get gallery sleep time
-    gallery_sleep_multiplier = 4
-    # Minimum time for a gallery download to sleep
-    gallery_sleep_min = (sleep_min * gallery_sleep_multiplier)   
-    # Maximum time for a gallery download to sleep
-    gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
-    
-    # Make sure API sleep time scale sensibly in relation to number of attempts
-    attempt_scale = (attempt + attempt) ^ 4
+    # Minimum time to sleep
+    gallery_sleep_min = 1
+    # Maximum time to sleep
+    gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     
     if stage == "api":
+        # Make sure API sleep time scale sensibly in relation to number of attempts
+        attempt_scale = (attempt + attempt) ^ 2
+        
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
         sleep_time = random.uniform(base_min, base_max)
