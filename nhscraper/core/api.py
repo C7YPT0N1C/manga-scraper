@@ -226,7 +226,7 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         
         # Debug logging for transparency
         log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
             "debug"
         )     
         return sleep_time
@@ -238,7 +238,7 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         
         # Debug logging for transparency
         log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
             "debug"
         )     
         return sleep_time
