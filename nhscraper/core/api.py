@@ -222,27 +222,25 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     if stage == "api":
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
+        sleep_time = random.uniform(base_min, base_max)
         
         # Debug logging for transparency
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
-        )
-        
-        sleep_time = random.uniform(base_min, base_max)
+        )     
         return sleep_time
 
     elif stage == "metadata":
         # Lightweight requests like fetching metadata (fixed short wait)
         base_min, base_max = (sleep_min, sleep_max)
+        sleep_time = random.uniform(base_min, base_max)
         
         # Debug logging for transparency
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
-        )
-        
-        sleep_time = random.uniform(base_min, base_max)
+        )     
         return sleep_time
 
     elif stage == "gallery":
@@ -309,8 +307,7 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         log(
             f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
             "debug"
-        )
-        
+        )        
         return sleep_time
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
