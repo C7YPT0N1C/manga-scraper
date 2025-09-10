@@ -217,83 +217,101 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
     
     # Make sure API sleep time scale sensibly in relation to number of attempts
-    attempt_scale = (attempt + attempt) ^ 10
+    attempt_scale = (attempt + attempt) ^ 12
     
     if stage == "api":
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
+        
+        # Debug logging for transparency
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            "debug"
+        )
+        
+        sleep_time = random.uniform(base_min, base_max)
+        return sleep_time
 
     elif stage == "metadata":
         # Lightweight requests like fetching metadata (fixed short wait)
         base_min, base_max = (sleep_min, sleep_max)
+        
+        # Debug logging for transparency
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            "debug"
+        )
+        
+        sleep_time = random.uniform(base_min, base_max)
+        return sleep_time
 
     elif stage == "gallery":
         # Heavier stage (fetching full galleries), so longer base wait
         base_min, base_max = (gallery_sleep_min, gallery_sleep_max)
 
-    # ------------------------------------------------------------
-    # GALLERIES
-    # ------------------------------------------------------------
-    
-    # Max amount of galleries to scale dynamic sleep for before capping out.
-    gallery_cap = 3000
-    
-    # The total number of galleries being processed; at least 1 to avoid division by zero
-    num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-    
-    # The current number of pages being processed
-    num_of_pages = num_pages
-    
-    # The VERY approximate number of total images being processed
-    rough_images_weight = min(num_of_galleries, gallery_cap) * num_of_pages
-    
-    # ------------------------------------------------------------
-    # THREADS
-    # ------------------------------------------------------------
-    
-    # The number of threads used to process galleries at once.
-    gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-    
-    # The number of threads used to process images in a gallery at once.
-    image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-    
-    # Total Threads Used
-    #total_threads = (gallery_threads + (gallery_threads * image_threads))
-    total_threads = (gallery_threads * image_threads)
+        # ------------------------------------------------------------
+        # GALLERIES
+        # ------------------------------------------------------------
+        
+        # Max amount of galleries to scale dynamic sleep for before capping out.
+        gallery_cap = 3000
+        
+        # The total number of galleries being processed; at least 1 to avoid division by zero
+        num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
+        
+        # The current number of pages being processed
+        num_of_pages = num_pages
+        
+        # The VERY approximate number of total images being processed
+        rough_images_weight = min(num_of_galleries, gallery_cap) * num_of_pages
+        
+        # ------------------------------------------------------------
+        # THREADS
+        # ------------------------------------------------------------
+        
+        # The number of threads used to process galleries at once.
+        gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+        
+        # The number of threads used to process images in a gallery at once.
+        image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+        
+        # Total Threads Used
+        #total_threads = (gallery_threads + (gallery_threads * image_threads))
+        total_threads = (gallery_threads * image_threads)
 
-    # ------------------------------------------------------------
-    # LOAD
-    # ------------------------------------------------------------
-    
-    # Total Load = Rough no of images being downloaded / number of threads downloading them
-    total_load = rough_images_weight / total_threads
-    
-    # Scale things down
-    load_floor = 100
-    
-    # Total Load / Load Floor
-    load_factor = (
-        total_load /
-        load_floor
-    )
+        # ------------------------------------------------------------
+        # LOAD
+        # ------------------------------------------------------------
+        
+        # Total Load = Rough no of images being downloaded / number of threads downloading them
+        total_load = rough_images_weight / total_threads
+        
+        # Scale things down
+        load_floor = 100
+        
+        # Total Load / Load Floor
+        load_factor = (
+            total_load /
+            load_floor
+        )
 
-    # ------------------------------------------------------------
-    # SCALING AND SLEEP
-    # ------------------------------------------------------------
-    
-    # Calculate Scale
-    scale = min(max(scale_min, load_factor), scale_max)
-    
-    # Choose a random sleep within the scaled range
-    sleep_time = random.uniform(base_min * scale, base_max * scale)
-    
-    # Debug logging for transparency
-    log(
-        f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
-        "debug"
-    )
-    
-    return sleep_time
+        # ------------------------------------------------------------
+        # SCALING AND SLEEP
+        # ------------------------------------------------------------
+        
+        # Calculate Scale
+        scale = min(max(scale_min, load_factor), scale_max)
+        
+        # Choose a random sleep within the scaled range
+        sleep_time = random.uniform(base_min * scale, base_max * scale)
+        
+        # Debug logging for transparency
+        log(
+            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+            "debug"
+        )
+        
+        return sleep_time
 
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
