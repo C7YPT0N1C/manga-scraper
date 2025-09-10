@@ -184,70 +184,111 @@ def clean_title(meta):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, attempt: int = 1): # TEST
+def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
-    BYPASS_SLEEP = config.get("NO_SLEEP", DEFAULT_NO_SLEEP)
+    # ------------------------------------------------------------
+    # Scaling logic
+    # ------------------------------------------------------------
+    # Scale grows with number of galleries and total concurrency
+    #   - More galleries / pages in current gallery = more cumulative load = wait longer
+    #   - Cap scaling at value of DEFAULT_MAX_SLEEP to prevent excessive waiting
+    #   - Galleries count capped at 1000 to avoid runaway scaling
     
-    if BYPASS_SLEEP == False:
-        sleep_min = 0.3 # Minimum time to sleep
-        gallery_sleep_min_multiplier = 1.5 # Minimum time for a gallery to sleep (this value x sleep_min)
-        
-        sleep_max = 0.5 # Maximum time to sleep
-        gallery_sleep_max_multiplier = 2 # Maximum time for a gallery to sleep (this value x sleep_max)
-        
-        scale_min = 1 # Minimum scale value
-        #scale_max = 5 # Maximum scale value # Old
-        scale_max = 60 # Maximum scale value
-        
-        # ------------------------------------------------------------
-        # Define a base sleep range depending on what stage of scraping we're in
-        # ------------------------------------------------------------
-        if stage == "api":
-            # When calling the API, back off more with each retry attempt
-            base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
-
-        elif stage == "metadata":
-            # Lightweight requests like fetching metadata (fixed short wait)
-            base_min, base_max = (sleep_min, sleep_max)
-
-        elif stage == "gallery":
-            # Heavier stage (fetching full galleries), so longer base wait
-            base_min, base_max = ((sleep_min * gallery_sleep_min_multiplier), (sleep_max * gallery_sleep_max_multiplier))
-
-        # ------------------------------------------------------------
-        # Scaling logic
-        # ------------------------------------------------------------
-        # Scale grows with number of galleries and total concurrency
-        #   - More galleries = more cumulative load
-        #   - Cap scaling at ×5 to prevent excessive waiting
-        #   - Galleries count capped at 1000 to avoid runaway scaling
-        num_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES))) # Number of galleries being processed; at least 1 to avoid division by zero
-        total_load = ( # Total parallel work = gallery threads × image threads
-            config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-            * config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        )
-        capped_galleries = min(num_galleries, 1000)
-        load_factor = total_load * capped_galleries / 1000
-        scale = min(max(scale_min, load_factor), scale_max)
-
-        # Choose a random sleep within the scaled range
-        sleep_time = random.uniform(base_min * scale, base_max * scale)
-        
-        # Debug logging for transparency
-        log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
-            "debug"
-        )
+    # ------------------------------------------------------------
+    # Define a base sleep range depending on what stage of scraping we're in
+    # ------------------------------------------------------------
     
-    else:
-        sleep_time = 0.3
-        
-        # Debug logging for transparency
-        log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
-            "debug"
-        )
+    # Minimum scale value
+    scale_min = 0.25
+    # Maximum scale value
+    scale_max = 60
+    
+    # Minimum time to sleep
+    sleep_min = 0.25
+    # Maximum time to sleep
+    sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    
+    # How much to multiply sleep time to get gallery sleep time
+    gallery_sleep_multiplier = 4
+    # Minimum time for a gallery download to sleep
+    gallery_sleep_min = (sleep_min * gallery_sleep_multiplier)   
+    # Maximum time for a gallery download to sleep
+    gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
+    
+    if stage == "api":
+        # When calling the API, back off more with each retry attempt
+        base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
+
+    elif stage == "metadata":
+        # Lightweight requests like fetching metadata (fixed short wait)
+        base_min, base_max = (sleep_min, sleep_max)
+
+    elif stage == "gallery":
+        # Heavier stage (fetching full galleries), so longer base wait
+        base_min, base_max = (gallery_sleep_min, gallery_sleep_max)
+
+    # ------------------------------------------------------------
+    # GALLERIES
+    # ------------------------------------------------------------
+    
+    # Max amount of galleries to scale dynamic sleep for before capping out.
+    gallery_cap = 3000
+    
+    # The total number of galleries being processed; at least 1 to avoid division by zero
+    num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
+    
+    # The current number of pages being processed
+    num_of_pages = num_pages
+    
+    # The VERY approximate number of total images being processed
+    rough_images_weight = min(num_of_galleries, gallery_cap) * num_of_pages
+    
+    # ------------------------------------------------------------
+    # THREADS
+    # ------------------------------------------------------------
+    
+    # The number of threads used to process galleries at once.
+    gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+    
+    # The number of threads used to process images in a gallery at once.
+    image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+    
+    # Total Threads Used
+    #total_threads = (gallery_threads + (gallery_threads * image_threads))
+    total_threads = (gallery_threads * image_threads)
+
+    # ------------------------------------------------------------
+    # LOAD
+    # ------------------------------------------------------------
+    
+    # Total Load = Rough no of images being downloaded / number of threads downloading them
+    total_load = rough_images_weight / total_threads
+    
+    # Scale things down
+    load_floor = 100
+    
+    # Total Load / Load Floor
+    load_factor = (
+        total_load /
+        load_floor
+    )
+
+    # ------------------------------------------------------------
+    # SCALING AND SLEEP
+    # ------------------------------------------------------------
+    
+    # Calculate Scale
+    scale = min(max(scale_min, load_factor), scale_max)
+    
+    # Choose a random sleep within the scaled range
+    sleep_time = random.uniform(base_min * scale, base_max * scale)
+    
+    # Debug logging for transparency
+    log(
+        f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Scale: {scale:.1f})",
+        "debug"
+    )
     
     return sleep_time
 

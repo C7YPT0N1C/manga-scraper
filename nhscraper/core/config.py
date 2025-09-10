@@ -124,6 +124,27 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
+# Define explicit replacements for certain symbols
+DODGY_SYMBOL_REPLACEMENTS = {
+    "à": "a", "À": "A", "á": "a", "Á": "A", "â": "a", "Â": "A", "ã": "a", "Ã": "A", "ä": "a", "Ä": "A",   "å": "a", "Å": "A",
+    "è": "e", "È": "E", "é": "e", "É": "E", "ê": "e", "Ê": "E", "ë": "e", "Ë": "E",
+    "ì": "i", "Ì": "I", "í": "i", "Í": "I", "î": "i", "Î": "I", "ï": "i", "Ï": "I",
+    "ò": "o", "Ò": "O", "ó": "o", "Ó": "O", "ô": "o", "Ô": "O", "õ": "o", "Õ": "O", "ö": "o", "Ö": "O", "ø": "o", "Ø": "O",
+    "ù": "u", "Ù": "U", "ú": "u", "Ú": "U", "û": "u", "Û": "U", "ü": "u", "Ü": "U",
+    "æ": "ae", "Æ": "AE", "ç": "c", "Ç": "C", "Œ": "CE", "Ð": "D", "ñ": "n", "Ñ": "N", "œ": "oe", "ß": "ss", "ý": "y", "Ý": "Y", "ÿ": "y", "Ÿ": "Y",
+    "¿": "?", "¡": "!"
+}
+
+# Fallback blacklist (these always become "_")
+DODGY_SYMBOL_BLACKLIST = [
+    "↑", "↓", "→", "←",
+    "♥", "★", "☆", "♪", "◆", "◇", "※", "✔", "✖",
+    "◦", "∙", "•", "°", "●", "‣", "®", "©",
+    "…", "@", "¬", "<", ">", "^", "¤", "¢",
+    "£", "$", "¥",
+    "ð", "§", "¶", "†", "‡", "‰", "µ", "¦"
+]
+
 # Default Paths
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
 
@@ -154,32 +175,11 @@ DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
 DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
 
-# Define explicit replacements for certain symbols
-DODGY_SYMBOL_REPLACEMENTS = {
-    "à": "a", "À": "A", "á": "a", "Á": "A", "â": "a", "Â": "A", "ã": "a", "Ã": "A", "ä": "a", "Ä": "A",   "å": "a", "Å": "A",
-    "è": "e", "È": "E", "é": "e", "É": "E", "ê": "e", "Ê": "E", "ë": "e", "Ë": "E",
-    "ì": "i", "Ì": "I", "í": "i", "Í": "I", "î": "i", "Î": "I", "ï": "i", "Ï": "I",
-    "ò": "o", "Ò": "O", "ó": "o", "Ó": "O", "ô": "o", "Ô": "O", "õ": "o", "Õ": "O", "ö": "o", "Ö": "O", "ø": "o", "Ø": "O",
-    "ù": "u", "Ù": "U", "ú": "u", "Ú": "U", "û": "u", "Û": "U", "ü": "u", "Ü": "U",
-    "æ": "ae", "Æ": "AE", "ç": "c", "Ç": "C", "Œ": "CE", "Ð": "D", "ñ": "n", "Ñ": "N", "œ": "oe", "ß": "ss", "ý": "y", "Ý": "Y", "ÿ": "y", "Ÿ": "Y",
-    "¿": "?", "¡": "!"
-}
-
-# Fallback blacklist (these always become "_")
-DODGY_SYMBOL_BLACKLIST = [
-    "↑", "↓", "→", "←",
-    "♥", "★", "☆", "♪", "◆", "◇", "※", "✔", "✖",
-    "◦", "∙", "•", "°", "●", "‣", "®", "©",
-    "…", "@", "¬", "<", ">", "^", "¤", "¢",
-    "£", "$", "¥",
-    "ð", "§", "¶", "†", "‡", "‰", "µ", "¦"
-]
-
 # Threads
 DEFAULT_THREADS_GALLERIES=2
-DEFAULT_THREADS_IMAGES=8
+DEFAULT_THREADS_IMAGES=10
 DEFAULT_MAX_RETRIES=3
-DEFAULT_NO_SLEEP=False
+DEFAULT_MAX_SLEEP=0.5
 
 # Download Options
 DEFAULT_USE_TOR=True
@@ -231,7 +231,7 @@ config = {
     "THREADS_GALLERIES": getenv_int("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
-    "NO_SLEEP": str(os.getenv("USE_TOR", DEFAULT_NO_SLEEP)).lower() == "true",
+    "MAX_SLEEP": getenv_int("MAX_SLEEP", DEFAULT_MAX_SLEEP),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
@@ -282,7 +282,7 @@ def normalise_config():
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-        "NO_SLEEP": DEFAULT_NO_SLEEP,
+        "MAX_SLEEP": DEFAULT_MAX_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "VERBOSE": DEFAULT_VERBOSE,
