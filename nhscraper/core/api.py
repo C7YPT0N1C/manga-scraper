@@ -184,7 +184,7 @@ def clean_title(meta):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
+def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
     # ------------------------------------------------------------
@@ -231,18 +231,6 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         )     
         return sleep_time
 
-    elif stage == "metadata":
-        # Lightweight requests like fetching metadata (fixed short wait)
-        base_min, base_max = (sleep_min, sleep_max)
-        sleep_time = random.uniform(base_min, base_max)
-        
-        # Debug logging for transparency
-        log(
-            f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s",
-            "debug"
-        )     
-        return sleep_time
-
     elif stage == "gallery":
         # Heavier stage (fetching full galleries), so longer base wait
         base_min, base_max = (gallery_sleep_min, gallery_sleep_max)
@@ -254,14 +242,11 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         # Max amount of galleries to scale dynamic sleep for before capping out.
         gallery_cap = 3000
         
-        # The total number of galleries being processed; at least 1 to avoid division by zero
+        # The total number of galleries to be processed; at least 1 to avoid division by zero
         num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
         
-        # The current number of pages being processed
-        num_of_pages = num_pages
-        
-        # The VERY approximate number of total images being processed
-        rough_images_weight = min(num_of_galleries, gallery_cap) * num_of_pages
+        # The number of total galleries to process
+        gallery_weight = min(num_of_galleries, gallery_cap)
         
         # ------------------------------------------------------------
         # THREADS
@@ -281,8 +266,8 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
         # LOAD
         # ------------------------------------------------------------
         
-        # Total Load = Rough no of images being downloaded / number of threads downloading them
-        total_load = rough_images_weight / total_threads
+        # Total Load = No of galleries needing processing / number of threads processing them
+        total_load = gallery_weight / total_threads
         
         # Scale things down
         load_floor = 100

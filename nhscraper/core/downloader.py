@@ -210,7 +210,7 @@ def process_galleries(gallery_ids):
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 
-                time.sleep(dynamic_sleep("gallery", num_pages, gallery_attempts)) # Sleep before starting gallery.
+                time.sleep(dynamic_sleep("gallery", gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False
