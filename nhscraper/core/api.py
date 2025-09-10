@@ -205,9 +205,9 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     scale_max = 60
     
     # Minimum time to sleep
-    sleep_min = 1
+    sleep_min = 5 # 1
     # Maximum time to sleep
-    sleep_max = 2.5
+    sleep_max = 10 # 2.5
     
     # Minimum time to sleep
     gallery_sleep_min = 1

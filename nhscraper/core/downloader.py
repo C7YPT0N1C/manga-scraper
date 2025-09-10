@@ -209,6 +209,8 @@ def process_galleries(gallery_ids):
                 gallery_metas = active_extension.return_gallery_metas(meta)
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
+                
+                time.sleep(dynamic_sleep("gallery", num_pages, gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False
@@ -282,14 +284,12 @@ def process_galleries(gallery_ids):
 
                 log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")
-                time.sleep(dynamic_sleep("gallery", num_pages, gallery_attempts)) # Sleep before starting next gallery.
                 break  # exit retry loop on success
 
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery {gallery_id}: {e}")
                 if not config.get("DRY_RUN") and gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
-                time.sleep(dynamic_sleep("gallery", gallery_attempts)) # Sleep before starting next gallery.
 
 ####################################################################################################
 # MAIN
