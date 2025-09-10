@@ -280,7 +280,7 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         # ------------------------------------------------------------
         
         # Total Load = No of galleries needing processing / number of threads processing them
-        total_load = gallery_weight / total_threads
+        total_load = (gallery_weight / total_threads) * attempt
         log(f"total_load={total_load}", "debug") # TEST
         
         # Scale things down
