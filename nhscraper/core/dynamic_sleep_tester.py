@@ -33,7 +33,7 @@ def dynamic_sleep(stage, num_galleries: int = 25, num_pages: int = 20, attempt: 
     gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
     
     # Make sure API sleep time scale sensibly in relation to number of attempts
-    attempt_scale = (attempt + attempt) ^ 12
+    attempt_scale = (attempt + attempt) ^ 10
     
     if stage == "api":
         # When calling the API, back off more with each retry attempt
@@ -123,4 +123,5 @@ def dynamic_sleep(stage, num_galleries: int = 25, num_pages: int = 20, attempt: 
 
 #dynamic_sleep("gallery", 200, 20)
 
+#dynamic_sleep("api")
 dynamic_sleep("api", attempt=1)
