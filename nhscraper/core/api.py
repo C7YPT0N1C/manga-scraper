@@ -347,7 +347,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
         log_clarification()
         logger.info(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
         
-        wait = dynamic_sleep("api", attempt=(attempt))
+        wait = dynamic_sleep("api")
         time.sleep(wait)
 
         while True:
