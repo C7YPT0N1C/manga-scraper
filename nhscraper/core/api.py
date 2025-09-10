@@ -216,9 +216,12 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     # Maximum time for a gallery download to sleep
     gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
     
+    # Make sure API sleep time scale sensibly in relation to number of attempts
+    attempt_scale = (attempt + attempt) * (attempt + attempt)
+    
     if stage == "api":
         # When calling the API, back off more with each retry attempt
-        base_min, base_max = (sleep_min * attempt, sleep_max * attempt)
+        base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
 
     elif stage == "metadata":
         # Lightweight requests like fetching metadata (fixed short wait)

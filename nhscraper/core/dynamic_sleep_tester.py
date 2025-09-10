@@ -32,7 +32,8 @@ def dynamic_sleep(stage, num_galleries: int = 25, num_pages: int = 20, attempt: 
     # Maximum time for a gallery download to sleep
     gallery_sleep_max = (sleep_max * gallery_sleep_multiplier)
     
-    attempt_scale = (attempt + attempt ) * (attempt + attempt )
+    # Make sure API sleep time scale sensibly in relation to number of attempts
+    attempt_scale = (attempt + attempt) * (attempt + attempt)
     
     if stage == "api":
         # When calling the API, back off more with each retry attempt
@@ -71,10 +72,10 @@ def dynamic_sleep(stage, num_galleries: int = 25, num_pages: int = 20, attempt: 
     # ------------------------------------------------------------
     
     # The number of threads used to process galleries at once.
-    gallery_threads = 2 # FROM CONFIG
+    gallery_threads = 16 # FROM CONFIG
     
     # The number of threads used to process images in a gallery at once.
-    image_threads = 10 # FROM CONFIG
+    image_threads = 32 # FROM CONFIG
     
     # Total Threads Used
     #total_threads = (gallery_threads + (gallery_threads * image_threads))
@@ -120,6 +121,6 @@ def dynamic_sleep(stage, num_galleries: int = 25, num_pages: int = 20, attempt: 
         f"(Max = base_max * scale = {base_max} * {scale} = {base_max * scale})"
     )
 
-#dynamic_sleep("gallery", 3000, 20)
+dynamic_sleep("gallery", 200, 20)
 
-dynamic_sleep("api", attempt=2)
+#dynamic_sleep("api", attempt=2)
