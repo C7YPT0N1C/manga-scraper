@@ -184,7 +184,7 @@ def clean_title(meta):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, attempt: int = 1): # TEST
+def dynamic_sleep(stage, attempt: int = 1): # HOLY FUCKING SHTI FIGURE OUT HOW THIS WORKS CUZ I DO NOT REMEMBER # TEST
     """Adaptive sleep timing based on load and stage"""
     
     DYNAMIC_SLEEP_DEBUG = True # Debugging
@@ -218,7 +218,8 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     # Minimum time to sleep
     gallery_sleep_min = 5
     # Maximum time to sleep
-    gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    #gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    gallery_sleep_max = 60 # TEST
     if DYNAMIC_SLEEP_DEBUG:
         log(f"gallery_sleep_min={gallery_sleep_min}, gallery_sleep_max={gallery_sleep_max}", "debug")
     
