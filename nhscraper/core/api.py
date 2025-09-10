@@ -393,7 +393,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
-                wait = 2 ** attempt
+                wait = dynamic_sleep("api", attempt=attempt)
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
                 continue
@@ -419,7 +419,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
-            wait = 2 ** attempt
+            wait = dynamic_sleep("api", attempt=attempt)
             log_clarification()
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
@@ -427,7 +427,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 return None
-            wait = 2 ** attempt
+            wait = dynamic_sleep("api", attempt=attempt)
             log_clarification()
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
