@@ -215,8 +215,8 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     
     if stage == "api":
-        attempt = 1 # Avoid zero error.
-        attempt_scale = (attempt + attempt) ^ 2 # Make sure API sleep time scale sensibly in relation to number of attempts
+        # Make sure API sleep time scale sensibly in relation to number of attempts
+        attempt_scale = (attempt + attempt) ^ 2
 
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
