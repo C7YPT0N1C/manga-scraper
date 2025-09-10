@@ -187,6 +187,8 @@ def clean_title(meta):
 def dynamic_sleep(stage, attempt: int = 1): # TEST
     """Adaptive sleep timing based on load and stage"""
     
+    DYNAMIC_SLEEP_DEBUG = True # Debugging
+    
     # ------------------------------------------------------------
     # Scaling logic
     # ------------------------------------------------------------
@@ -203,32 +205,39 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     scale_min = 0.25
     # Maximum scale value
     scale_max = 60
-    log(f"scale_min={scale_min}, scale_max={scale_max}", "debug") # TEST
+    if DYNAMIC_SLEEP_DEBUG:
+        log(f"scale_min={scale_min}, scale_max={scale_max}", "debug")
 
     # Minimum time to sleep
     sleep_min = 0.5 # 1
     # Maximum time to sleep
     sleep_max = 1 # 2.5
-    log(f"sleep_min={sleep_min}, sleep_max={sleep_max}", "debug") # TEST
+    if DYNAMIC_SLEEP_DEBUG:
+        log(f"sleep_min={sleep_min}, sleep_max={sleep_max}", "debug")
     
     # Minimum time to sleep
     gallery_sleep_min = 5
     # Maximum time to sleep
     gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
-    log(f"gallery_sleep_min={gallery_sleep_min}, gallery_sleep_max={gallery_sleep_max}", "debug") # TEST
+    if DYNAMIC_SLEEP_DEBUG:
+        log(f"gallery_sleep_min={gallery_sleep_min}, gallery_sleep_max={gallery_sleep_max}", "debug")
     
     if stage == "api":
         # Make sure API sleep time scale sensibly in relation to number of attempts
-        log(f"ATTEMPT: {attempt}") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"ATTEMPT: {attempt}")
         attempt_scale = attempt ** 2
-        log(f"ATTEMPT SCALE: {attempt_scale}") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"ATTEMPT SCALE: {attempt_scale}")
 
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
-        log(f"API base_min={base_min}, base_max={base_max}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"API base_min={base_min}, base_max={base_max}", "debug")
         
         sleep_time = random.uniform(base_min, base_max)
-        log(f"API random sleep_time candidate={sleep_time:.2f}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"API random sleep_time candidate={sleep_time:.2f}", "debug")
         
         # Debug logging for transparency
         log(
@@ -240,7 +249,8 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
     elif stage == "gallery":
         # Heavier stage (fetching full galleries), so longer base wait
         base_min, base_max = (gallery_sleep_min, gallery_sleep_max)
-        log(f"GALLERY base_min={base_min}, base_max={base_max}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"GALLERY base_min={base_min}, base_max={base_max}", "debug")
 
         # ------------------------------------------------------------
         # GALLERIES
@@ -248,15 +258,18 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         
         # Max amount of galleries to scale dynamic sleep for before capping out.
         gallery_cap = 3000
-        log(f"gallery_cap={gallery_cap}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"gallery_cap={gallery_cap}", "debug")
         
         # The total number of galleries to be processed; at least 1 to avoid division by zero
         num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-        log(f"num_of_galleries={num_of_galleries}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"num_of_galleries={num_of_galleries}", "debug")
         
         # The number of total galleries to process
         gallery_weight = min(num_of_galleries, gallery_cap)
-        log(f"gallery_weight={gallery_weight}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"gallery_weight={gallery_weight}", "debug")
         
         # ------------------------------------------------------------
         # THREADS
@@ -264,16 +277,19 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         
         # The number of threads used to process galleries at once.
         gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        log(f"gallery_threads={gallery_threads}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"gallery_threads={gallery_threads}", "debug")
         
         # The number of threads used to process images in a gallery at once.
         image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        log(f"image_threads={image_threads}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"image_threads={image_threads}", "debug")
         
         # Total Threads Used
         #total_threads = (gallery_threads + (gallery_threads * image_threads))
         total_threads = (gallery_threads * image_threads)
-        log(f"total_threads={total_threads}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"total_threads={total_threads}", "debug")
 
         # ------------------------------------------------------------
         # LOAD
@@ -281,18 +297,21 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         
         # Total Load = No of galleries needing processing / number of threads processing them
         total_load = (gallery_weight / total_threads) * attempt
-        log(f"total_load={total_load}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"total_load={total_load}", "debug")
         
         # Scale things down
         load_floor = 100
-        log(f"load_floor={load_floor}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"load_floor={load_floor}", "debug")
         
         # Total Load / Load Floor
         load_factor = (
             total_load /
             load_floor
         )
-        log(f"load_factor={load_factor}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"load_factor={load_factor}", "debug")
 
         # ------------------------------------------------------------
         # SCALING AND SLEEP
@@ -300,11 +319,13 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
         
         # Calculate Scale
         scale = min(max(scale_min, load_factor), scale_max)
-        log(f"scale={scale}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"scale={scale}", "debug")
         
         # Choose a random sleep within the scaled range
         sleep_time = random.uniform(base_min * scale, base_max * scale)
-        log(f"GALLERY random sleep_time candidate={sleep_time:.2f}", "debug") # TEST
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"GALLERY random sleep_time candidate={sleep_time:.2f}", "debug")
         
         # Debug logging for transparency
         log(
