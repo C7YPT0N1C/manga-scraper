@@ -217,6 +217,7 @@ def dynamic_sleep(stage, num_pages: int = 20, attempt: int = 1): # TEST
     if stage == "api":
         # Make sure API sleep time scale sensibly in relation to number of attempts
         attempt_scale = (attempt + attempt) ^ 2
+        log(f"ATTEMPT SCALE: {attempt_scale}") # TEST
 
         # When calling the API, back off more with each retry attempt
         base_min, base_max = (sleep_min * attempt_scale, sleep_max * attempt_scale)
@@ -412,6 +413,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
             resp = session.get(url, timeout=30)
             if resp.status_code == 429:
+                log(f"ATTEMPT: {attempt}") # TEST
                 wait = dynamic_sleep("api", attempt=(attempt+1))
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
