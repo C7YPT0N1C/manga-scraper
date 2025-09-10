@@ -301,7 +301,7 @@ def dynamic_sleep(stage, attempt: int = 1): # TEST
             log(f"total_load={total_load}", "debug")
         
         # Scale things down
-        load_floor = 100
+        load_floor = 10
         if DYNAMIC_SLEEP_DEBUG:
             log(f"load_floor={load_floor}", "debug")
         
