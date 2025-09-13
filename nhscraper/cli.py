@@ -122,11 +122,11 @@ def parse_args():
     parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument(
-        "--max-sleep",
+        "--sleep-limit",
         type=int,
-        default=DEFAULT_MAX_SLEEP,
+        default=DEFAULT_SLEEP_LIMIT,
         help=(
-            f"Approximate max time to dynamically sleep between galleries. (default: {DEFAULT_MAX_SLEEP})"
+            f"Caps download sleeping to this point, so load scaling can't push it higher. (default: {DEFAULT_SLEEP_LIMIT})"
             f"Lower numbers may result in hitting API limits. (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
         )
     )
@@ -273,7 +273,7 @@ def update_config(args): # Update config
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["MAX_RETRIES"] = args.max_retries
-    config["MAX_SLEEP"] = args.max_sleep
+    config["SLEEP_LIMIT"] = args.SLEEP_LIMIT
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose

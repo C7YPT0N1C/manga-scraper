@@ -45,9 +45,9 @@ def dynamic_sleep(stage, attempt: int = 1):
 
         # Linear interpolation based on gallery_weight
         anchor_low_galleries = 25
-        anchor_low_sleep = 4.0
+        anchor_low_sleep = 0.5
         anchor_high_galleries = gallery_cap
-        anchor_high_sleep = 9.0
+        anchor_high_sleep = 10.0
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}), Gallery 'Weight' = {gallery_weight}")
@@ -146,10 +146,11 @@ def dynamic_sleep(stage, attempt: int = 1):
         )
         return sleep_time
     
-set_num_of_galleries = 50
+set_num_of_galleries = 200
 set_gallery_threads = 2
 set_image_threads = 10
 
-for attempt in range (1, 2):
-    #dynamic_sleep("api", attempt=attempt)
-    dynamic_sleep("gallery", attempt=attempt)
+for test in range (1, set_num_of_galleries):
+    for attempt in range (1, 2):
+        #dynamic_sleep("api", attempt=attempt)
+        dynamic_sleep("gallery", attempt=attempt)

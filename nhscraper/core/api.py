@@ -226,9 +226,9 @@ def dynamic_sleep(stage, attempt: int = 1):
 
         # Linear interpolation based on gallery_weight
         anchor_low_galleries = 25 # ~ 1 Page of Galleries
-        anchor_low_sleep = 4.0
+        anchor_low_sleep = 0.5
         anchor_high_galleries = gallery_cap # ~ 50 Pages of Galleries
-        anchor_high_sleep = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+        anchor_high_sleep = config.get("SLEEP_LIMIT", DEFAULT_SLEEP_LIMIT)
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}), Gallery 'Weight' = {gallery_weight}")
