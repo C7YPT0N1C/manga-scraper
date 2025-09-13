@@ -221,8 +221,8 @@ def dynamic_sleep(stage, attempt: int = 1):
         # TARGETED SCALING
         # ------------------------------------------------------------
         # Anchors:
-        #   - 25 galleries → ~4s sleep
-        #   - 1250 galleries → ~10s sleep
+        #   - 25 galleries → ~0.5s sleep
+        #   - 1250 galleries → ~5s sleep
 
         # Linear interpolation based on gallery_weight
         anchor_low_galleries = 25 # ~ 1 Page of Galleries

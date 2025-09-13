@@ -12,7 +12,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
-    gallery_cap = 1000  # Max galleries considered for scaling
+    gallery_cap = 1250  # Max galleries considered for scaling
     
     # API sleep ranges
     api_sleep_min = 0.5
@@ -40,14 +40,14 @@ def dynamic_sleep(stage, attempt: int = 1):
         # TARGETED SCALING
         # ------------------------------------------------------------
         # Anchors:
-        #   - 25 galleries → ~4s sleep
-        #   - 1000 galleries → ~9s sleep
+        #   - 25 galleries → ~0.5s sleep
+        #   - 1000 galleries → ~5s sleep
 
         # Linear interpolation based on gallery_weight
         anchor_low_galleries = 25
         anchor_low_sleep = 0.5
         anchor_high_galleries = gallery_cap
-        anchor_high_sleep = 10.0
+        anchor_high_sleep = 5.0
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}), Gallery 'Weight' = {gallery_weight}")
@@ -146,7 +146,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         )
         return sleep_time
     
-set_num_of_galleries = 200
+set_num_of_galleries = 2776
 set_gallery_threads = 2
 set_image_threads = 10
 
