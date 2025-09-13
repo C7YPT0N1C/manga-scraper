@@ -273,7 +273,7 @@ def update_config(args): # Update config
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["MAX_RETRIES"] = args.max_retries
-    config["SLEEP_LIMIT"] = args.SLEEP_LIMIT
+    config["SLEEP_LIMIT"] = args.sleep_limit
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
