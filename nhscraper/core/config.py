@@ -73,7 +73,7 @@ def setup_logger(verbose=False, debug=False):
     # Logger level: always DEBUG so all messages reach file
     logger.setLevel(logging.DEBUG)
 
-    logger.info("Logger initialized. Console level: %s", 
+    logger.info("Logger initialised. Console level: %s", 
                 "DEBUG" if debug else "INFO" if verbose else "WARNING")
     
     return logger

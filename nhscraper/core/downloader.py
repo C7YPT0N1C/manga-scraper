@@ -310,8 +310,8 @@ def start_downloader(gallery_list=None):
         return
 
     log_clarification()
-    logger.info(f"Downloader: Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]}" 
-                if len(gallery_ids) > 1 else f"Downloader: Galleries to process: {gallery_ids[0]}")
+    logger.info(f"Downloader: Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]} ({len(gallery_ids)})"
+                if len(gallery_ids) > 1 else f"Downloader: Galleries to process: {gallery_ids[0]} ({len(gallery_ids)})")
 
     thread_map(
         lambda gid: process_galleries([gid]),
