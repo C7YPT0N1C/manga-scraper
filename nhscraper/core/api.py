@@ -196,7 +196,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API Sleep Ranges
 
-    log("------------------------------", "debug")
+    log("\n------------------------------", "debug")
     log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
 
     # ------------------------------------------------------------
@@ -212,9 +212,9 @@ def dynamic_sleep(stage, attempt: int = 1):
         log(f"→ API Base Min = {base_min}s, API Base Max = {base_max}s", "debug")
 
         sleep_time = random.uniform(base_min, base_max)
-        log(f"→ Sleep Time Candidate = {sleep_time:.2f}s (Min = {base_min}s, Max = {base_max}s)", "debug")
+        log(f"→ Sleep Time Candidate = {sleep_time:.2f}s (Min = {base_min}s, Max = {base_max}s)\n", "debug")
 
-        log(f"\n{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
         log("------------------------------\n", "debug")
         return sleep_time
     
@@ -288,9 +288,9 @@ def dynamic_sleep(stage, attempt: int = 1):
         # ------------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
         sleep_time = random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max)
-        log(f"→ Final Sleep Candidate = {sleep_time:.2f}s (Jitter {jitter_min*100:.0f}% - {jitter_max*100:.0f}%)", "debug")
+        log(f"→ Final Sleep Candidate = {sleep_time:.2f}s (Jitter {jitter_min*100:.0f}% - {jitter_max*100:.0f}%)\n", "debug")
 
-        log(f"\n{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {total_load:.2f} Units)", "debug")
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {total_load:.2f} Units)", "debug")
         log("------------------------------\n", "debug")
         return sleep_time
 
