@@ -210,10 +210,8 @@ def dynamic_sleep(stage, attempt: int = 1):
         attempt_scale = attempt ** 2
         base_min, base_max = api_sleep_min * attempt_scale, api_sleep_max * attempt_scale
         sleep_time = random.uniform(base_min, base_max)
-        log_clarification()
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
-        if DYNAMIC_SLEEP_DEBUG:
-            log("------------------------------\n", "debug")
+        log("------------------------------\n", "debug")
         return sleep_time
 
     # ------------------------------------------------------------
@@ -261,10 +259,14 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         # 4. Thread factor, attempt scaling, and load factor
         # --------------------------------------------------------
-        gallery_thread_multiplier = 0.25
-        image_thread_multiplier = 0.05
+        BASE_GALLERY_THREADS = 2
+        BASE_IMAGE_THREADS = 10
         
-        thread_factor = (1 + (gallery_threads - 2) * gallery_thread_multiplier) * (1 + (image_threads - 10) * image_thread_multiplier)
+        gallery_thread_damper = 0.9
+        image_thread_damper = 0.9
+
+        thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
+
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
