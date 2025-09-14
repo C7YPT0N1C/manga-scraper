@@ -188,7 +188,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     """Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling."""
 
-    DYNAMIC_SLEEP_DEBUG = True  # Enable detailed debug logs
+    DYNAMIC_SLEEP_DEBUG = config.get("DEBUG", DEFAULT_DEBUG)  # Enable detailed debug logs
 
     # ------------------------------------------------------------
     # Configurable parameters

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "1.7.1-beta"
+version = "1.7.2-beta"
 description = "NHentai scraper with extensions for the integration into other services."
 readme = "README.md"
 authors = [{ name = "C7YPT0N1C" }]
