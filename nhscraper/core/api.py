@@ -194,8 +194,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     # Max galleries considered for scaling
     gallery_cap = 3750 # ~ 150 Pages
     
-    api_sleep_min = 0.5
-    api_sleep_max = 0.75
+    api_sleep_min, api_sleep_max = 0.5, 0.75 # API Sleep Ranges
 
     log("------------------------------", "debug")
     log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
@@ -237,7 +236,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         gallery_weight = min(num_of_galleries, gallery_cap)
         gallery_factor = gallery_weight / gallery_cap
 
-        log(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}), Gallery 'Weight' = {gallery_weight}", "debug")
+        log(f"→ Number of Galleries = {num_of_galleries} (Capped at {gallery_cap}) (Gallery 'Weight' = {gallery_weight})", "debug")
         log(f"→ Gallery Threads = {gallery_threads}, Image Threads = {image_threads}", "debug")
 
         # Effective concurrency load
@@ -258,8 +257,8 @@ def dynamic_sleep(stage, attempt: int = 1):
         anchor_high_galleries = gallery_cap
         anchor_high_sleep = 2.5 # Seconds
 
-        g = max(anchor_low_galleries, min(gallery_weight, anchor_high_galleries))
-        frac_anchor = (g - anchor_low_galleries) / (anchor_high_galleries - anchor_low_galleries)
+        anchored = max(anchor_low_galleries, min(gallery_weight, anchor_high_galleries))
+        frac_anchor = (anchored - anchor_low_galleries) / (anchor_high_galleries - anchor_low_galleries)
         anchor_sleep = anchor_low_sleep + frac_anchor * (anchor_high_sleep - anchor_low_sleep)
         log(f"→ Anchor Base Sleep = {anchor_sleep:.2f}s (Fraction {frac_anchor:.3f})", "debug")
 
