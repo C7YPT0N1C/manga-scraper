@@ -17,11 +17,10 @@ def dynamic_sleep(stage, attempt: int = 1):
     gallery_sleep_min = 0.5 # seconds
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
-    if DYNAMIC_SLEEP_DEBUG:
-        print()
-        print("------------------------------")
-        print(f"{stage.capitalize()} Attempt: {attempt}")
-        print()
+    print()
+    print("------------------------------")
+    print(f"{stage.capitalize()} Attempt: {attempt}")
+    print()
 
     # ------------------------------------------------------------
     # API STAGE

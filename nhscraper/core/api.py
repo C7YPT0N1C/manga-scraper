@@ -197,11 +197,10 @@ def dynamic_sleep(stage, attempt: int = 1):
     gallery_sleep_min = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)  # Minimum Gallery sleep time
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
-    if DYNAMIC_SLEEP_DEBUG:
-        log_clarification()
-        log("------------------------------", "debug")
-        log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
-        log_clarification()
+    log_clarification()
+    log("------------------------------", "debug")
+    log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
+    log_clarification()
 
     # ------------------------------------------------------------
     # API STAGE
