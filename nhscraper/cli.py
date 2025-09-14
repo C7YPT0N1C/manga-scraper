@@ -122,12 +122,12 @@ def parse_args():
     parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})")
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument(
-        "--sleep-limit",
+        "--min-sleep",
         type=int,
-        default=DEFAULT_SLEEP_LIMIT,
+        default=DEFAULT_MIN_SLEEP,
         help=(
-            f"Caps download sleeping to this point, so load scaling can't push it higher. (default: {DEFAULT_SLEEP_LIMIT})"
-            f"Lower numbers may result in hitting API limits. (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
+            f"Minimum amount of time each thread should sleep before starting a new download. (default: {DEFAULT_MIN_SLEEP})"
+            f"Set this to a higher number if you are hitting API limits."
         )
     )
     
@@ -273,7 +273,7 @@ def update_config(args): # Update config
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["MAX_RETRIES"] = args.max_retries
-    config["SLEEP_LIMIT"] = args.sleep_limit
+    config["MIN_SLEEP"] = args.min_sleep
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose

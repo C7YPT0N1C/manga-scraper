@@ -184,40 +184,33 @@ def clean_title(meta):
 #  NHentai API Handling
 ################################################################################################################
 
-import random
-
 def dynamic_sleep(stage, attempt: int = 1):
     """Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling."""
 
-    DYNAMIC_SLEEP_DEBUG = True  # Set to False to silence detailed debug logs
+    DYNAMIC_SLEEP_DEBUG = True  # Enable detailed debug logs
 
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
-    gallery_cap = 3750  # Maximum galleries considered for scaling (~150 pages)
-    api_sleep_min, api_sleep_max = 0.5, 0.75  # API Sleep Ranges
+    gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
+    gallery_sleep_min = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)  # Minimum Gallery sleep time
+    api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
     if DYNAMIC_SLEEP_DEBUG:
-        log("\n------------------------------", "debug")
+        log_clarification()
+        log("------------------------------", "debug")
         log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
+        log_clarification()
 
     # ------------------------------------------------------------
     # API STAGE
     # ------------------------------------------------------------
     if stage == "api":
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ API Sleep Range: Min = {api_sleep_min}s, Max = {api_sleep_max}s", "debug")
-            attempt_scale = attempt ** 2
-            log(f"→ Attempt Scale = attempt^2 = {attempt}^2 = {attempt_scale}", "debug")
-
+        attempt_scale = attempt ** 2
         base_min, base_max = api_sleep_min * attempt_scale, api_sleep_max * attempt_scale
-
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Scaled API Sleep Range: Min = {base_min}s, Max = {base_max}s", "debug")
-
         sleep_time = random.uniform(base_min, base_max)
-
+        log_clarification()
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
         if DYNAMIC_SLEEP_DEBUG:
             log("------------------------------\n", "debug")
@@ -227,90 +220,74 @@ def dynamic_sleep(stage, attempt: int = 1):
     # GALLERY STAGE
     # ------------------------------------------------------------
     if stage == "gallery":
+        # --------------------------------------------------------
+        # 1. Calculate Galleries / Threads
+        # --------------------------------------------------------
         num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
+        if DYNAMIC_SLEEP_DEBUG:
+            log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
 
-        # ------------------------------------------------------------
-        # Thread optimisation
-        # ------------------------------------------------------------
         gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
         image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-        if gallery_threads is None or image_threads is None:
-            gallery_threads = min(max(2, int(num_of_galleries / 200) + 1), 8)
-            image_threads = gallery_threads * 5
-            if DYNAMIC_SLEEP_DEBUG:
-                log(f"→ Optimiser selected threads: {gallery_threads} gallery, {image_threads} image", "debug")
 
-        # ------------------------------------------------------------
-        # Gallery weight and factor
-        # ------------------------------------------------------------
-        gallery_weight = min(num_of_galleries, gallery_cap)
-        gallery_factor = gallery_weight / gallery_cap
+        if gallery_threads is None or image_threads is None:
+            # Base gallery threads = 2, scale with number of galleries
+            gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
+            image_threads = gallery_threads * 5  # Keep ratio 1:5
+            if DYNAMIC_SLEEP_DEBUG:
+                log(f"→ Optimised threads: {gallery_threads} gallery, {image_threads} image", "debug")
+
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Gallery Weight = min({num_of_galleries}, {gallery_cap}) = {gallery_weight}", "debug")
-            log(f"→ Normalised Gallery Factor = {gallery_weight} / {gallery_cap} = {gallery_factor:.3f}", "debug")
+            log(f"→ Gallery weight: {num_of_galleries}", "debug")
             log(f"→ Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
 
-        # ------------------------------------------------------------
-        # Load calculation
-        # ------------------------------------------------------------
+        # --------------------------------------------------------
+        # 2. Calculate total load (Units Of Work)
+        # --------------------------------------------------------        
         concurrency = gallery_threads * image_threads
-        total_load = concurrency * (1 + gallery_factor)
+        current_load = (concurrency * attempt) * num_of_galleries
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Concurrency = {gallery_threads} * {image_threads} = {concurrency}", "debug")
-            log(f"→ Total Load = Concurrency * (1 + Gallery Factor) = {concurrency} * (1 + {gallery_factor:.3f}) = {total_load:.2f}", "debug")
+            log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
-        load_floor = 10
-        load_factor = (total_load / load_floor) * attempt
+        # --------------------------------------------------------
+        # 3. Unit-based scaling
+        # --------------------------------------------------------
+        unit_factor = (current_load) / gallery_cap
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Load Factor = Total Load / Load Floor * Attempt = {total_load:.2f} / {load_floor} * {attempt} = {load_factor:.2f}", "debug")
+            log_clarification()
+            log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
 
-        # ------------------------------------------------------------
-        # Anchor-Based Base Sleep
-        # ------------------------------------------------------------
-        anchor_low_galleries = 25
-        anchor_low_sleep = 0.5  # Seconds
-        anchor_high_galleries = gallery_cap
-        anchor_high_sleep = 2.5  # Seconds
-
-        anchored = max(anchor_low_galleries, min(gallery_weight, anchor_high_galleries))
-        frac_anchor = (anchored - anchor_low_galleries) / (anchor_high_galleries - anchor_low_galleries)
-        anchor_sleep = anchor_low_sleep + frac_anchor * (anchor_high_sleep - anchor_low_sleep)
+        # --------------------------------------------------------
+        # 4. Thread factor, attempt scaling, and load factor
+        # --------------------------------------------------------
+        gallery_thread_multiplier = 0.25
+        image_thread_multiplier = 0.05
+        
+        thread_factor = (1 + (gallery_threads - 2) * gallery_thread_multiplier) * (1 + (image_threads - 10) * image_thread_multiplier)
+        scaled_sleep = unit_factor / thread_factor
+        
+        # Enforce the minimum sleep time
+        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
+        
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Anchor Interpolation: ({anchored} - {anchor_low_galleries}) / ({anchor_high_galleries} - {anchor_low_galleries}) = {frac_anchor:.3f}", "debug")
-            log(f"→ Anchor Base Sleep = {anchor_low_sleep}s + {frac_anchor:.3f} * ({anchor_high_sleep}s - {anchor_low_sleep}s) = {anchor_sleep:.2f}s", "debug")
+            log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
+            log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
 
-        # ------------------------------------------------------------
-        # Unit-Based Scaling
-        # ------------------------------------------------------------
-        min_units, min_mult = 10, 0.5
-        max_units, max_mult = 2000, 2.0
-        clamped_units = max(min_units, min(total_load, max_units))
-        frac_units = (clamped_units - min_units) / (max_units - min_units)
-        unit_mult = min_mult + frac_units * (max_mult - min_mult)
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Unit Scaling: Clamped Load = {clamped_units}, Fraction = {frac_units:.3f}", "debug")
-            log(f"→ Unit Multiplier = {min_mult} + {frac_units:.3f} * ({max_mult} - {min_mult}) = {unit_mult:.2f}", "debug")
-
-        base_sleep = anchor_sleep * unit_mult
-
-        # ------------------------------------------------------------
-        # Thread Factor and Attempt Scaling
-        # ------------------------------------------------------------
-        thread_factor = (1 + (gallery_threads - 2) * 0.25) * (1 + (image_threads - 10) * 0.05)
-        scaled_sleep = base_sleep * thread_factor * attempt
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Thread Factor = (1 + ({gallery_threads} - 2)*0.25) * (1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
-            log(f"→ Scaled Sleep = Base Sleep * Thread Factor * Attempt = {base_sleep:.2f} * {thread_factor:.2f} * {attempt} = {scaled_sleep:.2f}s", "debug")
-
-        # ------------------------------------------------------------
-        # Add jitter
-        # ------------------------------------------------------------
+        # --------------------------------------------------------
+        # 5. Add jitter to avoid predictable timing
+        # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
         sleep_time = random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max)
+        
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Final Candidate with Jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+            log(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
-        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {total_load:.2f} Units)", "debug")
+        # --------------------------------------------------------
+        # 6. Final result
+        # --------------------------------------------------------
+        log_clarification()
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
         if DYNAMIC_SLEEP_DEBUG:
             log("------------------------------\n", "debug")
 
