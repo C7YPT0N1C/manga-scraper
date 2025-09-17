@@ -871,9 +871,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Update creator's popular genres
     update_creator_popular_genres(meta)
-    
-    # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
-    store_creator_manga_names(meta)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
