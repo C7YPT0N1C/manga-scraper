@@ -887,8 +887,8 @@ def post_batch_hook():
     process_deferred_creators()
     add_missing_local_mangas_to_library()
     
-    # Find missing galleries
-    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
-
     # Clean up empty directories
     clean_directories(True)
+    
+    # Find missing galleries
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
