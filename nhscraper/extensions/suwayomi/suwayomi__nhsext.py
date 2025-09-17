@@ -258,9 +258,6 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
     
     logger.info(f"Fixed {removed} broken symlink(s).")
-    
-    DEDICATED_DOWNLOAD_PATH = ""
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
 # ------------------------------------------------------------
 # Update creator's most popular genres
@@ -823,8 +820,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     
     return False
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook(gallery_list):
+# Hook for pre-run functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
+def pre_batch_hook(gallery_list):
     if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
@@ -877,8 +874,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Update creator's popular genres
     update_creator_popular_genres(meta)
 
-# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
-def post_run_hook():
+# Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
+def post_batch_hook():
     if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return

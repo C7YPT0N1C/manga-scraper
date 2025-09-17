@@ -326,7 +326,7 @@ def start_downloader(gallery_list=None):
     load_extension()
 
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
-    active_extension.pre_run_hook(gallery_ids)
+    active_extension.pre_batch_hook(gallery_ids)
 
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
@@ -347,10 +347,10 @@ def start_downloader(gallery_list=None):
     )
 
     if not config.get("DRY_RUN"):
-        active_extension.post_run_hook()
+        active_extension.post_batch_hook()
     else:
         log_clarification()
-        logger.info("[DRY RUN] Downloader: Would call post_run_hook()")
+        logger.info("[DRY RUN] Downloader: Would call post_batch_hook()")
     
     end_time = time.perf_counter()  # End timer
     runtime = end_time - start_time
