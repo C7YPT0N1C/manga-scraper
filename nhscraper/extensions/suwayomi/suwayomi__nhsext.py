@@ -674,6 +674,7 @@ def add_missing_local_mangas_to_library():
     variables = {"sourceId": str(LOCAL_SOURCE_ID)}
 
     result = graphql_request(query, variables)
+    print(result)
     nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
     if not nodes:
