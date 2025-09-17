@@ -6,6 +6,8 @@ set_num_of_galleries = None
 set_gallery_threads = None
 set_image_threads = None
 
+gallery_list = []
+
 def dynamic_sleep(stage, attempt: int = 1):
     """Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling."""
@@ -119,16 +121,37 @@ def dynamic_sleep(stage, attempt: int = 1):
 
         return sleep_time
 
+def worst_case_time_estimate(gallery_list):
+    current_run_num_of_galleries = len(gallery_list)
+    current_run_gallery_threads = set_gallery_threads
+    current_run_gallery_sleep_min = set_image_threads
+    
+    worst_time = (
+            (current_run_num_of_galleries / current_run_gallery_threads) *
+            current_run_gallery_sleep_min
+        )
+    
+    worst_time_mins = worst_time / 60 # Convert To Minutes
+    worst_time_days = worst_time / 60 / 60 # Convert To Hours
+    worst_time_hours = worst_time / 60 /60 / 24 # Convert To Days
+    
+    print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+
 # ------------------------------
 # Example Test Run
 # ------------------------------
 set_gallery_sleep_min = 0.5 # Default: 0.5
-set_gallery_sleep_min = 100 # Default: 100
+set_gallery_sleep_max = 100 # Default: 100
 set_num_of_galleries = 50
 set_gallery_threads = 2 # Default: 2
 set_image_threads = 10 # Default: 10
 max_attempts = 1
 
+for gallery in range (1, (set_num_of_galleries + 1)):
+    gallery_list.append(000)
+
 for test in range(1, set_num_of_galleries):
     for attempt in range(1, (max_attempts + 1)):
         dynamic_sleep("gallery", attempt=attempt)
+
+worst_case_time_estimate(gallery_set)

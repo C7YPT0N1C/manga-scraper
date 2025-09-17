@@ -47,6 +47,23 @@ def load_extension():
 ####################################################################################################
 # UTILITIES
 ####################################################################################################
+
+def worst_case_time_estimate(gallery_list):
+    current_run_num_of_galleries = len(gallery_list)
+    current_run_gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+    current_run_gallery_sleep_min = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+    
+    worst_time = (
+            (current_run_num_of_galleries / current_run_gallery_threads) *
+            current_run_gallery_sleep_min
+        )
+    
+    worst_time_mins = worst_time / 60 # Convert To Minutes
+    worst_time_days = worst_time / 60 / 60 # Convert To Hours
+    worst_time_hours = worst_time / 60 /60 / 24 # Convert To Days
+    
+    print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+
 def build_gallery_path(meta, iteration: dict = None):
     """
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
@@ -308,6 +325,8 @@ def start_downloader(gallery_list=None):
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
+    
+    worst_case_time_estimate(gallery_ids)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]} ({len(gallery_ids)})"
