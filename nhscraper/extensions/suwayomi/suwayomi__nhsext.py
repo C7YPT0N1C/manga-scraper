@@ -567,11 +567,10 @@ def save_collected_manga_ids(ids: set[int]):
 
 # ----------------------------
 # Store the names of Creators' Mangas
-# so they can be added to the libary later
+# so they can be added to the library later
 # ----------------------------
 def store_creator_manga_names(meta: dict):
     deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
-
     gallery_meta = return_gallery_metas(meta)
     creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
     if not creators:
@@ -596,9 +595,9 @@ def store_creator_manga_names(meta: dict):
 
 # ----------------------------
 # Process / Retry Deferred Creators & Add to Category
-# ----------------------------  
-def process_deferred_creators():
-    """Resolve deferred creator manga names against Suwayomi and update them."""
+# ----------------------------
+def process_deferred_creators(category_id: int):
+    """Resolve deferred creator manga names and update them in library + category."""
 
     with _deferred_creators_lock:
         deferred_creators = load_deferred_creators()
@@ -613,6 +612,7 @@ def process_deferred_creators():
     new_ids = set()
 
     for creator_name in sorted(deferred_creators):
+        # Query manga by title & source
         query = """
         query ($title: String!, $sourceId: LongString!) {
           mangas(
@@ -637,29 +637,16 @@ def process_deferred_creators():
             new_ids.add(manga_id)
             logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
 
-    if not new_ids:
-        logger.info("GraphQL: No new creator manga names to update.")
-    else:
-        # Bulk update: inLibrary = true, assign category
-        mutation = """
-        mutation ($ids: [LongString!]!, $categoryId: LongString!) {
-          updateMangas(input: {
-            ids: $ids,
-            patch: { inLibrary: true, categoryId: $categoryId }
-          }) {
-            clientMutationId
-          }
-        }
-        """
-        result = graphql_request(mutation, {
-            "ids": list(new_ids),
-            "categoryId": str(CATEGORY_ID),
-        })
-        if result:
-            logger.info(f"GraphQL: Successfully updated {len(new_ids)} manga(s) → In Library + Category.")
+    if new_ids:
+        # Use helper functions
+        update_mangas(list(new_ids))
+        update_mangas_categories(list(new_ids), category_id)
 
+        # Save collected IDs
         collected_manga_ids.update(new_ids)
         save_collected_manga_ids(collected_manga_ids)
+    else:
+        logger.info("GraphQL: No new creator manga names to update.")
 
     # Always clear deferred state
     save_deferred_creators(set())
