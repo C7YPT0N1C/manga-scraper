@@ -107,7 +107,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
         
         if DYNAMIC_SLEEP_DEBUG:
-            print(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s")
+            print(f"→ Sleep after jitter (Capped at {gallery_sleep_max}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s")
 
         # --------------------------------------------------------
         # 6. Final result
@@ -146,8 +146,8 @@ def worst_case_time_estimate(gallery_list):
 # ------------------------------
 set_gallery_sleep_min = 0.5 # Default: 0.5
 set_gallery_sleep_max = 100 # Default: 100
-set_num_of_galleries = 50
-set_gallery_threads = 2 # Default: 2
+set_num_of_galleries = 6281
+set_gallery_threads = 200 # Default: 2
 set_image_threads = 10 # Default: 10
 max_attempts = 1
 

@@ -307,7 +307,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
         
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+            log(f"→ Sleep after jitter (Capped at {gallery_sleep_max}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
         # --------------------------------------------------------
         # 6. Final result
