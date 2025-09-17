@@ -1,5 +1,7 @@
 import random
 
+set_gallery_sleep_min = None
+set_gallery_sleep_max = None
 set_num_of_galleries = None
 set_gallery_threads = None
 set_image_threads = None
@@ -14,7 +16,8 @@ def dynamic_sleep(stage, attempt: int = 1):
     # Configurable parameters
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
-    gallery_sleep_min = 0.5 # seconds
+    gallery_sleep_min = set_gallery_sleep_min # seconds
+    gallery_sleep_max = set_gallery_sleep_max # seconds
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
     print()
@@ -89,7 +92,9 @@ def dynamic_sleep(stage, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
+        scaled_sleep = min(
+            max(scaled_sleep, gallery_sleep_min), gallery_sleep_max
+            )
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Thread factor = (({gallery_threads} / {BASE_GALLERY_THREADS}) ** {gallery_thread_damper}) * (({image_threads} / {BASE_IMAGE_THREADS}) ** {image_thread_damper}) = {thread_factor:.2f}")
@@ -117,9 +122,11 @@ def dynamic_sleep(stage, attempt: int = 1):
 # ------------------------------
 # Example Test Run
 # ------------------------------
+set_gallery_sleep_min = 0.5 # Default: 0.5
+set_gallery_sleep_min = 100 # Default: 100
 set_num_of_galleries = 50
-set_gallery_threads = 2
-set_image_threads = 10
+set_gallery_threads = 2 # Default: 2
+set_image_threads = 10 # Default: 10
 max_attempts = 1
 
 for test in range(1, set_num_of_galleries):

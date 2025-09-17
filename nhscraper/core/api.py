@@ -219,6 +219,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
     gallery_sleep_min = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)  # Minimum Gallery sleep time
+    gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)  # Maximum Gallery sleep time
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
     log_clarification()
@@ -293,7 +294,9 @@ def dynamic_sleep(stage, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
+        scaled_sleep = min(
+            max(scaled_sleep, gallery_sleep_min), gallery_sleep_max
+            )
         
         if DYNAMIC_SLEEP_DEBUG:
             log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
