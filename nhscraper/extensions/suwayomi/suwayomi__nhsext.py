@@ -599,6 +599,8 @@ def store_creator_manga_names(meta: dict):
 # ----------------------------
 def process_deferred_creators():
     """Resolve deferred creator manga names and update them in library + category."""
+    
+    log_clarification()
 
     with _deferred_creators_lock:
         deferred_creators = load_deferred_creators()
@@ -657,14 +659,21 @@ def add_missing_local_mangas_to_library():
     """Find all mangas in the Local Source that aren't in the library and add them."""
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
+    # Use a variable for the sourceId and cast it to string
     query = """
     query ($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+      mangas(
+        filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }
+      ) {
         nodes { id title }
       }
     }
     """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+
+    # Ensure LOCAL_SOURCE_ID is a string
+    variables = {"sourceId": str(LOCAL_SOURCE_ID)}
+
+    result = graphql_request(query, variables)
     nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
     if not nodes:
@@ -680,11 +689,14 @@ def add_missing_local_mangas_to_library():
 
     logger.info(f"GraphQL: Adding {len(new_ids)} new mangas to library and category.")
 
+    # Update in library flag and category
     update_mangas(list(new_ids))
     update_mangas_categories(list(new_ids), CATEGORY_ID)
 
+    # Save collected IDs to prevent reprocessing
     collected_manga_ids.update(new_ids)
     save_collected_manga_ids(collected_manga_ids)
+
     logger.info("GraphQL: Finished adding missing mangas to library.")
 
 ####################################################################################################################
@@ -832,8 +844,6 @@ def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
-    log_clarification()
-    
     # Add all creators to Suwayomi category
     process_deferred_creators()
     add_missing_local_mangas_to_library()
