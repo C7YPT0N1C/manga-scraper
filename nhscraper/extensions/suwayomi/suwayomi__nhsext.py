@@ -652,6 +652,40 @@ def process_deferred_creators():
     # Always clear deferred state
     save_deferred_creators(set())
     logger.info("GraphQL: Finished processing deferred creators.")
+    
+def add_missing_local_mangas_to_library():
+    """Find all mangas in the Local Source that aren't in the library and add them."""
+    logger.info("GraphQL: Fetching mangas not yet in library...")
+
+    query = """
+    query ($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+        nodes { id title }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    if not nodes:
+        logger.info("GraphQL: No mangas found outside the library.")
+        return
+
+    collected_manga_ids = load_collected_manga_ids()
+    new_ids = {int(node["id"]) for node in nodes if int(node["id"]) not in collected_manga_ids}
+
+    if not new_ids:
+        logger.info("GraphQL: All mangas are already processed.")
+        return
+
+    logger.info(f"GraphQL: Adding {len(new_ids)} new mangas to library and category.")
+
+    update_mangas(list(new_ids))
+    update_mangas_categories(list(new_ids), CATEGORY_ID)
+
+    collected_manga_ids.update(new_ids)
+    save_collected_manga_ids(collected_manga_ids)
+    logger.info("GraphQL: Finished adding missing mangas to library.")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -800,8 +834,9 @@ def post_run_hook():
 
     log_clarification()
     
-    # Add deferred creators to Suwayomi category
+    # Add all creators to Suwayomi category
     process_deferred_creators()
+    add_missing_local_mangas_to_library
 
     # Clean up empty directories
     remove_empty_directories(True)
