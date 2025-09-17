@@ -701,11 +701,11 @@ def find_missing_galleries(local_root: str):
             continue
         
         creator_name = creator_dir.name
-        logger.info(f"Checking creator: {creator_name}")
+        logger.info(f"GraphQL: Checking creator: {creator_name}")
 
         local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
         if not local_galleries:
-            logger.info(f"No galleries found for {creator_name}, skipping.")
+            logger.info(f"GraphQL: No galleries found for {creator_name}, skipping.")
             continue
 
         # Query manga by title & source
@@ -724,7 +724,7 @@ def find_missing_galleries(local_root: str):
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not nodes:
-            logger.warning(f"Creator '{creator_name}' not found in library.")
+            logger.warning(f"GraphQL: Creator '{creator_name}' not found in library.")
             continue
 
         manga = nodes[0]
