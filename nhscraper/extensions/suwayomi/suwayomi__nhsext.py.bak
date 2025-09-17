@@ -204,8 +204,6 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
-    
-    log_clarification()
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
@@ -237,27 +235,6 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
     logger.info(f"Removed empty directories.")
-    
-    log_clarification()
-    
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
-        return
-    
-    removed = 0
-    for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
-        for fname in filenames:
-            full_path = os.path.join(dirpath, fname)
-            if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
-                try:
-                    os.unlink(full_path)
-                    logger.info(f"Removed broken symlink: {full_path}")
-                    removed += 1
-                except Exception as e:
-                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
-    
-    logger.info(f"Fixed {removed} broken symlink(s).")
-    
     DEDICATED_DOWNLOAD_PATH = ""
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
 
