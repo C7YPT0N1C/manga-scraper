@@ -663,6 +663,8 @@ def process_deferred_creators():
 def add_missing_local_mangas_to_library():
     """Find all mangas in the Local Source that aren't in the library and add them."""
     
+    log_clarification()
+    
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
     query = """
@@ -696,6 +698,9 @@ def find_missing_galleries(local_root: str):
     Args:
         local_root: Path to the root folder containing creator directories.
     """
+    
+    log_clarification()
+    
     for creator_dir in sorted(Path(local_root).iterdir()):
         if not creator_dir.is_dir():
             continue
@@ -881,9 +886,11 @@ def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
-    # Add all creators to Suwayomi category
+    # Add all creators to Suwayomi
     process_deferred_creators()
     add_missing_local_mangas_to_library()
+    
+    # Find missing galleries
     find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
 
     # Clean up empty directories
