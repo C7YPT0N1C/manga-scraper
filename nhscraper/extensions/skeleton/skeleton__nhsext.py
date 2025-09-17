@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, json, requests, threading
+import os, time, json, requests
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -39,9 +39,6 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 ############################################
-
-# Thread locks for file operations
-_file_lock = threading.Lock()
 
 ####################################################################################################################
 # CORE
