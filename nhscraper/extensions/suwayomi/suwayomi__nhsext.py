@@ -659,44 +659,26 @@ def add_missing_local_mangas_to_library():
     """Find all mangas in the Local Source that aren't in the library and add them."""
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
-    # Use a variable for the sourceId and cast it to string
     query = """
     query ($sourceId: LongString!) {
-      mangas(
-        filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }
-      ) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
         nodes { id title }
       }
     }
     """
-
-    # Ensure LOCAL_SOURCE_ID is a string
-    variables = {"sourceId": str(LOCAL_SOURCE_ID)}
-
-    result = graphql_request(query, variables)
-    print(result)
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
     nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
     if not nodes:
         logger.info("GraphQL: No mangas found outside the library.")
         return
 
-    collected_manga_ids = load_collected_manga_ids()
-    new_ids = {int(node["id"]) for node in nodes if int(node["id"]) not in collected_manga_ids}
+    new_ids = [int(node["id"]) for node in nodes]  # ignore collected_manga_ids entirely
 
-    if not new_ids:
-        logger.info("GraphQL: All mangas are already processed.")
-        return
+    logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
 
-    logger.info(f"GraphQL: Adding {len(new_ids)} new mangas to library and category.")
-
-    # Update in library flag and category
-    update_mangas(list(new_ids))
-    update_mangas_categories(list(new_ids), CATEGORY_ID)
-
-    # Save collected IDs to prevent reprocessing
-    collected_manga_ids.update(new_ids)
-    save_collected_manga_ids(collected_manga_ids)
+    update_mangas(new_ids)
+    update_mangas_categories(new_ids, CATEGORY_ID)
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
 
