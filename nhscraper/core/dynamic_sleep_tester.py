@@ -124,25 +124,31 @@ def dynamic_sleep(stage, attempt: int = 1):
 def worst_case_time_estimate(gallery_list):
     current_run_num_of_galleries = len(gallery_list)
     current_run_gallery_threads = set_gallery_threads
-    current_run_gallery_sleep_min = set_image_threads
+    current_run_gallery_sleep_max = set_gallery_sleep_max
     
-    worst_time = (
+    print("")
+    print(f"Number of Galleries Processed: {len(gallery_list)}")
+    print(f"Number of Gallery Threads: {set_gallery_threads}")
+    print(f"Max Sleep Time: {current_run_gallery_sleep_max}")
+    
+    worst_time_secs = (
             (current_run_num_of_galleries / current_run_gallery_threads) *
-            current_run_gallery_sleep_min
+            current_run_gallery_sleep_max
         )
     
-    worst_time_mins = worst_time / 60 # Convert To Minutes
-    worst_time_days = worst_time / 60 / 60 # Convert To Hours
-    worst_time_hours = worst_time / 60 /60 / 24 # Convert To Days
+    worst_time_mins = worst_time_secs / 60 # Convert To Minutes
+    worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
+    worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
+    print("")
     print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 # ------------------------------
 # Example Test Run
 # ------------------------------
 set_gallery_sleep_min = 0.5 # Default: 0.5
-set_gallery_sleep_max = 100 # Default: 100
-set_num_of_galleries = 50
+set_gallery_sleep_max = 10 # Default: 100
+set_num_of_galleries = 10000
 set_gallery_threads = 2 # Default: 2
 set_image_threads = 10 # Default: 10
 max_attempts = 1

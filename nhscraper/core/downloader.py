@@ -51,17 +51,23 @@ def load_extension():
 def worst_case_time_estimate(gallery_list):
     current_run_num_of_galleries = len(gallery_list)
     current_run_gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-    current_run_gallery_sleep_min = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+    current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     
-    worst_time = (
+    log_clarification()
+    print(f"Number of Galleries Processed: {len(gallery_list)}")
+    print(f"Number of Gallery Threads: {current_run_gallery_threads}")
+    print(f"Max Sleep Time: {current_run_gallery_sleep_max}")
+    
+    worst_time_secs = (
             (current_run_num_of_galleries / current_run_gallery_threads) *
-            current_run_gallery_sleep_min
+            current_run_gallery_sleep_max
         )
     
-    worst_time_mins = worst_time / 60 # Convert To Minutes
-    worst_time_days = worst_time / 60 / 60 # Convert To Hours
-    worst_time_hours = worst_time / 60 /60 / 24 # Convert To Days
+    worst_time_mins = worst_time_secs / 60 # Convert To Minutes
+    worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
+    worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
+    log_clarification()    
     print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
