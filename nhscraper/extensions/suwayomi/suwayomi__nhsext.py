@@ -569,37 +569,30 @@ def save_collected_manga_ids(ids: set[int]):
 # Store the names of Creators' Mangas
 # so they can be added to the libary later
 # ----------------------------
-def store_creator_manga_IDs(meta: dict):
-    """Defer storing creators until the end of the run."""
+def store_creator_manga_names(creator_names: list[str]):
+    """Store creator manga names for later processing via GraphQL."""
     with _deferred_creators_lock:
-        deferred_creators = load_deferred_creators()
-
-    if not config.get("DRY_RUN"):
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"Deferring creators from gallery {gallery_meta['id']}: {creators}", "debug")
-
-        for creator_name in creators:
-            deferred_creators.add(creator_name)
-    else:
-        log(f"[DRY RUN] Would defer creators for gallery {meta.get('id')}", "debug")
-
-    with _deferred_creators_lock:
-        save_deferred_creators(deferred_creators)
+        deferred = load_deferred_creators()
+        before = len(deferred)
+        deferred.update(creator_names)
+        after = len(deferred)
+        if after > before:
+            logger.info(f"GraphQL: Stored {after - before} new deferred creator(s).")
+        save_deferred_creators(deferred)
 
 # ----------------------------
 # Process / Retry Deferred Creators & Add to Category
 # ----------------------------  
 def process_deferred_creators():
-    """Resolve deferred creators against Suwayomi and mark them In Library."""
+    """Resolve deferred creator manga names against Suwayomi and update them."""
     with _deferred_creators_lock:
         deferred_creators = load_deferred_creators()
 
     if not deferred_creators:
-        logger.info("No deferred creators to process.")
+        logger.info("GraphQL: No deferred creators to process.")
         return
 
-    logger.info(f"Processing {len(deferred_creators)} deferred creators...")
+    logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
 
     collected_manga_ids = load_collected_manga_ids()
     new_ids = set()
@@ -621,36 +614,44 @@ def process_deferred_creators():
 
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
         if not nodes:
-            logger.warning(f"Creator '{creator_name}' not found in Suwayomi local source.")
+            logger.warning(f"GraphQL: Creator manga '{creator_name}' not found in Suwayomi local source.")
             continue
 
         manga_id = int(nodes[0]["id"])
         if manga_id not in collected_manga_ids:
             new_ids.add(manga_id)
-            logger.info(f"Queued manga ID {manga_id} for creator '{creator_name}'.")
+            logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
 
     if not new_ids:
-        logger.info("No new creator manga IDs to update.")
+        logger.info("GraphQL: No new creator manga IDs to update.")
     else:
-        # Bulk update mutation
+        # Ensure category exists
+        category_id = ensure_category()
+
+        # Bulk update: inLibrary = true, assign category
         mutation = """
-        mutation ($ids: [LongString!]!) {
-          updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
+        mutation ($ids: [LongString!]!, $categoryId: LongString!) {
+          updateMangas(input: {
+            ids: $ids,
+            patch: { inLibrary: true, categoryId: $categoryId }
+          }) {
             clientMutationId
           }
         }
         """
-        result = graphql_request(mutation, {"ids": list(new_ids)})
+        result = graphql_request(mutation, {
+            "ids": list(new_ids),
+            "categoryId": str(category_id),
+        })
         if result:
-            logger.info(f"Successfully updated {len(new_ids)} new creator(s) to In Library.")
+            logger.info(f"GraphQL: Successfully updated {len(new_ids)} manga(s) → In Library + Category.")
 
         collected_manga_ids.update(new_ids)
         save_collected_manga_ids(collected_manga_ids)
 
     # Always clear deferred state
     save_deferred_creators(set())
-    logger.info("Finished processing deferred creators.")
-
+    logger.info("GraphQL: Finished processing deferred creators.")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -786,7 +787,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     update_creator_popular_genres(meta)
     
     # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
-    store_creator_manga_IDs(meta)
+    store_creator_manga_names(meta)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
