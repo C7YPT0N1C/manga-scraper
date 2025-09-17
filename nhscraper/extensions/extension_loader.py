@@ -35,7 +35,7 @@ INSTALLED_EXTENSIONS = []
 def load_local_manifest():
     """Load the local manifest, create it from remote if it doesn't exist."""
     if not os.path.exists(LOCAL_MANIFEST_PATH):
-        logger.info("Local manifest not found. Creating from remote...")
+        logger.warning("Local manifest not found. Creating from remote...")
         update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
@@ -57,7 +57,7 @@ def fetch_remote_manifest():
         logger.warning(f"Failed to fetch primary remote manifest: {e}")
         try:
             with urlopen(REMOTE_MANIFEST_BACKUP_URL) as response:
-                logger.info("Using backup remote manifest URL")
+                logger.warning("Using backup remote manifest URL")
                 return json.load(response)
         except Exception as e2:
             log_clarification()
@@ -193,7 +193,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
 
     if ext_entry.get("installed", False):
         if remote_version and is_remote_version_newer(local_version, remote_version):
-            logger.info(f"Extension '{extension_name}': Remote version {remote_version} is newer than local {local_version}, updating...")
+            logger.warning(f"Extension '{extension_name}': Remote version {remote_version} is newer than local {local_version}, updating...")
             update_needed = True
         elif reinstall:
             update_needed = True
@@ -201,7 +201,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
         update_needed = True  # Not installed, must install
 
     if not update_needed:
-        logger.info(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
+        logger.warning(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
         return
 
     repo_url = ext_entry.get("repo_url", "")
@@ -258,7 +258,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()
-        logger.info(f"Extension '{extension_name}': Installed successfully.")
+        logger.warning(f"Extension '{extension_name}': Installed successfully.")
 
     # Update manifest
     ext_entry["installed"] = True
@@ -281,7 +281,7 @@ def uninstall_selected_extension(extension_name: str):
     if hasattr(module, "uninstall_extension"):
         module.uninstall_extension()
         log_clarification()
-        logger.info(f"Extension '{extension_name}': Uninstalled successfully.")
+        logger.warning(f"Extension '{extension_name}': Uninstalled successfully.")
 
     # Update manifest
     ext_entry["installed"] = False
@@ -298,7 +298,7 @@ def get_selected_extension(name: str = "skeleton"):
     original_name = name  # Save the originally requested extension
 
     log_clarification()
-    logger.info("Extension Loader: Ready.")
+    logger.warning("Extension Loader: Ready.")
     log("Extension Loader: Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
@@ -313,7 +313,7 @@ def get_selected_extension(name: str = "skeleton"):
     # Ensure skeleton is installed first
     skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
-        logger.info("Skeleton extension not installed, installing now...")
+        logger.warning("Skeleton extension not installed, installing now...")
         install_selected_extension("skeleton", reinstall=True)
         manifest = _reload_extensions()
 
@@ -323,7 +323,7 @@ def get_selected_extension(name: str = "skeleton"):
         logger.warning(f"Extension '{original_name}' not found in manifest, falling back to skeleton")
         name = "skeleton"
     elif not ext_entry.get("installed", False):
-        logger.info(f"Extension '{original_name}' not installed, installing now...")
+        logger.warning(f"Extension '{original_name}' not installed, installing now...")
         install_selected_extension(original_name, reinstall=True)
         manifest = _reload_extensions()
 
@@ -338,7 +338,7 @@ def get_selected_extension(name: str = "skeleton"):
             #if hasattr(ext, "update_extension_download_path"): # The extension does this in it's pre run hook.
             #    ext.update_extension_download_path()
             log_clarification()
-            logger.info(f"Selected extension: {final_name}")
+            logger.warning(f"Selected extension: {final_name}")
             return ext
 
     # If we reach here, something went really wrong
