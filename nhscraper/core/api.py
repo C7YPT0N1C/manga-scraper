@@ -294,9 +294,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = min(
-            max(scaled_sleep, gallery_sleep_min), gallery_sleep_max
-            )
+        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
         
         if DYNAMIC_SLEEP_DEBUG:
             log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
@@ -306,7 +304,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max)
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
         
         if DYNAMIC_SLEEP_DEBUG:
             log(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")

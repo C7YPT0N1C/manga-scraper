@@ -94,9 +94,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = min(
-            max(scaled_sleep, gallery_sleep_min), gallery_sleep_max
-            )
+        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Thread factor = (({gallery_threads} / {BASE_GALLERY_THREADS}) ** {gallery_thread_damper}) * (({image_threads} / {BASE_IMAGE_THREADS}) ** {image_thread_damper}) = {thread_factor:.2f}")
@@ -106,7 +104,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max)
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
         
         if DYNAMIC_SLEEP_DEBUG:
             print(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s")
@@ -147,8 +145,8 @@ def worst_case_time_estimate(gallery_list):
 # Example Test Run
 # ------------------------------
 set_gallery_sleep_min = 0.5 # Default: 0.5
-set_gallery_sleep_max = 10 # Default: 100
-set_num_of_galleries = 10000
+set_gallery_sleep_max = 100 # Default: 100
+set_num_of_galleries = 50
 set_gallery_threads = 2 # Default: 2
 set_image_threads = 10 # Default: 10
 max_attempts = 1
