@@ -504,6 +504,90 @@ def ensure_category(category_name=None):
     return CATEGORY_ID
 
 # ----------------------------
+# Create File For Manga IDs and Deferred Creators
+# ----------------------------
+deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
+
+def load_deferred_creators() -> set[str]:
+    if os.path.exists(deferred_creators_file):
+        with open(deferred_creators_file, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+def save_deferred_creators(creators: set[str]):
+    with open(deferred_creators_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
+
+collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
+
+def load_collected_manga_ids() -> set[int]:
+    if os.path.exists(collected_manga_ids_file):
+        with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+def save_collected_manga_ids(ids: set[int]):
+    with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
+
+# ----------------------------
+# Store The IDs of Creators' Manga
+# ----------------------------
+def store_creator_manga_IDs(meta: dict):
+    global LOCAL_SOURCE_ID
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+    
+    if not LOCAL_SOURCE_ID:
+        logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
+        return
+
+    if not config.get("DRY_RUN"):
+        gallery_meta = return_gallery_metas(meta)
+        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+        log(f"GraphQL: Gallery Metadata:{gallery_meta}\n\nProcessing creators {creators}\n", "debug")
+        for creator_name in creators:
+            query = """
+            query ($title: String!, $sourceId: LongString!) {
+              mangas(
+                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
+              ) {
+                nodes { id title }
+              }
+            }
+            """
+            log(f"GraphQL: Looking up manga ID for creator '{creator_name}' in source {LOCAL_SOURCE_ID}", "debug")
+            result = graphql_request(query, {
+                "title": creator_name,
+                "sourceId": LOCAL_SOURCE_ID
+            })
+            
+            #log(f"GraphQL: Manga lookup result for '{creator_name}': {result}", "debug")
+            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            if not nodes:
+                logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
+                with _deferred_creators_lock:
+                    deferred_creators.add(creator_name)
+                continue
+
+            manga_id = int(nodes[0]["id"])
+            log(f"GraphQL: Found manga for creator '{creator_name}': {nodes[0]}", "debug")
+            with _manga_ids_lock:
+                if manga_id not in collected_manga_ids:
+                    collected_manga_ids.add(manga_id)
+                    log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+    else:
+        log(f"[DRY RUN] GraphQL: Would store manga ID for creators", "debug")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
+
+# ----------------------------
 # Bulk Update Functions
 # ----------------------------
 def update_mangas(ids: list[int]):
@@ -539,72 +623,26 @@ def update_mangas_categories(ids: list[int], category_id: int):
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
 
 # ----------------------------
-# Create File For Manga IDs and Deferred Creators
+# Add Single Creator to Category (defer if needed)
 # ----------------------------
-deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
-
-def load_deferred_creators() -> set[str]:
-    if os.path.exists(deferred_creators_file):
-        with open(deferred_creators_file, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
-
-def save_deferred_creators(creators: set[str]):
-    with open(deferred_creators_file, "w", encoding="utf-8") as f:
-        json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
-
-collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
-
-def load_collected_manga_ids() -> set[int]:
-    if os.path.exists(collected_manga_ids_file):
-        with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
-
-def save_collected_manga_ids(ids: set[int]):
-    with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
-        json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
-
-# ----------------------------
-# Store the names of Creators' Mangas
-# so they can be added to the libary later
-# ----------------------------
-def store_creator_manga_IDs(meta: dict):
-    """Defer storing creators until the end of the run."""
+def add_creator_to_category(meta: dict):
+    global LOCAL_SOURCE_ID
+    
     with _deferred_creators_lock:
-        deferred_creators = load_deferred_creators()
+        deferred_creators = load_deferred_creators()    
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
 
-    if not config.get("DRY_RUN"):
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"Deferring creators from gallery {gallery_meta['id']}: {creators}", "debug")
-
-        for creator_name in creators:
-            deferred_creators.add(creator_name)
-    else:
-        log(f"[DRY RUN] Would defer creators for gallery {meta.get('id')}", "debug")
-
-    with _deferred_creators_lock:
-        save_deferred_creators(deferred_creators)
-
-# ----------------------------
-# Process / Retry Deferred Creators & Add to Category
-# ----------------------------  
-def process_deferred_creators():
-    """Resolve deferred creators against Suwayomi and mark them In Library."""
-    with _deferred_creators_lock:
-        deferred_creators = load_deferred_creators()
-
-    if not deferred_creators:
-        logger.info("No deferred creators to process.")
+    if not LOCAL_SOURCE_ID:
+        logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot add creator.")
         return
 
-    logger.info(f"Processing {len(deferred_creators)} deferred creators...")
+    gallery_meta = return_gallery_metas(meta)
+    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    if not creators:
+        return
 
-    collected_manga_ids = load_collected_manga_ids()
-    new_ids = set()
-
-    for creator_name in sorted(deferred_creators):
+    for creator_name in creators:
         query = """
         query ($title: String!, $sourceId: LongString!) {
           mangas(
@@ -618,39 +656,182 @@ def process_deferred_creators():
             "title": creator_name,
             "sourceId": LOCAL_SOURCE_ID
         })
-
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
         if not nodes:
-            logger.warning(f"Creator '{creator_name}' not found in Suwayomi local source.")
+            logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
+            with _deferred_creators_lock:
+                deferred_creators.add(creator_name)
             continue
 
         manga_id = int(nodes[0]["id"])
-        if manga_id not in collected_manga_ids:
-            new_ids.add(manga_id)
-            logger.info(f"Queued manga ID {manga_id} for creator '{creator_name}'.")
-
-    if not new_ids:
-        logger.info("No new creator manga IDs to update.")
-    else:
-        # Bulk update mutation
-        mutation = """
-        mutation ($ids: [LongString!]!) {
-          updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
-            clientMutationId
-          }
-        }
-        """
-        result = graphql_request(mutation, {"ids": list(new_ids)})
-        if result:
-            logger.info(f"Successfully updated {len(new_ids)} new creator(s) to In Library.")
-
-        collected_manga_ids.update(new_ids)
+        with _manga_ids_lock:
+            if manga_id not in collected_manga_ids:
+                collected_manga_ids.add(manga_id)
+                log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
         save_collected_manga_ids(collected_manga_ids)
 
-    # Always clear deferred state
-    save_deferred_creators(set())
-    logger.info("Finished processing deferred creators.")
+# ----------------------------
+# Process / Retry Deferred Creators & Add to Category
+# ----------------------------
+def quick_retry_deferred_creators():
+    """
+    Immediate retry for deferred creators (once)
+    """
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+    
+    with _deferred_creators_lock:
+        creators_to_retry = list(deferred_creators)
 
+    for creator_name in creators_to_retry:
+        log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
+        query = """
+        query ($title: String!, $sourceId: LongString!) {
+        mangas(
+            filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
+        ) {
+            nodes { id title }
+        }
+        }
+        """
+        result = graphql_request(query, {
+            "title": creator_name,
+            "sourceId": LOCAL_SOURCE_ID
+        })
+        log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+        
+        if nodes:
+            manga_id = int(nodes[0]["id"])
+            log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
+            with _manga_ids_lock:
+                if manga_id not in collected_manga_ids:
+                    collected_manga_ids.add(manga_id)
+                    log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
+            with _deferred_creators_lock:
+                deferred_creators.discard(creator_name)
+    
+    if deferred_creators:
+        logger.info(f"GraphQL: {deferred_creators} could not be resolved after quick retry, deferring till later...")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
+
+def retry_deferred_creators():
+    global LOCAL_SOURCE_ID
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+    
+    if not deferred_creators:
+        return
+
+    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+    delay = 2
+
+    for attempt in range(1, max_attempts + 1):
+        with _deferred_creators_lock:
+            creators_to_retry = list(deferred_creators)
+
+        if not creators_to_retry:
+            return
+
+        logger.info(f"GraphQL: Retrying {len(creators_to_retry)} deferred creators (attempt {attempt}/{max_attempts})")
+
+        for creator_name in creators_to_retry:
+            log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
+            query = """
+            query ($title: String!, $sourceId: LongString!) {
+              mangas(
+                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
+              ) {
+                nodes { id title }
+              }
+            }
+            """
+            result = graphql_request(query, {
+                "title": creator_name,
+                "sourceId": LOCAL_SOURCE_ID
+            })
+            log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
+            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            
+            if nodes:
+                manga_id = int(nodes[0]["id"])
+                log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
+                with _manga_ids_lock:
+                    if manga_id not in collected_manga_ids:
+                        collected_manga_ids.add(manga_id)
+                        log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
+                with _deferred_creators_lock:
+                    deferred_creators.discard(creator_name)
+
+        if not deferred_creators:
+            logger.info("GraphQL: All deferred creators resolved.")
+            return
+
+        time.sleep(delay)
+        delay *= 2
+
+    if deferred_creators:
+        logger.info(f"GraphQL: Some creators could not be resolved after retries: {deferred_creators}")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
+
+def add_deferred_creators_to_category(type: str = "quick"):
+    global CATEGORY_ID
+    
+    
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+
+    if CATEGORY_ID is None:
+        CATEGORY_ID = ensure_category(SUWAYOMI_CATEGORY_NAME)
+        if CATEGORY_ID is None:
+            logger.error(f"GraphQL: Category '{SUWAYOMI_CATEGORY_NAME}' not set, cannot add creators.")
+            return
+
+    if type == "thorough":
+        retry_deferred_creators()
+    else:
+        quick_retry_deferred_creators()
+
+    # Fetch existing IDs in category
+    query = """
+    query ($categoryId: Int!) {
+      category(id: $categoryId) {
+        mangas { nodes { id title } }
+      }
+    }
+    """
+    result = graphql_request(query, {"categoryId": CATEGORY_ID})
+    existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
+
+    with _manga_ids_lock:
+        new_ids = list(collected_manga_ids - existing_ids)
+
+    if not new_ids:
+        logger.info(f"GraphQL: No new mangas to add to Category '{SUWAYOMI_CATEGORY_NAME}'.")
+        return
+
+    update_mangas(new_ids)
+    update_mangas_categories(new_ids, CATEGORY_ID)
+    
+    save_collected_manga_ids(collected_manga_ids)
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -787,6 +968,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
     store_creator_manga_IDs(meta)
+    add_creator_to_category(meta)
+    
+    # Immediately retry processing deferred creators
+    add_deferred_creators_to_category("quick")
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
@@ -800,7 +985,7 @@ def post_run_hook():
     log_clarification()
     
     # Add deferred creators to Suwayomi category
-    process_deferred_creators()
+    add_deferred_creators_to_category("thorough")
 
     # Clean up empty directories
     remove_empty_directories(True)
