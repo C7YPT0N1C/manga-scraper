@@ -117,10 +117,11 @@ def dynamic_sleep(stage, attempt: int = 1):
 # ------------------------------
 # Example Test Run
 # ------------------------------
-set_num_of_galleries = 3302
+set_num_of_galleries = 50
 set_gallery_threads = 2
 set_image_threads = 10
+max_attempts = 1
 
-for test in range(1, 5):
-    for attempt in range(1, 2):
+for test in range(1, set_num_of_galleries):
+    for attempt in range(1, (max_attempts + 1)):
         dynamic_sleep("gallery", attempt=attempt)
