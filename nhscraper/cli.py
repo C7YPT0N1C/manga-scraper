@@ -118,8 +118,26 @@ def parse_args():
     )
 
     # Threads / concurrency
-    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})")
-    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})")
+    parser.add_argument(
+        "--threads-galleries",
+        type=int,
+        default=DEFAULT_THREADS_GALLERIES,
+        help=(
+            f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})"
+            f"Be careful setting this any higher than {DEFAULT_THREADS_GALLERIES}"
+        )
+    )
+    
+    parser.add_argument(
+        "--threads-images",
+        type=int,
+        default=DEFAULT_THREADS_IMAGES,
+        help=(
+            f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})"
+            f"Be careful setting this any higher than {DEFAULT_THREADS_IMAGES}"
+        )
+    )
+    
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument(
         "--min-sleep",
