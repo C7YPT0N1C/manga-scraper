@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, re, json, socket
+import os, time, random, cloudscraper, requests, re, json
 from flask import Flask, jsonify, request
 from datetime import datetime
 import urllib.parse
@@ -52,29 +52,6 @@ def build_session():
     # Uses cloudscraper session by default.
     if session is None:
         session = session_builder()
-
-def rotate_tor(control_host="127.0.0.1", control_port=9051):
-    """
-    Ask Tor via ControlPort for a new circuit (NEWNYM).
-    Works if Tor is configured with ControlPort and cookie auth (default).
-    """
-    try:
-        s = socket.create_connection((control_host, control_port), timeout=10)
-        f = s.makefile("rw")
-        f.write("AUTHENTICATE\r\n")   # no password
-        f.flush()
-        resp = f.readline()
-        if not resp.startswith("250"):
-            f.close(); s.close()
-            return False
-        f.write("SIGNAL NEWNYM\r\n")
-        f.flush()
-        resp = f.readline()
-        f.close(); s.close()
-        return resp.startswith("250")
-    except Exception as e:
-        logger.debug(f"rotate_tor failed: {e}")
-        return False
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -349,9 +326,6 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
-# ===============================
-# FETCH GALLERY IDS
-# ===============================
 def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     ids: set[int] = set()
     page = start_page
@@ -382,15 +356,6 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
-                        # 🔹 Rotate Tor and try again once
-                        if rotate_tor():
-                            logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            try:
-                                resp = session.get(url, timeout=10)
-                                resp.raise_for_status()
-                            except Exception as e2:
-                                logger.warning(f"Page {page}: Still failed after Tor rotate: {e2}")
-                                resp = None
                         break
                     wait = dynamic_sleep("api", attempt=(attempt))
                     logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
@@ -436,6 +401,9 @@ def fetch_gallery_metadata(gallery_id: int):
                 continue
             resp.raise_for_status()
             
+            #log_clarification()
+            #log(f"Fetcher: Raw API response for Gallery: {gallery_id}: {resp.text}", "debug")
+            
             data = resp.json()
 
             # Validate the response
@@ -452,15 +420,6 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
-                if rotate_tor():
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    try:
-                        resp = session.get(url, timeout=10)
-                        resp.raise_for_status()
-                        return resp.json()
-                    except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
@@ -469,15 +428,6 @@ def fetch_gallery_metadata(gallery_id: int):
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
-                if rotate_tor():
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    try:
-                        resp = session.get(url, timeout=10)
-                        resp.raise_for_status()
-                        return resp.json()
-                    except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
