@@ -597,7 +597,7 @@ def store_creator_manga_names(meta: dict):
 # ----------------------------
 # Process / Retry Deferred Creators & Add to Category
 # ----------------------------
-def process_deferred_creators(category_id: int):
+def process_deferred_creators():
     """Resolve deferred creator manga names and update them in library + category."""
 
     with _deferred_creators_lock:
@@ -641,7 +641,7 @@ def process_deferred_creators(category_id: int):
     if new_ids:
         # Use helper functions
         update_mangas(list(new_ids))
-        update_mangas_categories(list(new_ids), category_id)
+        update_mangas_categories(list(new_ids), CATEGORY_ID)
 
         # Save collected IDs
         collected_manga_ids.update(new_ids)
