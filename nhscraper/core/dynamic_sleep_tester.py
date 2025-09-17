@@ -141,7 +141,7 @@ def worst_case_time_estimate(gallery_list):
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
     print("")
-    print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+    print(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 # ------------------------------
 # Example Test Run

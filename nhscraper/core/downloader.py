@@ -54,9 +54,9 @@ def worst_case_time_estimate(gallery_list):
     current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     
     log_clarification()
-    print(f"Number of Galleries Processed: {len(gallery_list)}")
-    print(f"Number of Gallery Threads: {current_run_gallery_threads}")
-    print(f"Max Sleep Time: {current_run_gallery_sleep_max}")
+    logger.info(f"Number of Galleries Processed: {len(gallery_list)}")
+    logger.info(f"Number of Gallery Threads: {current_run_gallery_threads}")
+    logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}")
     
     worst_time_secs = (
             (current_run_num_of_galleries / current_run_gallery_threads) *
@@ -68,7 +68,7 @@ def worst_case_time_estimate(gallery_list):
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
     log_clarification()    
-    print (f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+    logger.info(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
     """
