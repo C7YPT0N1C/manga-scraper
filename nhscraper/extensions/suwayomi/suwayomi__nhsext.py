@@ -569,22 +569,37 @@ def save_collected_manga_ids(ids: set[int]):
 # Store the names of Creators' Mangas
 # so they can be added to the libary later
 # ----------------------------
-def store_creator_manga_names(creator_names: list[str]):
-    """Store creator manga names for later processing via GraphQL."""
+def store_creator_manga_names(meta: dict):
+    deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
+
+    gallery_meta = return_gallery_metas(meta)
+    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    if not creators:
+        return
+
     with _deferred_creators_lock:
-        deferred = load_deferred_creators()
-        before = len(deferred)
-        deferred.update(creator_names)
-        after = len(deferred)
-        if after > before:
-            logger.info(f"GraphQL: Stored {after - before} new deferred creator(s).")
-        save_deferred_creators(deferred)
+        if os.path.exists(deferred_creators_file):
+            with open(deferred_creators_file, "r", encoding="utf-8") as f:
+                deferred_creators = json.load(f)
+        else:
+            deferred_creators = []
+
+        # Add only creator names (deduplicated)
+        for creator_name in creators:
+            if creator_name not in deferred_creators:
+                deferred_creators.append(creator_name)
+
+        with open(deferred_creators_file, "w", encoding="utf-8") as f:
+            json.dump(deferred_creators, f, ensure_ascii=False, indent=2)
+
+    logger.info(f"GraphQL: Deferred creators saved: {creators}")
 
 # ----------------------------
 # Process / Retry Deferred Creators & Add to Category
 # ----------------------------  
 def process_deferred_creators():
     """Resolve deferred creator manga names against Suwayomi and update them."""
+
     with _deferred_creators_lock:
         deferred_creators = load_deferred_creators()
 
@@ -623,7 +638,7 @@ def process_deferred_creators():
             logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
 
     if not new_ids:
-        logger.info("GraphQL: No new creator manga IDs to update.")
+        logger.info("GraphQL: No new creator manga names to update.")
     else:
         # Ensure category exists
         category_id = ensure_category()
