@@ -362,8 +362,6 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    BATCH_SIZE = config.get("BATCH_SIZE")
-
     for i in range(0, len(gallery_list), BATCH_SIZE):
         batch = gallery_list[i:i + BATCH_SIZE]
         print(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
