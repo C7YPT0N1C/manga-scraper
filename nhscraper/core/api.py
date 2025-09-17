@@ -343,7 +343,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             resp = None
             for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
                 try:
-                    resp = session.get(url, timeout=30)
+                    resp = resp = session.get(url, timeout=(5, 30))
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=(attempt))
                         logger.warning(f"Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
@@ -392,7 +392,7 @@ def fetch_gallery_metadata(gallery_id: int):
             log_clarification()
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}", "debug")
 
-            resp = session.get(url, timeout=30)
+            resp = session.get(url, timeout=(5, 30))
             if resp.status_code == 429:
                 wait = dynamic_sleep("api", attempt=(attempt))
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
