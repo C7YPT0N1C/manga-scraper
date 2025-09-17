@@ -42,6 +42,7 @@ AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set f
 
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
+CATEGORY_ID = None
 
 # Max number of genres stored in a creator's details.json
 MAX_GENRES_STORED = 15
