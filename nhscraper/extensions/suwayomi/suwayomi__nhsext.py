@@ -5,6 +5,7 @@
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
 from requests.auth import HTTPBasicAuth
+from pathlib import Path
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -590,36 +591,14 @@ def save_collected_manga_ids(ids: set[int]):
         json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
 
 # ----------------------------
-# Store the names of Creators' Mangas
-# so they can be added to the library later
+# Local Manga Library Management
 # ----------------------------
-def store_creator_manga_names(meta: dict):
-    deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
-    gallery_meta = return_gallery_metas(meta)
-    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-    if not creators:
-        return
-
-    with _deferred_creators_lock:
-        if os.path.exists(deferred_creators_file):
-            with open(deferred_creators_file, "r", encoding="utf-8") as f:
-                deferred_creators = json.load(f)
-        else:
-            deferred_creators = []
-
-        # Add only creator names (deduplicated)
-        for creator_name in creators:
-            if creator_name not in deferred_creators:
-                deferred_creators.append(creator_name)
-
-        with open(deferred_creators_file, "w", encoding="utf-8") as f:
-            json.dump(deferred_creators, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"GraphQL: Deferred creators saved: {creators}")
-
+# Functions to:
+# 1. Process deferred creators and add their mangas to the library + category
+# 2. Add all local mangas not yet in library
+# 3. Detect missing galleries for creator mangas
 # ----------------------------
-# Process / Retry Deferred Creators & Add to Category
-# ----------------------------
+
 def process_deferred_creators():
     """Resolve deferred creator manga names and update them in library + category."""
     
@@ -634,53 +613,56 @@ def process_deferred_creators():
 
     logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
 
-    collected_manga_ids = load_collected_manga_ids()
+    # Fetch all mangas in the local source once to avoid per-creator queries
+    query = """
+    query ($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId } }) {
+        nodes { id title inLibrary categories { id } }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    all_mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    # Build a lookup: title -> id, inLibrary, category_ids
+    manga_lookup = {
+        m["title"]: {
+            "id": int(m["id"]),
+            "inLibrary": m.get("inLibrary", False),
+            "categories": [c["id"] for c in m.get("categories", [])]
+        }
+        for m in all_mangas
+    }
+
     new_ids = set()
 
     for creator_name in sorted(deferred_creators):
-        # Query manga by title & source
-        query = """
-        query ($title: String!, $sourceId: LongString!) {
-          mangas(
-            filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-          ) {
-            nodes { id title }
-          }
-        }
-        """
-        result = graphql_request(query, {
-            "title": creator_name,
-            "sourceId": LOCAL_SOURCE_ID
-        })
-
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-        if not nodes:
+        manga_info = manga_lookup.get(creator_name)
+        if not manga_info:
             logger.warning(f"GraphQL: Creator manga '{creator_name}' not found in Suwayomi local source.")
             continue
 
-        manga_id = int(nodes[0]["id"])
-        if manga_id not in collected_manga_ids:
-            new_ids.add(manga_id)
-            logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
+        # Skip if already in library and already in category
+        if manga_info["inLibrary"] and CATEGORY_ID in manga_info["categories"]:
+            logger.info(f"GraphQL: Creator manga '{creator_name}' already in library and category, skipping.")
+            continue
+
+        manga_id = manga_info["id"]
+        new_ids.add(manga_id)
+        logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
 
     if new_ids:
-        # Use helper functions
         update_mangas(list(new_ids))
         update_mangas_categories(list(new_ids), CATEGORY_ID)
 
-        # Save collected IDs
-        collected_manga_ids.update(new_ids)
-        save_collected_manga_ids(collected_manga_ids)
-    else:
-        logger.info("GraphQL: No new creator manga names to update.")
-
-    # Always clear deferred state
+    # Always clear deferred state and collected manga IDs
     save_deferred_creators(set())
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
-    
+
 def add_missing_local_mangas_to_library():
     """Find all mangas in the Local Source that aren't in the library and add them."""
+    
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
     query = """
@@ -705,6 +687,57 @@ def add_missing_local_mangas_to_library():
     update_mangas_categories(new_ids, CATEGORY_ID)
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
+
+def find_missing_galleries(local_root: str):
+    """
+    Crawl the local manga directory and find galleries missing from Suwayomi library,
+    logging their paths and problematic characters.
+
+    Args:
+        local_root: Path to the root folder containing creator directories.
+    """
+    for creator_dir in sorted(Path(local_root).iterdir()):
+        if not creator_dir.is_dir():
+            continue
+        
+        creator_name = creator_dir.name
+        logger.info(f"Checking creator: {creator_name}")
+
+        local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
+        if not local_galleries:
+            logger.info(f"No galleries found for {creator_name}, skipping.")
+            continue
+
+        # Query manga by title & source
+        query = """
+        query ($title: String!, $sourceId: LongString!) {
+          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+            nodes {
+              id
+              title
+              chapters { title }
+            }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+        if not nodes:
+            logger.warning(f"Creator '{creator_name}' not found in library.")
+            continue
+
+        manga = nodes[0]
+        chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
+
+        # Detect and log missing galleries
+        for gallery_name, gallery_path in local_galleries.items():
+            if gallery_name not in chapter_titles:
+                symbols = {c for c in gallery_name if not c.isalnum() and c not in " _-"}  # unusual chars
+                logger.info(
+                    f"Missing gallery for '{creator_name}': '{gallery_name}' "
+                    f"at '{gallery_path}', unusual symbols: {symbols}"
+                )
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -854,6 +887,7 @@ def post_run_hook():
     # Add all creators to Suwayomi category
     process_deferred_creators()
     add_missing_local_mangas_to_library()
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
 
     # Clean up empty directories
     clean_directories(True)
