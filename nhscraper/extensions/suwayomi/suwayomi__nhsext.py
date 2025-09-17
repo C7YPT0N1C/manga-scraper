@@ -54,16 +54,14 @@ MAX_GENRES_PARSED = 100
 _session = None
 
 # Thread locks for file operations
-_file_lock = threading.Lock()
+_popular_genres_lock = threading.Lock()
 
 _collected_gallery_metas = []
 _gallery_meta_lock = threading.Lock()
 
-_collected_manga_ids = set()
 _manga_ids_lock = threading.Lock()
 
-_deferred_creators = set()
-_deferred_lock = threading.Lock()
+_deferred_creators_lock = threading.Lock()
 
 ####################################################################################################################
 # CORE
@@ -256,7 +254,7 @@ def update_creator_popular_genres(meta):
         ]
 
         top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        with _file_lock:
+        with _popular_genres_lock:
             if os.path.exists(top_genres_file):
                 with open(top_genres_file, "r", encoding="utf-8") as f:
                     all_genre_counts = json.load(f)
@@ -268,7 +266,7 @@ def update_creator_popular_genres(meta):
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
 
-            with _file_lock:
+            with _popular_genres_lock:
                 if os.path.exists(details_file):
                     with open(details_file, "r", encoding="utf-8") as f:
                         details = json.load(f)
@@ -288,7 +286,7 @@ def update_creator_popular_genres(meta):
             details["artist"] = creator_name
             details["description"] = f"Latest Doujin: {gallery_title}"
 
-            with _file_lock:
+            with _popular_genres_lock:
                 if creator_name not in all_genre_counts:
                     all_genre_counts[creator_name] = {}
                 creator_counts = all_genre_counts[creator_name]
@@ -506,10 +504,42 @@ def ensure_category(category_name=None):
     return CATEGORY_ID
 
 # ----------------------------
+# Create File For Manga IDs and Deferred Creators
+# ----------------------------
+deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
+
+def load_deferred_creators() -> set[str]:
+    if os.path.exists(deferred_creators_file):
+        with open(deferred_creators_file, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+def save_deferred_creators(creators: set[str]):
+    with open(deferred_creators_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
+
+collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
+
+def load_collected_manga_ids() -> set[int]:
+    if os.path.exists(collected_manga_ids_file):
+        with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+def save_collected_manga_ids(ids: set[int]):
+    with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
+
+# ----------------------------
 # Store The IDs of Creators' Manga
 # ----------------------------
 def store_creator_manga_IDs(meta: dict):
     global LOCAL_SOURCE_ID
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
     
     if not LOCAL_SOURCE_ID:
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
@@ -539,18 +569,23 @@ def store_creator_manga_IDs(meta: dict):
             nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
             if not nodes:
                 logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
-                with _deferred_lock:
-                    _deferred_creators.add(creator_name)
+                with _deferred_creators_lock:
+                    deferred_creators.add(creator_name)
                 continue
 
             manga_id = int(nodes[0]["id"])
             log(f"GraphQL: Found manga for creator '{creator_name}': {nodes[0]}", "debug")
             with _manga_ids_lock:
-                if manga_id not in _collected_manga_ids:
-                    _collected_manga_ids.add(manga_id)
+                if manga_id not in collected_manga_ids:
+                    collected_manga_ids.add(manga_id)
                     log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
     else:
         log(f"[DRY RUN] GraphQL: Would store manga ID for creators", "debug")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
 
 # ----------------------------
 # Bulk Update Functions
@@ -592,6 +627,11 @@ def update_mangas_categories(ids: list[int], category_id: int):
 # ----------------------------
 def add_creator_to_category(meta: dict):
     global LOCAL_SOURCE_ID
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()    
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
 
     if not LOCAL_SOURCE_ID:
         logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot add creator.")
@@ -620,15 +660,20 @@ def add_creator_to_category(meta: dict):
 
         if not nodes:
             logger.info(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
-            with _deferred_lock:
-                _deferred_creators.add(creator_name)
+            with _deferred_creators_lock:
+                deferred_creators.add(creator_name)
             continue
 
         manga_id = int(nodes[0]["id"])
         with _manga_ids_lock:
-            if manga_id not in _collected_manga_ids:
-                _collected_manga_ids.add(manga_id)
+            if manga_id not in collected_manga_ids:
+                collected_manga_ids.add(manga_id)
                 log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
 
 # ----------------------------
 # Process / Retry Deferred Creators & Add to Category
@@ -637,8 +682,13 @@ def quick_retry_deferred_creators():
     """
     Immediate retry for deferred creators (once)
     """
-    with _deferred_lock:
-        creators_to_retry = list(_deferred_creators)
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+    
+    with _deferred_creators_lock:
+        creators_to_retry = list(deferred_creators)
 
     for creator_name in creators_to_retry:
         log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
@@ -662,26 +712,37 @@ def quick_retry_deferred_creators():
             manga_id = int(nodes[0]["id"])
             log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
             with _manga_ids_lock:
-                if manga_id not in _collected_manga_ids:
-                    _collected_manga_ids.add(manga_id)
+                if manga_id not in collected_manga_ids:
+                    collected_manga_ids.add(manga_id)
                     log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
-            with _deferred_lock:
-                _deferred_creators.discard(creator_name)
+            with _deferred_creators_lock:
+                deferred_creators.discard(creator_name)
     
-    if _deferred_creators:
-        logger.info(f"GraphQL: {_deferred_creators} could not be resolved after quick retry, deferring till later...")
+    if deferred_creators:
+        logger.info(f"GraphQL: {deferred_creators} could not be resolved after quick retry, deferring till later...")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
 
 def retry_deferred_creators():
     global LOCAL_SOURCE_ID
-    if not _deferred_creators:
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
+    
+    if not deferred_creators:
         return
 
     max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
     delay = 2
 
     for attempt in range(1, max_attempts + 1):
-        with _deferred_lock:
-            creators_to_retry = list(_deferred_creators)
+        with _deferred_creators_lock:
+            creators_to_retry = list(deferred_creators)
 
         if not creators_to_retry:
             return
@@ -710,24 +771,33 @@ def retry_deferred_creators():
                 manga_id = int(nodes[0]["id"])
                 log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
                 with _manga_ids_lock:
-                    if manga_id not in _collected_manga_ids:
-                        _collected_manga_ids.add(manga_id)
+                    if manga_id not in collected_manga_ids:
+                        collected_manga_ids.add(manga_id)
                         log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
-                with _deferred_lock:
-                    _deferred_creators.discard(creator_name)
+                with _deferred_creators_lock:
+                    deferred_creators.discard(creator_name)
 
-        if not _deferred_creators:
+        if not deferred_creators:
             logger.info("GraphQL: All deferred creators resolved.")
             return
 
         time.sleep(delay)
         delay *= 2
 
-    if _deferred_creators:
-        logger.info(f"GraphQL: Some creators could not be resolved after retries: {_deferred_creators}")
+    if deferred_creators:
+        logger.info(f"GraphQL: Some creators could not be resolved after retries: {deferred_creators}")
+    
+    with _deferred_creators_lock:
+        save_deferred_creators(deferred_creators)
+    with _manga_ids_lock:
+        save_collected_manga_ids(collected_manga_ids)
 
 def add_deferred_creators_to_category(type: str = "quick"):
     global CATEGORY_ID
+    
+    
+    with _manga_ids_lock:
+        collected_manga_ids = load_collected_manga_ids()
 
     if CATEGORY_ID is None:
         CATEGORY_ID = ensure_category(SUWAYOMI_CATEGORY_NAME)
@@ -752,7 +822,7 @@ def add_deferred_creators_to_category(type: str = "quick"):
     existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
 
     with _manga_ids_lock:
-        new_ids = list(_collected_manga_ids - existing_ids)
+        new_ids = list(collected_manga_ids - existing_ids)
 
     if not new_ids:
         logger.info(f"GraphQL: No new mangas to add to Category '{SUWAYOMI_CATEGORY_NAME}'.")
@@ -760,6 +830,8 @@ def add_deferred_creators_to_category(type: str = "quick"):
 
     update_mangas(new_ids)
     update_mangas_categories(new_ids, CATEGORY_ID)
+    
+    save_collected_manga_ids(collected_manga_ids)
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
