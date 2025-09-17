@@ -154,4 +154,4 @@ for test in range(1, set_num_of_galleries):
     for attempt in range(1, (max_attempts + 1)):
         dynamic_sleep("gallery", attempt=attempt)
 
-worst_case_time_estimate(gallery_set)
+worst_case_time_estimate(gallery_list)
