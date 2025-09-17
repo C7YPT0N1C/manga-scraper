@@ -119,6 +119,8 @@ os.makedirs(NHENTAI_DIR, exist_ok=True)
 # Load environment variables
 if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
+    
+BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults

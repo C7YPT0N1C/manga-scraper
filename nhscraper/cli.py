@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, sys, argparse, re
+import os, time, sys, argparse, re
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import start_downloader
@@ -363,6 +363,20 @@ def main():
     # Download galleries
     # ------------------------------------------------------------
     start_downloader(gallery_list)
+    
+    BATCH_SIZE = config.get("BATCH_SIZE")
+
+    for i in range(0, len(gallery_list), BATCH_SIZE):
+        batch = gallery_list[i:i + BATCH_SIZE]
+        print(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
+        log_clarification()
+        
+        # Build scraper session.
+        build_session()
+    
+        start_downloader(batch) # Start batch.
+        
+        time.sleep(10) # Pause a little between batches
 
 if __name__ == "__main__":
     main()
