@@ -128,11 +128,11 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             return False
 
     excluded_tags = [t.lower() for t in config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)]
-    gallery_tags = [t.lower() for t in get_meta_tags("Should_Download_Gallery", meta, "tag")]
+    gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
     allowed_langs = [l.lower() for l in config.get("LANGUAGE", DEFAULT_LANGUAGE)]
-    gallery_langs = [l.lower() for l in get_meta_tags("Should_Download_Gallery", meta, "language")]
+    gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
     for tag in gallery_tags:

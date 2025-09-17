@@ -159,7 +159,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
+    log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
     return names
 
 def safe_name(s: str) -> str:
@@ -320,6 +320,9 @@ def dynamic_sleep(stage, attempt: int = 1):
 
 #####################################################################################################################################################################
 
+# ===============================
+# BUILD API URLS
+# ===============================
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
     
@@ -484,6 +487,9 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
+# ===============================
+# FETCH IMAGE URLS
+# ===============================
 def fetch_image_urls(meta: dict, page: int):
     """
     Returns the full image URL for a gallery page.
