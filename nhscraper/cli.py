@@ -362,8 +362,6 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    start_downloader(gallery_list)
-    
     BATCH_SIZE = config.get("BATCH_SIZE")
 
     for i in range(0, len(gallery_list), BATCH_SIZE):
