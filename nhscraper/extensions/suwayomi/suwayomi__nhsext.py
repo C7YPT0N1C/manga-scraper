@@ -836,7 +836,7 @@ def post_run_hook():
     
     # Add all creators to Suwayomi category
     process_deferred_creators()
-    add_missing_local_mangas_to_library
+    add_missing_local_mangas_to_library()
 
     # Clean up empty directories
     remove_empty_directories(True)
