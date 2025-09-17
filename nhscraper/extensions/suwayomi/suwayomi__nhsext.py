@@ -640,9 +640,6 @@ def process_deferred_creators():
     if not new_ids:
         logger.info("GraphQL: No new creator manga names to update.")
     else:
-        # Ensure category exists
-        category_id = ensure_category()
-
         # Bulk update: inLibrary = true, assign category
         mutation = """
         mutation ($ids: [LongString!]!, $categoryId: LongString!) {
@@ -656,7 +653,7 @@ def process_deferred_creators():
         """
         result = graphql_request(mutation, {
             "ids": list(new_ids),
-            "categoryId": str(category_id),
+            "categoryId": str(CATEGORY_ID),
         })
         if result:
             logger.info(f"GraphQL: Successfully updated {len(new_ids)} manga(s) → In Library + Category.")
