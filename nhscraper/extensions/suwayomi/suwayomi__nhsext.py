@@ -63,10 +63,6 @@ _gallery_meta_lock = threading.Lock()
 
 _deferred_creators_lock = threading.Lock()
 
-####################################################################################################################
-# CREATOR METADATA MANAGEMENT
-####################################################################################################################
-
 creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
 
 def load_creators_metadata() -> dict:
@@ -110,6 +106,24 @@ def save_collected_manga_ids(ids: set[int]):
         filtered = [mid for mid in entry.get("collected_manga_ids", []) if mid in ids]
         entry["collected_manga_ids"] = filtered
     save_creators_metadata(metadata)
+
+broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
+
+def load_possible_broken_symbols() -> set[str]:
+    if os.path.exists(broken_symbols_file):
+        try:
+            with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception as e:
+            logger.warning(f"Could not load broken symbols file: {e}")
+    return set()
+
+def save_possible_broken_symbols(symbols: set[str]):
+    try:
+        with open(broken_symbols_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(symbols), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save broken symbols file: {e}")
 
 ####################################################################################################################
 # CORE
