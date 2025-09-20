@@ -774,7 +774,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                 logger.info(
                     f"Missing gallery for '{creator_name}':"
                     f"\nName: '{gallery_name}'"
-                    f"\nPath: '{gallery_path}', "
+                    f"\nPath: '{gallery_path}'"
                     f"\nUnusual symbols: {symbols}"
                     f"\nStatus: {status}"
                 )
