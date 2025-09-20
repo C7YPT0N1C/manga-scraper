@@ -766,13 +766,17 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                 new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
                 if new_broken:
                     POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
-                    status = "broken symbols detected"
+                    status = "Broken symbols detected"
                 else:
-                    status = "update Suwayomi to reflect changes"
+                    status = "Update Suwayomi to reflect changes"
 
+                log_clarification()
                 logger.info(
-                    f"Missing gallery for '{creator_name}': '{gallery_name}' at '{gallery_path}', "
-                    f"unusual symbols: {symbols} ({status})"
+                    f"Missing gallery for '{creator_name}':"
+                    f"\nName: '{gallery_name}'"
+                    f"\nPath: '{gallery_path}', "
+                    f"\nUnusual symbols: {symbols}"
+                    f"\nStatus: ({status})"
                 )
 
                 # Clean the title using clean_title()
