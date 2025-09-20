@@ -325,16 +325,10 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 # ------------------------------------------------------------
 # Update creator's most popular genres
 # ------------------------------------------------------------
-def update_creator_popular_genres(meta):
+def update_creator_manga(meta):
     """
     Update a creator's details.json and genre metadata based on a downloaded gallery.
-
-    Steps:
-    1. Determine creators (artist/group/unknown).
-    2. Count genres from gallery tags.
-    3. Persist top genres into creators_metadata.json.
-    4. Update individual details.json files for each creator.
-    5. Save page 1 of the gallery as cover.[ext].
+    Also updates the top-level collected_manga_ids in creators_metadata.json.
     """
     if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
@@ -342,6 +336,7 @@ def update_creator_popular_genres(meta):
         if not creators:
             return
         gallery_title = gallery_meta["title"]
+        gallery_id = int(gallery_meta["id"])
         gallery_tags = meta.get("tags", [])
         gallery_genres = [
             tag["name"] for tag in gallery_tags
@@ -350,13 +345,18 @@ def update_creator_popular_genres(meta):
 
         metadata = load_creators_metadata()
 
+        # Update top-level collected manga IDs
+        collected_ids = set(metadata.get("collected_manga_ids", []))
+        collected_ids.add(gallery_id)
+        metadata["collected_manga_ids"] = sorted(collected_ids)
+
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
 
             # Initialize creator metadata if missing
-            entry = metadata.get(creator_name, {})
+            entry = metadata.get("creators", {}).setdefault(creator_name, {})
             genre_counts = entry.get("genre_counts", {})
 
             for genre in gallery_genres:
@@ -367,9 +367,8 @@ def update_creator_popular_genres(meta):
 
             # Update the metadata entry
             entry["genre_counts"] = genre_counts
-            entry.setdefault("collected_manga_ids", [])
             entry.setdefault("deferred", False)
-            metadata[creator_name] = entry
+            metadata["creators"][creator_name] = entry
 
             # Update details.json with top MAX_GENRES_STORED genres
             most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
@@ -389,7 +388,7 @@ def update_creator_popular_genres(meta):
         save_creators_metadata(metadata)
 
     else:
-        log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
+        log(f"[DRY RUN] Would create/update details.json and collected_manga_ids for creators: {creators}", "debug")
 
     # ----------------------------
     # Save page 1 as cover.[ext]
@@ -620,8 +619,7 @@ def update_mangas_categories(ids: list[int], category_id: int):
 
 def add_missing_local_mangas_to_library():
     """
-    Add all local mangas from the "Local Source" that are not yet marked as 'inLibrary' in Suwayomi.
-    Updates both the library status and the category.
+    Add all existing local mangas to library + category if they exist on disk.
     """
     log_clarification()
     logger.info("GraphQL: Fetching mangas not yet in library...")
@@ -640,18 +638,26 @@ def add_missing_local_mangas_to_library():
         logger.info("GraphQL: No mangas found outside the library.")
         return
 
-    new_ids = [int(node["id"]) for node in nodes]
+    new_ids = []
+    for node in nodes:
+        title = node["title"]
+        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
+        if os.path.exists(expected_path):
+            new_ids.append(int(node["id"]))
+        else:
+            logger.info(f"Skipping '{title}' as folder does not exist on disk.")
 
-    logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-    update_mangas(new_ids)
-    update_mangas_categories(new_ids, CATEGORY_ID)
+    if new_ids:
+        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+        update_mangas(new_ids)
+        update_mangas_categories(new_ids, CATEGORY_ID)
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
 
 def process_deferred_creators():
     """
-    Process all creators that were previously deferred.
-    Adds their mangas to the library and updates their category in Suwayomi.
+    Adds deferred creators to library and updates their category.
+    Ensures only existing local creator folders are added.
     """
     log_clarification()
 
@@ -664,7 +670,7 @@ def process_deferred_creators():
 
     logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
 
-    # Fetch all mangas in the local source once to avoid per-creator queries
+    # Fetch all mangas from local source
     query = """
     query ($sourceId: LongString!) {
       mangas(filter: { sourceId: { equalTo: $sourceId } }) {
@@ -675,38 +681,32 @@ def process_deferred_creators():
     result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
     all_mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
-    # Build a lookup: title -> id, inLibrary, category_ids
-    manga_lookup = {
-        m["title"]: {
-            "id": int(m["id"]),
-            "inLibrary": m.get("inLibrary", False),
-            "categories": [c["id"] for c in m.get("categories", [])]
-        }
-        for m in all_mangas
-    }
-
+    manga_lookup = {m["title"]: m for m in all_mangas}
     new_ids = set()
 
     for creator_name in sorted(deferred_creators):
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        if not os.path.exists(creator_folder):
+            logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
+            continue
+
         manga_info = manga_lookup.get(creator_name)
         if not manga_info:
-            logger.warning(f"GraphQL: Creator manga '{creator_name}' not found in Suwayomi local source.")
+            logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
             continue
 
-        # Skip if already in library and already in category
-        if manga_info["inLibrary"] and CATEGORY_ID in manga_info["categories"]:
-            logger.info(f"GraphQL: Creator manga '{creator_name}' already in library and category, skipping.")
+        if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
+            logger.info(f"Creator manga '{creator_name}' already in library and category, skipping.")
             continue
 
-        manga_id = manga_info["id"]
-        new_ids.add(manga_id)
-        logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
+        new_ids.add(int(manga_info["id"]))
+        logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
 
     if new_ids:
         update_mangas(list(new_ids))
         update_mangas_categories(list(new_ids), CATEGORY_ID)
 
-    # Always clear deferred state and collected manga IDs
+    # Clear deferred creators and collected manga IDs
     save_deferred_creators(set())
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
@@ -944,7 +944,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification()
     
     # Update creator's popular genres
-    update_creator_popular_genres(meta)
+    update_creator_manga(meta)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
