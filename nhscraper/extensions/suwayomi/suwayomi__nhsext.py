@@ -781,18 +781,21 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                 # Clean the title using clean_title()
                 cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
                 if cleaned_title != gallery_name:
-                    logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
                     new_path = gallery_path.parent / cleaned_title
-                    gallery_path.rename(new_path)
+                    if new_path.exists():
+                        logger.info(f"Skipping rename: target already exists: '{new_path}'")
+                    else:
+                        logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
+                        gallery_path.rename(new_path)
 
-                    # Optionally update Suwayomi
-                    if auto_update:
-                        mutation = """
-                        mutation ($id: ID!, $title: String!) {
-                            updateManga(input: {id: $id, title: $title}) { manga { id title } }
-                        }
-                        """
-                        graphql_request(mutation, {"id": manga["id"], "title": cleaned_title})
+                        # Optionally update Suwayomi
+                        if auto_update:
+                            mutation = """
+                            mutation ($id: ID!, $title: String!) {
+                                updateManga(input: {id: $id, title: $title}) { manga { id title } }
+                            }
+                            """
+                            graphql_request(mutation, {"id": manga["id"], "title": cleaned_title})
 
     # Deduplicate against replacements, blacklist, and allowed symbols
     all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
