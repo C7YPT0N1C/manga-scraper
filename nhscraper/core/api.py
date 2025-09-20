@@ -165,34 +165,54 @@ def get_meta_tags(referrer: str, meta, tag_type):
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
-def clean_title(meta):
-    title_obj = meta.get("title", {}) or {}
-    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-    title = (
-        title_obj.get(title_type)
-        or title_obj.get("english")
-        or title_obj.get("pretty")
-        or title_obj.get("japanese")
-        or f"Gallery_{meta.get('id')}"
-    )
+def clean_title(meta_or_title, possible_broken_symbols: set[str] = None):
+    """
+    Clean a gallery/manga title. Accepts either a meta dict (like from GraphQL) or a raw string.
+    
+    Args:
+        meta_or_title: Either a dict with metadata containing "title" or a string title.
+        possible_broken_symbols: Optional set of extra symbols detected as broken.
+    
+    Returns:
+        str: Sanitized title.
+    """
+    # Determine if input is a dict or string
+    if isinstance(meta_or_title, dict):
+        meta = meta_or_title
+        title_obj = meta.get("title", {}) or {}
+        title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
+        title = (
+            title_obj.get(title_type)
+            or title_obj.get("english")
+            or title_obj.get("pretty")
+            or title_obj.get("japanese")
+            or f"Gallery_{meta.get('id', 'UNKNOWN')}"
+        )
+        # If there's a |, take the last part
+        if "|" in title:
+            title = title.split("|")[-1].strip()
+    else:
+        # Already a string
+        title = meta_or_title
 
-    # If there's a |, take the last part
-    if "|" in title:
-        title = title.split("|")[-1].strip()
-
-    # Remove all content inside [] or {} brackets, including the brackets themselves
+    # Remove content inside [] or {} brackets
     title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
 
-    # Explicit replacements
+    # Apply explicit replacements first
     for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
         title = title.replace(symbol, replacement)
 
     # Replace all variations of spaces around dash (ASCII, en, em) with single hyphen
     title = re.sub(r"\s*[–—-]\s*", "-", title)
 
-    # Replace blacklisted symbols with underscores
-    for symbol in BROKEN_SYMBOL_BLACKLIST:
-        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
+    # Replace blacklisted and detected broken symbols with underscores
+    all_symbols_to_replace = set(BROKEN_SYMBOL_BLACKLIST)
+    if possible_broken_symbols:
+        allowed_set = set(ALLOWED_SYMBOLS).union(BROKEN_SYMBOL_REPLACEMENTS.keys(), BROKEN_SYMBOL_BLACKLIST)
+        all_symbols_to_replace.update(possible_broken_symbols.difference(allowed_set))
+
+    for symbol in all_symbols_to_replace:
+        title = title.replace(symbol, "_")
 
     # Collapse multiple underscores/spaces
     title = re.sub(r"_+", "_", title)
@@ -200,7 +220,7 @@ def clean_title(meta):
     title = title.strip(" _")
 
     if not title:
-        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
+        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     return safe_name(title)
 
