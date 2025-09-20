@@ -713,13 +713,17 @@ def find_missing_galleries(local_root: str):
         # Query manga by title & source
         query = """
         query ($title: String!, $sourceId: LongString!) {
-          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+        mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
             nodes {
-              id
-              title
-              chapters { title }
+            id
+            title
+            chapters {
+                nodes {
+                name
+                }
             }
-          }
+            }
+        }
         }
         """
         result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
