@@ -696,6 +696,9 @@ def find_missing_galleries(local_root: str):
         local_root: Path to the root folder containing creator directories.
     """
     
+    # Global accumulator
+    POSSIBLE_BROKEN_SYMBOLS = set()
+    
     log_clarification()
     
     for creator_dir in sorted(Path(local_root).iterdir()):
@@ -713,17 +716,17 @@ def find_missing_galleries(local_root: str):
         # Query manga by title & source
         query = """
         query ($title: String!, $sourceId: LongString!) {
-        mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
             nodes {
-            id
-            title
-            chapters {
+              id
+              title
+              chapters {
                 nodes {
-                name
+                  name
                 }
+              }
             }
-            }
-        }
+          }
         }
         """
         result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
@@ -736,9 +739,6 @@ def find_missing_galleries(local_root: str):
         manga = nodes[0]
         chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
 
-        # Global accumulator
-        POSSIBLE_BROKEN_SYMBOLS = set()
-
         # Detect and log missing galleries
         for gallery_name, gallery_path in local_galleries.items():
             if gallery_name not in chapter_titles:
@@ -750,10 +750,10 @@ def find_missing_galleries(local_root: str):
                     f"at '{gallery_path}', unusual symbols: {symbols}"
                 )
 
-        # Only log once, at the end
-        if POSSIBLE_BROKEN_SYMBOLS:
-            formatted_list = ", ".join(f'"{c}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
-            logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
+    # Only log once, at the end
+    if POSSIBLE_BROKEN_SYMBOLS:
+        formatted_list = ", ".join(f'"{c}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
