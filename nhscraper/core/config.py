@@ -324,7 +324,7 @@ MIRRORS = get_mirrors()
 # ------------------------------------------------------------
 
 # Symbols that are filesystem safe and should not be removed or replaced
-ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", ",", ".", ":", "?"]
+ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", "\"", ",", ".", ":", "?"]
 
 # Define explicit replacements for certain symbols
 BROKEN_SYMBOL_REPLACEMENTS = {
