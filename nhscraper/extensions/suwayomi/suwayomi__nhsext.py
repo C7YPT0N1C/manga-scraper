@@ -646,8 +646,45 @@ def process_deferred_creators():
     Ensures only existing local creator folders are added.
     Adds all existing local mangas to library + category if they exist on disk.
     """
+    
+    # ----------------------------
+    # Add mangas not yet in library
+    # ----------------------------
     log_clarification()
+    logger.info("GraphQL: Fetching mangas not yet in library...")
 
+    query = """
+    query FetchMangasNotInLibrary($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+        nodes { id title }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    if not nodes:
+        logger.info("GraphQL: No mangas found outside the library.")
+        return
+
+    new_ids = []
+    for node in nodes:
+        title = node["title"]
+        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
+        if os.path.exists(expected_path):
+            new_ids.append(int(node["id"]))
+
+    if new_ids:
+        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+        update_mangas(new_ids, CATEGORY_ID)
+
+    logger.info("GraphQL: Finished adding missing mangas to library.")
+
+    # ----------------------------
+    # Process deferred creators
+    # ----------------------------   
+    log_clarification()
+    
     with _deferred_creators_lock:
         deferred_creators = load_deferred_creators()
 
@@ -699,39 +736,6 @@ def process_deferred_creators():
     save_deferred_creators(still_deferred)
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
-
-    # ----------------------------
-    # Add mangas not yet in library
-    # ----------------------------
-    log_clarification()
-    logger.info("GraphQL: Fetching mangas not yet in library...")
-
-    query = """
-    query FetchMangasNotInLibrary($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
-        nodes { id title }
-      }
-    }
-    """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
-    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-
-    if not nodes:
-        logger.info("GraphQL: No mangas found outside the library.")
-        return
-
-    new_ids = []
-    for node in nodes:
-        title = node["title"]
-        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
-        if os.path.exists(expected_path):
-            new_ids.append(int(node["id"]))
-
-    if new_ids:
-        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-        update_mangas(new_ids, CATEGORY_ID)
-
-    logger.info("GraphQL: Finished adding missing mangas to library.")
 
 def find_missing_galleries(local_root: str, auto_update: bool = True):
     """
