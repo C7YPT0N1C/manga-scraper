@@ -72,8 +72,8 @@ def load_creators_metadata() -> dict:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialise global collected IDs and creators dictionary if missing
-    return {"collected_manga_ids": [], "creators": {}}
+    # Initialise global deferred_creators and creators dictionary if missing
+    return {"deferred_creators": [], "creators": {}}
 
 def save_creators_metadata(metadata: dict):
     try:
@@ -99,15 +99,6 @@ def save_deferred_creators(creators: set[str]):
     for creator_name, entry in metadata["creators"].items():
         if creator_name not in creators:
             entry["deferred"] = False
-    save_creators_metadata(metadata)
-
-def load_collected_manga_ids() -> set[int]:
-    metadata = load_creators_metadata()
-    return set(metadata.get("collected_manga_ids", []))
-
-def save_collected_manga_ids(ids: set[int]):
-    metadata = load_creators_metadata()
-    metadata["collected_manga_ids"] = sorted(ids)
     save_creators_metadata(metadata)
 
 broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
@@ -361,7 +352,6 @@ def update_creator_manga(meta):
 
             # Update the metadata entry
             entry["genre_counts"] = genre_counts
-            entry.setdefault("deferred", False)
 
             if "creators" not in metadata:
                 metadata["creators"] = {}
@@ -666,7 +656,6 @@ def process_deferred_creators():
 
     # Clear deferred creators and collected manga IDs
     save_deferred_creators(set())
-    save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
     
     log_clarification()
