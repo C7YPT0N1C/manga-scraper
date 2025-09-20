@@ -72,7 +72,8 @@ def load_creators_metadata() -> dict:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Could not load creators_metadata.json: {e}")
-    return {}
+    # Initialize global collected IDs and creators dictionary if missing
+    return {"collected_manga_ids": [], "creators": {}}
 
 def save_creators_metadata(metadata: dict):
     try:
@@ -84,27 +85,29 @@ def save_creators_metadata(metadata: dict):
 
 def load_deferred_creators() -> set[str]:
     metadata = load_creators_metadata()
-    return {creator for creator, entry in metadata.items() if entry.get("deferred", False)}
+    creators = metadata.get("creators", {})
+    return {c for c, entry in creators.items() if entry.get("deferred", False)}
 
 def save_deferred_creators(creators: set[str]):
     metadata = load_creators_metadata()
-    for creator_name in metadata:
-        metadata[creator_name]["deferred"] = creator_name in creators
+    if "creators" not in metadata:
+        metadata["creators"] = {}
+    for creator_name in creators:
+        entry = metadata["creators"].setdefault(creator_name, {})
+        entry["deferred"] = True
+    # Clear deferred for creators not in the set
+    for creator_name, entry in metadata["creators"].items():
+        if creator_name not in creators:
+            entry["deferred"] = False
     save_creators_metadata(metadata)
 
 def load_collected_manga_ids() -> set[int]:
     metadata = load_creators_metadata()
-    all_ids = set()
-    for entry in metadata.values():
-        all_ids.update(entry.get("collected_manga_ids", []))
-    return set(all_ids)
+    return set(metadata.get("collected_manga_ids", []))
 
 def save_collected_manga_ids(ids: set[int]):
     metadata = load_creators_metadata()
-    for creator_name, entry in metadata.items():
-        # Keep only collected IDs that are still in the set
-        filtered = [mid for mid in entry.get("collected_manga_ids", []) if mid in ids]
-        entry["collected_manga_ids"] = filtered
+    metadata["collected_manga_ids"] = sorted(ids)
     save_creators_metadata(metadata)
 
 broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
@@ -323,6 +326,16 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 # Update creator's most popular genres
 # ------------------------------------------------------------
 def update_creator_popular_genres(meta):
+    """
+    Update a creator's details.json and genre metadata based on a downloaded gallery.
+
+    Steps:
+    1. Determine creators (artist/group/unknown).
+    2. Count genres from gallery tags.
+    3. Persist top genres into creators_metadata.json.
+    4. Update individual details.json files for each creator.
+    5. Save page 1 of the gallery as cover.[ext].
+    """
     if not config.get("DRY_RUN"):
         gallery_meta = return_gallery_metas(meta)
         creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
@@ -606,10 +619,11 @@ def update_mangas_categories(ids: list[int], category_id: int):
 # ----------------------------
 
 def add_missing_local_mangas_to_library():
-    """Find all mangas in the Local Source that aren't in the library and add them."""
-    
+    """
+    Add all local mangas from the "Local Source" that are not yet marked as 'inLibrary' in Suwayomi.
+    Updates both the library status and the category.
+    """
     log_clarification()
-    
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
     query = """
@@ -626,18 +640,19 @@ def add_missing_local_mangas_to_library():
         logger.info("GraphQL: No mangas found outside the library.")
         return
 
-    new_ids = [int(node["id"]) for node in nodes]  # ignore collected_manga_ids entirely
+    new_ids = [int(node["id"]) for node in nodes]
 
     logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-
     update_mangas(new_ids)
     update_mangas_categories(new_ids, CATEGORY_ID)
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
 
 def process_deferred_creators():
-    """Resolve deferred creator manga names and update them in library + category."""
-    
+    """
+    Process all creators that were previously deferred.
+    Adds their mangas to the library and updates their category in Suwayomi.
+    """
     log_clarification()
 
     with _deferred_creators_lock:
