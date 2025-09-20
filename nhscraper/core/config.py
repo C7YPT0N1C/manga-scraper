@@ -421,3 +421,5 @@ BROKEN_SYMBOL_BLACKLIST = [
     "£", "$", "¥",
     "ð", "§", "¶", "†", "‡", "‰", "µ", "¦", "~"
 ]
+
+POSSIBLE_BROKEN_SYMBOLS = []

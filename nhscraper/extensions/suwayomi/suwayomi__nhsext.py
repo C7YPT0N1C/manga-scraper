@@ -750,10 +750,13 @@ def find_missing_galleries(local_root: str):
                     f"unusual symbols: {symbols}"
                 )
 
-    # Only log once, at the end
+    # Deduplicate against replacements and blacklist
+    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST)
+    POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
+
     if POSSIBLE_BROKEN_SYMBOLS:
-        formatted_list = ", ".join(json.dumps(c) for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
-        logger.info(f'POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]')
+        formatted_list = ", ".join(f'"{c}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
