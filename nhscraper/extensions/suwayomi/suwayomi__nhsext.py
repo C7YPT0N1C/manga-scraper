@@ -66,7 +66,7 @@ _deferred_creators_lock = threading.Lock()
 deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
 
 def load_deferred_creators() -> set[str]:
-    if deferred_creators_file.exists():
+    if os.path.exists(deferred_creators_file):
         try:
             with open(deferred_creators_file, "r", encoding="utf-8") as f:
                 return set(json.load(f))
@@ -84,7 +84,7 @@ def save_deferred_creators(creators: set[str]):
 collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
 
 def load_collected_manga_ids() -> set[int]:
-    if collected_manga_ids_file.exists():
+    if os.path.exists(collected_manga_ids_file):
         try:
             with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
                 return set(json.load(f))
@@ -102,7 +102,7 @@ def save_collected_manga_ids(ids: set[int]):
 broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
 
 def load_possible_broken_symbols() -> set[str]:
-    if broken_symbols_file.exists():
+    if os.path.exists(broken_symbols_file):
         try:
             with open(broken_symbols_file, "r", encoding="utf-8") as f:
                 return set(json.load(f))
