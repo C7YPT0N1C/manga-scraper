@@ -884,8 +884,8 @@ def post_batch_hook():
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
     # Add all creators to Suwayomi
-    process_deferred_creators()
     add_missing_local_mangas_to_library()
+    process_deferred_creators()
     
     # Clean up empty directories
     clean_directories(True)
