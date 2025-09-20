@@ -63,59 +63,53 @@ _gallery_meta_lock = threading.Lock()
 
 _deferred_creators_lock = threading.Lock()
 
-deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
+####################################################################################################################
+# CREATOR METADATA MANAGEMENT
+####################################################################################################################
+
+creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
+
+def load_creators_metadata() -> dict:
+    if os.path.exists(creators_metadata_file):
+        try:
+            with open(creators_metadata_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load creators_metadata.json: {e}")
+    return {}
+
+def save_creators_metadata(metadata: dict):
+    try:
+        os.makedirs(os.path.dirname(creators_metadata_file), exist_ok=True)
+        with open(creators_metadata_file, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save creators_metadata.json: {e}")
 
 def load_deferred_creators() -> set[str]:
-    if os.path.exists(deferred_creators_file):
-        try:
-            with open(deferred_creators_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception as e:
-            logger.warning(f"Could not load deferred creators file: {e}")
-    return set()
+    metadata = load_creators_metadata()
+    return {creator for creator, entry in metadata.items() if entry.get("deferred", False)}
 
 def save_deferred_creators(creators: set[str]):
-    try:
-        with open(deferred_creators_file, "w", encoding="utf-8") as f:
-            json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save deferred creators file: {e}")
-
-collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
+    metadata = load_creators_metadata()
+    for creator_name in metadata:
+        metadata[creator_name]["deferred"] = creator_name in creators
+    save_creators_metadata(metadata)
 
 def load_collected_manga_ids() -> set[int]:
-    if os.path.exists(collected_manga_ids_file):
-        try:
-            with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception as e:
-            logger.warning(f"Could not load collected manga ids file: {e}")
-    return set()
+    metadata = load_creators_metadata()
+    all_ids = set()
+    for entry in metadata.values():
+        all_ids.update(entry.get("collected_manga_ids", []))
+    return set(all_ids)
 
 def save_collected_manga_ids(ids: set[int]):
-    try:
-        with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
-            json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save collected manga ids file: {e}")
-        
-broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
-
-def load_possible_broken_symbols() -> set[str]:
-    if os.path.exists(broken_symbols_file):
-        try:
-            with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception as e:
-            logger.warning(f"Could not load broken symbols file: {e}")
-    return set()
-
-def save_possible_broken_symbols(symbols: set[str]):
-    try:
-        with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(sorted(symbols), f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save broken symbols file: {e}")
+    metadata = load_creators_metadata()
+    for creator_name, entry in metadata.items():
+        # Keep only collected IDs that are still in the set
+        filtered = [mid for mid in entry.get("collected_manga_ids", []) if mid in ids]
+        entry["collected_manga_ids"] = filtered
+    save_creators_metadata(metadata)
 
 ####################################################################################################################
 # CORE
@@ -327,83 +321,61 @@ def update_creator_popular_genres(meta):
             if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
         ]
 
-        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        with _popular_genres_lock:
-            if os.path.exists(top_genres_file):
-                with open(top_genres_file, "r", encoding="utf-8") as f:
-                    all_genre_counts = json.load(f)
-            else:
-                all_genre_counts = {}
+        metadata = load_creators_metadata()
 
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
 
-            with _popular_genres_lock:
-                if os.path.exists(details_file):
-                    with open(details_file, "r", encoding="utf-8") as f:
-                        details = json.load(f)
-                else:
-                    details = {
-                        "title": "",
-                        "author": creator_name,
-                        "artist": creator_name,
-                        "description": "",
-                        "genre": [],
-                        "status": "1",
-                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-                    }
+            # Initialize creator metadata if missing
+            entry = metadata.get(creator_name, {})
+            genre_counts = entry.get("genre_counts", {})
 
-            details["title"] = creator_name
-            details["author"] = creator_name
-            details["artist"] = creator_name
-            details["description"] = f"Latest Doujin: {gallery_title}"
+            for genre in gallery_genres:
+                genre_counts[genre] = genre_counts.get(genre, 0) + 1
 
-            with _popular_genres_lock:
-                if creator_name not in all_genre_counts:
-                    all_genre_counts[creator_name] = {}
-                creator_counts = all_genre_counts[creator_name]
-                for genre in gallery_genres:
-                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
+            # Keep only the top MAX_GENRES_PARSED genres
+            genre_counts = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
 
-                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
-                log_clarification()
-                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
-                details["genre"] = [g for g, count in most_popular]
+            # Update the metadata entry
+            entry["genre_counts"] = genre_counts
+            entry.setdefault("collected_manga_ids", [])
+            entry.setdefault("deferred", False)
+            metadata[creator_name] = entry
 
-                if len(creator_counts) > MAX_GENRES_PARSED:
-                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-                    all_genre_counts[creator_name] = creator_counts
+            # Update details.json with top MAX_GENRES_STORED genres
+            most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+            details = {
+                "title": creator_name,
+                "author": creator_name,
+                "artist": creator_name,
+                "description": f"Latest Doujin: {gallery_title}",
+                "genre": [g for g, _ in most_popular],
+                "status": "1",
+                "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+            }
 
-                with open(details_file, "w", encoding="utf-8") as f:
-                    json.dump(details, f, ensure_ascii=False, indent=2)
+            with open(details_file, "w", encoding="utf-8") as f:
+                json.dump(details, f, ensure_ascii=False, indent=2)
 
-                with open(top_genres_file, "w", encoding="utf-8") as f:
-                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
-    
+        save_creators_metadata(metadata)
+
     else:
-        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
-    
+        log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
+
     # ----------------------------
     # Save page 1 as cover.[ext]
     # ----------------------------
     if not config.get("DRY_RUN"):
         try:
-            gallery_meta = return_gallery_metas(meta)
-            creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-            if not creators:
-                creators = ["Unknown Creator"]
-
             for creator_name in creators:
                 creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
                 gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
-
                 if not os.path.exists(gallery_folder):
                     logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
                     continue
 
-                # Look for page 1 file (assume starts with 1.)
                 candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
                 if not candidates:
                     logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
@@ -412,7 +384,6 @@ def update_creator_popular_genres(meta):
                 page1_file = os.path.join(gallery_folder, candidates[0])
                 _, ext = os.path.splitext(page1_file)
 
-                # Remove any existing cover.* file regardless of extension
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
@@ -422,7 +393,6 @@ def update_creator_popular_genres(meta):
                             logger.info(f"Failed to remove old cover file {f}: {e}")
 
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
-
                 shutil.copy2(page1_file, cover_file)
                 logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
 

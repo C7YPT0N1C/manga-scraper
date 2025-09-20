@@ -5,6 +5,7 @@
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
 from requests.auth import HTTPBasicAuth
+from pathlib import Path
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -60,9 +61,61 @@ _popular_genres_lock = threading.Lock()
 _collected_gallery_metas = []
 _gallery_meta_lock = threading.Lock()
 
-_manga_ids_lock = threading.Lock()
-
 _deferred_creators_lock = threading.Lock()
+
+deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
+
+def load_deferred_creators() -> set[str]:
+    if os.path.exists(deferred_creators_file):
+        try:
+            with open(deferred_creators_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception as e:
+            logger.warning(f"Could not load deferred creators file: {e}")
+    return set()
+
+def save_deferred_creators(creators: set[str]):
+    try:
+        with open(deferred_creators_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save deferred creators file: {e}")
+
+collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
+
+def load_collected_manga_ids() -> set[int]:
+    if os.path.exists(collected_manga_ids_file):
+        try:
+            with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception as e:
+            logger.warning(f"Could not load collected manga ids file: {e}")
+    return set()
+
+def save_collected_manga_ids(ids: set[int]):
+    try:
+        with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save collected manga ids file: {e}")
+        
+broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
+
+def load_possible_broken_symbols() -> set[str]:
+    if os.path.exists(broken_symbols_file):
+        try:
+            with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception as e:
+            logger.warning(f"Could not load broken symbols file: {e}")
+    return set()
+
+def save_possible_broken_symbols(symbols: set[str]):
+    try:
+        with open(broken_symbols_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(symbols), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save broken symbols file: {e}")
 
 ####################################################################################################################
 # CORE
@@ -204,6 +257,8 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
+    
+    log_clarification()
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
@@ -235,6 +290,26 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
     logger.info(f"Removed empty directories.")
+    
+    log_clarification()
+    
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
+        return
+    
+    removed = 0
+    for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
+        for fname in filenames:
+            full_path = os.path.join(dirpath, fname)
+            if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
+                try:
+                    os.unlink(full_path)
+                    logger.info(f"Removed broken symlink: {full_path}")
+                    removed += 1
+                except Exception as e:
+                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
+    
+    logger.info(f"Fixed {removed} broken symlink(s).")
 
 # ------------------------------------------------------------
 # Update creator's most popular genres
@@ -538,124 +613,19 @@ def update_mangas_categories(ids: list[int], category_id: int):
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
 
 # ----------------------------
-# Create File For Manga IDs and Deferred Creators
+# Local Manga Library Management
 # ----------------------------
-deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
-
-def load_deferred_creators() -> set[str]:
-    if os.path.exists(deferred_creators_file):
-        with open(deferred_creators_file, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
-
-def save_deferred_creators(creators: set[str]):
-    with open(deferred_creators_file, "w", encoding="utf-8") as f:
-        json.dump(sorted(creators), f, ensure_ascii=False, indent=2)
-
-collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
-
-def load_collected_manga_ids() -> set[int]:
-    if os.path.exists(collected_manga_ids_file):
-        with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
-            return set(json.load(f))
-    return set()
-
-def save_collected_manga_ids(ids: set[int]):
-    with open(collected_manga_ids_file, "w", encoding="utf-8") as f:
-        json.dump(sorted(ids), f, ensure_ascii=False, indent=2)
-
+# Functions to:
+# 1. Process deferred creators and add their mangas to the library + category
+# 2. Add all local mangas not yet in library
+# 3. Detect missing galleries for creator mangas
 # ----------------------------
-# Store the names of Creators' Mangas
-# so they can be added to the library later
-# ----------------------------
-def store_creator_manga_names(meta: dict):
-    deferred_creators_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "deferred_creators.json")
-    gallery_meta = return_gallery_metas(meta)
-    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-    if not creators:
-        return
 
-    with _deferred_creators_lock:
-        if os.path.exists(deferred_creators_file):
-            with open(deferred_creators_file, "r", encoding="utf-8") as f:
-                deferred_creators = json.load(f)
-        else:
-            deferred_creators = []
-
-        # Add only creator names (deduplicated)
-        for creator_name in creators:
-            if creator_name not in deferred_creators:
-                deferred_creators.append(creator_name)
-
-        with open(deferred_creators_file, "w", encoding="utf-8") as f:
-            json.dump(deferred_creators, f, ensure_ascii=False, indent=2)
-
-    logger.info(f"GraphQL: Deferred creators saved: {creators}")
-
-# ----------------------------
-# Process / Retry Deferred Creators & Add to Category
-# ----------------------------
-def process_deferred_creators():
-    """Resolve deferred creator manga names and update them in library + category."""
-    
-    log_clarification()
-
-    with _deferred_creators_lock:
-        deferred_creators = load_deferred_creators()
-
-    if not deferred_creators:
-        logger.info("GraphQL: No deferred creators to process.")
-        return
-
-    logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
-
-    collected_manga_ids = load_collected_manga_ids()
-    new_ids = set()
-
-    for creator_name in sorted(deferred_creators):
-        # Query manga by title & source
-        query = """
-        query ($title: String!, $sourceId: LongString!) {
-          mangas(
-            filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-          ) {
-            nodes { id title }
-          }
-        }
-        """
-        result = graphql_request(query, {
-            "title": creator_name,
-            "sourceId": LOCAL_SOURCE_ID
-        })
-
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-        if not nodes:
-            logger.warning(f"GraphQL: Creator manga '{creator_name}' not found in Suwayomi local source.")
-            continue
-
-        manga_id = int(nodes[0]["id"])
-        if manga_id not in collected_manga_ids:
-            new_ids.add(manga_id)
-            logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
-
-    if new_ids:
-        # Use helper functions
-        update_mangas(list(new_ids))
-        update_mangas_categories(list(new_ids), CATEGORY_ID)
-
-        # Save collected IDs
-        collected_manga_ids.update(new_ids)
-        save_collected_manga_ids(collected_manga_ids)
-    else:
-        logger.info("GraphQL: No new creator manga names to update.")
-
-    # Always clear deferred state
-    save_deferred_creators(set())
-    save_collected_manga_ids(set())
-    logger.info("GraphQL: Finished processing deferred creators.")
-    
 def add_missing_local_mangas_to_library():
     """Find all mangas in the Local Source that aren't in the library and add them."""
+    
+    log_clarification()
+    
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
     query = """
@@ -680,6 +650,166 @@ def add_missing_local_mangas_to_library():
     update_mangas_categories(new_ids, CATEGORY_ID)
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
+
+def process_deferred_creators():
+    """Resolve deferred creator manga names and update them in library + category."""
+    
+    log_clarification()
+
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+
+    if not deferred_creators:
+        logger.info("GraphQL: No deferred creators to process.")
+        return
+
+    logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
+
+    # Fetch all mangas in the local source once to avoid per-creator queries
+    query = """
+    query ($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId } }) {
+        nodes { id title inLibrary categories { id } }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    all_mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    # Build a lookup: title -> id, inLibrary, category_ids
+    manga_lookup = {
+        m["title"]: {
+            "id": int(m["id"]),
+            "inLibrary": m.get("inLibrary", False),
+            "categories": [c["id"] for c in m.get("categories", [])]
+        }
+        for m in all_mangas
+    }
+
+    new_ids = set()
+
+    for creator_name in sorted(deferred_creators):
+        manga_info = manga_lookup.get(creator_name)
+        if not manga_info:
+            logger.warning(f"GraphQL: Creator manga '{creator_name}' not found in Suwayomi local source.")
+            continue
+
+        # Skip if already in library and already in category
+        if manga_info["inLibrary"] and CATEGORY_ID in manga_info["categories"]:
+            logger.info(f"GraphQL: Creator manga '{creator_name}' already in library and category, skipping.")
+            continue
+
+        manga_id = manga_info["id"]
+        new_ids.add(manga_id)
+        logger.info(f"GraphQL: Queued manga ID {manga_id} for '{creator_name}'.")
+
+    if new_ids:
+        update_mangas(list(new_ids))
+        update_mangas_categories(list(new_ids), CATEGORY_ID)
+
+    # Always clear deferred state and collected manga IDs
+    save_deferred_creators(set())
+    save_collected_manga_ids(set())
+    logger.info("GraphQL: Finished processing deferred creators.")
+
+def find_missing_galleries(local_root: str, auto_update: bool = True):
+    """
+    Crawl the local manga directory and fix gallery titles if needed.
+    
+    Args:
+        local_root: Path to the root folder containing creator directories.
+        auto_update: If True, updates the titles in Suwayomi using GraphQL.
+    """
+
+    # Load persisted broken symbols
+    POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
+    log_clarification()
+
+    for creator_dir in sorted(Path(local_root).iterdir()):
+        if not creator_dir.is_dir():
+            continue
+
+        creator_name = creator_dir.name
+        local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
+        if not local_galleries:
+            logger.info(f"No galleries found for {creator_name}, skipping.")
+            continue
+
+        # Query manga by title & source
+        query = """
+        query ($title: String!, $sourceId: LongString!) {
+          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+            nodes {
+              id
+              title
+              chapters {
+                nodes { name }
+              }
+            }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+        if not nodes:
+            logger.warning(f"Creator '{creator_name}' not found in library.")
+            continue
+
+        manga = nodes[0]
+        chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
+
+        for gallery_name, gallery_path in local_galleries.items():
+            if gallery_name not in chapter_titles:
+                # Detect unusual symbols
+                symbols = {c for c in gallery_name if not c.isalnum() and c not in " _-"}
+                new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
+                if new_broken:
+                    POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
+                    status = "Broken symbols detected."
+                else:
+                    status = "Update Suwayomi to reflect changes."
+
+                log_clarification()
+                logger.info(
+                    f"Missing gallery for '{creator_name}':"
+                    f"\nName: '{gallery_name}'"
+                    f"\nPath: '{gallery_path}'"
+                    f"\nUnusual symbols: {symbols}"
+                    f"\nStatus: {status}"
+                )
+
+                # Clean the title using clean_title()
+                cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
+                if cleaned_title != gallery_name:
+                    logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
+                    new_path = gallery_path.parent / cleaned_title
+                    gallery_path.rename(new_path)
+
+                    # Optionally update Suwayomi
+                    if auto_update:
+                        mutation = """
+                        mutation ($id: ID!, $title: String!) {
+                            updateManga(input: {id: $id, title: $title}) { manga { id title } }
+                        }
+                        """
+                        graphql_request(mutation, {"id": manga["id"], "title": cleaned_title})
+
+    # Deduplicate against replacements, blacklist, and allowed symbols
+    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
+    POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
+
+    if POSSIBLE_BROKEN_SYMBOLS:
+        def escape_symbol(c):
+            if c in {'"', '\\'}:
+                return f'\\{c}'
+            return c
+        formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
+
+    # Persist updated broken symbols
+    save_possible_broken_symbols(POSSIBLE_BROKEN_SYMBOLS)
+    return POSSIBLE_BROKEN_SYMBOLS
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -813,9 +943,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Update creator's popular genres
     update_creator_popular_genres(meta)
-    
-    # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
-    store_creator_manga_names(meta)
 
 # Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
@@ -826,9 +953,12 @@ def post_batch_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
-    # Add all creators to Suwayomi category
-    process_deferred_creators()
+    # Add all creators to Suwayomi
     add_missing_local_mangas_to_library()
-
+    process_deferred_creators()
+    
     # Clean up empty directories
     clean_directories(True)
+    
+    # Find missing galleries
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
