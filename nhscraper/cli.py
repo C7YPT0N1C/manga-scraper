@@ -390,7 +390,7 @@ def main():
     
         start_downloader(batch) # Start batch.
         
-        BATCH_SLEEP_TIME = (BATCH_SIZE / 0.05) # Seconds to sleep between batches.
+        BATCH_SLEEP_TIME = (BATCH_SIZE * 0.05) # Seconds to sleep between batches.
         
         logger.info(f"Batch {i//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
         time.sleep(BATCH_SLEEP_TIME) # Pause between batches
