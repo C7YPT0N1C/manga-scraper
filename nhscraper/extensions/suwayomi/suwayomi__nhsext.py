@@ -532,6 +532,7 @@ def update_creator_manga(meta):
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
     if config.get("DRY_RUN"):
+        log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
     gallery_meta = return_gallery_metas(meta)
@@ -546,9 +547,12 @@ def update_creator_manga(meta):
         if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
     ]
 
+    # Load all metadata at once
     metadata = load_creators_metadata()
-    collected_ids = set(load_collected_manga_ids())
-    deferred_creators = set(load_deferred_creators())
+    collected_ids = set(metadata.get("collected_manga_ids", []))
+    deferred_creators = set(metadata.get("deferred_creators", []))
+    if "creators" not in metadata:
+        metadata["creators"] = {}
 
     for creator_name in creators:
         # --- Try to retrieve manga metadata from Suwayomi ---
@@ -559,7 +563,6 @@ def update_creator_manga(meta):
             collected_ids.add(suwayomi_id)
             try:
                 update_mangas([suwayomi_id], CATEGORY_ID)
-                # If successful, remove from collected list + deferred list
                 collected_ids.discard(suwayomi_id)
                 deferred_creators.discard(creator_name)
             except Exception as e:
@@ -570,20 +573,19 @@ def update_creator_manga(meta):
             # No existing manga found, mark creator as deferred
             deferred_creators.add(creator_name)
 
-        # --- Handle genres as before ---
-        entry = metadata.get("creators", {}).setdefault(creator_name, {})
+        # --- Update genre counts ---
+        entry = metadata["creators"].setdefault(creator_name, {})
         genre_counts = entry.get("genre_counts", {})
         for genre in gallery_genres:
             genre_counts[genre] = genre_counts.get(genre, 0) + 1
-        genre_counts = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-        entry["genre_counts"] = genre_counts
+        entry["genre_counts"] = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
 
-        # Update details.json with top genres
+        # --- Update details.json ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
 
-        most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+        most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
         details = {
             "title": creator_name,
             "author": creator_name,
@@ -597,20 +599,12 @@ def update_creator_manga(meta):
         with open(details_file, "w", encoding="utf-8") as f:
             json.dump(details, f, ensure_ascii=False, indent=2)
 
-        if "creators" not in metadata:
-            metadata["creators"] = {}
-        metadata["creators"][creator_name] = entry
+    # --- Save all metadata at once ---
+    metadata["collected_manga_ids"] = sorted(collected_ids)
+    metadata["deferred_creators"] = sorted(deferred_creators)
+    save_creators_metadata(metadata)
 
-        # Save updated metadata (IDs + deferred)
-        save_collected_manga_ids(collected_ids)
-        save_deferred_creators(deferred_creators)
-
-    else:
-        log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
-
-    # ----------------------------
-    # Save page 1 as cover.[ext]
-    # ----------------------------
+    # --- Update manga cover ---
     if not config.get("DRY_RUN"):
         try:
             for creator_name in creators:
@@ -628,6 +622,7 @@ def update_creator_manga(meta):
                 page1_file = os.path.join(gallery_folder, candidates[0])
                 _, ext = os.path.splitext(page1_file)
 
+                # Remove old cover
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
@@ -643,8 +638,7 @@ def update_creator_manga(meta):
         except Exception as e:
             logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
     else:
-        log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
-
+        log(f"[DRY RUN] Would update manga cover for creators: {creators}", "debug")
 
 def process_deferred_creators():
     """
