@@ -703,7 +703,7 @@ def find_missing_galleries(local_root: str):
             continue
         
         creator_name = creator_dir.name
-        logger.info(f"GraphQL: Checking creator: {creator_name}")
+        #logger.info(f"GraphQL: Checking creator: {creator_name}")
 
         local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
         if not local_galleries:
