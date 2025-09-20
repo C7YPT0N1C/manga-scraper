@@ -596,6 +596,36 @@ def save_collected_manga_ids(ids: set[int]):
 # 3. Detect missing galleries for creator mangas
 # ----------------------------
 
+def add_missing_local_mangas_to_library():
+    """Find all mangas in the Local Source that aren't in the library and add them."""
+    
+    log_clarification()
+    
+    logger.info("GraphQL: Fetching mangas not yet in library...")
+
+    query = """
+    query ($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+        nodes { id title }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    if not nodes:
+        logger.info("GraphQL: No mangas found outside the library.")
+        return
+
+    new_ids = [int(node["id"]) for node in nodes]  # ignore collected_manga_ids entirely
+
+    logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+
+    update_mangas(new_ids)
+    update_mangas_categories(new_ids, CATEGORY_ID)
+
+    logger.info("GraphQL: Finished adding missing mangas to library.")
+
 def process_deferred_creators():
     """Resolve deferred creator manga names and update them in library + category."""
     
@@ -656,36 +686,6 @@ def process_deferred_creators():
     save_deferred_creators(set())
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
-
-def add_missing_local_mangas_to_library():
-    """Find all mangas in the Local Source that aren't in the library and add them."""
-    
-    log_clarification()
-    
-    logger.info("GraphQL: Fetching mangas not yet in library...")
-
-    query = """
-    query ($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
-        nodes { id title }
-      }
-    }
-    """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
-    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-
-    if not nodes:
-        logger.info("GraphQL: No mangas found outside the library.")
-        return
-
-    new_ids = [int(node["id"]) for node in nodes]  # ignore collected_manga_ids entirely
-
-    logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-
-    update_mangas(new_ids)
-    update_mangas_categories(new_ids, CATEGORY_ID)
-
-    logger.info("GraphQL: Finished adding missing mangas to library.")
 
 def find_missing_galleries(local_root: str):
     """

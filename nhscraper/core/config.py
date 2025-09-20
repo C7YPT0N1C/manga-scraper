@@ -173,7 +173,7 @@ DEFAULT_RANGE_END=600000
 DEFAULT_GALLERIES=""
 
 # Filters
-DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
+DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,scat,low scat,coprophagia,ai generated"
 DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
 
