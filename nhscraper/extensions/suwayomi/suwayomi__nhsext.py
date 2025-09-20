@@ -466,6 +466,22 @@ def ensure_category(category_name=None):
 # ----------------------------
 # Bulk Update Functions
 # ----------------------------
+
+def update_suwayomi(manga_id: int, title: str):
+    """
+    Updates a manga entry on Suwayomi with a new title.
+    """
+    mutation = """
+    mutation UpdateSuwayomi($id: ID!, $title: String!) {
+        updateManga(input: {id: $id, title: $title}) { manga { id title } }
+    }
+    """
+    try:
+        graphql_request(mutation, {"id": manga_id, "title": title})
+        logger.info(f"Suwayomi updated: ID {manga_id} -> Title '{title}'")
+    except Exception as e:
+        logger.warning(f"Failed to update Suwayomi for manga {manga_id}: {e}")
+
 def update_mangas(ids: list[int], category_id: int):
     if not ids:
         return
@@ -724,6 +740,7 @@ def process_deferred_creators():
 
         if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
             logger.info(f"Creator manga '{creator_name}' already in library and category, skipping.")
+            deferred_creators.discard(creator_name)
             continue
 
         new_ids.add(int(manga_info["id"]))
@@ -814,15 +831,9 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                     else:
                         logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
                         gallery_path.rename(new_path)
-
-                        # Optionally update Suwayomi
+                        
                         if auto_update:
-                            mutation = """
-                            mutation UpdateSuwayomi($id: ID!, $title: String!) {
-                                updateManga(input: {id: $id, title: $title}) { manga { id title } }
-                            }
-                            """
-                            graphql_request(mutation, {"id": manga["id"], "title": cleaned_title})
+                            update_suwayomi(manga["id"], cleaned_title) # Optionally update Suwayomi
 
     # Deduplicate against replacements, blacklist, and allowed symbols
     all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
