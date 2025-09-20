@@ -13,6 +13,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
+
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
@@ -131,6 +132,7 @@ def save_possible_broken_symbols(symbols: set[str]):
 ####################################################################################################################
 # CORE
 ####################################################################################################################
+
 def update_extension_download_path():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
@@ -322,115 +324,6 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
     
     logger.info(f"Fixed {removed} broken symlink(s).")
 
-# ------------------------------------------------------------
-# Update creator's most popular genres
-# ------------------------------------------------------------
-def update_creator_manga(meta):
-    """
-    Update a creator's details.json and genre metadata based on a downloaded gallery.
-    Also append the Suwayomi manga ID to the top-level collected_manga_ids.
-    """
-    if not config.get("DRY_RUN"):
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        if not creators:
-            return
-        gallery_title = gallery_meta["title"]
-        gallery_tags = meta.get("tags", [])
-        gallery_genres = [
-            tag["name"] for tag in gallery_tags
-            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-        ]
-
-        metadata = load_creators_metadata()
-
-        # Append this gallery's Suwayomi manga ID to the top-level collected_manga_ids
-        suwayomi_id = meta.get("suwayomi_id")  # Must be set somewhere during download
-        if suwayomi_id is not None:
-            collected_ids = set(metadata.get("collected_manga_ids", []))
-            collected_ids.add(suwayomi_id)
-            metadata["collected_manga_ids"] = sorted(collected_ids)
-
-        for creator_name in creators:
-            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            details_file = os.path.join(creator_folder, "details.json")
-            os.makedirs(creator_folder, exist_ok=True)
-
-            # Initialise creator metadata if missing
-            entry = metadata.get("creators", {}).get(creator_name, {})
-            genre_counts = entry.get("genre_counts", {})
-
-            for genre in gallery_genres:
-                genre_counts[genre] = genre_counts.get(genre, 0) + 1
-
-            # Keep only the top MAX_GENRES_PARSED genres
-            genre_counts = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-
-            # Update the metadata entry
-            entry["genre_counts"] = genre_counts
-            entry.setdefault("deferred", False)
-
-            if "creators" not in metadata:
-                metadata["creators"] = {}
-            metadata["creators"][creator_name] = entry
-
-            # Update details.json with top MAX_GENRES_STORED genres
-            most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
-            details = {
-                "title": creator_name,
-                "author": creator_name,
-                "artist": creator_name,
-                "description": f"Latest Doujin: {gallery_title}",
-                "genre": [g for g, _ in most_popular],
-                "status": "1",
-                "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-            }
-
-            with open(details_file, "w", encoding="utf-8") as f:
-                json.dump(details, f, ensure_ascii=False, indent=2)
-
-        save_creators_metadata(metadata)
-
-    else:
-        log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
-
-    # ----------------------------
-    # Save page 1 as cover.[ext]
-    # ----------------------------
-    if not config.get("DRY_RUN"):
-        try:
-            for creator_name in creators:
-                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
-                if not os.path.exists(gallery_folder):
-                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
-                    continue
-
-                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
-                if not candidates:
-                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
-                    continue
-
-                page1_file = os.path.join(gallery_folder, candidates[0])
-                _, ext = os.path.splitext(page1_file)
-
-                for f in os.listdir(creator_folder):
-                    if f.startswith("cover."):
-                        try:
-                            os.remove(os.path.join(creator_folder, f))
-                            log(f"Removed old cover file: {f}")
-                        except Exception as e:
-                            logger.info(f"Failed to remove old cover file {f}: {e}")
-
-                cover_file = os.path.join(creator_folder, f"cover{ext}")
-                shutil.copy2(page1_file, cover_file)
-                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
-
-        except Exception as e:
-            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
-    else:
-        log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
-
 ############################################
 
 def graphql_request(query: str, variables: dict = None):
@@ -507,15 +400,12 @@ def new_graphql_request(query: str, variables: dict = None):
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-# ----------------------------
-# Get Local Source ID
-# ----------------------------
 def get_local_source_id():
     global LOCAL_SOURCE_ID
 
     log("GraphQL: Fetching Local source ID", "debug")
     query = """
-    query {
+    query FetchLocalSourceID{
       sources {
         nodes { id name }
       }
@@ -538,16 +428,13 @@ def get_local_source_id():
     logger.error("GraphQL: Could not find 'Local source' in sources")
     LOCAL_SOURCE_ID = None
 
-# ----------------------------
-# Ensure Category Exists
-# ----------------------------
 def ensure_category(category_name=None):
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
     log(f"GraphQL: Ensuring '{name}' category exists", "debug")
     query = """
-    query ($name: String!) {
+    query EnsureTargetCategoryExists($name: String!) {
       categories(filter: { name: { equalTo: $name } }) {
         nodes { id name }
       }
@@ -566,7 +453,7 @@ def ensure_category(category_name=None):
 
     log(f"GraphQL: Creating new category {name}", "debug")
     mutation = """
-    mutation ($name: String!) {
+    mutation CreateTargetCategory($name: String!) {
       createCategory(input: { name: $name }) {
         category { id name }
       }
@@ -586,7 +473,7 @@ def update_mangas(ids: list[int], category_id: int):
     
     log(f"GraphQL: Updating mangas {ids} as 'In Library'", "debug")
     mutation = """
-    mutation ($ids: [Int!]!) {
+    mutation AddMangasToLibrary($ids: [Int!]!) {
       updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
         clientMutationId
       }
@@ -598,7 +485,7 @@ def update_mangas(ids: list[int], category_id: int):
     
     log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
     mutation = """
-    mutation ($ids: [Int!]!, $categoryId: Int!) {
+    mutation AddMangasToCategory($ids: [Int!]!, $categoryId: Int!) {
       updateMangasCategories(
         input: { ids: $ids, patch: { addToCategories: [$categoryId] } }
       ) {
@@ -609,6 +496,160 @@ def update_mangas(ids: list[int], category_id: int):
     result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
+    
+def retrieve_creator_suwayomi_metadata(creator_name: str):
+    """
+    Retrieve metadata for a creator from Suwayomi's Local Source by exact title match.
+    Returns the list of nodes (id, title, chapters, etc).
+    """
+    query = """
+    query FetchMangaMetadataFromLocalSource($title: String!) {
+      mangas(
+        filter: { sourceId: { equalTo: "0" }, title: { equalTo: $title } }
+      ) {
+        nodes {
+          id
+          title
+          chapters {
+            nodes {
+              name
+            }
+          }
+        }
+      }
+    }
+    """
+    result = graphql_request(query, {"title": creator_name})
+    if not result:
+        return []
+    return result.get("data", {}).get("mangas", {}).get("nodes", [])
+    
+# ------------------------------------------------------------
+# Update creator's most popular genres
+# ------------------------------------------------------------
+
+def update_creator_manga(meta):
+    """
+    Update a creator's details.json and genre metadata based on a downloaded gallery.
+    Also attempt to immediately add the creator's manga to Suwayomi using its ID.
+    """
+    if config.get("DRY_RUN"):
+        return
+
+    gallery_meta = return_gallery_metas(meta)
+    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    if not creators:
+        return
+
+    gallery_title = gallery_meta["title"]
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
+
+    metadata = load_creators_metadata()
+    collected_ids = set(metadata.get("collected_manga_ids", []))
+
+    for creator_name in creators:
+        # --- Try to retrieve manga metadata from Suwayomi ---
+        nodes = retrieve_creator_suwayomi_metadata(creator_name)
+        suwayomi_id = int(nodes[0]["id"]) if nodes else None
+
+        if suwayomi_id is not None:
+            collected_ids.add(suwayomi_id)
+            try:
+                update_mangas([suwayomi_id], CATEGORY_ID)
+                # If successful, remove from collected list
+                if suwayomi_id in collected_ids:
+                    collected_ids.remove(suwayomi_id)
+                # Ensure creator is not deferred
+                entry = metadata.get("creators", {}).setdefault(creator_name, {})
+                entry["deferred"] = False
+            except Exception as e:
+                logger.warning(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}")
+                if suwayomi_id in collected_ids:
+                    collected_ids.remove(suwayomi_id)
+                entry = metadata.get("creators", {}).setdefault(creator_name, {})
+                entry["deferred"] = True
+        else:
+            # No existing manga found, mark as deferred
+            entry = metadata.get("creators", {}).setdefault(creator_name, {})
+            entry["deferred"] = True
+
+        # --- Handle genres as before ---
+        genre_counts = entry.get("genre_counts", {})
+        for genre in gallery_genres:
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+        genre_counts = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
+        entry["genre_counts"] = genre_counts
+
+        # Update details.json with top genres
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        os.makedirs(creator_folder, exist_ok=True)
+        details_file = os.path.join(creator_folder, "details.json")
+
+        most_popular = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+        details = {
+            "title": creator_name,
+            "author": creator_name,
+            "artist": creator_name,
+            "description": f"Latest Doujin: {gallery_title}",
+            "genre": [g for g, _ in most_popular],
+            "status": "1",
+            "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+        }
+
+        with open(details_file, "w", encoding="utf-8") as f:
+            json.dump(details, f, ensure_ascii=False, indent=2)
+
+        if "creators" not in metadata:
+            metadata["creators"] = {}
+        metadata["creators"][creator_name] = entry
+
+        # Save updated collected IDs + metadata
+        metadata["collected_manga_ids"] = sorted(collected_ids)
+        save_creators_metadata(metadata)
+
+    else:
+        log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
+
+    # ----------------------------
+    # Save page 1 as cover.[ext]
+    # ----------------------------
+    if not config.get("DRY_RUN"):
+        try:
+            for creator_name in creators:
+                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
+                if not os.path.exists(gallery_folder):
+                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+                    continue
+
+                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
+                if not candidates:
+                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
+                    continue
+
+                page1_file = os.path.join(gallery_folder, candidates[0])
+                _, ext = os.path.splitext(page1_file)
+
+                for f in os.listdir(creator_folder):
+                    if f.startswith("cover."):
+                        try:
+                            os.remove(os.path.join(creator_folder, f))
+                            log(f"Removed old cover file: {f}")
+                        except Exception as e:
+                            logger.info(f"Failed to remove old cover file {f}: {e}")
+
+                cover_file = os.path.join(creator_folder, f"cover{ext}")
+                shutil.copy2(page1_file, cover_file)
+                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
+
+        except Exception as e:
+            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
+    else:
+        log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
 
 # ----------------------------
 # Local Manga Library Management
@@ -638,7 +679,7 @@ def process_deferred_creators():
 
     # Fetch all mangas from local source
     query = """
-    query ($sourceId: LongString!) {
+    query FetchAllMangasFromLocalSource($sourceId: LongString!) {
       mangas(filter: { sourceId: { equalTo: $sourceId } }) {
         nodes { id title inLibrary categories { id } }
       }
@@ -676,11 +717,14 @@ def process_deferred_creators():
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
     
+    # ----------------------------
+    # Add mangas not yet in library
+    # ----------------------------
     log_clarification()
     logger.info("GraphQL: Fetching mangas not yet in library...")
 
     query = """
-    query ($sourceId: LongString!) {
+    query FetchMangasNotInLibrary($sourceId: LongString!) {
       mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
         nodes { id title }
       }
@@ -732,7 +776,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
 
         # Query manga by title & source
         query = """
-        query ($title: String!, $sourceId: LongString!) {
+        query QueryMangaByTitleSource($title: String!, $sourceId: LongString!) {
           mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
             nodes {
               id
@@ -789,7 +833,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                         # Optionally update Suwayomi
                         if auto_update:
                             mutation = """
-                            mutation ($id: ID!, $title: String!) {
+                            mutation UpdateSuwayomi($id: ID!, $title: String!) {
                                 updateManga(input: {id: $id, title: $title}) { manga { id title } }
                             }
                             """

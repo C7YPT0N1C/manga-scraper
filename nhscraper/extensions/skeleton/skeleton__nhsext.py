@@ -15,6 +15,7 @@ from nhscraper.core.api import get_meta_tags, safe_name, clean_title
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
+
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
@@ -45,6 +46,7 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 ####################################################################################################################
 # CORE
 ####################################################################################################################
+
 def update_extension_download_path():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
