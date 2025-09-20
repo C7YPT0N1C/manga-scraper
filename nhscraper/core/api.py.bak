@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, re, json, socket
+import os, time, random, cloudscraper, requests, re, json
 from flask import Flask, jsonify, request
 from datetime import datetime
 import urllib.parse
@@ -52,29 +52,6 @@ def build_session():
     # Uses cloudscraper session by default.
     if session is None:
         session = session_builder()
-
-def rotate_tor(control_host="127.0.0.1", control_port=9051):
-    """
-    Ask Tor via ControlPort for a new circuit (NEWNYM).
-    Works if Tor is configured with ControlPort and cookie auth (default).
-    """
-    try:
-        s = socket.create_connection((control_host, control_port), timeout=10)
-        f = s.makefile("rw")
-        f.write("AUTHENTICATE\r\n")   # no password
-        f.flush()
-        resp = f.readline()
-        if not resp.startswith("250"):
-            f.close(); s.close()
-            return False
-        f.write("SIGNAL NEWNYM\r\n")
-        f.flush()
-        resp = f.readline()
-        f.close(); s.close()
-        return resp.startswith("250")
-    except Exception as e:
-        logger.debug(f"rotate_tor failed: {e}")
-        return False
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -159,60 +136,40 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug") # DEBUGGING
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
     return names
 
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
-def clean_title(meta_or_title, possible_broken_symbols: set[str] = None):
-    """
-    Clean a gallery/manga title. Accepts either a meta dict (like from GraphQL) or a raw string.
-    
-    Args:
-        meta_or_title: Either a dict with metadata containing "title" or a string title.
-        possible_broken_symbols: Optional set of extra symbols detected as broken.
-    
-    Returns:
-        str: Sanitised title.
-    """
-    # Determine if input is a dict or string
-    if isinstance(meta_or_title, dict):
-        meta = meta_or_title
-        title_obj = meta.get("title", {}) or {}
-        title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
-        title = (
-            title_obj.get(title_type)
-            or title_obj.get("english")
-            or title_obj.get("pretty")
-            or title_obj.get("japanese")
-            or f"Gallery_{meta.get('id', 'UNKNOWN')}"
-        )
-        # If there's a |, take the last part
-        if "|" in title:
-            title = title.split("|")[-1].strip()
-    else:
-        # Already a string
-        title = meta_or_title
+def clean_title(meta):
+    title_obj = meta.get("title", {}) or {}
+    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
+    title = (
+        title_obj.get(title_type)
+        or title_obj.get("english")
+        or title_obj.get("pretty")
+        or title_obj.get("japanese")
+        or f"Gallery_{meta.get('id')}"
+    )
 
-    # Remove content inside [] or {} brackets
+    # If there's a |, take the last part
+    if "|" in title:
+        title = title.split("|")[-1].strip()
+
+    # Remove all content inside [] or {} brackets, including the brackets themselves
     title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
 
-    # Apply explicit replacements first
+    # Explicit replacements
     for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
         title = title.replace(symbol, replacement)
 
     # Replace all variations of spaces around dash (ASCII, en, em) with single hyphen
     title = re.sub(r"\s*[–—-]\s*", "-", title)
 
-    # Replace blacklisted and detected broken symbols with underscores
-    all_symbols_to_replace = set(BROKEN_SYMBOL_BLACKLIST)
-    if possible_broken_symbols:
-        allowed_set = set(ALLOWED_SYMBOLS).union(BROKEN_SYMBOL_REPLACEMENTS.keys(), BROKEN_SYMBOL_BLACKLIST)
-        all_symbols_to_replace.update(possible_broken_symbols.difference(allowed_set))
-
-    for symbol in all_symbols_to_replace:
-        title = title.replace(symbol, "_")
+    # Replace blacklisted symbols with underscores
+    for symbol in BROKEN_SYMBOL_BLACKLIST:
+        title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
 
     # Collapse multiple underscores/spaces
     title = re.sub(r"_+", "_", title)
@@ -220,7 +177,7 @@ def clean_title(meta_or_title, possible_broken_symbols: set[str] = None):
     title = title.strip(" _")
 
     if not title:
-        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
+        title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}"
 
     return safe_name(title)
 
@@ -239,7 +196,6 @@ def dynamic_sleep(stage, attempt: int = 1):
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
     gallery_sleep_min = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)  # Minimum Gallery sleep time
-    gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)  # Maximum Gallery sleep time
     api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
 
     log_clarification()
@@ -324,10 +280,10 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
+        sleep_time = random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max)
         
         if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Sleep after jitter (Capped at {gallery_sleep_max}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+            log(f"→ Sleep after jitter = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
         # --------------------------------------------------------
         # 6. Final result
@@ -341,9 +297,6 @@ def dynamic_sleep(stage, attempt: int = 1):
 
 #####################################################################################################################################################################
 
-# ===============================
-# BUILD API URLS
-# ===============================
 def build_url(query_type: str, query_value: str, page: int) -> str:
     query_lower = query_type.lower()
     
@@ -373,9 +326,6 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
-# ===============================
-# FETCH GALLERY IDS
-# ===============================
 def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     ids: set[int] = set()
     page = start_page
@@ -406,15 +356,6 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
-                        # 🔹 Rotate Tor and try again once
-                        if rotate_tor():
-                            logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            try:
-                                resp = session.get(url, timeout=10)
-                                resp.raise_for_status()
-                            except Exception as e2:
-                                logger.warning(f"Page {page}: Still failed after Tor rotate: {e2}")
-                                resp = None
                         break
                     wait = dynamic_sleep("api", attempt=(attempt))
                     logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
@@ -460,6 +401,9 @@ def fetch_gallery_metadata(gallery_id: int):
                 continue
             resp.raise_for_status()
             
+            #log_clarification()
+            #log(f"Fetcher: Raw API response for Gallery: {gallery_id}: {resp.text}", "debug")
+            
             data = resp.json()
 
             # Validate the response
@@ -468,11 +412,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(
-                f"Fetcher: Fetched metadata for Gallery: {gallery_id}: "
-                #f"{data}", # DEBUGGING
-                "debug"
-            )
+            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}: {data}", "debug")
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
@@ -480,15 +420,6 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
-                if rotate_tor():
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    try:
-                        resp = session.get(url, timeout=10)
-                        resp.raise_for_status()
-                        return resp.json()
-                    except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
@@ -497,24 +428,12 @@ def fetch_gallery_metadata(gallery_id: int):
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
-                if rotate_tor():
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    try:
-                        resp = session.get(url, timeout=10)
-                        resp.raise_for_status()
-                        return resp.json()
-                    except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
 
-# ===============================
-# FETCH IMAGE URLS
-# ===============================
 def fetch_image_urls(meta: dict, page: int):
     """
     Returns the full image URL for a gallery page.
@@ -522,7 +441,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
+        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug")
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -552,7 +471,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
         return urls  # return list so downloader can try them in order
 
     except Exception as e:

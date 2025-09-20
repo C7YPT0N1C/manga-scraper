@@ -137,6 +137,9 @@ install_scraper() {
     # Symlink CLI
     ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
+    # Symlink Local Manifest
+    ln -sf "$NHENTAI_DIR/nhscraper/extensions/local_manifest.json" $NHENTAI_DIR/local_manifest.json
+
     echo -e "\nnhentai-scraper (branch: $branch) installed at $NHENTAI_DIR"
 }
 
@@ -146,6 +149,11 @@ create_env_file() {
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # NHentai Scraper Configuration
+
+# Custom (Username and Password must be manually set for now)
+# TEST
+AUTH_USERNAME = "Username"
+AUTH_PASSWORD = "Password"
 
 # Directories
 NHENTAI_DIR=/opt/nhentai-scraper
@@ -178,7 +186,8 @@ TITLE_TYPE=
 THREADS_GALLERIES=
 THREADS_IMAGES=
 MAX_RETRIES=
-NO_SLEEP=
+MIN_SLEEP=
+MAX_SLEEP=
 
 # Download Options
 USE_TOR=true
@@ -343,6 +352,12 @@ start_update() {
     pip install --upgrade pip setuptools wheel
     pip install --editable "$NHENTAI_DIR"
 
+    check_python_version
+    install_system_packages
+    create_env_file
+    create_systemd_services
+    print_links
+
     echo "Update complete (branch: $branch)"
 }
 
@@ -380,8 +395,8 @@ start_install() {
 
             # Run nhentai-scraper commands after installation to initialise config, files, etc
             nhentai-scraper --help
-            hentai-scraper --install-extension skeleton
-            hentai-scraper --install-extension suwayomi
+            nhentai-scraper --install-extension skeleton
+            nhentai-scraper --install-extension suwayomi
 
             exit 0
             ;;

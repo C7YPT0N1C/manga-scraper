@@ -4,6 +4,8 @@
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
+from requests.auth import HTTPBasicAuth
+from pathlib import Path
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -36,8 +38,12 @@ SUBFOLDER_STRUCTURE = ["creator", "title"]
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
+AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now. # TEST
+AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
+
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
+CATEGORY_ID = None
 
 # Max number of genres stored in a creator's details.json
 MAX_GENRES_STORED = 15
@@ -46,17 +52,78 @@ MAX_GENRES_PARSED = 100
 
 ############################################
 
+# Keep a persistent session for cookie-based login
+_session = None
+
 # Thread locks for file operations
-_file_lock = threading.Lock()
+_popular_genres_lock = threading.Lock()
 
 _collected_gallery_metas = []
 _gallery_meta_lock = threading.Lock()
 
-_collected_manga_ids = set()
-_manga_ids_lock = threading.Lock()
+_deferred_creators_lock = threading.Lock()
 
-_deferred_creators = set()
-_deferred_lock = threading.Lock()
+creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
+
+def load_creators_metadata() -> dict:
+    if os.path.exists(creators_metadata_file):
+        try:
+            with open(creators_metadata_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load creators_metadata.json: {e}")
+    # Initialise dictionaries if missing
+    return {
+        "collected_manga_ids": [],
+        "deferred_creators": [],
+        "creators": {}
+    }
+
+def save_creators_metadata(metadata: dict):
+    try:
+        os.makedirs(os.path.dirname(creators_metadata_file), exist_ok=True)
+        with open(creators_metadata_file, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save creators_metadata.json: {e}")
+
+# ---- Global deferred list ----
+def load_deferred_creators() -> set[str]:
+    metadata = load_creators_metadata()
+    return set(metadata.get("deferred_creators", []))
+
+def save_deferred_creators(creators: set[str]):
+    metadata = load_creators_metadata()
+    metadata["deferred_creators"] = sorted(creators)
+    save_creators_metadata(metadata)
+
+# ---- Collected manga IDs ----
+def load_collected_manga_ids() -> set[int]:
+    metadata = load_creators_metadata()
+    return set(metadata.get("collected_manga_ids", []))
+
+def save_collected_manga_ids(ids: set[int]):
+    metadata = load_creators_metadata()
+    metadata["collected_manga_ids"] = sorted(ids)
+    save_creators_metadata(metadata)
+
+broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
+
+def load_possible_broken_symbols() -> set[str]:
+    if os.path.exists(broken_symbols_file):
+        try:
+            with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception as e:
+            logger.warning(f"Could not load broken symbols file: {e}")
+    return set()
+
+def save_possible_broken_symbols(symbols: set[str]):
+    try:
+        with open(broken_symbols_file, "w", encoding="utf-8") as f:
+            json.dump(sorted(symbols), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save broken symbols file: {e}")
 
 ####################################################################################################################
 # CORE
@@ -67,8 +134,8 @@ def update_extension_download_path():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
     
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
@@ -105,8 +172,8 @@ def install_extension():
     if not DEDICATED_DOWNLOAD_PATH:
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
     try:
@@ -163,8 +230,8 @@ WantedBy=multi-user.target
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
     try:
@@ -196,7 +263,7 @@ def test_hook():
     log_clarification()
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
-def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
+def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
     log_clarification()
@@ -205,8 +272,8 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
     if RemoveEmptyArtistFolder:
@@ -231,136 +298,97 @@ def remove_empty_directories(RemoveEmptyArtistFolder: bool = True):
                     logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
 
     logger.info(f"Removed empty directories.")
-    DEDICATED_DOWNLOAD_PATH = ""
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
-
-# ------------------------------------------------------------
-# Update creator's most popular genres
-# ------------------------------------------------------------
-def update_creator_popular_genres(meta):
-    if not global_dry_run:
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        if not creators:
-            return
-        gallery_title = gallery_meta["title"]
-        gallery_tags = meta.get("tags", [])
-        gallery_genres = [
-            tag["name"] for tag in gallery_tags
-            if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-        ]
-
-        top_genres_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "most_popular_genres.json")
-        with _file_lock:
-            if os.path.exists(top_genres_file):
-                with open(top_genres_file, "r", encoding="utf-8") as f:
-                    all_genre_counts = json.load(f)
-            else:
-                all_genre_counts = {}
-
-        for creator_name in creators:
-            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            details_file = os.path.join(creator_folder, "details.json")
-            os.makedirs(creator_folder, exist_ok=True)
-
-            with _file_lock:
-                if os.path.exists(details_file):
-                    with open(details_file, "r", encoding="utf-8") as f:
-                        details = json.load(f)
-                else:
-                    details = {
-                        "title": "",
-                        "author": creator_name,
-                        "artist": creator_name,
-                        "description": "",
-                        "genre": [],
-                        "status": "1",
-                        "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
-                    }
-
-            details["title"] = creator_name
-            details["author"] = creator_name
-            details["artist"] = creator_name
-            details["description"] = f"Latest Doujin: {gallery_title}"
-
-            with _file_lock:
-                if creator_name not in all_genre_counts:
-                    all_genre_counts[creator_name] = {}
-                creator_counts = all_genre_counts[creator_name]
-                for genre in gallery_genres:
-                    creator_counts[genre] = creator_counts.get(genre, 0) + 1
-
-                most_popular = sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
-                log_clarification()
-                #log(f"Most Popular Genres for {creator_name}:\n{most_popular}", "debug")
-                details["genre"] = [g for g, count in most_popular]
-
-                if len(creator_counts) > MAX_GENRES_PARSED:
-                    creator_counts = dict(sorted(creator_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
-                    all_genre_counts[creator_name] = creator_counts
-
-                with open(details_file, "w", encoding="utf-8") as f:
-                    json.dump(details, f, ensure_ascii=False, indent=2)
-
-                with open(top_genres_file, "w", encoding="utf-8") as f:
-                    json.dump(all_genre_counts, f, ensure_ascii=False, indent=2)
     
-    else:
-        log(f"[DRY RUN] Would create details.json for {creator_name}", "debug")
+    log_clarification()
     
-    # ----------------------------
-    # Save page 1 as cover.[ext]
-    # ----------------------------
-    if not global_dry_run:
-        try:
-            gallery_meta = return_gallery_metas(meta)
-            creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-            if not creators:
-                creators = ["Unknown Creator"]
-
-            for creator_name in creators:
-                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
-
-                if not os.path.exists(gallery_folder):
-                    logger.warning(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
-                    continue
-
-                # Look for page 1 file (assume starts with 1.)
-                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
-                if not candidates:
-                    logger.warning(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
-                    continue
-
-                page1_file = os.path.join(gallery_folder, candidates[0])
-                _, ext = os.path.splitext(page1_file)
-                cover_file = os.path.join(creator_folder, f"cover{ext}")
-
-                shutil.copy2(page1_file, cover_file)
-                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
-
-        except Exception as e:
-            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
-    else:
-        log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
+        return
+    
+    removed = 0
+    for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
+        for fname in filenames:
+            full_path = os.path.join(dirpath, fname)
+            if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
+                try:
+                    os.unlink(full_path)
+                    logger.info(f"Removed broken symlink: {full_path}")
+                    removed += 1
+                except Exception as e:
+                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
+    
+    logger.info(f"Fixed {removed} broken symlink(s).")
 
 ############################################
 
 def graphql_request(query: str, variables: dict = None):
+    """Framework for making requests to GraphQL"""
+    
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] GraphQL: Would make request: {query} with variables {variables}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
     try:
-        #log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
+        #log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
-        #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
+        #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
         return result
+    
+    except requests.RequestException as e:
+        logger.error(f"GraphQL: Request failed: {e}")
+        return None
+    
+    except ValueError as e:
+        logger.error(f"GraphQL: Failed to decode JSON response: {e}")
+        logger.error(f"Raw response: {response.text if response else 'No response'}")
+        return None
+
+def new_graphql_request(query: str, variables: dict = None):
+    """New framework for making requests to GraphQL. Allows for authentication with the server."""
+    
+    global _session
+    headers = {"Content-Type": "application/json"}
+    payload = {"query": query, "variables": variables or {}}
+
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
+        return None
+
+    try:
+        if _session is None:
+            # Initialise session and login once
+            _session = requests.Session()
+            login_payload = {
+                "username": AUTH_USERNAME,
+                "password": AUTH_PASSWORD,
+            }
+            
+            login_url = GRAPHQL_URL.replace("/graphql", "/auth/login")
+            
+            resp = _session.post(login_url, json=login_payload, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+            if resp.status_code != 200:
+                logger.error(f"GraphQL: Login failed with status {resp.status_code}: {resp.text}")
+                return None
+            
+            logger.info("GraphQL: Successfully logged in and obtained session cookie.")
+
+        #log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+        response = _session.post(
+            GRAPHQL_URL,
+            headers=headers,
+            json=payload
+        )
+        response.raise_for_status()
+        result = response.json()
+        #log(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+        return result
+
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
         return None
@@ -369,15 +397,12 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-# ----------------------------
-# Get Local Source ID
-# ----------------------------
 def get_local_source_id():
     global LOCAL_SOURCE_ID
 
     log("GraphQL: Fetching Local source ID", "debug")
     query = """
-    query {
+    query FetchLocalSourceID{
       sources {
         nodes { id name }
       }
@@ -400,16 +425,13 @@ def get_local_source_id():
     logger.error("GraphQL: Could not find 'Local source' in sources")
     LOCAL_SOURCE_ID = None
 
-# ----------------------------
-# Ensure Category Exists
-# ----------------------------
 def ensure_category(category_name=None):
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
     log(f"GraphQL: Ensuring '{name}' category exists", "debug")
     query = """
-    query ($name: String!) {
+    query EnsureTargetCategoryExists($name: String!) {
       categories(filter: { name: { equalTo: $name } }) {
         nodes { id name }
       }
@@ -428,7 +450,7 @@ def ensure_category(category_name=None):
 
     log(f"GraphQL: Creating new category {name}", "debug")
     mutation = """
-    mutation ($name: String!) {
+    mutation CreateTargetCategory($name: String!) {
       createCategory(input: { name: $name }) {
         category { id name }
       }
@@ -440,133 +462,43 @@ def ensure_category(category_name=None):
     return CATEGORY_ID
 
 # ----------------------------
-# Store The IDs of Creators' Manga
-# ----------------------------
-def store_creator_manga_IDs(meta: dict):
-    global LOCAL_SOURCE_ID
-    
-    if not LOCAL_SOURCE_ID:
-        logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot store manga IDs.")
-        return
-
-    if not global_dry_run:
-        gallery_meta = return_gallery_metas(meta)
-        creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
-        log(f"GraphQL: Gallery Metadata:{gallery_meta}\nProcessing creators {creators}", "debug")
-        for creator_name in creators:
-            query = """
-            query ($title: String!, $sourceId: LongString!) {
-              mangas(
-                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-              ) {
-                nodes { id title }
-              }
-            }
-            """
-            log(f"GraphQL: Looking up manga ID for creator '{creator_name}' in source {LOCAL_SOURCE_ID}", "debug")
-            result = graphql_request(query, {
-                "title": creator_name,
-                "sourceId": LOCAL_SOURCE_ID
-            })
-            
-            #log(f"GraphQL: Manga lookup result for '{creator_name}': {result}", "debug")
-            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-            if not nodes:
-                logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
-                with _deferred_lock:
-                    _deferred_creators.add(creator_name)
-                continue
-
-            manga_id = int(nodes[0]["id"])
-            log(f"GraphQL: Found manga for creator '{creator_name}': {nodes[0]}", "debug")
-            with _manga_ids_lock:
-                if manga_id not in _collected_manga_ids:
-                    _collected_manga_ids.add(manga_id)
-                    log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
-    else:
-        log(f"[DRY-RUN] GraphQL: Would store manga ID for creators", "debug")
-
-# ----------------------------
-# Retry deferred creators
-# ----------------------------
-def retry_deferred_creators():
-    global LOCAL_SOURCE_ID
-    if not _deferred_creators:
-        return
-
-    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
-    delay = 2
-
-    for attempt in range(1, max_attempts + 1):
-        with _deferred_lock:
-            creators_to_retry = list(_deferred_creators)
-
-        if not creators_to_retry:
-            return
-
-        logger.info(f"GraphQL: Retrying {len(creators_to_retry)} deferred creators (attempt {attempt}/{max_attempts})")
-
-        for creator_name in creators_to_retry:
-            log(f"GraphQL: Retrying creator '{creator_name}' with source {LOCAL_SOURCE_ID}", "debug")
-            query = """
-            query ($title: String!, $sourceId: LongString!) {
-              mangas(
-                filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-              ) {
-                nodes { id title }
-              }
-            }
-            """
-            result = graphql_request(query, {
-                "title": creator_name,
-                "sourceId": LOCAL_SOURCE_ID
-            })
-            log(f"GraphQL: Retry result for '{creator_name}': {result}", "debug")
-            nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-            if nodes:
-                manga_id = int(nodes[0]["id"])
-                log(f"GraphQL: Found manga {nodes[0]} for creator '{creator_name}' on retry", "debug")
-                with _manga_ids_lock:
-                    if manga_id not in _collected_manga_ids:
-                        _collected_manga_ids.add(manga_id)
-                        log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}' (retried)", "debug")
-                with _deferred_lock:
-                    _deferred_creators.discard(creator_name)
-
-        if not _deferred_creators:
-            logger.info("GraphQL: All deferred creators resolved.")
-            return
-
-        time.sleep(delay)
-        delay *= 2
-
-    if _deferred_creators:
-        logger.warning(f"GraphQL: Some creators could not be resolved after retries: {_deferred_creators}")
-
-# ----------------------------
 # Bulk Update Functions
 # ----------------------------
-def update_mangas(ids: list[int]):
+
+def update_suwayomi(manga_id: int, title: str):
+    """
+    Updates a manga entry on Suwayomi with a new title.
+    """
+    mutation = """
+    mutation UpdateSuwayomi($id: ID!, $title: String!) {
+        updateManga(input: {id: $id, title: $title}) { manga { id title } }
+    }
+    """
+    try:
+        graphql_request(mutation, {"id": manga_id, "title": title})
+        logger.info(f"Suwayomi updated: ID {manga_id} -> Title '{title}'")
+    except Exception as e:
+        logger.warning(f"Failed to update Suwayomi for manga {manga_id}: {e}")
+
+def update_mangas(ids: list[int], category_id: int):
     if not ids:
         return
-    log(f"GraphQL: Updating mangas {ids} as 'In Library", "debug")
+    
+    log(f"GraphQL: Updating mangas {ids} as 'In Library'", "debug")
     mutation = """
-    mutation ($ids: [Int!]!) {
+    mutation AddMangasToLibrary($ids: [Int!]!) {
       updateMangas(input: { ids: $ids, patch: { inLibrary: true } }) {
         clientMutationId
       }
     }
     """
     result = graphql_request(mutation, {"ids": ids})
-    log(f"GraphQL: updateMangas result: {result}", "debug")
+    #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
-
-def update_mangas_categories(ids: list[int], category_id: int):
-    if not ids:
-        return
+    
     log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
     mutation = """
-    mutation ($ids: [Int!]!, $categoryId: Int!) {
+    mutation AddMangasToCategory($ids: [Int!]!, $categoryId: Int!) {
       updateMangasCategories(
         input: { ids: $ids, patch: { addToCategories: [$categoryId] } }
       ) {
@@ -575,17 +507,46 @@ def update_mangas_categories(ids: list[int], category_id: int):
     }
     """
     result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
-    log(f"GraphQL: updateMangasCategories result: {result}", "debug")
+    #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
-
-# ----------------------------
-# Add Single Creator to Category (defer if needed)
-# ----------------------------
-def add_creator_to_category(meta: dict):
-    global LOCAL_SOURCE_ID
-
-    if not LOCAL_SOURCE_ID:
-        logger.error("GraphQL: LOCAL_SOURCE_ID not set, cannot add creator.")
+    
+def retrieve_creator_suwayomi_metadata(creator_name: str):
+    """
+    Retrieve metadata for a creator from Suwayomi's Local Source by exact title match.
+    Returns the list of nodes (id, title, chapters, etc).
+    """
+    query = """
+    query FetchMangaMetadataFromLocalSource($title: String!) {
+      mangas(
+        filter: { sourceId: { equalTo: "0" }, title: { equalTo: $title } }
+      ) {
+        nodes {
+          id
+          title
+          chapters {
+            nodes {
+              name
+            }
+          }
+        }
+      }
+    }
+    """
+    result = graphql_request(query, {"title": creator_name})
+    if not result:
+        return []
+    return result.get("data", {}).get("mangas", {}).get("nodes", [])
+    
+# ------------------------------------------------------------
+# Update creator mangas and ensure they are added to Suwayomi
+# ------------------------------------------------------------
+def update_creator_manga(meta):
+    """
+    Update a creator's details.json and genre metadata based on a downloaded gallery.
+    Also attempt to immediately add the creator's manga to Suwayomi using its ID.
+    """
+    if config.get("DRY_RUN"):
+        log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
     gallery_meta = return_gallery_metas(meta)
@@ -593,68 +554,300 @@ def add_creator_to_category(meta: dict):
     if not creators:
         return
 
+    gallery_title = gallery_meta["title"]
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
+
+    # Load all metadata at once
+    metadata = load_creators_metadata()
+    collected_ids = set(metadata.get("collected_manga_ids", []))
+    deferred_creators = set(metadata.get("deferred_creators", []))
+    if "creators" not in metadata:
+        metadata["creators"] = {}
+
     for creator_name in creators:
-        query = """
-        query ($title: String!, $sourceId: LongString!) {
-          mangas(
-            filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }
-          ) {
-            nodes { id title }
-          }
-        }
-        """
-        result = graphql_request(query, {
+        # --- Try to retrieve manga metadata from Suwayomi ---
+        nodes = retrieve_creator_suwayomi_metadata(creator_name)
+        suwayomi_id = int(nodes[0]["id"]) if nodes else None
+
+        if suwayomi_id is not None:
+            collected_ids.add(suwayomi_id)
+            try:
+                update_mangas([suwayomi_id], CATEGORY_ID)
+                collected_ids.discard(suwayomi_id)
+                deferred_creators.discard(creator_name)
+            except Exception as e:
+                logger.warning(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}")
+                collected_ids.discard(suwayomi_id)
+                deferred_creators.add(creator_name)
+        else:
+            # No existing manga found, mark creator as deferred
+            deferred_creators.add(creator_name)
+
+        # --- Update genre counts ---
+        entry = metadata["creators"].setdefault(creator_name, {})
+        genre_counts = entry.get("genre_counts", {})
+        for genre in gallery_genres:
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+        entry["genre_counts"] = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
+
+        # --- Update details.json ---
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        os.makedirs(creator_folder, exist_ok=True)
+        details_file = os.path.join(creator_folder, "details.json")
+
+        most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+        details = {
             "title": creator_name,
-            "sourceId": LOCAL_SOURCE_ID
-        })
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            "author": creator_name,
+            "artist": creator_name,
+            "description": f"Latest Doujin: {gallery_title}",
+            "genre": [g for g, _ in most_popular],
+            "status": "1",
+            "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
+        }
 
-        if not nodes:
-            logger.warning(f"GraphQL: No manga found for creator '{creator_name}', deferring.")
-            with _deferred_lock:
-                _deferred_creators.add(creator_name)
-            continue
+        with open(details_file, "w", encoding="utf-8") as f:
+            json.dump(details, f, ensure_ascii=False, indent=2)
 
-        manga_id = int(nodes[0]["id"])
-        with _manga_ids_lock:
-            if manga_id not in _collected_manga_ids:
-                _collected_manga_ids.add(manga_id)
-                log(f"GraphQL: Stored manga ID {manga_id} for creator '{creator_name}'", "debug")
+    # --- Save all metadata at once ---
+    metadata["collected_manga_ids"] = sorted(collected_ids)
+    metadata["deferred_creators"] = sorted(deferred_creators)
+    save_creators_metadata(metadata)
 
-# ----------------------------
-# Process Deferred Creators & Add to Category
-# ----------------------------
-def add_deferred_creators_to_category():
-    global CATEGORY_ID
+    # --- Update manga cover ---
+    if not config.get("DRY_RUN"):
+        try:
+            for creator_name in creators:
+                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
+                if not os.path.exists(gallery_folder):
+                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+                    continue
 
-    if CATEGORY_ID is None:
-        CATEGORY_ID = ensure_category(SUWAYOMI_CATEGORY_NAME)
-        if CATEGORY_ID is None:
-            logger.error(f"GraphQL: Category '{SUWAYOMI_CATEGORY_NAME}' not set, cannot add creators.")
-            return
+                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
+                if not candidates:
+                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
+                    continue
 
-    retry_deferred_creators()
+                page1_file = os.path.join(gallery_folder, candidates[0])
+                _, ext = os.path.splitext(page1_file)
 
-    # Fetch existing IDs in category
+                # Remove old cover
+                for f in os.listdir(creator_folder):
+                    if f.startswith("cover."):
+                        try:
+                            os.remove(os.path.join(creator_folder, f))
+                            log(f"Removed old cover file: {f}")
+                        except Exception as e:
+                            logger.info(f"Failed to remove old cover file {f}: {e}")
+
+                cover_file = os.path.join(creator_folder, f"cover{ext}")
+                shutil.copy2(page1_file, cover_file)
+                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
+
+        except Exception as e:
+            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
+    else:
+        log(f"[DRY RUN] Would update manga cover for creators: {creators}", "debug")
+
+def process_deferred_creators():
+    """
+    Adds deferred creators to library and updates their category.
+    Ensures only existing local creator folders are added.
+    Adds all existing local mangas to library + category if they exist on disk.
+    """
+    
+    # ----------------------------
+    # Add mangas not yet in library
+    # ----------------------------
+    log_clarification()
+    logger.info("GraphQL: Fetching mangas not yet in library...")
+
     query = """
-    query ($categoryId: Int!) {
-      category(id: $categoryId) {
-        mangas { nodes { id title } }
+    query FetchMangasNotInLibrary($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+        nodes { id title }
       }
     }
     """
-    result = graphql_request(query, {"categoryId": CATEGORY_ID})
-    existing_ids = {int(n["id"]) for n in result.get("data", {}).get("category", {}).get("mangas", {}).get("nodes", [])}
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
-    with _manga_ids_lock:
-        new_ids = list(_collected_manga_ids - existing_ids)
-
-    if not new_ids:
-        logger.info(f"GraphQL: No new mangas to add to category '{SUWAYOMI_CATEGORY_NAME}'.")
+    if not nodes:
+        logger.info("GraphQL: No mangas found outside the library.")
         return
 
-    update_mangas(new_ids)
-    update_mangas_categories(new_ids, CATEGORY_ID)
+    new_ids = []
+    for node in nodes:
+        title = node["title"]
+        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
+        if os.path.exists(expected_path):
+            new_ids.append(int(node["id"]))
+
+    if new_ids:
+        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+        update_mangas(new_ids, CATEGORY_ID)
+
+    logger.info("GraphQL: Finished adding missing mangas to library.")
+
+    # ----------------------------
+    # Process deferred creators
+    # ----------------------------   
+    log_clarification()
+    
+    with _deferred_creators_lock:
+        deferred_creators = load_deferred_creators()
+
+    if not deferred_creators:
+        logger.info("GraphQL: No deferred creators to process.")
+        return
+
+    logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
+
+    # Fetch all mangas from local source
+    query = """
+    query FetchAllMangasFromLocalSource($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId } }) {
+        nodes { id title inLibrary categories { id } }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    all_mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    manga_lookup = {m["title"]: m for m in all_mangas}
+    new_ids = set()
+    still_deferred = set()
+
+    for creator_name in sorted(deferred_creators):
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+        if not os.path.exists(creator_folder):
+            logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
+            still_deferred.add(creator_name)
+            continue
+
+        manga_info = manga_lookup.get(creator_name)
+        if not manga_info:
+            logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
+            still_deferred.add(creator_name)
+            continue
+
+        if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
+            logger.info(f"Creator manga '{creator_name}' already in library and category, skipping.")
+            deferred_creators.discard(creator_name)
+            continue
+
+        new_ids.add(int(manga_info["id"]))
+        logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
+
+    if new_ids:
+        update_mangas(list(new_ids), CATEGORY_ID)
+
+    # Update deferred + collected globally
+    save_deferred_creators(still_deferred)
+    save_collected_manga_ids(set())
+    logger.info("GraphQL: Finished processing deferred creators.")
+
+def find_missing_galleries(local_root: str, auto_update: bool = True):
+    """
+    Crawl the local manga directory and fix gallery titles if needed.
+    
+    Args:
+        local_root: Path to the root folder containing creator directories.
+        auto_update: If True, updates the titles in Suwayomi using GraphQL.
+    """
+
+    # Load persisted broken symbols
+    POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
+
+    for creator_dir in sorted(Path(local_root).iterdir()):
+        if not creator_dir.is_dir():
+            continue
+
+        creator_name = creator_dir.name
+        local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
+        if not local_galleries:
+            logger.info(f"No galleries found for {creator_name}, skipping.")
+            continue
+
+        # Query manga by title & source
+        query = """
+        query QueryMangaByTitleSource($title: String!, $sourceId: LongString!) {
+          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+            nodes {
+              id
+              title
+              chapters {
+                nodes { name }
+              }
+            }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+        if not nodes:
+            log_clarification()
+            logger.warning(f"Creator '{creator_name}' not found in library.")
+            continue
+
+        manga = nodes[0]
+        chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
+
+        for gallery_name, gallery_path in local_galleries.items():
+            if gallery_name not in chapter_titles:
+                # Detect all non-English characters
+                symbols = {c for c in gallery_name if ord(c) > 127}
+
+                new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
+                if new_broken:
+                    POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
+                    status = "Broken symbols detected."
+                else:
+                    status = "Update Suwayomi to reflect changes."
+
+                log_clarification()
+                logger.info(
+                    f"Missing gallery for '{creator_name}':"
+                    f"\nName: '{gallery_name}'"
+                    f"\nPath: '{gallery_path}'"
+                    f"\nNon-English symbols: {symbols}"
+                    f"\nStatus: {status}"
+                )
+
+                # Clean the title using clean_title()
+                cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
+                if cleaned_title != gallery_name:
+                    new_path = gallery_path.parent / cleaned_title
+                    if new_path.exists():
+                        logger.info(f"Skipping rename: target already exists: '{new_path}'")
+                    else:
+                        logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
+                        gallery_path.rename(new_path)
+                        
+                        if auto_update:
+                            update_suwayomi(manga["id"], cleaned_title) # Optionally update Suwayomi
+
+    # Deduplicate against replacements, blacklist, and allowed symbols
+    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
+    POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
+
+    if POSSIBLE_BROKEN_SYMBOLS:
+        def escape_symbol(c):
+            if c in {'"', '\\'}:
+                return f'\\{c}'
+            return c
+        formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
+
+    # Persist updated broken symbols
+    save_possible_broken_symbols(POSSIBLE_BROKEN_SYMBOLS)
+    return POSSIBLE_BROKEN_SYMBOLS
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
@@ -662,6 +855,11 @@ def add_deferred_creators_to_category():
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
+    """
+    Downloads an image from one of the provided URLs to the given path.
+    Tries mirrors in order until one succeeds, with retries per mirror.
+    Updates tqdm progress bar with current creator.
+    """
     #log_clarification()
     #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
@@ -680,8 +878,8 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if global_dry_run:
-        logger.info(f"[DRY-RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
@@ -693,7 +891,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     for url in urls:
         for attempt in range(1, retries + 1):
             try:
-                r = session.get(url, timeout=30, stream=True)
+                r = session.get(url, timeout=10, stream=True)
                 if r.status_code == 429:
                     wait = 2 ** attempt
                     logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
@@ -730,8 +928,12 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     
     return False
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook(gallery_list):
+# Hook for pre-run functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
+def pre_batch_hook(gallery_list):
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
     
@@ -747,16 +949,27 @@ def pre_run_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
 
@@ -764,20 +977,25 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
 
-    # Update creator's popular genres
-    update_creator_popular_genres(meta)
+    log_clarification()
     
-    # Store creator's manga ID, then add creator's manga to Suwayomi Category (thread safe)
-    store_creator_manga_IDs(meta)
-    add_creator_to_category(meta)
+    # Update creator's popular genres
+    update_creator_manga(meta)
 
-# Hook for post-run functionality. Reset download path. Use active_extension.post_run_hook(ARGS) in downloader.
-def post_run_hook():
+# Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
+def post_batch_hook():
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        return
+    
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
-    # Add deferred creators to Suwayomi category
-    add_deferred_creators_to_category()
-
+    # Add all creators to Suwayomi
+    process_deferred_creators()
+    
     # Clean up empty directories
-    remove_empty_directories(True)
+    clean_directories(True)
+    
+    # Find missing galleries
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, sys, argparse, re
+import os, time, sys, argparse, re
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import start_downloader
@@ -118,17 +118,43 @@ def parse_args():
     )
 
     # Threads / concurrency
-    parser.add_argument("--threads-galleries", type=int, default=DEFAULT_THREADS_GALLERIES, help=f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})")
-    parser.add_argument("--threads-images", type=int, default=DEFAULT_THREADS_IMAGES, help=f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})")
+    parser.add_argument(
+        "--threads-galleries",
+        type=int,
+        default=DEFAULT_THREADS_GALLERIES,
+        help=(
+            f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})"
+            f"Be careful setting this any higher than {DEFAULT_THREADS_GALLERIES}"
+        )
+    )
+    
+    parser.add_argument(
+        "--threads-images",
+        type=int,
+        default=DEFAULT_THREADS_IMAGES,
+        help=(
+            f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})"
+            f"Be careful setting this any higher than {DEFAULT_THREADS_IMAGES}"
+        )
+    )
+    
     parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument(
-        "--no-sleep",
-        action="store_true",
-        default=DEFAULT_NO_SLEEP,
+        "--min-sleep",
+        type=int,
+        default=DEFAULT_MIN_SLEEP,
         help=(
-            f"Skips dynamically sleeping between galleries. Not recommended for large downloads. (default: {DEFAULT_USE_TOR})"
-            "For a large number of galleries, using this flag in conjunction with a lower thread count MAY result in faster downloads, but is still not recommended."
-            f"May result in hitting API limits (will be retried up to value of MAX_RETRIES, default: {DEFAULT_MAX_RETRIES})"
+            f"Minimum amount of time each thread should sleep before starting a new download. (default: {DEFAULT_MIN_SLEEP})"
+            f"Set this to a higher number if you are hitting API limits."
+        )
+    )
+    parser.add_argument(
+        "--max-sleep",
+        type=int,
+        default=DEFAULT_MAX_SLEEP,
+        help=(
+            f"Maximum amount of time each thread can sleep before starting a new download. (default: {DEFAULT_MAX_SLEEP})"
+            f"Setting this to a number lower than {DEFAULT_MAX_SLEEP}, may result in hitting API limits."
         )
     )
     
@@ -274,7 +300,8 @@ def update_config(args): # Update config
     config["THREADS_GALLERIES"] = args.threads_galleries
     config["THREADS_IMAGES"] = args.threads_images
     config["MAX_RETRIES"] = args.max_retries
-    config["NO_SLEEP"] = args.no_sleep
+    config["MIN_SLEEP"] = args.min_sleep
+    config["MAX_SLEEP"] = args.max_sleep
     config["DRY_RUN"] = args.dry_run
     config["USE_TOR"] = args.use_tor
     config["VERBOSE"] = args.verbose
@@ -355,7 +382,24 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    start_downloader(gallery_list)
+    BATCH_SLEEP_TIME = (BATCH_SIZE * 0.05) # Seconds to sleep between batches.
+    for i in range(0, len(gallery_list), BATCH_SIZE):
+        log_clarification()
+        batch = gallery_list[i:i + BATCH_SIZE]
+        logger.info(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
+        
+        # Build scraper session.
+        build_session()
+    
+        start_downloader(batch) # Start batch.
+        
+        if i + BATCH_SIZE < len(gallery_list): # Not last batch
+            log_clarification()
+            logger.info(f"Batch {i//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
+            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
+        else: # Last batch
+            log_clarification()
+            logger.info(f"All batches complete.")
 
 if __name__ == "__main__":
     main()

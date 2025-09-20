@@ -44,68 +44,65 @@ logger.debug("Logger: Debugging Started.")
 def setup_logger(verbose=False, debug=False):
     """
     Configure the nhscraper logger.
-    Ensures no duplicate handlers and sets levels based on flags/config.
+    File logs always DEBUG.
+    Console respects verbose/debug flags.
     """
-
-    # Always get the same logger
     logger = logging.getLogger("nhscraper")
-    logger.handlers.clear()
+    logger.handlers.clear()  # remove previous handlers
 
-    # --- Formatter ---
+    # Formatter
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
-    # --- Console handler ---
+    # Console handler
     ch = logging.StreamHandler()
     if debug:
-        logger.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
     elif verbose:
-        logger.setLevel(logging.INFO)
         ch.setLevel(logging.INFO)
     else:
-        logger.setLevel(logging.WARNING)
         ch.setLevel(logging.WARNING)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # Runtime log (new file per run, timestamped)
+    # File handler: always DEBUG
     fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
     fh_runtime.setLevel(logging.DEBUG)
     fh_runtime.setFormatter(formatter)
     logger.addHandler(fh_runtime)
 
-    # Announce level
-    if debug:
-        logger.info("Log Level Set To DEBUG")
-    elif verbose:
-        logger.info("Log Level Set To INFO")
-    else:
-        logger.info("Log Level Set To WARNING")
+    # Logger level: always DEBUG so all messages reach file
+    logger.setLevel(logging.DEBUG)
 
+    logger.info("Logger initialised. Console level: %s", 
+                "DEBUG" if debug else "INFO" if verbose else "WARNING")
+    
     return logger
 
 # --- Placeholder logger so imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str, log_type: str = None):
-    """Unified logging for CLI depending on verbose/debug flags."""
-    debug_mode = config.get("DEBUG")
-    verbose_mode = config.get("VERBOSE")
+def log(message: str, log_type: str = "info"):
+    """
+    Unified logging function.
+    All logs go to file (DEBUG+), console respects setup_logger flags.
+    
+    log_type: "debug", "info", "warning", "error", "critical"
+    """
+    logger = logging.getLogger("nhscraper")
 
-    if log_type == None:
-        if logger.getEffectiveLevel == 10: # Only log if log level is DEBUG
-            logger.debug(message)  # Log as debug
-        if logger.getEffectiveLevel == 20: # Only log if log level is INFO
-            logger.info(message)  # Log as debug
-        else:
-            print(message)         # Always print to terminal
-    
-    elif log_type == "debug":
-        logger.debug(message)  # Always log debug to file if DEBUG or VERBOSE
-    
-    elif log_type == "info":
-        logger.info(message)   # Log info to file and terminal
+    # Map string to logging function
+    log_map = {
+        "debug": logger.debug,
+        "info": logger.info,
+        "warning": logger.warning,
+        "error": logger.error,
+        "critical": logger.critical,
+    }
+
+    log_func = log_map.get(log_type.lower(), logger.info)
+    log_func(message)
+
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
@@ -122,6 +119,8 @@ os.makedirs(NHENTAI_DIR, exist_ok=True)
 # Load environment variables
 if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
+    
+BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
@@ -153,18 +152,16 @@ DEFAULT_RANGE_END=600000
 DEFAULT_GALLERIES=""
 
 # Filters
-DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,ai generated"
+DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated"
 DEFAULT_LANGUAGE="english"
 DEFAULT_TITLE_TYPE="english"
-DODGY_SYMBOL_BLACKLIST = ["↑", "↓", "→", "←", "★", "☆", "♥", "♪", "◆", "◇", "※", "✔", "✖", "•", "●", "…", "@",
-                          "¤", "¢", "£", "¥", "§", "¶", "†", "‡", "‰", "µ", "¦", "°", "¬", "<", ">", "$", "^"]
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
-DEFAULT_THREADS_IMAGES=8
+DEFAULT_THREADS_IMAGES=10
 DEFAULT_MAX_RETRIES=3
-DEFAULT_NO_SLEEP=False
-
+DEFAULT_MIN_SLEEP=0.5
+DEFAULT_MAX_SLEEP=100
 # Download Options
 DEFAULT_USE_TOR=True
 DEFAULT_DRY_RUN=False
@@ -215,7 +212,8 @@ config = {
     "THREADS_GALLERIES": getenv_int("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
-    "NO_SLEEP": str(os.getenv("USE_TOR", DEFAULT_NO_SLEEP)).lower() == "true",
+    "MIN_SLEEP": getenv_int("MIN_SLEEP", DEFAULT_MIN_SLEEP),
+    "MIN_SLEEP": getenv_int("MAX_SLEEP", DEFAULT_MAX_SLEEP),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
@@ -266,7 +264,8 @@ def normalise_config():
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-        "NO_SLEEP": DEFAULT_NO_SLEEP,
+        "MIN_SLEEP": DEFAULT_MIN_SLEEP,
+        "MAX_SLEEP": DEFAULT_MAX_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "VERBOSE": DEFAULT_VERBOSE,
@@ -320,4 +319,114 @@ def get_mirrors():
 
 MIRRORS = get_mirrors()
 
-global_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+# ------------------------------------------------------------
+# Gallery Title Cleaning
+# ------------------------------------------------------------
+
+# Symbols that are filesystem safe and should not be removed or replaced
+ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", "\"", ",", ".", ":", "?"]
+
+# Define explicit replacements for certain symbols
+BROKEN_SYMBOL_REPLACEMENTS = {
+    # Miscellaneous
+    "ā": "a", "Ā": "A", "ē": "e", "Ē": "E",
+    "ī": "i", "Ī": "I", "ō": "o", "Ō": "O",
+    "ū": "u", "Ū": "U","ŕ": "r", "Ŕ": "R",
+    "ś": "s", "Ś": "S", "ź": "z", "Ź": "Z", "ż": "z", "Ż": "Z",
+    
+    # Accented Latin vowels
+    "à": "a", "À": "A", "á": "a", "Á": "A", "â": "a", "Â": "A",
+    "ã": "a", "Ã": "A", "ä": "a", "Ä": "A", "å": "a", "Å": "A",
+    "è": "e", "È": "E", "é": "e", "É": "E", "ê": "e", "Ê": "E",
+    "ë": "e", "Ë": "E",
+    "ì": "i", "Ì": "I", "í": "i", "Í": "I", "î": "i", "Î": "I",
+    "ï": "i", "Ï": "I",
+    "ò": "o", "Ò": "O", "ó": "o", "Ó": "O", "ô": "o", "Ô": "O",
+    "õ": "o", "Õ": "O", "ö": "o", "Ö": "O", "ø": "o", "Ø": "O",
+    "ù": "u", "Ù": "U", "ú": "u", "Ú": "U", "û": "u", "Û": "U",
+    "ü": "u", "Ü": "U",
+    "ý": "y", "Ý": "Y", "ÿ": "y", "Ÿ": "Y",
+
+    # Special Latin ligatures & consonants
+    "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE",
+    "ç": "c", "Ç": "C",
+    "ñ": "n", "Ñ": "N",
+    "ß": "ss",
+    "Ð": "D",
+
+    # Punctuation & misc symbols
+    "’": "'", "¿": "?", "¡": "!",
+    "ー": "-", "×": "X",
+
+    # Greek letters
+    "α": "a", "Α": "A",
+    "β": "b", "Β": "B",
+    "γ": "g", "Γ": "G",
+    "δ": "d", "Δ": "D",
+    "ε": "e", "Ε": "E",
+    "ζ": "z", "Ζ": "Z",
+    "η": "e", "Η": "E",
+    "θ": "th", "Θ": "Th",
+    "ι": "i", "Ι": "I",
+    "κ": "k", "Κ": "K",
+    "λ": "l", "Λ": "L",
+    "μ": "m", "Μ": "M",
+    "ν": "n", "Ν": "N",
+    "ξ": "x", "Ξ": "X",
+    "ο": "o", "Ο": "O",
+    "π": "p", "Π": "P",
+    "ρ": "r", "Ρ": "R",
+    "σ": "s", "Σ": "S", "ς": "s",
+    "τ": "t", "Τ": "T",
+    "υ": "y", "Υ": "Y",
+    "φ": "f", "Φ": "F",
+    "χ": "ch", "Χ": "Ch",
+    "ψ": "ps", "Ψ": "Ps",
+    "ω": "o", "Ω": "O",
+
+    # Cyrillic letters
+    "а": "a", "А": "A",
+    "б": "b", "Б": "B",
+    "в": "v", "В": "V",
+    "г": "g", "Г": "G",
+    "д": "d", "Д": "D",
+    "е": "e", "Е": "E",
+    "ё": "e", "Ё": "E",
+    "ж": "zh", "Ж": "Zh",
+    "з": "z", "З": "Z",
+    "и": "i", "И": "I",
+    "й": "i", "Й": "I",
+    "к": "k", "К": "K",
+    "л": "l", "Л": "L",
+    "м": "m", "М": "M",
+    "н": "n", "Н": "N",
+    "о": "o", "О": "O",
+    "п": "p", "П": "P",
+    "р": "r", "Р": "R",
+    "с": "s", "С": "S",
+    "т": "t", "Т": "T",
+    "у": "u", "У": "U",
+    "ф": "f", "Ф": "F",
+    "х": "h", "Х": "H",
+    "ц": "ts", "Ц": "Ts",
+    "ч": "ch", "Ч": "Ch",
+    "ш": "sh", "Ш": "Sh",
+    "щ": "shch", "Щ": "Shch",
+    "ъ": "", "Ъ": "",
+    "ы": "y", "Ы": "Y",
+    "ь": "", "Ь": "",
+    "э": "e", "Э": "E",
+    "ю": "yu", "Ю": "Yu",
+    "я": "ya", "Я": "Ya"
+}
+
+# Fallback blacklist (these always become "_")
+BROKEN_SYMBOL_BLACKLIST = [
+    "↑", "↓", "→", "←",
+    "♡", "♥", "★", "☆", "♪", "◆", "◇", "※", "✔", "✖",
+    "◦", "∙", "•", "°", "●", "‣", "®", "©",
+    "…", "@", "¬", "<", ">", "^", "¤", "¢",
+    "♂", "♀", "⚥", "⚢", "⚣", "⚤", "⚦", "⚧", "⚨", "⚩", "♂", "♀",
+    "£", "$", "¥",
+    "ð", "§", "¶", "†", "‡", "‰", "µ", "¦", "~"
+]
