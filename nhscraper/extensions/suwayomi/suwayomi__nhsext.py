@@ -72,7 +72,7 @@ def load_creators_metadata() -> dict:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialize global collected IDs and creators dictionary if missing
+    # Initialise global collected IDs and creators dictionary if missing
     return {"collected_manga_ids": [], "creators": {}}
 
 def save_creators_metadata(metadata: dict):
@@ -344,19 +344,12 @@ def update_creator_manga(meta):
 
         metadata = load_creators_metadata()
 
-        # Append this gallery's Suwayomi manga ID to the top-level collected_manga_ids
-        suwayomi_id = meta.get("suwayomi_id")  # Must be set somewhere during download
-        if suwayomi_id is not None:
-            collected_ids = set(metadata.get("collected_manga_ids", []))
-            collected_ids.add(suwayomi_id)
-            metadata["collected_manga_ids"] = sorted(collected_ids)
-
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
             os.makedirs(creator_folder, exist_ok=True)
 
-            # Initialize creator metadata if missing
+            # Initialise creator metadata if missing
             entry = metadata.get("creators", {}).get(creator_name, {})
             genre_counts = entry.get("genre_counts", {})
 
@@ -583,6 +576,7 @@ def ensure_category(category_name=None):
 def update_mangas(ids: list[int], category_id: int):
     if not ids:
         return
+    
     log(f"GraphQL: Updating mangas {ids} as 'In Library'", "debug")
     mutation = """
     mutation ($ids: [Int!]!) {
@@ -595,8 +589,6 @@ def update_mangas(ids: list[int], category_id: int):
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
-    if not ids:
-        return
     log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
     mutation = """
     mutation ($ids: [Int!]!, $categoryId: Int!) {
@@ -620,46 +612,11 @@ def update_mangas(ids: list[int], category_id: int):
 # 3. Detect missing galleries for creator mangas
 # ----------------------------
 
-def add_missing_local_mangas_to_library():
-    """
-    Add all existing local mangas to library + category if they exist on disk.
-    """
-    log_clarification()
-    logger.info("GraphQL: Fetching mangas not yet in library...")
-
-    query = """
-    query ($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
-        nodes { id title }
-      }
-    }
-    """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
-    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-
-    if not nodes:
-        logger.info("GraphQL: No mangas found outside the library.")
-        return
-
-    new_ids = []
-    for node in nodes:
-        title = node["title"]
-        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
-        if os.path.exists(expected_path):
-            new_ids.append(int(node["id"]))
-        #else:
-        #    logger.info(f"Skipping '{title}' as folder does not exist on disk.")
-
-    if new_ids:
-        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-        update_mangas(new_ids, CATEGORY_ID)
-
-    logger.info("GraphQL: Finished adding missing mangas to library.")
-
 def process_deferred_creators():
     """
     Adds deferred creators to library and updates their category.
     Ensures only existing local creator folders are added.
+    Adds all existing local mangas to library + category if they exist on disk.
     """
     log_clarification()
 
@@ -711,6 +668,38 @@ def process_deferred_creators():
     save_deferred_creators(set())
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
+    
+    log_clarification()
+    logger.info("GraphQL: Fetching mangas not yet in library...")
+
+    query = """
+    query ($sourceId: LongString!) {
+      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+        nodes { id title }
+      }
+    }
+    """
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+    if not nodes:
+        logger.info("GraphQL: No mangas found outside the library.")
+        return
+
+    new_ids = []
+    for node in nodes:
+        title = node["title"]
+        expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
+        if os.path.exists(expected_path):
+            new_ids.append(int(node["id"]))
+        #else:
+        #    logger.info(f"Skipping '{title}' as folder does not exist on disk.")
+
+    if new_ids:
+        logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+        update_mangas(new_ids, CATEGORY_ID)
+
+    logger.info("GraphQL: Finished adding missing mangas to library.")
 
 def find_missing_galleries(local_root: str, auto_update: bool = True):
     """
@@ -958,7 +947,6 @@ def post_batch_hook():
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
 
     # Add all creators to Suwayomi
-    add_missing_local_mangas_to_library()
     process_deferred_creators()
     
     # Clean up empty directories

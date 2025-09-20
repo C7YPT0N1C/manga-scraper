@@ -174,7 +174,7 @@ def clean_title(meta_or_title, possible_broken_symbols: set[str] = None):
         possible_broken_symbols: Optional set of extra symbols detected as broken.
     
     Returns:
-        str: Sanitized title.
+        str: Sanitised title.
     """
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
