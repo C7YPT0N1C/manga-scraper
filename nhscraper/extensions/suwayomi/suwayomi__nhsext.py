@@ -84,7 +84,7 @@ def save_deferred_creators(creators: set[str]):
 collected_manga_ids_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "collected_manga_ids.json")
 
 def load_collected_manga_ids() -> set[int]:
-    if deferred_creators_file.exists():
+    if collected_manga_ids_file.exists():
         try:
             with open(collected_manga_ids_file, "r", encoding="utf-8") as f:
                 return set(json.load(f))
