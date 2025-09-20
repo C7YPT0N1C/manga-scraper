@@ -184,14 +184,14 @@ def clean_title(meta):
     title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
 
     # Explicit replacements
-    for symbol, replacement in DODGY_SYMBOL_REPLACEMENTS.items():
+    for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
         title = title.replace(symbol, replacement)
 
     # Replace all variations of spaces around dash (ASCII, en, em) with single hyphen
     title = re.sub(r"\s*[–—-]\s*", "-", title)
 
     # Replace blacklisted symbols with underscores
-    for symbol in DODGY_SYMBOL_BLACKLIST:
+    for symbol in BROKEN_SYMBOL_BLACKLIST:
         title = re.sub(rf"\s*{re.escape(symbol)}", "_", title)
 
     # Collapse multiple underscores/spaces
