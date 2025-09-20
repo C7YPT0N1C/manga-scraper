@@ -746,13 +746,13 @@ def find_missing_galleries(local_root: str):
                 if symbols:
                     POSSIBLE_BROKEN_SYMBOLS.update(symbols)
                 logger.info(
-                    f"Missing gallery for '{creator_name}': '{gallery_name}' "
-                    f"at '{gallery_path}', unusual symbols: {symbols}"
+                    f"Missing gallery for '{creator_name}': '{gallery_name}' at '{gallery_path}', "
+                    f"unusual symbols: {symbols}"
                 )
 
     # Only log once, at the end
     if POSSIBLE_BROKEN_SYMBOLS:
-        formatted_list = ", ".join(f'"{c}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        formatted_list = ", ".join(repr(c) for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
         logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
 ####################################################################################################################
