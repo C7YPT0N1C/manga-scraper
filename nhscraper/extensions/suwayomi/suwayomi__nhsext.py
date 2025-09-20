@@ -737,13 +737,20 @@ def find_missing_galleries(local_root: str):
         chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
 
         # Detect and log missing galleries
+        POSSIBLE_BROKEN_SYMBOLS = set()
+
         for gallery_name, gallery_path in local_galleries.items():
             if gallery_name not in chapter_titles:
                 symbols = {c for c in gallery_name if not c.isalnum() and c not in " _-"}  # unusual chars
+                if symbols:
+                    POSSIBLE_BROKEN_SYMBOLS.update(symbols)
                 logger.info(
                     f"Missing gallery for '{creator_name}': '{gallery_name}' "
                     f"at '{gallery_path}', unusual symbols: {symbols}"
                 )
+
+        if POSSIBLE_BROKEN_SYMBOLS:
+            logger.info(f"POSSIBLE_BROKEN_SYMBOLS = {sorted(POSSIBLE_BROKEN_SYMBOLS)}")
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
