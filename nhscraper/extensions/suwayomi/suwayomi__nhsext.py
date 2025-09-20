@@ -73,8 +73,12 @@ def load_creators_metadata() -> dict:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialise global collected IDs and creators dictionary if missing
-    return {"collected_manga_ids": [], "creators": {}}
+    # Initialise dictionaries if missing
+    return {
+        "collected_manga_ids": [],
+        "deferred_creators": [],
+        "creators": {}
+    }
 
 def save_creators_metadata(metadata: dict):
     try:
@@ -84,24 +88,17 @@ def save_creators_metadata(metadata: dict):
     except Exception as e:
         logger.warning(f"Could not save creators_metadata.json: {e}")
 
+# ---- Global deferred list ----
 def load_deferred_creators() -> set[str]:
     metadata = load_creators_metadata()
-    creators = metadata.get("creators", {})
-    return {c for c, entry in creators.items() if entry.get("deferred", False)}
+    return set(metadata.get("deferred_creators", []))
 
 def save_deferred_creators(creators: set[str]):
     metadata = load_creators_metadata()
-    if "creators" not in metadata:
-        metadata["creators"] = {}
-    for creator_name in creators:
-        entry = metadata["creators"].setdefault(creator_name, {})
-        entry["deferred"] = True
-    # Clear deferred for creators not in the set
-    for creator_name, entry in metadata["creators"].items():
-        if creator_name not in creators:
-            entry["deferred"] = False
+    metadata["deferred_creators"] = sorted(creators)
     save_creators_metadata(metadata)
 
+# ---- Collected manga IDs ----
 def load_collected_manga_ids() -> set[int]:
     metadata = load_creators_metadata()
     return set(metadata.get("collected_manga_ids", []))
@@ -343,9 +340,11 @@ def graphql_request(query: str, variables: dict = None):
         result = response.json()
         #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # Only needed for ACTUAL code debugging.
         return result
+    
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
         return None
+    
     except ValueError as e:
         logger.error(f"GraphQL: Failed to decode JSON response: {e}")
         logger.error(f"Raw response: {response.text if response else 'No response'}")
@@ -525,9 +524,8 @@ def retrieve_creator_suwayomi_metadata(creator_name: str):
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
     
 # ------------------------------------------------------------
-# Update creator's most popular genres
+# Update creator mangas and ensure they are added to Suwayomi
 # ------------------------------------------------------------
-
 def update_creator_manga(meta):
     """
     Update a creator's details.json and genre metadata based on a downloaded gallery.
@@ -549,7 +547,8 @@ def update_creator_manga(meta):
     ]
 
     metadata = load_creators_metadata()
-    collected_ids = set(metadata.get("collected_manga_ids", []))
+    collected_ids = set(load_collected_manga_ids())
+    deferred_creators = set(load_deferred_creators())
 
     for creator_name in creators:
         # --- Try to retrieve manga metadata from Suwayomi ---
@@ -560,24 +559,19 @@ def update_creator_manga(meta):
             collected_ids.add(suwayomi_id)
             try:
                 update_mangas([suwayomi_id], CATEGORY_ID)
-                # If successful, remove from collected list
-                if suwayomi_id in collected_ids:
-                    collected_ids.remove(suwayomi_id)
-                # Ensure creator is not deferred
-                entry = metadata.get("creators", {}).setdefault(creator_name, {})
-                entry["deferred"] = False
+                # If successful, remove from collected list + deferred list
+                collected_ids.discard(suwayomi_id)
+                deferred_creators.discard(creator_name)
             except Exception as e:
                 logger.warning(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}")
-                if suwayomi_id in collected_ids:
-                    collected_ids.remove(suwayomi_id)
-                entry = metadata.get("creators", {}).setdefault(creator_name, {})
-                entry["deferred"] = True
+                collected_ids.discard(suwayomi_id)
+                deferred_creators.add(creator_name)
         else:
-            # No existing manga found, mark as deferred
-            entry = metadata.get("creators", {}).setdefault(creator_name, {})
-            entry["deferred"] = True
+            # No existing manga found, mark creator as deferred
+            deferred_creators.add(creator_name)
 
         # --- Handle genres as before ---
+        entry = metadata.get("creators", {}).setdefault(creator_name, {})
         genre_counts = entry.get("genre_counts", {})
         for genre in gallery_genres:
             genre_counts[genre] = genre_counts.get(genre, 0) + 1
@@ -607,9 +601,9 @@ def update_creator_manga(meta):
             metadata["creators"] = {}
         metadata["creators"][creator_name] = entry
 
-        # Save updated collected IDs + metadata
-        metadata["collected_manga_ids"] = sorted(collected_ids)
-        save_creators_metadata(metadata)
+        # Save updated metadata (IDs + deferred)
+        save_collected_manga_ids(collected_ids)
+        save_deferred_creators(deferred_creators)
 
     else:
         log(f"[DRY RUN] Would create/update details.json for creators: {creators}", "debug")
@@ -651,14 +645,6 @@ def update_creator_manga(meta):
     else:
         log(f"[DRY RUN] Would update manga cover for {creator_name}", "debug")
 
-# ----------------------------
-# Local Manga Library Management
-# ----------------------------
-# Functions to:
-# 1. Process deferred creators and add their mangas to the library + category
-# 2. Add all local mangas not yet in library
-# 3. Detect missing galleries for creator mangas
-# ----------------------------
 
 def process_deferred_creators():
     """
@@ -690,16 +676,19 @@ def process_deferred_creators():
 
     manga_lookup = {m["title"]: m for m in all_mangas}
     new_ids = set()
+    still_deferred = set()
 
     for creator_name in sorted(deferred_creators):
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
         if not os.path.exists(creator_folder):
             logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
+            still_deferred.add(creator_name)
             continue
 
         manga_info = manga_lookup.get(creator_name)
         if not manga_info:
             logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
+            still_deferred.add(creator_name)
             continue
 
         if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
@@ -712,11 +701,11 @@ def process_deferred_creators():
     if new_ids:
         update_mangas(list(new_ids), CATEGORY_ID)
 
-    # Clear deferred creators and collected manga IDs
-    save_deferred_creators(set())
+    # Update deferred + collected globally
+    save_deferred_creators(still_deferred)
     save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
-    
+
     # ----------------------------
     # Add mangas not yet in library
     # ----------------------------
@@ -743,8 +732,6 @@ def process_deferred_creators():
         expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
         if os.path.exists(expected_path):
             new_ids.append(int(node["id"]))
-        #else:
-        #    logger.info(f"Skipping '{title}' as folder does not exist on disk.")
 
     if new_ids:
         logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
