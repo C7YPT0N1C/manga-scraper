@@ -382,7 +382,7 @@ def main():
     # ------------------------------------------------------------
     for i in range(0, len(gallery_list), BATCH_SIZE):
         batch = gallery_list[i:i + BATCH_SIZE]
-        print(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
+        logger.info(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
         log_clarification()
         
         # Build scraper session.
