@@ -751,7 +751,7 @@ def find_missing_galleries(local_root: str):
                 )
 
     # Deduplicate against replacements and blacklist
-    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST)
+    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
     POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
 
     if POSSIBLE_BROKEN_SYMBOLS:

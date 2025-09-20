@@ -323,6 +323,9 @@ MIRRORS = get_mirrors()
 # Gallery Title Cleaning
 # ------------------------------------------------------------
 
+# Symbols that are filesystem safe and should not be removed or replaced
+ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", ",", ".", ":", "?"]
+
 # Define explicit replacements for certain symbols
 BROKEN_SYMBOL_REPLACEMENTS = {
     # Accented Latin vowels
@@ -421,5 +424,3 @@ BROKEN_SYMBOL_BLACKLIST = [
     "£", "$", "¥",
     "ð", "§", "¶", "†", "‡", "‰", "µ", "¦", "~"
 ]
-
-ALLOWED_SYMBOLS = ["!"]
