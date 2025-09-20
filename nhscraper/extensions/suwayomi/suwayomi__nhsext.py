@@ -755,7 +755,13 @@ def find_missing_galleries(local_root: str):
     POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
 
     if POSSIBLE_BROKEN_SYMBOLS:
-        formatted_list = ", ".join(f'"{c}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        # Escape backslashes and quotes for valid Python literal, but show symbols normally
+        def escape_symbol(c):
+            if c in {'"', '\\'}:
+                return f'\\{c}'
+            return c
+
+        formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
         logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
 ####################################################################################################################
