@@ -328,6 +328,12 @@ ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", "\"", ",", ".", ":", "?"]
 
 # Define explicit replacements for certain symbols
 BROKEN_SYMBOL_REPLACEMENTS = {
+    # Miscellaneous
+    "ā": "a", "Ā": "A", "ē": "e", "Ē": "E",
+    "ī": "i", "Ī": "I", "ō": "o", "Ō": "O",
+    "ū": "u", "Ū": "U","ŕ": "r", "Ŕ": "R",
+    "ś": "s", "Ś": "S", "ź": "z", "Ź": "Z", "ż": "z", "Ż": "Z",
+    
     # Accented Latin vowels
     "à": "a", "À": "A", "á": "a", "Á": "A", "â": "a", "Â": "A",
     "ã": "a", "Ã": "A", "ä": "a", "Ä": "A", "å": "a", "Å": "A",

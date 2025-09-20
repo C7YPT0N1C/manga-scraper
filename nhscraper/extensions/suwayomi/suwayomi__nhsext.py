@@ -723,7 +723,6 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
 
     # Load persisted broken symbols
     POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
-    log_clarification()
 
     for creator_dir in sorted(Path(local_root).iterdir()):
         if not creator_dir.is_dir():
@@ -753,6 +752,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not nodes:
+            log_clarification()
             logger.warning(f"Creator '{creator_name}' not found in library.")
             continue
 
@@ -761,8 +761,9 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
 
         for gallery_name, gallery_path in local_galleries.items():
             if gallery_name not in chapter_titles:
-                # Detect unusual symbols
-                symbols = {c for c in gallery_name if not c.isalnum() and c not in " _-"}
+                # Detect all non-English characters
+                symbols = {c for c in gallery_name if ord(c) > 127}
+
                 new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
                 if new_broken:
                     POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
@@ -775,7 +776,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                     f"Missing gallery for '{creator_name}':"
                     f"\nName: '{gallery_name}'"
                     f"\nPath: '{gallery_path}'"
-                    f"\nUnusual symbols: {symbols}"
+                    f"\nNon-English symbols: {symbols}"
                     f"\nStatus: {status}"
                 )
 
