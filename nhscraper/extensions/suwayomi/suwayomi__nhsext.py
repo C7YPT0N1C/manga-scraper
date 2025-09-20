@@ -72,8 +72,8 @@ def load_creators_metadata() -> dict:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialise global deferred_creators and creators dictionary if missing
-    return {"deferred_creators": [], "creators": {}}
+    # Initialise global collected IDs and creators dictionary if missing
+    return {"collected_manga_ids": [], "creators": {}}
 
 def save_creators_metadata(metadata: dict):
     try:
@@ -99,6 +99,15 @@ def save_deferred_creators(creators: set[str]):
     for creator_name, entry in metadata["creators"].items():
         if creator_name not in creators:
             entry["deferred"] = False
+    save_creators_metadata(metadata)
+
+def load_collected_manga_ids() -> set[int]:
+    metadata = load_creators_metadata()
+    return set(metadata.get("collected_manga_ids", []))
+
+def save_collected_manga_ids(ids: set[int]):
+    metadata = load_creators_metadata()
+    metadata["collected_manga_ids"] = sorted(ids)
     save_creators_metadata(metadata)
 
 broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
@@ -335,6 +344,13 @@ def update_creator_manga(meta):
 
         metadata = load_creators_metadata()
 
+        # Append this gallery's Suwayomi manga ID to the top-level collected_manga_ids
+        suwayomi_id = meta.get("suwayomi_id")  # Must be set somewhere during download
+        if suwayomi_id is not None:
+            collected_ids = set(metadata.get("collected_manga_ids", []))
+            collected_ids.add(suwayomi_id)
+            metadata["collected_manga_ids"] = sorted(collected_ids)
+
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             details_file = os.path.join(creator_folder, "details.json")
@@ -352,6 +368,7 @@ def update_creator_manga(meta):
 
             # Update the metadata entry
             entry["genre_counts"] = genre_counts
+            entry.setdefault("deferred", False)
 
             if "creators" not in metadata:
                 metadata["creators"] = {}
@@ -656,6 +673,7 @@ def process_deferred_creators():
 
     # Clear deferred creators and collected manga IDs
     save_deferred_creators(set())
+    save_collected_manga_ids(set())
     logger.info("GraphQL: Finished processing deferred creators.")
     
     log_clarification()
