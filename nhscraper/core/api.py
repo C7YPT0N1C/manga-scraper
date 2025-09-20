@@ -159,7 +159,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug")
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug") # DEBUGGING
     return names
 
 def safe_name(s: str) -> str:
@@ -468,7 +468,11 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}: {data}", "debug")
+            log(
+                f"Fetcher: Fetched metadata for Gallery: {gallery_id}: "
+                #f"{data}", # DEBUGGING
+                "debug"
+            )
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):
@@ -518,7 +522,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     try:
-        log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug")
+        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -548,7 +552,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in config.get("NHENTAI_MIRRORS", [])
         ]
 
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
