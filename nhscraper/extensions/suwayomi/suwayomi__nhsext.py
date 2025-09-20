@@ -752,8 +752,8 @@ def find_missing_galleries(local_root: str):
 
     # Only log once, at the end
     if POSSIBLE_BROKEN_SYMBOLS:
-        formatted_list = ", ".join(repr(c) for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
-        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
+        formatted_list = ", ".join(json.dumps(c) for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f'POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]')
 
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
