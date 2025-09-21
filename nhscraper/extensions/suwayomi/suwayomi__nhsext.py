@@ -743,6 +743,7 @@ def process_deferred_creators():
     """
 
     new_ids = set()
+    processed_creators = set()
     still_deferred = set()
 
     for creator_name in sorted(deferred_creators):
@@ -760,23 +761,20 @@ def process_deferred_creators():
             still_deferred.add(creator_name)
             continue
 
-        manga_info = mangas[0]  # since title is unique per creator
+        manga_info = mangas[0]  # title is unique per creator
         if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
             logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
             remove_from_deferred(creator_name)
             continue
 
         new_ids.add(int(manga_info["id"]))
+        processed_creators.add(creator_name)
         logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
 
     if new_ids:
         update_mangas(list(new_ids), CATEGORY_ID)
-        # ensure those are removed from deferred after adding
-        for creator_name in deferred_creators:
-            result = graphql_request(query, {"creatorName": creator_name})
-            mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-            if mangas and int(mangas[0]["id"]) in new_ids:
-                remove_from_deferred(creator_name)
+        for creator_name in processed_creators:
+            remove_from_deferred(creator_name)
 
     # Only keep those still truly deferred
     save_deferred_creators(still_deferred)
