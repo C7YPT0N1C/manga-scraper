@@ -406,7 +406,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
-                        # 🔹 Rotate Tor and try again once
+                        # Rotate Tor and try again once
                         if rotate_tor():
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
                             try:
@@ -477,7 +477,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
+                # Rotate Tor and try again once
                 if rotate_tor():
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     try:
@@ -494,7 +494,7 @@ def fetch_gallery_metadata(gallery_id: int):
         except requests.RequestException as e:
             if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # 🔹 Rotate Tor and try again once
+                # Rotate Tor and try again once
                 if rotate_tor():
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     try:
