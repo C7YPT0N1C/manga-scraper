@@ -671,9 +671,9 @@ def process_deferred_creators():
 
     query = """
     query FetchMangasNotInLibrary($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+    mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
         nodes { id title }
-      }
+    }
     }
     """
     result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
@@ -683,16 +683,22 @@ def process_deferred_creators():
         logger.info("GraphQL: No mangas found outside the library.")
         return
 
+    metadata = load_creators_metadata()
     new_ids = []
+
     for node in nodes:
         title = node["title"]
         expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
         if os.path.exists(expected_path):
             new_ids.append(int(node["id"]))
+            # Remove creator from creators_metadata.json if it exists
+            if title in metadata.get("creators", {}):
+                del metadata["creators"][title]
 
     if new_ids:
         logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
         update_mangas(new_ids, CATEGORY_ID)
+        save_creators_metadata(metadata)  # Save after removing any creators
 
     logger.info("GraphQL: Finished adding missing mangas to library.")
 
