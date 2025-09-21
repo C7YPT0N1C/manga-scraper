@@ -382,7 +382,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
     
     try:
         log_clarification()
-        logger.info(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
+        log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
         
         while True:
             if end_page is not None and page > end_page:
