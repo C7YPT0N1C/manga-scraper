@@ -484,7 +484,7 @@ def ensure_category(category_name=None):
 
 def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     log_clarification()
-    log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
+    log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
 
     # Mutation to trigger the update once
     trigger_mutation = f"""
@@ -521,7 +521,7 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     try:
         # Trigger the update once
         graphql_request(trigger_mutation, debug=False)
-        logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
+        logger.info(f"Suwayomi library update triggered for Category ID {category_id}. Waiting for completion...")
 
         # Initialize progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Category {category_id} Update", unit="job", dynamic_ncols=True)
@@ -554,7 +554,7 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             if total_jobs is not None and not is_running and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
-                logger.info(f"Suwayomi library update for category ID {category_id} is complete!")
+                logger.info(f"Suwayomi library update for Category ID {category_id} completed.")
                 break
 
             time.sleep(poll_interval)
@@ -564,7 +564,7 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     except Exception as e:
         logger.warning(f"Failed during Suwayomi update for category {category_id}: {e}")
 
-def update_suwayomi_mangas(ids: list[int], category_id: int):
+def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     if not ids:
         return
     
@@ -673,7 +673,7 @@ def update_creator_manga(meta):
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)
             try:
-                update_suwayomi_mangas([suwayomi_id], CATEGORY_ID)
+                add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID)
                 collected_ids.discard(suwayomi_id)
 
                 # Use helper instead of manual discard
@@ -796,7 +796,7 @@ def process_deferred_creators():
 
         if new_ids:
             logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-            update_suwayomi_mangas(new_ids, CATEGORY_ID)
+            add_mangas_to_suwayomi(new_ids, CATEGORY_ID)
 
     # ----------------------------
     # Process deferred creators
@@ -860,13 +860,13 @@ def process_deferred_creators():
         logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
 
     if new_ids:
-        update_suwayomi_mangas(list(new_ids), CATEGORY_ID)
+        add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID)
         for creator_name in processed_creators:
             remove_from_deferred(creator_name)
 
     # Only keep those still truly deferred
     save_deferred_creators(still_deferred)
-    logger.info("GraphQL: Finished processing deferred creators.")
+    logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
 
 def find_missing_galleries(local_root: str):
     """
@@ -908,7 +908,7 @@ def find_missing_galleries(local_root: str):
 
         if not nodes:
             log_clarification()
-            logger.warning(f"Creator '{creator_name}' not found in library.")
+            logger.info(f"Creator '{creator_name}' not found in library.")
             continue
 
         manga = nodes[0]
@@ -927,7 +927,7 @@ def find_missing_galleries(local_root: str):
                     status = "Update Suwayomi to reflect changes."
 
                 log_clarification()
-                logger.warning(
+                logger.info(
                     f"Missing gallery for '{creator_name}':"
                     f"\nName: '{gallery_name}'"
                     f"\nPath: '{gallery_path}'"
