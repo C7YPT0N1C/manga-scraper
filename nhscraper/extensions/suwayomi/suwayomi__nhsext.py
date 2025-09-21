@@ -765,7 +765,7 @@ def process_deferred_creators():
             continue
 
         manga_info = mangas[0]  # title is unique per creator
-        if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
+        if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", {}).get("nodes", [])]:
             logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
             remove_from_deferred(creator_name)
             continue
