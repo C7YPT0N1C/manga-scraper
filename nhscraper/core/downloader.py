@@ -328,9 +328,10 @@ def start_downloader(gallery_list=None):
     log("Downloader: Debugging Started.", "debug")
 
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
+    load_extension()
     active_extension.pre_batch_hook(gallery_ids)
 
-    load_extension()
+    log_clarification()
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
