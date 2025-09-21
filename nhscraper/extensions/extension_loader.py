@@ -298,7 +298,7 @@ def get_selected_extension(name: str = "skeleton"):
     original_name = name  # Save the originally requested extension
 
     log_clarification()
-    logger.warning("Extension Loader: Ready.")
+    logger.info("Extension Loader: Ready.")
     log("Extension Loader: Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
