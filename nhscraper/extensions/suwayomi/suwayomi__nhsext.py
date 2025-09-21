@@ -6,6 +6,7 @@
 import os, time, json, requests, threading, subprocess, shutil, tarfile
 from requests.auth import HTTPBasicAuth
 from pathlib import Path
+from tqdm import tqdm
 
 from nhscraper.core.config import *
 from nhscraper.core.api import get_meta_tags, safe_name, clean_title
@@ -480,11 +481,10 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-import time
-
 def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     """
-    Updates the Suwayomi library for a given category ID and waits until the update is complete.
+    Updates the Suwayomi library for a given category ID and waits until the update is complete,
+    showing a dynamic tqdm progress bar.
     
     :param category_id: The ID of the category to update.
     :param poll_interval: Seconds to wait between polling the update status.
@@ -493,107 +493,17 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
     
     mutation = """
-    fragment UPDATER_JOB_INFO_FIELDS on UpdaterJobsInfoType {
-      isRunning
-      totalJobs
-      finishedJobs
-      skippedCategoriesCount
-      skippedMangasCount
-      __typename
-    }
-
-    fragment UPDATER_CATEGORY_FIELDS on CategoryUpdateType {
-      status
-      category {
-        id
-        name
-        __typename
-      }
-      __typename
-    }
-
-    fragment MANGA_CHAPTER_STAT_FIELDS on MangaType {
-      id
-      unreadCount
-      downloadCount
-      bookmarkCount
-      hasDuplicateChapters
-      chapters {
-        totalCount
-        __typename
-      }
-      __typename
-    }
-
-    fragment MANGA_CHAPTER_NODE_FIELDS on MangaType {
-      firstUnreadChapter {
-        id
-        sourceOrder
-        isRead
-        mangaId
-        __typename
-      }
-      lastReadChapter {
-        id
-        sourceOrder
-        lastReadAt
-        __typename
-      }
-      latestReadChapter {
-        id
-        sourceOrder
-        lastReadAt
-        __typename
-      }
-      latestFetchedChapter {
-        id
-        fetchedAt
-        __typename
-      }
-      latestUploadedChapter {
-        id
-        uploadDate
-        __typename
-      }
-      __typename
-    }
-
-    fragment UPDATER_MANGA_FIELDS on MangaUpdateType {
-      status
-      manga {
-        id
-        title
-        thumbnailUrl
-        ...MANGA_CHAPTER_STAT_FIELDS
-        ...MANGA_CHAPTER_NODE_FIELDS
-        __typename
-      }
-      __typename
-    }
-
-    fragment UPDATER_STATUS_FIELDS on LibraryUpdateStatus {
-      jobsInfo {
-        ...UPDATER_JOB_INFO_FIELDS
-        __typename
-      }
-      categoryUpdates {
-        ...UPDATER_CATEGORY_FIELDS
-        __typename
-      }
-      mangaUpdates {
-        ...UPDATER_MANGA_FIELDS
-        __typename
-      }
-      __typename
-    }
-
     mutation UPDATE_LIBRARY($input: UpdateLibraryInput!) {
       updateLibrary(input: $input) {
         updateStatus {
-          ...UPDATER_STATUS_FIELDS
-          __typename
+          jobsInfo {
+            isRunning
+            totalJobs
+            finishedJobs
+            skippedCategoriesCount
+            skippedMangasCount
+          }
         }
-        __typename
       }
     }
     """
@@ -605,7 +515,11 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
         graphql_request(mutation, variables, debug=True)
         logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
 
-        # Poll for completion
+        # Initialize tqdm progress bar without total yet
+        pbar = tqdm(total=0, desc=f"Category {category_id} update", unit="job", dynamic_ncols=True)
+        last_finished = 0
+        total_jobs = None
+
         while True:
             result = graphql_request(mutation, variables, debug=False)
             if not result:
@@ -613,23 +527,30 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
                 time.sleep(poll_interval)
                 continue
 
-            jobs_info = result.get("data", {}).get("updateLibrary", {}).get("updateStatus", {}).get("jobsInfo")
-            if not jobs_info:
-                logger.warning("No jobs info returned, retrying...")
-                time.sleep(poll_interval)
-                continue
-
+            jobs_info = result.get("data", {}).get("updateLibrary", {}).get("updateStatus", {}).get("jobsInfo", {})
             is_running = jobs_info.get("isRunning", False)
             finished = jobs_info.get("finishedJobs", 0)
             total = jobs_info.get("totalJobs", 0)
 
-            logger.info(f"Update progress: {finished}/{total} jobs finished. Running: {is_running}")
+            # Set total if not yet known
+            if total_jobs is None and total > 0:
+                total_jobs = total
+                pbar.total = total_jobs
+                pbar.refresh()
+
+            # Update progress bar
+            pbar.update(finished - last_finished)
+            last_finished = finished
 
             if not is_running:
+                pbar.n = pbar.total
+                pbar.refresh()
                 logger.info(f"Suwayomi library update for category ID {category_id} is complete!")
                 break
 
             time.sleep(poll_interval)
+
+        pbar.close()
 
     except Exception as e:
         logger.warning(f"Failed during Suwayomi update for category {category_id}: {e}")
