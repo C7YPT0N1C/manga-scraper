@@ -427,7 +427,7 @@ def get_local_source_id():
       }
     }
     """
-    result = graphql_request(query, debug = False)
+    result = graphql_request(query, debug=False)
     if not result:
         log_clarification()
         logger.error("GraphQL: Failed to fetch sources")
@@ -456,7 +456,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(query, {"name": name}, debug = False)
+    result = graphql_request(query, {"name": name}, debug=False)
     
     #log(f"GraphQL: Category query result: {result}", "debug")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
@@ -473,7 +473,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(mutation, {"name": name}, debug = False)
+    result = graphql_request(mutation, {"name": name}, debug=False)
     log(f"GraphQL: Create category result: {result}", "debug")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
     return CATEGORY_ID
@@ -520,11 +520,11 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
 
     try:
         # Trigger the update once
-        graphql_request(trigger_mutation, debug=True)
+        graphql_request(trigger_mutation, debug=False)
         logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
 
         # Initialize progress bar
-        pbar = tqdm(total=0, desc=f"Category {category_id} update", unit="job", dynamic_ncols=True)
+        pbar = tqdm(total=0, desc=f"Suwayomi Category {category_id} Update", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
@@ -564,22 +564,7 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     except Exception as e:
         logger.warning(f"Failed during Suwayomi update for category {category_id}: {e}")
 
-def update_suwayomi_manga_title(manga_id: int, title: str):
-    """
-    Updates a manga entry on Suwayomi with a new title.
-    """
-    mutation = """
-    mutation UpdateSuwayomi($id: ID!, $title: String!) {
-        updateManga(input: {id: $id, title: $title}) { manga { id title } }
-    }
-    """
-    try:
-        graphql_request(mutation, {"id": manga_id, "title": title}, debug = True)
-        logger.info(f"Suwayomi updated: ID {manga_id} -> Title '{title}'")
-    except Exception as e:
-        logger.warning(f"Failed to update Suwayomi for manga {manga_id}: {e}")
-
-def update_mangas(ids: list[int], category_id: int):
+def update_suwayomi_mangas(ids: list[int], category_id: int):
     if not ids:
         return
     
@@ -591,7 +576,7 @@ def update_mangas(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids}, debug = False)
+    result = graphql_request(mutation, {"ids": ids}, debug=False)
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
@@ -605,11 +590,11 @@ def update_mangas(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id}, debug = False)
+    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id}, debug=False)
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
     
-def retrieve_creator_suwayomi_metadata(creator_name: str):
+def fetch_creators_suwayomi_metadata(creator_name: str):
     """
     Retrieve metadata for a creator from Suwayomi's Local Source by exact title match.
     Returns the list of nodes (id, title, chapters, etc).
@@ -631,7 +616,7 @@ def retrieve_creator_suwayomi_metadata(creator_name: str):
       }
     }
     """
-    result = graphql_request(query, {"title": creator_name}, debug = False)
+    result = graphql_request(query, {"title": creator_name}, debug=False)
     if not result:
         return []
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
@@ -682,13 +667,13 @@ def update_creator_manga(meta):
 
     for creator_name in creators:
         # --- Try to retrieve manga metadata from Suwayomi ---
-        nodes = retrieve_creator_suwayomi_metadata(creator_name)
+        nodes = fetch_creators_suwayomi_metadata(creator_name)
         suwayomi_id = int(nodes[0]["id"]) if nodes else None
 
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)
             try:
-                update_mangas([suwayomi_id], CATEGORY_ID)
+                update_suwayomi_mangas([suwayomi_id], CATEGORY_ID)
                 collected_ids.discard(suwayomi_id)
 
                 # Use helper instead of manual discard
@@ -793,7 +778,7 @@ def process_deferred_creators():
       }
     }
     """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug = False)
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug=False)
     nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
     new_ids = []
@@ -811,7 +796,7 @@ def process_deferred_creators():
 
         if new_ids:
             logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-            update_mangas(new_ids, CATEGORY_ID)
+            update_suwayomi_mangas(new_ids, CATEGORY_ID)
 
     # ----------------------------
     # Process deferred creators
@@ -856,7 +841,7 @@ def process_deferred_creators():
             still_deferred.add(creator_name)
             continue
 
-        result = graphql_request(query, {"creatorName": creator_name}, debug = False)
+        result = graphql_request(query, {"creatorName": creator_name}, debug=False)
         mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not mangas:
@@ -875,7 +860,7 @@ def process_deferred_creators():
         logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
 
     if new_ids:
-        update_mangas(list(new_ids), CATEGORY_ID)
+        update_suwayomi_mangas(list(new_ids), CATEGORY_ID)
         for creator_name in processed_creators:
             remove_from_deferred(creator_name)
 
@@ -960,9 +945,6 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                     else:
                         logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
                         gallery_path.rename(new_path)
-                        
-                        if auto_update:
-                            update_suwayomi_manga_title(manga["id"], cleaned_title) # Optionally update Suwayomi
 
     # Deduplicate against replacements, blacklist, and allowed symbols
     all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
@@ -1122,12 +1104,6 @@ def post_batch_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
 
-    # Add all creators to Suwayomi
-    process_deferred_creators()
-    
-    # Find missing galleries
-    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
-
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     if config.get("DRY_RUN"):
@@ -1137,8 +1113,14 @@ def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
     
-    log_clarification()
     clean_directories(True)
     
+    # Add all creators to Suwayomi
+    process_deferred_creators()
+    
+    # Find missing galleries that might have been missed
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
+    
     # Update Suwayomi category at end
-    log("GraphQL: Please update Suwayomi to reflect any changes made.")
+    log_clarification()
+    log("Please update the library manually to reflect any changes.")
