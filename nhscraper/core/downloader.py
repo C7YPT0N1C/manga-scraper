@@ -7,7 +7,7 @@ from tqdm.contrib.concurrent import thread_map
 from nhscraper.core.config import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
-    session, dynamic_sleep, fetch_gallery_metadata,
+    build_session, session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, safe_name, clean_title
 )
 from nhscraper.extensions.extension_loader import get_selected_extension  # Import active extension
@@ -320,41 +320,66 @@ def process_galleries(gallery_ids):
 ####################################################################################################
 # MAIN
 ####################################################################################################
-def start_downloader(gallery_list=None):
-    start_time = time.perf_counter()  # Start timer
+
+def start_batch(batch_list=None):
+    batch_ids = batch_list
     
-    log_clarification()
-    logger.info("Downloader: Ready.")
-    log("Downloader: Debugging Started.", "debug")
-
-    gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
-    load_extension()
-    active_extension.pre_batch_hook(gallery_ids)
+    active_extension.pre_batch_hook(batch_ids)
 
     log_clarification()
-    if not gallery_ids:
+    if not batch_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
     
-    worst_case_time_estimate(gallery_ids)
+    worst_case_time_estimate(batch_ids)
 
     log_clarification()
-    logger.info(f"Downloader: Galleries to process: {gallery_ids[0]} -> {gallery_ids[-1]} ({len(gallery_ids)})"
-                if len(gallery_ids) > 1 else f"Downloader: Galleries to process: {gallery_ids[0]} ({len(gallery_ids)})")
+    logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"
+                if len(batch_ids) > 1 else f"Downloader: Galleries to process: {batch_ids[0]} ({len(batch_ids)})")
 
     thread_map(
         lambda gid: process_galleries([gid]),
-        gallery_ids,
+        batch_ids,
         max_workers=gallery_threads,
         desc="Processing galleries",
         unit="gallery"
     )
 
-    if not config.get("DRY_RUN"):
-        active_extension.post_batch_hook()
-    else:
+    load_extension()
+    active_extension.post_batch_hook()
+
+def start_downloader(gallery_list=None):
+    log_clarification()
+    logger.info("Downloader: Ready.")
+    log("Downloader: Debugging Started.", "debug")
+    
+    start_time = time.perf_counter()  # Start timer
+    
+    # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+    load_extension()
+    
+    gallery_ids = gallery_list
+    
+    BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
+    for i in range(0, len(gallery_list), BATCH_SIZE):
         log_clarification()
-        logger.info("[DRY RUN] Downloader: Would call post_batch_hook()")
+        batch = gallery_list[i:i + BATCH_SIZE]
+        logger.info(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
+        
+        # Build scraper session.
+        build_session()
+    
+        start_batch(batch) # Start batch.
+        
+        if i + BATCH_SIZE < len(gallery_list): # Not last batch
+            log_clarification()
+            logger.info(f"Batch {i//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
+            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
+        else: # Last batch
+            log_clarification()
+            logger.info(f"All batches complete.")
+    
+    active_extension.post_run_hook()
     
     end_time = time.perf_counter()  # End timer
     runtime = end_time - start_time

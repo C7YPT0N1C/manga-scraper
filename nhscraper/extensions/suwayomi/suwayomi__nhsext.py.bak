@@ -120,7 +120,7 @@ def save_possible_broken_symbols(symbols: set[str]):
 ####################################################################################################################
 # CORE
 ####################################################################################################################
-def update_extension_download_path():
+def pre_run_hook():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
@@ -213,7 +213,7 @@ WantedBy=multi-user.target
         log(f"\nSuwayomi Web: http://$IP:4567/", "debug")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
         
-        update_extension_download_path()
+        pre_run_hook()
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:
@@ -901,7 +901,7 @@ def pre_batch_hook(gallery_list):
     
     global LOCAL_SOURCE_ID, CATEGORY_ID  
     
-    update_extension_download_path()
+    pre_run_hook()
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()

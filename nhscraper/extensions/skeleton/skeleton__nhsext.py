@@ -47,7 +47,8 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 # CORE
 ####################################################################################################################
 
-def update_extension_download_path():
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
@@ -101,7 +102,7 @@ def install_extension():
         os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
         
-        update_extension_download_path()
+        pre_run_hook()
         
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
@@ -276,16 +277,16 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     
     return False
 
-# Hook for pre-run functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
+# Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
     if config.get("DRY_RUN"):
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
+    log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
-    update_extension_download_path()
+    pre_run_hook()
     
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -327,8 +328,20 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
+# Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
+        return
+    
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
+    
+    #log_clarification()
+    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
+
+# Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
+def post_run_hook():
     if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return

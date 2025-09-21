@@ -384,24 +384,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
-    for i in range(0, len(gallery_list), BATCH_SIZE):
-        log_clarification()
-        batch = gallery_list[i:i + BATCH_SIZE]
-        logger.info(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
-        
-        # Build scraper session.
-        build_session()
-    
-        start_downloader(batch) # Start batch.
-        
-        if i + BATCH_SIZE < len(gallery_list): # Not last batch
-            log_clarification()
-            logger.info(f"Batch {i//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
-            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
-        else: # Last batch
-            log_clarification()
-            logger.info(f"All batches complete.")
+    start_downloader(gallery_list) # Start download
 
 if __name__ == "__main__":
     main()

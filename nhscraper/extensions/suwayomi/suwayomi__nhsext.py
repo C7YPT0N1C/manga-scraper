@@ -135,7 +135,8 @@ def save_possible_broken_symbols(symbols: set[str]):
 # CORE
 ####################################################################################################################
 
-def update_extension_download_path():
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
@@ -228,7 +229,7 @@ WantedBy=multi-user.target
         log(f"\nSuwayomi Web: http://$IP:4567/", "debug")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
         
-        update_extension_download_path()
+        pre_run_hook()
         logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
     
     except Exception as e:
@@ -482,30 +483,30 @@ def ensure_category(category_name=None):
 # ----------------------------
 
 def update_suwayomi_category(category_id: int, poll_interval: int = 5):
-    from tqdm import tqdm
-
+    log_clarification()
     log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
 
-    trigger_mutation = """
-    mutation UPDATE_LIBRARY($input: UpdateLibraryInput!) {
-      updateLibrary(input: $input) {
-        updateStatus {
-          jobsInfo {
+    # Mutation to trigger the update once
+    trigger_mutation = f"""
+    mutation UpdateLibraryCategory {{
+      updateLibrary(input: {{ categories: [{category_id}] }}) {{
+        updateStatus {{
+          jobsInfo {{
             isRunning
             totalJobs
             finishedJobs
             skippedCategoriesCount
             skippedMangasCount
-          }
-        }
-      }
-    }
+          }}
+        }}
+      }}
+    }}
     """
-    trigger_vars = {"input": {"categories": [category_id]}}
 
+    # Query to check the status repeatedly
     status_query = """
-    query GET_LIBRARY_UPDATE_STATUS($categoryId: Int!) {
-      libraryUpdateStatus(categoryId: $categoryId) {
+    query CheckLibraryCategoryUpdateStatus {
+      libraryUpdateStatus {
         jobsInfo {
           isRunning
           totalJobs
@@ -519,15 +520,16 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
 
     try:
         # Trigger the update once
-        graphql_request(trigger_mutation, trigger_vars, debug=True)
+        graphql_request(trigger_mutation, debug=True)
         logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
 
+        # Initialize progress bar
         pbar = tqdm(total=0, desc=f"Category {category_id} update", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
         while True:
-            result = graphql_request(status_query, {"categoryId": category_id}, debug=False)
+            result = graphql_request(status_query, debug=False)
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
                 time.sleep(poll_interval)
@@ -538,8 +540,8 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             finished = jobs_info.get("finishedJobs", 0)
             total = jobs_info.get("totalJobs", 0)
 
-            # Update total jobs if available
-            if total > 0:
+            # Set total if available
+            if total_jobs is None and total > 0:
                 total_jobs = total
                 pbar.total = total_jobs
                 pbar.refresh()
@@ -548,7 +550,7 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             pbar.update(finished - last_finished)
             last_finished = finished
 
-            # Exit only when update is finished and total_jobs is known
+            # Exit only when update is finished
             if total_jobs is not None and not is_running and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
@@ -1057,18 +1059,18 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     
     return False
 
-# Hook for pre-run functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
+# Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
     if config.get("DRY_RUN"):
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Pre-run Hook Called.", "debug")
+    log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
     global LOCAL_SOURCE_ID, CATEGORY_ID  
     
-    update_extension_download_path()
+    pre_run_hook()
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()
@@ -1111,23 +1113,32 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Update creator's popular genres
     update_creator_manga(meta)
 
-# Hook for post-run functionality. Reset download path. Use active_extension.post_batch_hook(ARGS) in downloader.
+# Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
+    if config.get("DRY_RUN"):
+        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
+        return
+    
+    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
+
+    # Add all creators to Suwayomi
+    process_deferred_creators()
+    
+    # Find missing galleries
+    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
+
+# Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
+def post_run_hook():
     if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
-
-    # Add all creators to Suwayomi
-    process_deferred_creators()
     
-    # Clean up empty directories
+    log_clarification()
     clean_directories(True)
     
-    # Find missing galleries
-    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
-    
     # Update Suwayomi category at end
-    update_suwayomi_category(CATEGORY_ID)
+    log("GraphQL: Please update Suwayomi to reflect any changes made.")

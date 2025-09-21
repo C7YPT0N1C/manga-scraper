@@ -335,8 +335,8 @@ def get_selected_extension(name: str = "skeleton"):
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
-            #if hasattr(ext, "update_extension_download_path"): # The extension does this in it's pre run hook.
-            #    ext.update_extension_download_path()
+            #if hasattr(ext, "pre_run_hook"): # The extension does this in it's pre run hook.
+            #    ext.pre_run_hook()
             log_clarification()
             logger.warning(f"Selected extension: {final_name}")
             return ext
