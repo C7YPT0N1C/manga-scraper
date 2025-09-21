@@ -852,7 +852,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                     status = "Update Suwayomi to reflect changes."
 
                 log_clarification()
-                logger.info(
+                logger.warning(
                     f"Missing gallery for '{creator_name}':"
                     f"\nName: '{gallery_name}'"
                     f"\nPath: '{gallery_path}'"
