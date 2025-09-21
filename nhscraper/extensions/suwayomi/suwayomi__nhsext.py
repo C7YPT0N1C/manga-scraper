@@ -672,7 +672,7 @@ def update_creator_manga(meta):
                     if f.startswith("cover."):
                         try:
                             os.remove(os.path.join(creator_folder, f))
-                            log(f"Removed old cover file: {f}")
+                            log(f"Removed old cover file: {os.path.join(creator_folder, f)}")
                         except Exception as e:
                             logger.info(f"Failed to remove old cover file {f}: {e}")
 
