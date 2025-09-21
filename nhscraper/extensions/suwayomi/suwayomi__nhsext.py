@@ -751,6 +751,7 @@ def process_deferred_creators():
     still_deferred = set()
     
     while process_creators_attempt <= max_retries:
+        log_clarification()
         log(f"Processing creators (attempt {process_creators_attempt}/{max_retries})...")
         
         update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
