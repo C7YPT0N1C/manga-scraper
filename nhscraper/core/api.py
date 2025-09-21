@@ -468,11 +468,8 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(
-                f"Fetcher: Fetched metadata for Gallery: {gallery_id}: "
-                #f"{data}", # DEBUGGING
-                "debug"
-            )
+            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}:", "debug")
+            #log(f"Fetcher: Metadata for Gallery: {gallery_id}: {data}", "debug") # DEBUGGING
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):

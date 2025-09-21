@@ -175,6 +175,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     Supports repeated flags like --tag "big boobs" --tag "big ass"
     and optional page ranges. Defaults to start_page=1, end_page=None.
     """
+    
     if not arg_list:
         return set()
 
@@ -224,6 +225,10 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     return gallery_ids
 
 def build_gallery_list(args):
+    
+    log_clarification()
+    logger.info(f"Parsing galleries from NHentai...")
+    
     gallery_ids = set()
 
     # ------------------------------------------------------------
