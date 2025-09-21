@@ -421,7 +421,7 @@ def get_local_source_id():
 
     log("GraphQL: Fetching Local source ID", "debug")
     query = """
-    query FetchLocalSourceID{
+    query FetchLocalSourceID {
       sources {
         nodes { id name }
       }
