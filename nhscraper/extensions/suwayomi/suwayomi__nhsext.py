@@ -323,8 +323,10 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 
 ############################################
 
-def graphql_request(query: str, variables: dict = None):
+def graphql_request(query: str, variables: dict = None, debug: bool = False):
     """Framework for making requests to GraphQL"""
+    
+    #debug = True  # DEBUGGING
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
@@ -334,11 +336,15 @@ def graphql_request(query: str, variables: dict = None):
         return None
 
     try:
-        #log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+        if debug == True:
+            log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+        
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
-        #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
+        
+        if debug == True:
+            log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
         return result
     
     except requests.RequestException as e:
@@ -350,7 +356,7 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-def new_graphql_request(query: str, variables: dict = None):
+def new_graphql_request(query: str, variables: dict = None, debug: bool = False):
     """New framework for making requests to GraphQL. Allows for authentication with the server."""
     
     global _session
@@ -380,7 +386,9 @@ def new_graphql_request(query: str, variables: dict = None):
             
             logger.info("GraphQL: Successfully logged in and obtained session cookie.")
 
-        #log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+        if debug == True:
+            log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+        
         response = _session.post(
             GRAPHQL_URL,
             headers=headers,
@@ -388,7 +396,10 @@ def new_graphql_request(query: str, variables: dict = None):
         )
         response.raise_for_status()
         result = response.json()
-        #log(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+        
+        if debug == True:
+            log(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+        
         return result
 
     except requests.RequestException as e:
@@ -410,7 +421,7 @@ def get_local_source_id():
       }
     }
     """
-    result = graphql_request(query)
+    result = graphql_request(query, debug = False)
     if not result:
         log_clarification()
         logger.error("GraphQL: Failed to fetch sources")
@@ -439,9 +450,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(query, {
-        "name": name
-    })
+    result = graphql_request(query, {"name": name}, debug = False)
     
     #log(f"GraphQL: Category query result: {result}", "debug")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
@@ -458,7 +467,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(mutation, {"name": name})
+    result = graphql_request(mutation, {"name": name}, debug = False)
     log(f"GraphQL: Create category result: {result}", "debug")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
     return CATEGORY_ID
@@ -477,7 +486,7 @@ def update_suwayomi(manga_id: int, title: str):
     }
     """
     try:
-        graphql_request(mutation, {"id": manga_id, "title": title})
+        graphql_request(mutation, {"id": manga_id, "title": title}, debug = True)
         logger.info(f"Suwayomi updated: ID {manga_id} -> Title '{title}'")
     except Exception as e:
         logger.warning(f"Failed to update Suwayomi for manga {manga_id}: {e}")
@@ -494,7 +503,7 @@ def update_mangas(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids})
+    result = graphql_request(mutation, {"ids": ids}, debug = False)
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
@@ -508,7 +517,7 @@ def update_mangas(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
+    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id}, debug = False)
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
     
@@ -534,7 +543,7 @@ def retrieve_creator_suwayomi_metadata(creator_name: str):
       }
     }
     """
-    result = graphql_request(query, {"title": creator_name})
+    result = graphql_request(query, {"title": creator_name}, debug = False)
     if not result:
         return []
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
@@ -693,7 +702,7 @@ def process_deferred_creators():
       }
     }
     """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug = False)
     nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
     new_ids = []
@@ -756,7 +765,7 @@ def process_deferred_creators():
             still_deferred.add(creator_name)
             continue
 
-        result = graphql_request(query, {"creatorName": creator_name})
+        result = graphql_request(query, {"creatorName": creator_name}, debug = False)
         mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not mangas:
@@ -819,7 +828,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
           }
         }
         """
-        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID})
+        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID}, debug=False)
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         if not nodes:
