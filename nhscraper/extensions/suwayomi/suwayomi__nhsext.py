@@ -482,13 +482,6 @@ def ensure_category(category_name=None):
 # ----------------------------
 
 def update_suwayomi_category(category_id: int, poll_interval: int = 5):
-    """
-    Updates the Suwayomi library for a given category ID and waits until the update is complete,
-    showing a dynamic tqdm progress bar.
-
-    :param category_id: The ID of the category to update.
-    :param poll_interval: Seconds to wait between polling the update status.
-    """
     from tqdm import tqdm
 
     log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
@@ -555,8 +548,8 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             pbar.update(finished - last_finished)
             last_finished = finished
 
-            # Exit only when update is finished and jobs match
-            if not is_running and finished >= total_jobs:
+            # Exit only when update is finished and total_jobs is known
+            if total_jobs is not None and not is_running and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
                 logger.info(f"Suwayomi library update for category ID {category_id} is complete!")
