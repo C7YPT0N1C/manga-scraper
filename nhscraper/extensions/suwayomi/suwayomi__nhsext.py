@@ -493,7 +493,6 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
 
     log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
 
-    # Mutation to trigger the update (run once)
     trigger_mutation = """
     mutation UPDATE_LIBRARY($input: UpdateLibraryInput!) {
       updateLibrary(input: $input) {
@@ -511,7 +510,6 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     """
     trigger_vars = {"input": {"categories": [category_id]}}
 
-    # Query to check the status (poll repeatedly)
     status_query = """
     query GET_LIBRARY_UPDATE_STATUS($categoryId: Int!) {
       libraryUpdateStatus(categoryId: $categoryId) {
@@ -531,7 +529,6 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
         graphql_request(trigger_mutation, trigger_vars, debug=True)
         logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
 
-        # Initialize progress bar without total yet
         pbar = tqdm(total=0, desc=f"Category {category_id} update", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
@@ -548,8 +545,8 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             finished = jobs_info.get("finishedJobs", 0)
             total = jobs_info.get("totalJobs", 0)
 
-            # Set total if not yet known
-            if total_jobs is None and total > 0:
+            # Update total jobs if available
+            if total > 0:
                 total_jobs = total
                 pbar.total = total_jobs
                 pbar.refresh()
@@ -558,7 +555,8 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
             pbar.update(finished - last_finished)
             last_finished = finished
 
-            if not is_running:
+            # Exit only when update is finished and jobs match
+            if not is_running and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
                 logger.info(f"Suwayomi library update for category ID {category_id} is complete!")
