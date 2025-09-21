@@ -868,13 +868,12 @@ def process_deferred_creators():
     save_deferred_creators(still_deferred)
     logger.info("GraphQL: Finished processing deferred creators.")
 
-def find_missing_galleries(local_root: str, auto_update: bool = True):
+def find_missing_galleries(local_root: str):
     """
     Crawl the local manga directory and fix gallery titles if needed.
     
     Args:
         local_root: Path to the root folder containing creator directories.
-        auto_update: If True, updates the titles in Suwayomi using GraphQL.
     """
 
     # Load persisted broken symbols
@@ -1115,11 +1114,11 @@ def post_run_hook():
     
     clean_directories(True)
     
-    # Add all creators to Suwayomi
-    process_deferred_creators()
-    
     # Find missing galleries that might have been missed
     find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
+    
+    # Add all creators to Suwayomi
+    process_deferred_creators()
     
     # Update Suwayomi category at end
     log_clarification()
