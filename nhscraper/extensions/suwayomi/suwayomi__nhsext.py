@@ -736,12 +736,15 @@ def process_deferred_creators():
         id
         title
         inLibrary
-        categories { id }
+        categories {
+            nodes {
+            id
+            }
+        }
         }
     }
     }
     """
-
     new_ids = set()
     processed_creators = set()
     still_deferred = set()
