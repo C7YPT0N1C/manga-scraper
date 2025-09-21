@@ -674,11 +674,12 @@ def update_creator_manga(meta):
                             os.remove(os.path.join(creator_folder, f))
                             log(f"Removed old cover file: {os.path.join(creator_folder, f)}")
                         except Exception as e:
-                            logger.info(f"Failed to remove old cover file {f}: {e}")
+                            logger.warning(f"Failed to remove old cover file {f}: {e}")
 
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
+                
                 shutil.copy2(page1_file, cover_file)
-                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
+                log(f"Updated manga cover for {creator_name}: {cover_file}")
 
         except Exception as e:
             logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
