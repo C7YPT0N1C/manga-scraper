@@ -18,8 +18,8 @@ from nhscraper.extensions.extension_loader import get_selected_extension  # Impo
 active_extension = "skeleton"
 download_location = ""
 
-gallery_threads = 2
-image_threads = 10
+gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
 
 skipped_galleries = []
 
@@ -50,7 +50,7 @@ def load_extension():
 
 def worst_case_time_estimate(gallery_list):
     current_run_num_of_galleries = len(gallery_list)
-    current_run_gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+    current_run_gallery_threads = gallery_threads
     current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
@@ -295,9 +295,9 @@ def process_galleries(gallery_ids):
                     img_path = os.path.join(primary_folder, img_filename)
                     tasks.append((page, img_urls, img_path, primary_creator))
 
-                # --- Download images (once, in primary creator’s folder) ---
+                # --- Download images ---
                 if tasks:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=config["THREADS_IMAGES"]) as executor:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
                         if not config.get("DRY_RUN"):
                             submit_creator_tasks(executor, tasks, gallery_id, session, primary_creator)
                         else:
@@ -326,11 +326,11 @@ def start_downloader(gallery_list=None):
     log_clarification()
     logger.info("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
-    load_extension()
-
+    
     gallery_ids = gallery_list or config.get("GALLERIES", DEFAULT_GALLERIES)
     active_extension.pre_batch_hook(gallery_ids)
 
+    load_extension()
     if not gallery_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
@@ -344,7 +344,7 @@ def start_downloader(gallery_list=None):
     thread_map(
         lambda gid: process_galleries([gid]),
         gallery_ids,
-        max_workers=config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
+        max_workers=gallery_threads,
         desc="Processing galleries",
         unit="gallery"
     )

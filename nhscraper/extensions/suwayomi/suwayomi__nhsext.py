@@ -480,7 +480,161 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi(manga_id: int, title: str):
+import time
+
+def update_suwayomi_category(category_id: int, poll_interval: int = 5):
+    """
+    Updates the Suwayomi library for a given category ID and waits until the update is complete.
+    
+    :param category_id: The ID of the category to update.
+    :param poll_interval: Seconds to wait between polling the update status.
+    """
+    
+    log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
+    
+    mutation = """
+    fragment UPDATER_JOB_INFO_FIELDS on UpdaterJobsInfoType {
+      isRunning
+      totalJobs
+      finishedJobs
+      skippedCategoriesCount
+      skippedMangasCount
+      __typename
+    }
+
+    fragment UPDATER_CATEGORY_FIELDS on CategoryUpdateType {
+      status
+      category {
+        id
+        name
+        __typename
+      }
+      __typename
+    }
+
+    fragment MANGA_CHAPTER_STAT_FIELDS on MangaType {
+      id
+      unreadCount
+      downloadCount
+      bookmarkCount
+      hasDuplicateChapters
+      chapters {
+        totalCount
+        __typename
+      }
+      __typename
+    }
+
+    fragment MANGA_CHAPTER_NODE_FIELDS on MangaType {
+      firstUnreadChapter {
+        id
+        sourceOrder
+        isRead
+        mangaId
+        __typename
+      }
+      lastReadChapter {
+        id
+        sourceOrder
+        lastReadAt
+        __typename
+      }
+      latestReadChapter {
+        id
+        sourceOrder
+        lastReadAt
+        __typename
+      }
+      latestFetchedChapter {
+        id
+        fetchedAt
+        __typename
+      }
+      latestUploadedChapter {
+        id
+        uploadDate
+        __typename
+      }
+      __typename
+    }
+
+    fragment UPDATER_MANGA_FIELDS on MangaUpdateType {
+      status
+      manga {
+        id
+        title
+        thumbnailUrl
+        ...MANGA_CHAPTER_STAT_FIELDS
+        ...MANGA_CHAPTER_NODE_FIELDS
+        __typename
+      }
+      __typename
+    }
+
+    fragment UPDATER_STATUS_FIELDS on LibraryUpdateStatus {
+      jobsInfo {
+        ...UPDATER_JOB_INFO_FIELDS
+        __typename
+      }
+      categoryUpdates {
+        ...UPDATER_CATEGORY_FIELDS
+        __typename
+      }
+      mangaUpdates {
+        ...UPDATER_MANGA_FIELDS
+        __typename
+      }
+      __typename
+    }
+
+    mutation UPDATE_LIBRARY($input: UpdateLibraryInput!) {
+      updateLibrary(input: $input) {
+        updateStatus {
+          ...UPDATER_STATUS_FIELDS
+          __typename
+        }
+        __typename
+      }
+    }
+    """
+    
+    variables = {"input": {"categories": [category_id]}}
+
+    try:
+        # Trigger the update
+        graphql_request(mutation, variables, debug=True)
+        logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
+
+        # Poll for completion
+        while True:
+            result = graphql_request(mutation, variables, debug=False)
+            if not result:
+                logger.warning("Failed to fetch update status, retrying...")
+                time.sleep(poll_interval)
+                continue
+
+            jobs_info = result.get("data", {}).get("updateLibrary", {}).get("updateStatus", {}).get("jobsInfo")
+            if not jobs_info:
+                logger.warning("No jobs info returned, retrying...")
+                time.sleep(poll_interval)
+                continue
+
+            is_running = jobs_info.get("isRunning", False)
+            finished = jobs_info.get("finishedJobs", 0)
+            total = jobs_info.get("totalJobs", 0)
+
+            logger.info(f"Update progress: {finished}/{total} jobs finished. Running: {is_running}")
+
+            if not is_running:
+                logger.info(f"Suwayomi library update for category ID {category_id} is complete!")
+                break
+
+            time.sleep(poll_interval)
+
+    except Exception as e:
+        logger.warning(f"Failed during Suwayomi update for category {category_id}: {e}")
+
+def update_suwayomi_manga_title(manga_id: int, title: str):
     """
     Updates a manga entry on Suwayomi with a new title.
     """
@@ -693,6 +847,8 @@ def process_deferred_creators():
     Adds all existing local mangas to library + category if they exist on disk.
     Cleans up creators_metadata.json so successful creators are removed from deferred_creators.
     """
+    
+    update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
 
     # ----------------------------
     # Add mangas not yet in library
@@ -876,7 +1032,7 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
                         gallery_path.rename(new_path)
                         
                         if auto_update:
-                            update_suwayomi(manga["id"], cleaned_title) # Optionally update Suwayomi
+                            update_suwayomi_manga_title(manga["id"], cleaned_title) # Optionally update Suwayomi
 
     # Deduplicate against replacements, blacklist, and allowed symbols
     all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
