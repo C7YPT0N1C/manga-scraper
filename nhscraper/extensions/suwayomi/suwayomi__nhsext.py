@@ -485,14 +485,16 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
     """
     Updates the Suwayomi library for a given category ID and waits until the update is complete,
     showing a dynamic tqdm progress bar.
-    
+
     :param category_id: The ID of the category to update.
     :param poll_interval: Seconds to wait between polling the update status.
     """
-    
+    from tqdm import tqdm
+
     log(f"GraphQL: Updating Suwayomi library for category ID {category_id}")
-    
-    mutation = """
+
+    # Mutation to trigger the update (run once)
+    trigger_mutation = """
     mutation UPDATE_LIBRARY($input: UpdateLibraryInput!) {
       updateLibrary(input: $input) {
         updateStatus {
@@ -507,27 +509,41 @@ def update_suwayomi_category(category_id: int, poll_interval: int = 5):
       }
     }
     """
-    
-    variables = {"input": {"categories": [category_id]}}
+    trigger_vars = {"input": {"categories": [category_id]}}
+
+    # Query to check the status (poll repeatedly)
+    status_query = """
+    query GET_LIBRARY_UPDATE_STATUS($categoryId: Int!) {
+      libraryUpdateStatus(categoryId: $categoryId) {
+        jobsInfo {
+          isRunning
+          totalJobs
+          finishedJobs
+          skippedCategoriesCount
+          skippedMangasCount
+        }
+      }
+    }
+    """
 
     try:
-        # Trigger the update
-        graphql_request(mutation, variables, debug=True)
+        # Trigger the update once
+        graphql_request(trigger_mutation, trigger_vars, debug=True)
         logger.info(f"Suwayomi library update triggered for category ID {category_id}. Waiting for completion...")
 
-        # Initialize tqdm progress bar without total yet
+        # Initialize progress bar without total yet
         pbar = tqdm(total=0, desc=f"Category {category_id} update", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
         while True:
-            result = graphql_request(mutation, variables, debug=False)
+            result = graphql_request(status_query, {"categoryId": category_id}, debug=False)
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
                 time.sleep(poll_interval)
                 continue
 
-            jobs_info = result.get("data", {}).get("updateLibrary", {}).get("updateStatus", {}).get("jobsInfo", {})
+            jobs_info = result.get("data", {}).get("libraryUpdateStatus", {}).get("jobsInfo", {})
             is_running = jobs_info.get("isRunning", False)
             finished = jobs_info.get("finishedJobs", 0)
             total = jobs_info.get("totalJobs", 0)
