@@ -227,7 +227,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 def build_gallery_list(args):
     
     log_clarification()
-    logger.info(f"Parsing galleries from NHentai...")
+    log(f"Parsing galleries from NHentai...")
     
     gallery_ids = set()
 
