@@ -226,9 +226,6 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
 def build_gallery_list(args):
     
-    log_clarification()
-    log(f"Parsing galleries from NHentai...")
-    
     gallery_ids = set()
 
     # ------------------------------------------------------------
@@ -371,6 +368,8 @@ def main():
     build_session()
     
     # Build Gallery List (make sure not empty.)
+    log_clarification()
+    log(f"Parsing galleries from NHentai...")
     gallery_list = build_gallery_list(args)
     if not gallery_list:
         logger.warning("No galleries provided. Exiting.")

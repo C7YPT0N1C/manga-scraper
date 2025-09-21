@@ -82,7 +82,7 @@ def setup_logger(verbose=False, debug=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str, log_type: str = "info"):
+def log(message: str, log_type: str = "warning"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
