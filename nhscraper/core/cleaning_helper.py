@@ -8,7 +8,7 @@ import os, logging
 # ------------------------------------------------------------
 
 # Symbols that are filesystem safe and should not be removed or replaced
-ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", "\"", ",", ".", ":", "?"]
+ALLOWED_SYMBOLS = [ "!", "#", "&", "'", "(", ")", "\"", ",", ".", ":", "?", "_"]
 
 # Fallback blacklist (these always become "_")
 BROKEN_SYMBOL_BLACKLIST = [
