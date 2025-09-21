@@ -1122,4 +1122,4 @@ def post_run_hook():
     
     # Update Suwayomi category at end
     log_clarification()
-    log("Please update the library manually to reflect any changes.")
+    log("Please run a small download and / or update the library manually to reflect any changes.")
