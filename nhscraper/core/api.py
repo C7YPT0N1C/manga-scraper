@@ -382,7 +382,10 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
     
     try:
         log_clarification()
-        log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
+        if query_value is None:
+            log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
+        else:
+            log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
         
         while True:
             if end_page is not None and page > end_page:
