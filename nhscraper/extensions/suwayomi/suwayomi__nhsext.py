@@ -5,7 +5,6 @@
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
 from requests.auth import HTTPBasicAuth
-from pathlib import Path
 from tqdm import tqdm
 
 from nhscraper.core.config import *
@@ -109,28 +108,6 @@ def save_collected_manga_ids(ids: set[int]):
     metadata["collected_manga_ids"] = sorted(ids)
     save_creators_metadata(metadata)
 
-broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
-
-def load_possible_broken_symbols() -> set[str]:
-    if os.path.exists(broken_symbols_file):
-        try:
-            with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-        except Exception as e:
-            logger.warning(f"Could not load broken symbols file: {e}")
-    return set()
-
-def save_possible_broken_symbols(symbols: set[str]):
-    """
-    Save possible broken symbols as a mapping { "symbol": "_" }.
-    """
-    try:
-        symbol_map = {s: "_" for s in sorted(symbols)}
-        with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(symbol_map, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save broken symbols file: {e}")
-
 ####################################################################################################################
 # CORE
 ####################################################################################################################
@@ -140,7 +117,7 @@ def pre_run_hook():
     log_clarification()
     logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH)
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
     if config.get("DRY_RUN"):
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
@@ -870,105 +847,6 @@ def process_deferred_creators():
     save_deferred_creators(still_deferred)
     logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
 
-def find_missing_galleries(local_root: str):
-    """
-    Crawl the local manga directory and fix gallery titles if needed.
-    
-    Only reports missing galleries that have new possible broken symbols.
-
-    Args:
-        local_root: Path to the root folder containing creator directories.
-    """
-    
-    log_clarification()
-    logger.warning("Attempting to fix missing galleries. This may take a while...")
-
-    # Load persisted broken symbols
-    POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
-
-    for creator_dir in sorted(Path(local_root).iterdir()):
-        if not creator_dir.is_dir():
-            continue
-
-        creator_name = creator_dir.name
-        local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
-        if not local_galleries:
-            logger.info(f"No galleries found for {creator_name}, skipping.")
-            continue
-
-        # Query manga by title & source
-        query = """
-        query QueryMangaByTitleSource($title: String!, $sourceId: LongString!) {
-          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
-            nodes {
-              id
-              title
-              chapters {
-                nodes { name }
-              }
-            }
-          }
-        }
-        """
-        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID}, debug=False)
-        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
-
-        if not nodes:
-            log_clarification()
-            logger.info(f"Creator '{creator_name}' not found in library.")
-            continue
-
-        manga = nodes[0]
-        chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
-
-        for gallery_name, gallery_path in local_galleries.items():
-            if gallery_name not in chapter_titles:
-                # Detect non-English symbols
-                symbols = {c for c in gallery_name if ord(c) > 127}
-
-                # Only consider symbols that are new
-                new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
-                if not new_broken:
-                    # Skip galleries missing for other reasons
-                    continue
-
-                # Update POSSIBLE_BROKEN_SYMBOLS
-                POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
-
-                log_clarification()
-                logger.warning(f"Missing gallery for '{creator_name}': '{gallery_name}'. Fixing...")
-                logger.info(
-                    f"\nName: '{gallery_name}'"
-                    f"\nPath: '{gallery_path}'"
-                    f"\nNew non-English symbols: {new_broken}"
-                )
-
-                # Clean the title
-                cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
-                if cleaned_title != gallery_name:
-                    new_path = gallery_path.parent / cleaned_title
-                    if new_path.exists():
-                        logger.warning(f"Skipping rename: target already exists: '{new_path}'")
-                    else:
-                        logger.warning(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
-                        gallery_path.rename(new_path)
-
-    # Deduplicate against replacements, blacklist, and allowed symbols
-    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
-    POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
-
-    if POSSIBLE_BROKEN_SYMBOLS:
-        def escape_symbol(c):
-            if c in {'"', '\\'}:
-                return f'\\{c}'
-            return c
-        formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
-        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
-
-    # Persist updated broken symbols
-    save_possible_broken_symbols({symbol: "_" for symbol in sorted(POSSIBLE_BROKEN_SYMBOLS)})
-    return POSSIBLE_BROKEN_SYMBOLS
-
 ####################################################################################################################
 # CORE HOOKS (thread-safe)
 ####################################################################################################################
@@ -1121,9 +999,6 @@ def post_run_hook():
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
     
     clean_directories(True)
-    
-    # Find missing galleries that might have been missed
-    find_missing_galleries(DEDICATED_DOWNLOAD_PATH)
     
     # Add all creators to Suwayomi
     process_deferred_creators()

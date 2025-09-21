@@ -7,13 +7,10 @@ from datetime import datetime
 import urllib.parse
 from urllib.parse import urljoin
 from threading import Thread, Lock
-from pathlib import Path
 
 from nhscraper.core.config import *
 
-download_path = get_download_path() # Get download path from config
-
-broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+broken_symbols_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "possible_broken_symbols.json")
 
 def load_possible_broken_symbols() -> set[str]:
     if os.path.exists(broken_symbols_file):
@@ -190,21 +187,126 @@ def get_meta_tags(referrer: str, meta, tag_type):
 def safe_name(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
-def clean_title(meta_or_title):
+def find_missing_galleries(local_root: str):
     """
-    Clean a gallery/manga title. Accepts either a meta dict or a raw string.
-    Detects broken symbols in the title, updates the persisted broken symbols file,
-    and applies them when cleaning.
+    Crawl the local manga directory and fix gallery titles if needed.
+    
+    Only reports missing galleries that have new possible broken symbols.
+
+    Args:
+        local_root: Path to the root folder containing creator directories.
+    """
+    
+    log_clarification()
+    logger.warning("Attempting to fix missing galleries. This may take a while...")
+
+    # Load persisted broken symbols
+    POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
+
+    for creator_dir in sorted(Path(local_root).iterdir()):
+        if not creator_dir.is_dir():
+            continue
+
+        creator_name = creator_dir.name
+        local_galleries = {f.name: f for f in creator_dir.iterdir() if f.is_dir()}
+        if not local_galleries:
+            logger.info(f"No galleries found for {creator_name}, skipping.")
+            continue
+
+        # Query manga by title & source
+        query = """
+        query QueryMangaByTitleSource($title: String!, $sourceId: LongString!) {
+          mangas(filter: { sourceId: { equalTo: $sourceId }, title: { equalTo: $title } }) {
+            nodes {
+              id
+              title
+              chapters {
+                nodes { name }
+              }
+            }
+          }
+        }
+        """
+        result = graphql_request(query, {"title": creator_name, "sourceId": LOCAL_SOURCE_ID}, debug=False)
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+        if not nodes:
+            log_clarification()
+            logger.info(f"Creator '{creator_name}' not found in library.")
+            continue
+
+        manga = nodes[0]
+        chapter_titles = {c["name"] for c in manga.get("chapters", {}).get("nodes", []) if c.get("name")}
+
+        for gallery_name, gallery_path in local_galleries.items():
+            if gallery_name not in chapter_titles:
+                # Detect non-English symbols
+                symbols = {c for c in gallery_name if ord(c) > 127}
+
+                # Only consider symbols that are new
+                new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
+                if not new_broken:
+                    # Skip galleries missing for other reasons
+                    continue
+
+                # Update POSSIBLE_BROKEN_SYMBOLS
+                POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
+
+                log_clarification()
+                logger.warning(f"Missing gallery for '{creator_name}': '{gallery_name}'. Fixing...")
+                logger.info(
+                    f"\nName: '{gallery_name}'"
+                    f"\nPath: '{gallery_path}'"
+                    f"\nNew non-English symbols: {new_broken}"
+                )
+
+                # Clean the title
+                cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
+                if cleaned_title != gallery_name:
+                    new_path = gallery_path.parent / cleaned_title
+                    if new_path.exists():
+                        logger.warning(f"Skipping rename: target already exists: '{new_path}'")
+                    else:
+                        logger.warning(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
+                        gallery_path.rename(new_path)
+
+    # Deduplicate against replacements, blacklist, and allowed symbols
+    all_known_symbols = set(BROKEN_SYMBOL_REPLACEMENTS.keys()).union(BROKEN_SYMBOL_BLACKLIST, ALLOWED_SYMBOLS)
+    POSSIBLE_BROKEN_SYMBOLS.difference_update(all_known_symbols)
+
+    if POSSIBLE_BROKEN_SYMBOLS:
+        def escape_symbol(c):
+            if c in {'"', '\\'}:
+                return f'\\{c}'
+            return c
+        formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
+        logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
+
+    # Persist updated broken symbols
+    save_possible_broken_symbols({symbol: "_" for symbol in sorted(POSSIBLE_BROKEN_SYMBOLS)})
+    return POSSIBLE_BROKEN_SYMBOLS
+
+def clean_title(meta_or_title, possible_broken_symbols: set[str] = None, local_root: str = None):
+    """
+    Clean a gallery/manga title. Accepts either a meta dict (like from GraphQL) or a raw string.
+    Optionally scans local galleries to detect new broken symbols.
 
     Args:
         meta_or_title: Either a dict with metadata containing "title" or a string title.
+        possible_broken_symbols: Optional set of extra symbols detected as broken.
+        local_root: Optional path to the root folder containing local galleries. If provided,
+                    find_missing_galleries() will be called to detect new broken symbols.
 
     Returns:
         str: Sanitised title.
     """
-    
-    # Load persisted broken symbols
-    possible_broken_symbols = load_possible_broken_symbols()
+    # First, optionally scan for new broken symbols
+    if local_root:
+        new_symbols = find_missing_galleries(local_root)
+        if possible_broken_symbols:
+            possible_broken_symbols.update(new_symbols)
+        else:
+            possible_broken_symbols = new_symbols
 
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
@@ -218,32 +320,29 @@ def clean_title(meta_or_title):
             or title_obj.get("japanese")
             or f"Gallery_{meta.get('id', 'UNKNOWN')}"
         )
+        # If there's a |, take the last part
         if "|" in title:
             title = title.split("|")[-1].strip()
     else:
+        # Already a string
         title = meta_or_title
-
-    # Detect non-ASCII symbols in the current title
-    symbols = {c for c in title if ord(c) > 127}
-    new_broken = symbols.difference(ALLOWED_SYMBOLS, possible_broken_symbols)
-    if new_broken:
-        possible_broken_symbols.update(new_broken)
-        logger.info(f"New broken symbols detected in '{title}': {new_broken}")
 
     # Remove content inside [] or {} brackets
     title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
 
-    # Apply explicit replacements
+    # Apply explicit replacements first
     for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
         title = title.replace(symbol, replacement)
 
-    # Normalise dashes
+    # Replace all variations of spaces around dash (ASCII, en, em) with single hyphen
     title = re.sub(r"\s*[–—-]\s*", "-", title)
 
-    # Replace blacklisted and broken symbols with underscores
+    # Replace blacklisted and detected broken symbols with underscores
     all_symbols_to_replace = set(BROKEN_SYMBOL_BLACKLIST)
-    allowed_set = set(ALLOWED_SYMBOLS).union(BROKEN_SYMBOL_REPLACEMENTS.keys(), BROKEN_SYMBOL_BLACKLIST)
-    all_symbols_to_replace.update(possible_broken_symbols.difference(allowed_set))
+    if possible_broken_symbols:
+        allowed_set = set(ALLOWED_SYMBOLS).union(BROKEN_SYMBOL_REPLACEMENTS.keys(), BROKEN_SYMBOL_BLACKLIST)
+        all_symbols_to_replace.update(possible_broken_symbols.difference(allowed_set))
+
     for symbol in all_symbols_to_replace:
         title = title.replace(symbol, "_")
 
@@ -254,10 +353,6 @@ def clean_title(meta_or_title):
 
     if not title:
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
-
-    # Persist updated broken symbols
-    if possible_broken_symbols:
-        save_possible_broken_symbols({s: "_" for s in sorted(possible_broken_symbols)})
 
     return safe_name(title)
 
