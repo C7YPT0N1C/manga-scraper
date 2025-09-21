@@ -594,7 +594,7 @@ def update_creator_manga(meta):
                 update_mangas([suwayomi_id], CATEGORY_ID)
                 collected_ids.discard(suwayomi_id)
 
-                # ✅ Use helper instead of manual discard
+                # Use helper instead of manual discard
                 remove_from_deferred(creator_name)
 
             except Exception as e:
@@ -727,18 +727,21 @@ def process_deferred_creators():
 
     logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
 
-    # Fetch all mangas from local source
     query = """
-    query FetchAllMangasFromLocalSource($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId } }) {
-        nodes { id title inLibrary categories { id } }
-      }
+    query FindMangaMetadataFromLocalSource($creatorName: String!) {
+    mangas(
+        filter: { sourceId: { equalTo: "0" }, title: { equalTo: $creatorName } }
+    ) {
+        nodes {
+        id
+        title
+        inLibrary
+        categories { id }
+        }
+    }
     }
     """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
-    all_mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
-    manga_lookup = {m["title"]: m for m in all_mangas}
     new_ids = set()
     still_deferred = set()
 
@@ -749,12 +752,15 @@ def process_deferred_creators():
             still_deferred.add(creator_name)
             continue
 
-        manga_info = manga_lookup.get(creator_name)
-        if not manga_info:
+        result = graphql_request(query, {"creatorName": creator_name})
+        mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+
+        if not mangas:
             logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
             still_deferred.add(creator_name)
             continue
 
+        manga_info = mangas[0]  # since title is unique per creator
         if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", [])]:
             logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
             remove_from_deferred(creator_name)
@@ -766,10 +772,11 @@ def process_deferred_creators():
     if new_ids:
         update_mangas(list(new_ids), CATEGORY_ID)
         # ensure those are removed from deferred after adding
-        for manga_id in new_ids:
-            for title, m in manga_lookup.items():
-                if int(m["id"]) == manga_id:
-                    remove_from_deferred(title)
+        for creator_name in deferred_creators:
+            result = graphql_request(query, {"creatorName": creator_name})
+            mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            if mangas and int(mangas[0]["id"]) in new_ids:
+                remove_from_deferred(creator_name)
 
     # Only keep those still truly deferred
     save_deferred_creators(still_deferred)
