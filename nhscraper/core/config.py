@@ -48,7 +48,7 @@ def setup_logger(verbose=False, debug=False):
     Console respects verbose/debug flags.
     """
     logger = logging.getLogger("nhscraper")
-    logger.handlers.clear()  # remove previous handlers
+    logger.handlers.clear()  # Remove previous handlers
 
     # Formatter
     formatter = logging.Formatter("[%(levelname)s] %(message)s")
@@ -70,10 +70,11 @@ def setup_logger(verbose=False, debug=False):
     fh_runtime.setFormatter(formatter)
     logger.addHandler(fh_runtime)
 
-    # Logger level: always DEBUG so all messages reach file
+    # Logger level: DEBUG so all messages reach the file handler
     logger.setLevel(logging.DEBUG)
 
-    logger.info("Logger initialised. Console level: %s", 
+    # Log initialisation summary
+    logger.info("Logger initialised. Console level: %s",
                 "DEBUG" if debug else "INFO" if verbose else "WARNING")
     
     return logger
@@ -86,7 +87,7 @@ def log(message: str, log_type: str = "warning"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
-    
+
     log_type: "debug", "info", "warning", "error", "critical"
     """
     logger = logging.getLogger("nhscraper")
