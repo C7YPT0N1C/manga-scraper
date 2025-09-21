@@ -380,7 +380,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    BATCH_SLEEP_TIME = (BATCH_SIZE * 0.05) # Seconds to sleep between batches.
+    BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for i in range(0, len(gallery_list), BATCH_SIZE):
         log_clarification()
         batch = gallery_list[i:i + BATCH_SIZE]

@@ -121,6 +121,7 @@ if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
     
 BATCH_SIZE = 500 # Splits large scrapes into smaller ones
+BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults

@@ -8,6 +8,9 @@ set_image_threads = None
 
 gallery_list = []
 
+BATCH_SIZE = 500 # Splits large scrapes into smaller ones
+BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
+
 def dynamic_sleep(stage, attempt: int = 1):
     """Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling."""
@@ -123,16 +126,18 @@ def worst_case_time_estimate(gallery_list):
     current_run_num_of_galleries = len(gallery_list)
     current_run_gallery_threads = set_gallery_threads
     current_run_gallery_sleep_max = set_gallery_sleep_max
+    current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
     print("")
     print(f"Number of Galleries Processed: {len(gallery_list)}")
     print(f"Number of Gallery Threads: {set_gallery_threads}")
+    print(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries")
     print(f"Max Sleep Time: {current_run_gallery_sleep_max}")
     
     worst_time_secs = (
-            (current_run_num_of_galleries / current_run_gallery_threads) *
-            current_run_gallery_sleep_max
-        )
+        ((current_run_num_of_galleries / current_run_gallery_threads) * current_run_gallery_sleep_max ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * current_batch_sleep_time)
+    )
     
     worst_time_mins = worst_time_secs / 60 # Convert To Minutes
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
@@ -146,8 +151,8 @@ def worst_case_time_estimate(gallery_list):
 # ------------------------------
 set_gallery_sleep_min = 0.5 # Default: 0.5
 set_gallery_sleep_max = 100 # Default: 100
-set_num_of_galleries = 6281
-set_gallery_threads = 200 # Default: 2
+set_num_of_galleries = 8349
+set_gallery_threads = 2 # Default: 2
 set_image_threads = 10 # Default: 10
 max_attempts = 1
 

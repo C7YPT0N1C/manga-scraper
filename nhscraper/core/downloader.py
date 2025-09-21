@@ -52,22 +52,23 @@ def worst_case_time_estimate(gallery_list):
     current_run_num_of_galleries = len(gallery_list)
     current_run_gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
     current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
     log_clarification()
-    logger.info(f"Number of Galleries Processed: {len(gallery_list)}")
-    logger.info(f"Number of Gallery Threads: {current_run_gallery_threads}")
-    logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}")
+    #logger.info(f"Number of Galleries Processed: {len(gallery_list)}") # DEBUGGING
+    #logger.info(f"Number of Gallery Threads: {current_run_gallery_threads}") # DEBUGGING
+    #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
+    #logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}") # DEBUGGING
     
     worst_time_secs = (
-            (current_run_num_of_galleries / current_run_gallery_threads) *
-            current_run_gallery_sleep_max
-        )
+        ((current_run_num_of_galleries / current_run_gallery_threads) * current_run_gallery_sleep_max ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * current_batch_sleep_time)
+    )
     
     worst_time_mins = worst_time_secs / 60 # Convert To Minutes
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
-    log_clarification()    
     logger.info(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
@@ -206,6 +207,7 @@ def process_galleries(gallery_ids):
         if not config.get("DRY_RUN"):
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
+            log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark gallery {gallery_id} as started.")
 
         gallery_attempts = 0
@@ -247,6 +249,7 @@ def process_galleries(gallery_ids):
                     if not config.get("DRY_RUN"):
                         db.mark_gallery_skipped(gallery_id)
                     else:
+                        log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
