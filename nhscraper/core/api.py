@@ -12,26 +12,31 @@ from pathlib import Path
 from nhscraper.core.config import *
 
 download_path = get_download_path() # Get download path from config
+max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
 broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
 
-def load_possible_broken_symbols() -> set[str]:
+def load_possible_broken_symbols() -> dict[str, str]:
+    """
+    Load possible broken symbols as a mapping { "symbol": "_" }.
+    """
     if os.path.exists(broken_symbols_file):
         try:
             with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
         except Exception as e:
             logger.warning(f"Could not load broken symbols file: {e}")
-    return set()
+    return {}
 
-def save_possible_broken_symbols(symbols: set[str]):
+def save_possible_broken_symbols(symbols: dict[str, str]):
     """
     Save possible broken symbols as a mapping { "symbol": "_" }.
     """
     try:
-        symbol_map = {s: "_" for s in sorted(symbols)}
         with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(symbol_map, f, ensure_ascii=False, indent=2)
+            json.dump(symbols, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning(f"Could not save broken symbols file: {e}")
 
@@ -203,7 +208,7 @@ def clean_title(meta_or_title):
         str: Sanitised title.
     """
     
-    # Load persisted broken symbols
+    # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
 
     # Determine if input is a dict or string
@@ -225,9 +230,17 @@ def clean_title(meta_or_title):
 
     # Detect non-ASCII symbols in the current title
     symbols = {c for c in title if ord(c) > 127}
-    new_broken = symbols.difference(ALLOWED_SYMBOLS, possible_broken_symbols)
+    known_symbols = set(ALLOWED_SYMBOLS).union(
+        BROKEN_SYMBOL_REPLACEMENTS.keys(),
+        BROKEN_SYMBOL_BLACKLIST,
+        possible_broken_symbols.keys()
+    )
+    new_broken = symbols.difference(known_symbols)
+
+    # Add new symbols to the mapping
     if new_broken:
-        possible_broken_symbols.update(new_broken)
+        for s in new_broken:
+            possible_broken_symbols[s] = "_"
         logger.info(f"New broken symbols detected in '{title}': {new_broken}")
 
     # Remove content inside [] or {} brackets
@@ -237,14 +250,15 @@ def clean_title(meta_or_title):
     for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
         title = title.replace(symbol, replacement)
 
+    # Apply persisted broken symbol replacements
+    for symbol, replacement in possible_broken_symbols.items():
+        title = title.replace(symbol, replacement)
+
     # Normalise dashes
     title = re.sub(r"\s*[–—-]\s*", "-", title)
 
-    # Replace blacklisted and broken symbols with underscores
-    all_symbols_to_replace = set(BROKEN_SYMBOL_BLACKLIST)
-    allowed_set = set(ALLOWED_SYMBOLS).union(BROKEN_SYMBOL_REPLACEMENTS.keys(), BROKEN_SYMBOL_BLACKLIST)
-    all_symbols_to_replace.update(possible_broken_symbols.difference(allowed_set))
-    for symbol in all_symbols_to_replace:
+    # Replace blacklisted characters
+    for symbol in BROKEN_SYMBOL_BLACKLIST:
         title = title.replace(symbol, "_")
 
     # Collapse multiple underscores/spaces
@@ -255,9 +269,9 @@ def clean_title(meta_or_title):
     if not title:
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
-    # Persist updated broken symbols
+    # Persist updated broken symbols mapping
     if possible_broken_symbols:
-        save_possible_broken_symbols({s: "_" for s in sorted(possible_broken_symbols)})
+        save_possible_broken_symbols(possible_broken_symbols)
 
     return safe_name(title)
 
@@ -432,7 +446,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             log(f"Fetcher: Requesting URL: {url}", "debug")
 
             resp = None
-            for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
+            for attempt in range(1, max_api_retries + 1):
                 try:
                     resp = session.get(url, timeout=10)
                     if resp.status_code == 429:
@@ -443,7 +457,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
+                    if attempt >= max_api_retries:
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         # Rotate Tor and try again once
@@ -487,7 +501,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
     url = f"{API_BASE}/gallery/{gallery_id}"
-    for attempt in range(1, config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES) + 1):
+    for attempt in range(1, max_api_retries + 1):
         try:
             log_clarification()
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}", "debug")
@@ -515,7 +529,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if "404 Client Error: Not Found for url" in str(e):
                 logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
-            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
+            if attempt >= max_api_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rotate Tor and try again once
                 if rotate_tor():
@@ -532,7 +546,7 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
-            if attempt >= config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES):
+            if attempt >= max_api_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rotate Tor and try again once
                 if rotate_tor():
@@ -633,7 +647,7 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
     # Unified function to update gallery state per stage.
     # stage: 'download' or 'graphql'
     # success: True if stage completed, False if failed
-    max_attempts = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+    max_attempts = max_api_retries
     
     with state_lock:
         entry = gallery_metadata.setdefault(gallery_id, {"meta": None})
