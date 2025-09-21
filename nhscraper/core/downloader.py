@@ -69,7 +69,7 @@ def worst_case_time_estimate(gallery_list):
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
-    logger.info(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+    log(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
     """
