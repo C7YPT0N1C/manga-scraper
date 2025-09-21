@@ -42,19 +42,31 @@ log_clarification()
 logger.info("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
+class ConditionalFormatter(logging.Formatter):
+    """
+    Custom formatter:
+    - INFO: only show message
+    - Other levels: include [LEVEL] prefix
+    """
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "[%(levelname)s] %(message)s"
+        return super().format(record)
+
 def setup_logger(verbose=False, debug=False):
     """
     Configure the nhscraper logger.
-    File logs always DEBUG.
-    Console respects verbose/debug flags.
+    - Console respects verbose/debug flags with conditional formatting
+    - File logs always DEBUG with full level info
     """
     logger = logging.getLogger("nhscraper")
     logger.handlers.clear()  # Remove previous handlers
 
-    # Formatter
-    formatter = logging.Formatter("[%(levelname)s] %(message)s")
-
+    # ----------------------------
     # Console handler
+    # ----------------------------
     ch = logging.StreamHandler()
     if debug:
         ch.setLevel(logging.DEBUG)
@@ -62,19 +74,21 @@ def setup_logger(verbose=False, debug=False):
         ch.setLevel(logging.INFO)
     else:
         ch.setLevel(logging.WARNING)
-    ch.setFormatter(formatter)
+    ch.setFormatter(ConditionalFormatter())
     logger.addHandler(ch)
 
+    # ----------------------------
     # File handler: always DEBUG
-    fh_runtime = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
-    fh_runtime.setLevel(logging.DEBUG)
-    fh_runtime.setFormatter(formatter)
-    logger.addHandler(fh_runtime)
+    # ----------------------------
+    fh = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logger.addHandler(fh)
 
-    # Logger level: DEBUG so all messages reach the file handler
+    # Logger level: DEBUG ensures all messages reach file handler
     logger.setLevel(logging.DEBUG)
 
-    # Log initialisation summary
+    # Initialisation summary
     logger.info("Logger initialised. Console level: %s",
                 "DEBUG" if debug else "INFO" if verbose else "WARNING")
     

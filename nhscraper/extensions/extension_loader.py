@@ -338,7 +338,7 @@ def get_selected_extension(name: str = "skeleton"):
             #if hasattr(ext, "pre_run_hook"): # The extension does this in it's pre run hook.
             #    ext.pre_run_hook()
             log_clarification()
-            logger.warning(f"Selected extension: {final_name}")
+            logger.info(f"Selected extension: {final_name}")
             return ext
 
     # If we reach here, something went really wrong

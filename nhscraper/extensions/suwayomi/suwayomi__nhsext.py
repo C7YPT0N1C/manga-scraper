@@ -482,9 +482,11 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi_category(category_id: int, poll_interval: int = 5):
+def update_suwayomi_category(category_id: int):
     log_clarification()
     log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
+    
+    poll_interval = 2
 
     # Mutation to trigger the update once
     trigger_mutation = f"""
@@ -879,7 +881,7 @@ def find_missing_galleries(local_root: str):
     """
     
     log_clarification()
-    logger.warning("Checking for missing galleries with new broken symbols...")
+    logger.warning("Attempting to fix missing galleries. This may take a while...")
 
     # Load persisted broken symbols
     POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
@@ -934,7 +936,7 @@ def find_missing_galleries(local_root: str):
                 POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
 
                 log_clarification()
-                logger.warning(f"Missing gallery due to new broken symbols for '{creator_name}':")
+                logger.warning(f"Missing gallery for '{creator_name}': '{gallery_name}'. Fixing...")
                 logger.info(
                     f"\nName: '{gallery_name}'"
                     f"\nPath: '{gallery_path}'"
@@ -946,9 +948,9 @@ def find_missing_galleries(local_root: str):
                 if cleaned_title != gallery_name:
                     new_path = gallery_path.parent / cleaned_title
                     if new_path.exists():
-                        logger.info(f"Skipping rename: target already exists: '{new_path}'")
+                        logger.warning(f"Skipping rename: target already exists: '{new_path}'")
                     else:
-                        logger.info(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
+                        logger.warning(f"Renaming gallery '{gallery_name}' -> '{cleaned_title}'")
                         gallery_path.rename(new_path)
 
     # Deduplicate against replacements, blacklist, and allowed symbols
@@ -1128,4 +1130,4 @@ def post_run_hook():
     
     # Update Suwayomi category at end
     log_clarification()
-    log("Please run a small download and / or update the library manually to reflect any changes.")
+    log("Please update the library manually and / or run a small download to reflect any changes.")
