@@ -19,7 +19,7 @@ RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
 # --- Placeholder logger so imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
-    placeholder_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    placeholder_formatter = logging.Formatter("[%(levelname)s] %(message)s")
     placeholder_console = logging.StreamHandler()
     placeholder_console.setLevel(logging.WARNING)   # Default to WARNING
     placeholder_console.setFormatter(placeholder_formatter)
