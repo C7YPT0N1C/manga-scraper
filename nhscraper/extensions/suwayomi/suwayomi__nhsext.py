@@ -120,9 +120,13 @@ def load_possible_broken_symbols() -> set[str]:
     return set()
 
 def save_possible_broken_symbols(symbols: set[str]):
+    """
+    Save possible broken symbols as a mapping { "symbol": "_" }.
+    """
     try:
+        symbol_map = {s: "_" for s in sorted(symbols)}
         with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(sorted(symbols), f, ensure_ascii=False, indent=2)
+            json.dump(symbol_map, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning(f"Could not save broken symbols file: {e}")
 
@@ -885,8 +889,8 @@ def find_missing_galleries(local_root: str, auto_update: bool = True):
         formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
         logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
-    # Persist updated broken symbols
-    save_possible_broken_symbols(POSSIBLE_BROKEN_SYMBOLS)
+    # Persist updated broken symbols as a dict with "_" as replacement
+    save_possible_broken_symbols({symbol: "_" for symbol in sorted(POSSIBLE_BROKEN_SYMBOLS)})
     return POSSIBLE_BROKEN_SYMBOLS
 
 ####################################################################################################################
