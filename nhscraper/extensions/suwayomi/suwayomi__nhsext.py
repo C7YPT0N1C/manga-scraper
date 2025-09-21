@@ -334,11 +334,11 @@ def graphql_request(query: str, variables: dict = None):
         return None
 
     try:
-        #log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+        log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
-        #log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
+        log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
         return result
     
     except requests.RequestException as e:
