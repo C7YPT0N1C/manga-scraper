@@ -872,9 +872,14 @@ def find_missing_galleries(local_root: str):
     """
     Crawl the local manga directory and fix gallery titles if needed.
     
+    Only reports missing galleries that have new possible broken symbols.
+
     Args:
         local_root: Path to the root folder containing creator directories.
     """
+    
+    log_clarification()
+    logger.warning("Checking for missing galleries with new broken symbols...")
 
     # Load persisted broken symbols
     POSSIBLE_BROKEN_SYMBOLS = load_possible_broken_symbols()
@@ -916,26 +921,27 @@ def find_missing_galleries(local_root: str):
 
         for gallery_name, gallery_path in local_galleries.items():
             if gallery_name not in chapter_titles:
-                # Detect all non-English characters
+                # Detect non-English symbols
                 symbols = {c for c in gallery_name if ord(c) > 127}
 
+                # Only consider symbols that are new
                 new_broken = symbols.difference(ALLOWED_SYMBOLS, POSSIBLE_BROKEN_SYMBOLS)
-                if new_broken:
-                    POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
-                    status = "Broken symbols detected."
-                else:
-                    status = "Update Suwayomi to reflect changes."
+                if not new_broken:
+                    # Skip galleries missing for other reasons
+                    continue
+
+                # Update POSSIBLE_BROKEN_SYMBOLS
+                POSSIBLE_BROKEN_SYMBOLS.update(new_broken)
 
                 log_clarification()
+                logger.warning(f"Missing gallery due to new broken symbols for '{creator_name}':")
                 logger.info(
-                    f"Missing gallery for '{creator_name}':"
                     f"\nName: '{gallery_name}'"
                     f"\nPath: '{gallery_path}'"
-                    f"\nNon-English symbols: {symbols}"
-                    f"\nStatus: {status}"
+                    f"\nNew non-English symbols: {new_broken}"
                 )
 
-                # Clean the title using clean_title()
+                # Clean the title
                 cleaned_title = clean_title(gallery_name, POSSIBLE_BROKEN_SYMBOLS)
                 if cleaned_title != gallery_name:
                     new_path = gallery_path.parent / cleaned_title
@@ -957,7 +963,7 @@ def find_missing_galleries(local_root: str):
         formatted_list = ", ".join(f'"{escape_symbol(c)}"' for c in sorted(POSSIBLE_BROKEN_SYMBOLS))
         logger.info(f"POSSIBLE_BROKEN_SYMBOLS = [ {formatted_list} ]")
 
-    # Persist updated broken symbols as a dict with "_" as replacement
+    # Persist updated broken symbols
     save_possible_broken_symbols({symbol: "_" for symbol in sorted(POSSIBLE_BROKEN_SYMBOLS)})
     return POSSIBLE_BROKEN_SYMBOLS
 
