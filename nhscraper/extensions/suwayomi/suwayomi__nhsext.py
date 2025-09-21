@@ -36,6 +36,8 @@ if DEDICATED_DOWNLOAD_PATH is None:
 
 SUBFOLDER_STRUCTURE = ["creator", "title"]
 
+extension_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+
 ############################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
@@ -119,7 +121,7 @@ def pre_run_hook():
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
@@ -157,7 +159,7 @@ def install_extension():
     if not DEDICATED_DOWNLOAD_PATH:
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -215,7 +217,7 @@ WantedBy=multi-user.target
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -257,7 +259,7 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -314,7 +316,7 @@ def graphql_request(query: str, variables: dict = None, debug: bool = False):
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
@@ -346,7 +348,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
@@ -621,7 +623,7 @@ def update_creator_manga(meta):
     Update a creator's details.json and genre metadata based on a downloaded gallery.
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
@@ -698,7 +700,7 @@ def update_creator_manga(meta):
     save_creators_metadata(metadata)
 
     # --- Update manga cover ---
-    if not config.get("DRY_RUN"):
+    if not extension_dry_run:
         try:
             for creator_name in creators:
                 creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
@@ -876,7 +878,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
@@ -928,7 +930,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
 
 # Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
@@ -947,7 +949,7 @@ def pre_batch_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
     log_clarification()
@@ -955,7 +957,7 @@ def pre_gallery_download_hook(gallery_id):
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
@@ -964,7 +966,7 @@ def during_gallery_download_hook(gallery_id):
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
@@ -982,7 +984,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
@@ -991,7 +993,7 @@ def post_batch_hook():
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
-    if config.get("DRY_RUN"):
+    if extension_dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     

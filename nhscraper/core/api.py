@@ -11,40 +11,12 @@ from pathlib import Path
 
 from nhscraper.core.config import *
 
-download_path = get_download_path() # Get download path from config
-max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
-
-broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
-
-def load_possible_broken_symbols() -> dict[str, str]:
-    """
-    Load possible broken symbols as a mapping { "symbol": "_" }.
-    """
-    if os.path.exists(broken_symbols_file):
-        try:
-            with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-        except Exception as e:
-            logger.warning(f"Could not load broken symbols file: {e}")
-    return {}
-
-def save_possible_broken_symbols(symbols: dict[str, str]):
-    """
-    Save possible broken symbols as a mapping { "symbol": "_" }.
-    """
-    try:
-        with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(symbols, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save broken symbols file: {e}")
-
 ################################################################################################################
 # HTTP SESSION
 ################################################################################################################
 session = None
 session_lock = Lock()
+session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
 def session_builder():
     log_clarification()
@@ -66,7 +38,7 @@ def session_builder():
     
     log(f"Built HTTP session with cloudscraper", "debug")
     
-    if config.get("USE_TOR", DEFAULT_USE_TOR):
+    if session_use_tor:
         proxy = "socks5h://127.0.0.1:9050"
         s.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
@@ -109,6 +81,35 @@ def rotate_tor(control_host="127.0.0.1", control_port=9051):
 ################################################################################################################
 # GLOBAL VARIABLES
 ################################################################################################################
+
+download_path = get_download_path() # Get download path from config
+max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+
+broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+
+def load_possible_broken_symbols() -> dict[str, str]:
+    """
+    Load possible broken symbols as a mapping { "symbol": "_" }.
+    """
+    if os.path.exists(broken_symbols_file):
+        try:
+            with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            logger.warning(f"Could not load broken symbols file: {e}")
+    return {}
+
+def save_possible_broken_symbols(symbols: dict[str, str]):
+    """
+    Save possible broken symbols as a mapping { "symbol": "_" }.
+    """
+    try:
+        with open(broken_symbols_file, "w", encoding="utf-8") as f:
+            json.dump(symbols, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save broken symbols file: {e}")
 
 # ===============================
 # SCRAPER API
@@ -385,9 +386,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         log_clarification()
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
-        if DYNAMIC_SLEEP_DEBUG:
-            log("------------------------------\n", "debug")
-
+        log("------------------------------\n", "debug")
         return sleep_time
 
 #####################################################################################################################################################################
@@ -541,7 +540,6 @@ def fetch_gallery_metadata(gallery_id: int):
                     except Exception as e2:
                         logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
-            log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
@@ -558,7 +556,6 @@ def fetch_gallery_metadata(gallery_id: int):
                     except Exception as e2:
                         logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
-            log_clarification()
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
@@ -621,7 +618,7 @@ def fetch_image_urls(meta: dict, page: int):
 def get_tor_ip():
     """Fetch current IP, through Tor if enabled."""
     try:
-        if config.get("USE_TOR", DEFAULT_USE_TOR):
+        if session_use_tor:
             r = requests.get("https://httpbin.org/ip",
                              proxies={
                                  "http": "socks5h://127.0.0.1:9050",

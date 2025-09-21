@@ -21,6 +21,8 @@ download_location = ""
 gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
 image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
 
+downloader_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+
 skipped_galleries = []
 
 ####################################################################################################
@@ -37,7 +39,7 @@ def load_extension():
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) \
                         or config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
 
-    if not config.get("DRY_RUN", DEFAULT_DRY_RUN):
+    if not downloader_dry_run:
         os.makedirs(download_location, exist_ok=True)
     else:
         logger.info(f"[DRY RUN] Downloader: Skipping creation of: {download_location}")
@@ -134,7 +136,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         return False
 
     # Skip only if NOT in dry-run
-    if not config.get("DRY_RUN") and os.path.exists(doujin_folder):
+    if not downloader_dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
                 for ext in ("jpg", "png", "gif", "webp"))
@@ -204,7 +206,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
 def process_galleries(gallery_ids):
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        if not config.get("DRY_RUN"):
+        if not downloader_dry_run:
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
@@ -225,7 +227,7 @@ def process_galleries(gallery_ids):
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
-                    if not config.get("DRY_RUN") and gallery_attempts >= max_gallery_attempts:
+                    if not downloader_dry_run and gallery_attempts >= max_gallery_attempts:
                         db.mark_gallery_failed(gallery_id)
                     continue
 
@@ -246,7 +248,7 @@ def process_galleries(gallery_ids):
                         break
 
                 if skip_gallery:
-                    if not config.get("DRY_RUN"):
+                    if not downloader_dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
@@ -258,7 +260,7 @@ def process_galleries(gallery_ids):
                 log(f"Downloader: Primary Creator for Gallery {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
-                if config.get("DRY_RUN"):
+                if downloader_dry_run:
                     log(f"[DRY RUN] Downloader: Would create primary folder for {creators[0]}: {primary_folder}", "debug")
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
@@ -270,7 +272,7 @@ def process_galleries(gallery_ids):
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
-                    if config.get("DRY_RUN"):
+                    if downloader_dry_run:
                         log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {primary_folder}", "debug")
                     else:
                         if os.path.islink(extra_folder):
@@ -298,13 +300,13 @@ def process_galleries(gallery_ids):
                 # --- Download images (once, in primary creator’s folder) ---
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
-                        if not config.get("DRY_RUN"):
+                        if not downloader_dry_run:
                             submit_creator_tasks(executor, tasks, gallery_id, session, primary_creator)
                         else:
                             for _ in tasks:
                                 time.sleep(0.1)  # fake delay
 
-                if not config.get("DRY_RUN"):
+                if not downloader_dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
 
@@ -314,7 +316,7 @@ def process_galleries(gallery_ids):
 
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery {gallery_id}: {e}")
-                if not config.get("DRY_RUN") and gallery_attempts >= max_gallery_attempts:
+                if not downloader_dry_run and gallery_attempts >= max_gallery_attempts:
                     db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
