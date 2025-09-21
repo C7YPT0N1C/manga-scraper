@@ -40,6 +40,7 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 extension_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+extension_max_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
 ############################################
 
@@ -221,7 +222,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
         return False
 
     if retries is None:
-        retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+        retries = extension_max_retries
 
     if os.path.exists(path):
         log(f"Already exists, skipping: {path}", "debug")

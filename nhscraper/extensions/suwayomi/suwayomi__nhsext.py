@@ -37,6 +37,7 @@ if DEDICATED_DOWNLOAD_PATH is None:
 SUBFOLDER_STRUCTURE = ["creator", "title"]
 
 extension_dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+extension_max_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
 ############################################
 
@@ -744,108 +745,123 @@ def process_deferred_creators():
     Cleans up creators_metadata.json so successful creators are removed from deferred_creators.
     """
     
-    update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
+    max_retries = extension_max_retries # Number of attempts to process deferred creators
+    process_creators_attempt = 1
+    
+    still_deferred = set()
+    
+    while process_creators_attempt <= max_retries:
+        log(f"Processing creators (attempt {process_creators_attempt}/{max_retries})...")
+        
+        update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
 
-    # ----------------------------
-    # Add mangas not yet in library
-    # ----------------------------
-    log_clarification()
-    logger.info("GraphQL: Fetching mangas not yet in library...")
+        # ----------------------------
+        # Add mangas not yet in library
+        # ----------------------------
+        log_clarification()
+        logger.info("GraphQL: Fetching mangas not yet in library...")
 
-    query = """
-    query FetchMangasNotInLibrary($sourceId: LongString!) {
-      mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
-        nodes { id title }
-      }
-    }
-    """
-    result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug=False)
-    nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+        query = """
+        query FetchMangasNotInLibrary($sourceId: LongString!) {
+        mangas(filter: { sourceId: { equalTo: $sourceId }, inLibrary: { equalTo: false } }) {
+            nodes { id title }
+        }
+        }
+        """
+        result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug=False)
+        nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
-    new_ids = []
+        new_ids = []
 
-    if not nodes:
-        logger.info("GraphQL: No mangas found outside the library.")
-    else:
-        for node in nodes:
-            title = node["title"]
-            expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
-            if os.path.exists(expected_path):
-                new_ids.append(int(node["id"]))
-                # remove from deferred if found
-                remove_from_deferred(title)
+        if not nodes:
+            logger.info("GraphQL: No mangas found outside the library.")
+        else:
+            for node in nodes:
+                title = node["title"]
+                expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
+                if os.path.exists(expected_path):
+                    new_ids.append(int(node["id"]))
+                    # remove from deferred if found
+                    remove_from_deferred(title)
 
-        if new_ids:
-            logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-            add_mangas_to_suwayomi(new_ids, CATEGORY_ID)
+            if new_ids:
+                logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
+                add_mangas_to_suwayomi(new_ids, CATEGORY_ID)
 
-    # ----------------------------
-    # Process deferred creators
-    # ----------------------------
-    log_clarification()
+        # ----------------------------
+        # Process deferred creators
+        # ----------------------------
+        log_clarification()
 
-    with _deferred_creators_lock:
-        deferred_creators = load_deferred_creators()
+        with _deferred_creators_lock:
+            deferred_creators = load_deferred_creators()
 
-    if not deferred_creators:
-        logger.info("GraphQL: No deferred creators to process.")
-        return
+        if not deferred_creators:
+            logger.info("GraphQL: No deferred creators to process.")
+            return
 
-    logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
+        logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
 
-    query = """
-    query FindMangaMetadataFromLocalSource($creatorName: String!) {
-    mangas(
-        filter: { sourceId: { equalTo: "0" }, title: { equalTo: $creatorName } }
-    ) {
-        nodes {
-        id
-        title
-        inLibrary
-        categories {
+        query = """
+        query FindMangaMetadataFromLocalSource($creatorName: String!) {
+        mangas(
+            filter: { sourceId: { equalTo: "0" }, title: { equalTo: $creatorName } }
+        ) {
             nodes {
             id
+            title
+            inLibrary
+            categories {
+                nodes {
+                id
+                }
+            }
             }
         }
         }
-    }
-    }
-    """
-    new_ids = set()
-    processed_creators = set()
-    still_deferred = set()
+        """
+        new_ids = set()
+        processed_creators = set()
 
-    for creator_name in sorted(deferred_creators):
-        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-        if not os.path.exists(creator_folder):
-            logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
-            still_deferred.add(creator_name)
-            continue
+        for creator_name in sorted(deferred_creators):
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            if not os.path.exists(creator_folder):
+                logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
+                still_deferred.add(creator_name)
+                continue
 
-        result = graphql_request(query, {"creatorName": creator_name}, debug=False)
-        mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
+            result = graphql_request(query, {"creatorName": creator_name}, debug=False)
+            mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
-        if not mangas:
-            logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
-            still_deferred.add(creator_name)
-            continue
+            if not mangas:
+                logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
+                still_deferred.add(creator_name)
+                continue
 
-        manga_info = mangas[0]  # title is unique per creator
-        if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", {}).get("nodes", [])]:
-            logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
-            remove_from_deferred(creator_name)
-            continue
+            manga_info = mangas[0]  # title is unique per creator
+            if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", {}).get("nodes", [])]:
+                logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
+                remove_from_deferred(creator_name)
+                continue
 
-        new_ids.add(int(manga_info["id"]))
-        processed_creators.add(creator_name)
-        logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
+            new_ids.add(int(manga_info["id"]))
+            processed_creators.add(creator_name)
+            logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
 
-    if new_ids:
-        add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID)
-        for creator_name in processed_creators:
-            remove_from_deferred(creator_name)
+        if new_ids:
+            add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID)
+            for creator_name in processed_creators:
+                remove_from_deferred(creator_name)
+        
+        # If no creators remain, we’re done early
+        if not still_deferred:
+            logger.info("Successfully processed all deferred creators.")
+            return
+        
+        # Otherwise, try again
+        process_creators_attempt += 1
 
-    # Only keep those still truly deferred
+    # After max retries, keep creators still deferred
     save_deferred_creators(still_deferred)
     logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
 
@@ -870,7 +886,7 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
         return False
 
     if retries is None:
-        retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+        retries = extension_max_retries
 
     if os.path.exists(path):
         log(f"Already exists, skipping: {path}", "debug")
