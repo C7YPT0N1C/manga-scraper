@@ -50,8 +50,8 @@ SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
 CATEGORY_ID = None
 
 # Max number of genres stored in a creator's details.json
-MAX_GENRES_STORED = 15
-# Max number of genres parsed from a gallery and stored in a creator's "most_popular_genres.json" field.
+MAX_GENRES_STORED = 25
+# Max number of genres parsed from a gallery and stored in a creator's "genre_count" field in creators_metadata.json.
 MAX_GENRES_PARSED = 100
 
 ############################################
