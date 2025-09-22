@@ -612,7 +612,7 @@ def remove_from_deferred(creator_name: str):
 
     if creator_name in deferred_creators:
         deferred_creators.discard(creator_name)
-        logger.info(f"Removed '{creator_name}' from deferred_creators.")
+        logger.info(f"Removed '{creator_name}' from deferred creators.")
         metadata["deferred_creators"] = sorted(deferred_creators)
         save_creators_metadata(metadata)
     
@@ -742,7 +742,7 @@ def process_deferred_creators():
     Adds deferred creators to library and updates their category.
     Ensures only existing local creator folders are added.
     Adds all existing local mangas to library + category if they exist on disk.
-    Cleans up creators_metadata.json so successful creators are removed from deferred_creators.
+    Cleans up creators_metadata.json so successful creators are removed from deferred creators.
     """
     
     max_retries = extension_max_retries # Number of attempts to process deferred creators
