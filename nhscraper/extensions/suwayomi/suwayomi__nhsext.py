@@ -142,7 +142,6 @@ def return_gallery_metas(meta):
     
     language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
-    log_clarification()
     return {
         "creator": creators,
         "title": full_title,
@@ -247,8 +246,7 @@ def uninstall_extension():
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     log_clarification()
-    log(f"Extension: {EXTENSION_NAME}: Test hook called.", "debug")
-    log_clarification()
+    log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
@@ -624,6 +622,9 @@ def update_creator_manga(meta):
     Update a creator's details.json and genre metadata based on a downloaded gallery.
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
+    
+    log_clarification()
+    
     if extension_dry_run:
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
@@ -877,8 +878,6 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current creator.
     """
-    #log_clarification()
-    #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
@@ -993,8 +992,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Thread-safe append
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
-
-    log_clarification()
     
     # Update creator's popular genres
     update_creator_manga(meta)

@@ -267,8 +267,8 @@ def process_galleries(gallery_ids):
 
                 # --- Symlink all additional creators to the primary folder ---
                 for extra_creator in creators[1:]:
-                    extra_safe = safe_name(extra_creator)
-                    extra_folder = build_gallery_path(meta, {"creator": [extra_creator]})
+                    extra_creator_safe = safe_name(extra_creator)
+                    extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
@@ -281,7 +281,7 @@ def process_galleries(gallery_ids):
                             logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
                             continue  # skip creating symlink if real folder exists
                         os.symlink(primary_folder, extra_folder)
-                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator}")
+                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe}")
 
                 # --- Prepare download tasks (only once, for primary creator) ---
                 tasks = []

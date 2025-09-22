@@ -146,7 +146,6 @@ def return_gallery_metas(meta):
     
     language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
-    log_clarification()
     return {
         "creator": creators,
         "title": full_title,

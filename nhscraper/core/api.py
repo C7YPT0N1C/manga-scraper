@@ -307,7 +307,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         base_min, base_max = api_sleep_min * attempt_scale, api_sleep_max * attempt_scale
         sleep_time = random.uniform(base_min, base_max)
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
-        log("------------------------------\n", "debug")
+        log("------------------------------", "debug")
         return sleep_time
 
     # ------------------------------------------------------------
@@ -386,7 +386,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         log_clarification()
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
-        log("------------------------------\n", "debug")
+        log("------------------------------", "debug")
         return sleep_time
 
 #####################################################################################################################################################################
@@ -503,7 +503,7 @@ def fetch_gallery_metadata(gallery_id: int):
     for attempt in range(1, max_api_retries + 1):
         try:
             log_clarification()
-            log(f"Fetcher: Fetching metadata for Gallery: {gallery_id} from URL: {url}", "debug")
+            log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
             resp = session.get(url, timeout=10)
             if resp.status_code == 429:
@@ -511,6 +511,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
                 time.sleep(wait)
                 continue
+            
             resp.raise_for_status()
             
             data = resp.json()
@@ -521,7 +522,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
 
             log_clarification()
-            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}:", "debug")
+            log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
             #log(f"Fetcher: Metadata for Gallery: {gallery_id}: {data}", "debug") # DEBUGGING
             return data
         except requests.HTTPError as e:

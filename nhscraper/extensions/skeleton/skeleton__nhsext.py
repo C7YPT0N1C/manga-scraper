@@ -77,7 +77,6 @@ def return_gallery_metas(meta):
     
     language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
-    log_clarification()
     return {
         "creator": creators,
         "title": full_title,
@@ -142,7 +141,6 @@ def uninstall_extension():
 def test_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
-    log_clarification()
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
@@ -212,8 +210,6 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
     Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current creator.
     """
-    #log_clarification()
-    #log(f"Extension: {EXTENSION_NAME}: Image Download Hook Called.", "debug")
     
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
