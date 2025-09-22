@@ -50,14 +50,14 @@ def load_extension():
 # UTILITIES
 ####################################################################################################
 
-def worst_case_time_estimate(gallery_list):
-    current_run_num_of_galleries = len(gallery_list)
+def worst_case_time_estimate(context: str, id_list: list):
+    current_run_num_of_galleries = len(id_list)
     current_run_gallery_threads = gallery_threads
     current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
     log_clarification()
-    #logger.info(f"Number of Galleries Processed: {len(gallery_list)}") # DEBUGGING
+    #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
     #logger.info(f"Number of Gallery Threads: {current_run_gallery_threads}") # DEBUGGING
     #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
     #logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}") # DEBUGGING
@@ -71,7 +71,7 @@ def worst_case_time_estimate(gallery_list):
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
-    log(f"Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
+    log(f"{context} Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
     """
@@ -332,8 +332,6 @@ def start_batch(batch_list=None):
     if not batch_ids:
         logger.error("No galleries specified. Use --galleries or --range.")
         return
-    
-    worst_case_time_estimate(batch_ids)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"
@@ -362,20 +360,25 @@ def start_downloader(gallery_list=None):
     
     gallery_ids = gallery_list
     
+    worst_case_time_estimate(f"Run", gallery_ids)
+    
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
-    for i in range(0, len(gallery_list), BATCH_SIZE):
+    for batch_num in range(0, len(gallery_ids), BATCH_SIZE):
+        batch_ids = gallery_ids[batch_num:batch_num + BATCH_SIZE]
+        
+        worst_case_time_estimate(f"Batch {batch_num}", batch_ids)
+        
         log_clarification()
-        batch = gallery_list[i:i + BATCH_SIZE]
-        logger.info(f"Downloading Batch {i//BATCH_SIZE + 1} with {len(batch)} Galleries...")
+        logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_ids)} Galleries...")
         
         # Build scraper session.
         build_session()
     
-        start_batch(batch) # Start batch.
+        start_batch(batch_ids) # Start batch.
         
-        if i + BATCH_SIZE < len(gallery_list): # Not last batch
+        if batch_num + BATCH_SIZE < len(gallery_ids): # Not last batch
             log_clarification()
-            logger.info(f"Batch {i//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
+            logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
             time.sleep(BATCH_SLEEP_TIME) # Pause between batches
         else: # Last batch
             log_clarification()
