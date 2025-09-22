@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from nhscraper.core.config import *
 
-DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
+DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper/core/nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
