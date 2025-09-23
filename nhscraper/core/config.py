@@ -148,6 +148,7 @@ BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
 
 # Default Paths
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+download_path = DEFAULT_DOWNLOAD_PATH # Load initial value to public variable on import
 
 DEFAULT_DOUJIN_TXT_PATH="/root/Doujinshi_IDs.txt"
 if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
@@ -155,38 +156,61 @@ if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
     with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
         f.write("# Add one nhentai URL or gallery ID per line\n")
     logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
+doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH # Load initial value to public variable on import
 
 # Extensions
 DEFAULT_EXTENSION="skeleton"
+extension = DEFAULT_EXTENSION # Load initial value to public variable on import
 DEFAULT_EXTENSION_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
+extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH # Load initial value to public variable on import
 
 # APIs and Mirrors
 DEFAULT_NHENTAI_API_BASE="https://nhentai.net/api"
+nhentai_api_base = DEFAULT_NHENTAI_API_BASE # Load initial value to public variable on import
 DEFAULT_NHENTAI_MIRRORS="https://i.nhentai.net"
+nhentai_mirrors = DEFAULT_NHENTAI_MIRRORS # Load initial value to public variable on import
 
 # Gallery ID selection
 DEFAULT_PAGE_RANGE_START=1
+homepage_range_start = DEFAULT_PAGE_RANGE_START # Load initial value to public variable on import
 DEFAULT_PAGE_RANGE_END=2
+homepage_range_end = DEFAULT_PAGE_RANGE_END # Load initial value to public variable on import
 DEFAULT_RANGE_START=500000
+range_start = DEFAULT_RANGE_START # Load initial value to public variable on import
 DEFAULT_RANGE_END=600000
+range_end = DEFAULT_RANGE_END # Load initial value to public variable on import
 DEFAULT_GALLERIES=""
+galleries = DEFAULT_GALLERIES # Load initial value to public variable on import
 
 # Filters
 DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated"
+excluded_tags = DEFAULT_EXCLUDED_TAGS # Load initial value to public variable on import
 DEFAULT_LANGUAGE="english"
+language = DEFAULT_LANGUAGE # Load initial value to public variable on import
 DEFAULT_TITLE_TYPE="english"
+title_type = DEFAULT_TITLE_TYPE # Load initial value to public variable on import
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
+threads_galleries = DEFAULT_THREADS_GALLERIES # Load initial value to public variable on import
 DEFAULT_THREADS_IMAGES=10
+threads_images = DEFAULT_THREADS_IMAGES # Load initial value to public variable on import
 DEFAULT_MAX_RETRIES=3
+max_retries = DEFAULT_MAX_RETRIES # Load initial value to public variable on import
 DEFAULT_MIN_SLEEP=0.5
+min_sleep = DEFAULT_MIN_SLEEP # Load initial value to public variable on import
 DEFAULT_MAX_SLEEP=100
+max_sleep = DEFAULT_MAX_SLEEP # Load initial value to public variable on import
+
 # Download Options
 DEFAULT_USE_TOR=True
+use_tor = DEFAULT_USE_TOR # Load initial value to public variable on import
 DEFAULT_DRY_RUN=False
+dry_run = DEFAULT_DRY_RUN # Load initial value to public variable on import
 DEFAULT_VERBOSE=False
+verbose = DEFAULT_VERBOSE # Load initial value to public variable on import
 DEFAULT_DEBUG=False
+debug = DEFAULT_DEBUG # Load initial value to public variable on import
 
 # ------------------------------------------------------------
 # Helper: safe int from env
@@ -259,7 +283,43 @@ def update_env(key, value):
 
     # Update runtime config
     config[key] = value
+
+def fetch_env_vars():
+    """
+    Update environment variables used by this module.
+    Any module that uses any these variables can call this function to ensure they are up to date.
+    """
     
+    global download_path, doujin_txt_path, extension, extension_download_path, nhentai_api_base, nhentai_mirrors
+    global homepage_range_start, homepage_range_end, range_start, range_end, galleries, excluded_tags
+    global language, title_type, threads_galleries, threads_images, max_retries, min_sleep, max_sleep
+    global use_tor, dry_run, verbose, debug
+    
+    # Update variables from config
+    download_path = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
+    doujin_txt_path = config.get("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH)
+    extension = config.get("EXTENSION", DEFAULT_EXTENSION)
+    extension_download_path = config.get("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH)
+    nhentai_api_base = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
+    nhentai_mirrors = config.get("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+    homepage_range_start = config.get("HOMEPAGE_RANGE_START", DEFAULT_PAGE_RANGE_START)
+    homepage_range_end = config.get("HOMEPAGE_RANGE_END", DEFAULT_PAGE_RANGE_END)
+    range_start = config.get("RANGE_START", DEFAULT_RANGE_START)
+    range_end = config.get("RANGE_END", DEFAULT_RANGE_END)
+    galleries = config.get("GALLERIES", DEFAULT_GALLERIES)
+    excluded_tags = config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)
+    language = config.get("LANGUAGE", DEFAULT_LANGUAGE)
+    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE)
+    threads_galleries = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+    threads_images = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+    max_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+    min_sleep = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)
+    max_sleep = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
+    use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
+    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
+    verbose = config.get("VERBOSE", DEFAULT_VERBOSE)
+    debug = config.get("DEBUG", DEFAULT_DEBUG)
+
 # ------------------------------------------------------------
 # Normalise config with defaults
 # ------------------------------------------------------------
@@ -345,63 +405,26 @@ MIRRORS = get_mirrors()
 # Fetch latest env vars
 # ------------------------------------------------------------
 
-# Load initial values on import
-doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
-download_path = DEFAULT_DOWNLOAD_PATH
-extension = DEFAULT_EXTENSION
-extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
-nhentai_api_base = DEFAULT_NHENTAI_API_BASE
-nhentai_mirrors = DEFAULT_NHENTAI_MIRRORS
-homepage_range_start = DEFAULT_PAGE_RANGE_START
-homepage_range_end = DEFAULT_PAGE_RANGE_END
-range_start = DEFAULT_RANGE_START
-range_end = DEFAULT_RANGE_END
-galleries = DEFAULT_GALLERIES
-excluded_tags = DEFAULT_EXCLUDED_TAGS
-language = DEFAULT_LANGUAGE
-title_type = DEFAULT_TITLE_TYPE
-threads_galleries = DEFAULT_THREADS_GALLERIES
-threads_images = DEFAULT_THREADS_IMAGES
-max_retries = DEFAULT_MAX_RETRIES
-min_sleep = DEFAULT_MIN_SLEEP
-max_sleep = DEFAULT_MAX_SLEEP
-use_tor = DEFAULT_USE_TOR
-dry_run = DEFAULT_DRY_RUN
-verbose = DEFAULT_VERBOSE
-debug = DEFAULT_DEBUG
 
-def fetch_env_vars():
-    """
-    Update environment variables used by this module.
-    Any module that uses any these variables can call this function to ensure they are up to date.
-    """
-    
-    global doujin_txt_path, download_path, extension, extension_download_path, nhentai_api_base, nhentai_mirrors
-    global homepage_range_start, homepage_range_end, range_start, range_end, galleries, excluded_tags
-    global language, title_type, threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-    global use_tor, dry_run, verbose, debug
-    
-    # Update variables from config
-    doujin_txt_path = config.get("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH)
-    download_path = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
-    extension = config.get("EXTENSION", DEFAULT_EXTENSION)
-    extension_download_path = config.get("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH)
-    nhentai_api_base = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
-    nhentai_mirrors = config.get("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
-    homepage_range_start = config.get("HOMEPAGE_RANGE_START", DEFAULT_PAGE_RANGE_START)
-    homepage_range_end = config.get("HOMEPAGE_RANGE_END", DEFAULT_PAGE_RANGE_END)
-    range_start = config.get("RANGE_START", DEFAULT_RANGE_START)
-    range_end = config.get("RANGE_END", DEFAULT_RANGE_END)
-    galleries = config.get("GALLERIES", DEFAULT_GALLERIES)
-    excluded_tags = config.get("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)
-    language = config.get("LANGUAGE", DEFAULT_LANGUAGE)
-    title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE)
-    threads_galleries = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-    threads_images = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-    max_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
-    min_sleep = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)
-    max_sleep = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
-    use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
-    dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-    verbose = config.get("VERBOSE", DEFAULT_VERBOSE)
-    debug = config.get("DEBUG", DEFAULT_DEBUG)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
