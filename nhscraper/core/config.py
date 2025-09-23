@@ -55,20 +55,18 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
 
 def log_clarification():
     """
-    Prints a blank line in the terminal if logging level is INFO,
-    or adds a blank debug line to the log otherwise.
+    Prints a blank line in the terminal if the console handler is at INFO,
+    or adds a blank debug line otherwise.
     """
     logger = logging.getLogger("nhscraper")
-    level = logger.getEffectiveLevel()
-    
-    if level == logging.INFO:
-        # Log a newline and immediately flush the handler
-        for handler in logger.handlers:
-            if isinstance(handler, logging.StreamHandler):
-                handler.stream.write("\n")
-                handler.flush()
+
+    console_handler = next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
+    if console_handler and console_handler.level == logging.INFO:
+        # direct blank line to console
+        console_handler.stream.write("\n")
+        console_handler.flush()
     else:
-        logger.debug("")  # blank debug line
+        logger.debug("")  # goes to file (and console if debug mode)
 
 def setup_logger(calm=False, debug=False):
     """
@@ -433,31 +431,3 @@ def get_mirrors():
     return mirrors
 
 MIRRORS = get_mirrors()
-
-# ------------------------------------------------------------
-# Fetch latest env vars
-# ------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
