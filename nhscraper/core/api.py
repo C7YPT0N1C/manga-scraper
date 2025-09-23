@@ -44,7 +44,7 @@ def session_builder(rebuild: bool = False):
 
     # Random User-Agents (only randomized if flag is True)
     DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    RandomiseUserAgent = False
+    RandomiseUserAgent = True
     
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -92,12 +92,20 @@ def build_session(rebuild=False):
     
     # Ensure session is ready
     # Uses cloudscraper session by default.
-    if session is None:
-        with session_lock:
-            if rebuild:
-                session = session_builder(rebuild=True)
-            else:
-                session = session_builder(rebuild=False)
+    with session_lock:
+        if session is None:
+            # First build
+            session = session_builder(rebuild=False)
+        elif rebuild:
+            # Close old session before rebuilding
+            try:
+                session.close()
+                logger.debug("Closed old session before rebuilding")
+            except Exception as e:
+                logger.debug(f"Failed to close old session: {e}")
+            session = session_builder(rebuild=True)
+
+        return session
         
 ################################################################################################################
 # GLOBAL VARIABLES
