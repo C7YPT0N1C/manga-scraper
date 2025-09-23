@@ -106,7 +106,7 @@ def build_session(rebuild=False):
     
     if session is None:
         # First build
-        session_builder(rebuild=False)
+        returned_session = session_builder(rebuild=False)
     elif rebuild:
         # Close old session before rebuilding
         try:
@@ -114,7 +114,9 @@ def build_session(rebuild=False):
             logger.debug("Closed old session before rebuilding")
         except Exception as e:
             logger.debug(f"Failed to close old session: {e}")
-        session_builder(rebuild=True)
+        returned_session = session_builder(rebuild=True)
+        
+        return returned_session
         
 ################################################################################################################
 # GLOBAL VARIABLES
