@@ -3,6 +3,7 @@
 
 import os, time, sys, argparse, re, subprocess
 
+from nhscraper.core import configurator
 from nhscraper.core.configurator import *
 from nhscraper.core.downloader import start_downloader
 from nhscraper.core.api import get_session, fetch_gallery_ids

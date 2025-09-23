@@ -4,6 +4,7 @@
 import os, sqlite3, threading
 from datetime import datetime, timezone
 
+from nhscraper.core import configurator
 from nhscraper.core.configurator import *
 
 DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")

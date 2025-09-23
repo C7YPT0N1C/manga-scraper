@@ -503,8 +503,6 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 
             resp = None
             for attempt in range(1, configurator.max_retries + 1):
-                log_clarification("debug")
-                log(f"Maximum retries: {configurator.max_retries}", "debug")
                 try:
                     resp = gallery_ids_session.get(url, timeout=10)
                     if resp.status_code == 429:
