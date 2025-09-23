@@ -206,7 +206,7 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=None, retries=None):
+def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None, retries=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
@@ -234,14 +234,14 @@ def download_images_hook(gallery, page, urls, path, session, pbar=None, creator=
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if not isinstance(session, requests.Session):
-        session = requests.Session()
+    if not isinstance(downloader_session, requests.Session):
+        downloader_session = requests.Session()
 
     # Loop through mirrors
     for url in urls:
         for attempt in range(1, retries + 1):
             try:
-                r = session.get(url, timeout=10, stream=True)
+                r = downloader_session.get(url, timeout=10, stream=True)
                 if r.status_code == 429:
                     wait = 2 ** attempt
                     logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
