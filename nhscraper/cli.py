@@ -312,7 +312,7 @@ def update_config(args):
     update_env("THREADS_IMAGES", args.threads_images)
     update_env("MAX_RETRIES", args.max_retries)
     update_env("MIN_SLEEP", args.min_sleep)
-    update_env("MAX_SLEEP", args.configurator.max_sleep)
+    update_env("MAX_SLEEP", args.max_sleep)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
     update_env("CALM", args.calm)
