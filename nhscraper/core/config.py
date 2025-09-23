@@ -53,6 +53,16 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
     # Logger level: DEBUG ensures all messages reach file handler
     logger.setLevel(logging.DEBUG)
 
+# ------------------------------------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------------------------------------
+def log_clarification():
+    if logger.getEffectiveLevel() == logging.INFO:
+        print("", flush=True) # new line in terminal, flush to terminal immediately
+    else:
+        logger.debug("") # add a blank debug line
+
 def setup_logger(calm=False, debug=False):
     """
     Configure the nhscraper logger.
@@ -83,24 +93,15 @@ def setup_logger(calm=False, debug=False):
     logger.setLevel(logging.DEBUG)
 
     # Initialisation summary
+    log_clarification()
     logger.debug("Logger initialised. Console level: %s",
                  "DEBUG" if debug else "WARNING" if calm else "INFO")
+    
+    log_clarification()
+    logger.debug("Logger: Ready.")
+    logger.debug("Logger: Debugging Started.")
 
     return logger
-
-# ------------------------------------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------------------------------------
-def log_clarification():
-    if logger.getEffectiveLevel() == logging.INFO:
-        print("", flush=True) # new line in terminal, flush to terminal immediately
-    else:
-        logger.debug("") # add a blank debug line
-
-log_clarification()
-logger.debug("Logger: Ready.")
-logger.debug("Logger: Debugging Started.")
 
 def log(message: str, log_type: str = "info"):
     """
