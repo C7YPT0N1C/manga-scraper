@@ -308,7 +308,9 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 ############################################
 
 def graphql_request(query: str, variables: dict = None, debug: bool = False):
-    """Framework for making requests to GraphQL"""
+    """
+    Framework for making requests to GraphQL
+    """
     
     #debug = True  # DEBUGGING
     
@@ -341,7 +343,9 @@ def graphql_request(query: str, variables: dict = None, debug: bool = False):
         return None
 
 def new_graphql_request(query: str, variables: dict = None, debug: bool = False):
-    """New framework for making requests to GraphQL. Allows for authentication with the server."""
+    """
+    New framework for making requests to GraphQL. Allows for authentication with the server.
+    """
     
     global _session
     headers = {"Content-Type": "application/json"}
@@ -579,6 +583,7 @@ def fetch_creators_suwayomi_metadata(creator_name: str):
     Retrieve metadata for a creator from Suwayomi's Local Source by exact title match.
     Returns the list of nodes (id, title, chapters, etc).
     """
+    
     query = """
     query FetchMangaMetadataFromLocalSource($title: String!) {
       mangas(
@@ -605,6 +610,7 @@ def remove_from_deferred(creator_name: str):
     """
     Remove a creator from the global deferred_creators list in creators_metadata.json.
     """
+    
     metadata = load_creators_metadata()
     deferred_creators = set(metadata.get("deferred_creators", []))
 

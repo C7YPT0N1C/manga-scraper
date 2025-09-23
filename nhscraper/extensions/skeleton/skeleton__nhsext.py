@@ -89,6 +89,7 @@ def install_extension():
     """
     Install the extension and ensure the dedicated image download path exists.
     """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
 
     if not DEDICATED_DOWNLOAD_PATH:
@@ -115,6 +116,7 @@ def uninstall_extension():
     """
     Remove the extension and related paths.
     """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     if extension_dry_run:

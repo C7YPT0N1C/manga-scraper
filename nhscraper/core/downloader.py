@@ -77,6 +77,7 @@ def build_gallery_path(meta, iteration: dict = None):
     """
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
     """
+    
     gallery_metas = active_extension.return_gallery_metas(meta)
 
     if iteration:
@@ -118,6 +119,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     """
     Decide whether to download a gallery or skip it.
     """
+    
     if not meta:
         update_skipped_galleries(False, meta, "Not Meta.")
         return False
@@ -189,6 +191,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
     """
     Submit download tasks for a single creator's pages.
     """
+    
     futures = [
         executor.submit(
             active_extension.download_images_hook,

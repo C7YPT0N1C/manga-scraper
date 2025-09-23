@@ -33,7 +33,10 @@ INSTALLED_EXTENSIONS = []
 # Helpers
 #######################################################################
 def load_local_manifest():
-    """Load the local manifest, create it from remote if it doesn't exist."""
+    """
+    Load the local manifest, create it from remote if it doesn't exist.
+    """
+    
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         logger.warning("Local manifest not found. Creating from remote...")
         update_local_manifest_from_remote()
@@ -43,12 +46,18 @@ def load_local_manifest():
         return json_load
 
 def save_local_manifest(manifest: dict):
-    """Save the local manifest to disk."""
+    """
+    Save the local manifest to disk.
+    """
+    
     with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 def fetch_remote_manifest():
-    """Fetch remote manifest.json with backup fallback."""
+    """
+    Fetch remote manifest.json with backup fallback.
+    """
+    
     try:
         with urlopen(REMOTE_MANIFEST_URL) as response:
             return json.load(response)
@@ -65,7 +74,10 @@ def fetch_remote_manifest():
             return {"extensions": []}
 
 def update_local_manifest_from_remote():
-    """Merge remote manifest into local manifest, keeping installed flags intact."""
+    """
+    Merge remote manifest into local manifest, keeping installed flags intact.
+    """
+    
     remote_manifest = fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
@@ -88,7 +100,10 @@ def update_local_manifest_from_remote():
 # Refresh manifest and installed extensions
 # ------------------------------------------------------------
 def _reload_extensions():
-    """Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS."""
+    """
+    Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS.
+    """
+    
     update_local_manifest_from_remote()
     load_installed_extensions()
     return load_local_manifest()
@@ -127,7 +142,10 @@ def sparse_clone(extension_name: str, url: str):
 # Extension Loader
 # ------------------------------------------------------------
 def load_installed_extensions():
-    """Load installed extensions dynamically; reinstall if missing."""
+    """
+    Load installed extensions dynamically; reinstall if missing.
+    """
+    
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
@@ -160,6 +178,7 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     Compares semantic version strings (e.g., "1.2.3").
     Returns True if remote_version > local_version.
     """
+    
     def parse(v):
         return [int(x) for x in v.split(".") if x.isdigit()]
     
@@ -172,6 +191,10 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     return rv > lv
 
 def install_selected_extension(extension_name: str, reinstall: bool = False):
+    """
+    Installs an extension. If reinstall is True, forces reinstallation. Runs install hook if available.
+    """
+    
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
@@ -265,7 +288,10 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     save_local_manifest(manifest)
 
 def uninstall_selected_extension(extension_name: str):
-    """Uninstall an extension."""
+    """
+    Uninstalls an extension. Runs uninstall hook if available.
+    """
+    
     manifest = load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
@@ -295,6 +321,7 @@ def get_selected_extension(name: str = "skeleton"):
     If the extension is not installed, installs it first.
     Ensures 'skeleton' is always installed to provide a valid download path.
     """
+    
     original_name = name  # Save the originally requested extension
 
     log_clarification()

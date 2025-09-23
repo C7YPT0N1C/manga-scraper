@@ -12,8 +12,10 @@ BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
 
 def dynamic_sleep(stage, attempt: int = 1):
-    """Adaptive sleep timing based on load and stage, 
-    including dynamic thread optimisation with anchor + units scaling."""
+    """
+    Adaptive sleep timing based on load and stage, 
+    including dynamic thread optimisation with anchor + units scaling.
+    """
 
     DYNAMIC_SLEEP_DEBUG = True  # Enable detailed debug logs
 

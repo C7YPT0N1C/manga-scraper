@@ -16,7 +16,10 @@ INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
 
 def run_installer(flag: str):
-    """Call the Bash installer with the given flag, using sudo if needed."""
+    """
+    Call the Bash installer with the given flag, using sudo if needed.
+    """
+    
     if not os.path.exists(INSTALLER_PATH):
         print(f"[ERROR] Installer not found at {INSTALLER_PATH}")
         sys.exit(1)
@@ -170,7 +173,8 @@ def parse_args():
     return parser.parse_args()
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
-    """Parse CLI args and call fetch_gallery_ids for any query type.
+    """
+    Parse CLI args and call fetch_gallery_ids for any query type.
 
     Supports repeated flags like --tag "big boobs" --tag "big ass"
     and optional page ranges. Defaults to start_page=1, end_page=None.

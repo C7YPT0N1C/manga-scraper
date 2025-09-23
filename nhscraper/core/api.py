@@ -101,6 +101,9 @@ def build_session(rebuild=False):
     Ensure session is ready.
     If rebuild=True, calls session_builder to rebuild the session.
     """
+    
+    global session
+    
     if session is None:
         # First build
         session_builder(rebuild=False)
@@ -126,6 +129,7 @@ def load_possible_broken_symbols() -> dict[str, str]:
     """
     Load possible broken symbols as a mapping { "symbol": "_" }.
     """
+    
     if os.path.exists(broken_symbols_file):
         try:
             with open(broken_symbols_file, "r", encoding="utf-8") as f:
@@ -140,6 +144,7 @@ def save_possible_broken_symbols(symbols: dict[str, str]):
     """
     Save possible broken symbols as a mapping { "symbol": "_" }.
     """
+    
     try:
         with open(broken_symbols_file, "w", encoding="utf-8") as f:
             json.dump(symbols, f, ensure_ascii=False, indent=2)
@@ -216,6 +221,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
     - Splits names on "|".
     - Returns [] if none found.
     """
+    
     if not meta or "tags" not in meta:
         return []
 
@@ -316,8 +322,10 @@ def clean_title(meta_or_title):
 ################################################################################################################
 
 def dynamic_sleep(stage, attempt: int = 1):
-    """Adaptive sleep timing based on load and stage, 
-    including dynamic thread optimisation with anchor + units scaling."""
+    """
+    Adaptive sleep timing based on load and stage, 
+    including dynamic thread optimisation with anchor + units scaling.
+    """
 
     DYNAMIC_SLEEP_DEBUG = config.get("DEBUG", DEFAULT_DEBUG)  # Enable detailed debug logs
 
@@ -608,6 +616,7 @@ def fetch_image_urls(meta: dict, page: int):
     Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
     Handles missing metadata, unknown types, and defaulting to webp.
     """
+    
     try:
         #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
 
@@ -655,7 +664,9 @@ def fetch_image_urls(meta: dict, page: int):
 # API STATE HELPERS
 ##################################################################################################################################
 def get_tor_ip():
-    """Fetch current IP, through Tor if enabled."""
+    """
+    Fetch current IP, through Tor if enabled.
+    """
     try:
         if session_use_tor:
             r = requests.get("https://httpbin.org/ip",
@@ -717,7 +728,10 @@ def status_endpoint():
 
 @app.route("/status/galleries", methods=["GET"])
 def all_galleries_status():
-    """Return live metadata and status for all galleries."""
+    """
+    Return live metadata and status for all galleries.
+    """
+    
     with state_lock:
         for gid in running_galleries:
             if gid in gallery_metadata:

@@ -48,6 +48,7 @@ class ConditionalFormatter(logging.Formatter):
     - INFO: only show message
     - Other levels: include [LEVEL] prefix
     """
+    
     def format(self, record):
         if record.levelno == logging.INFO:
             self._style._fmt = "%(message)s"
@@ -61,6 +62,7 @@ def setup_logger(verbose=False, debug=False):
     - Console respects verbose/debug flags with conditional formatting
     - File logs always DEBUG with full level info
     """
+    
     logger = logging.getLogger("nhscraper")
     logger.handlers.clear()  # Remove previous handlers
 
@@ -105,6 +107,7 @@ def log(message: str, log_type: str = "warning"):
 
     log_type: "debug", "info", "warning", "error", "critical"
     """
+    
     logger = logging.getLogger("nhscraper")
 
     # Map string to logging function
@@ -245,6 +248,7 @@ def update_env(key, value):
     Update a single variable in the .env file.
     If the key doesn't exist, append it.
     """
+    
     if not os.path.exists(ENV_FILE):
         # create empty file if missing
         with open(ENV_FILE, "w") as f:
@@ -308,6 +312,7 @@ def get_download_path():
         1. EXTENSION_DOWNLOAD_PATH if set and valid
         2. Default DOWNLOAD_PATH
     """
+    
     ext_path = config.get("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH).strip()
     if ext_path and os.path.isdir(ext_path):
         return ext_path
