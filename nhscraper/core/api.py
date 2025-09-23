@@ -226,6 +226,8 @@ def clean_title(meta_or_title):
         str: Sanitised title.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
 
