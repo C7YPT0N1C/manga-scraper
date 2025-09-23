@@ -27,6 +27,7 @@ skipped_galleries = []
 def load_extension():
     global active_extension, download_location
 
+    logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
     ext_name = extension
     active_extension = get_selected_extension(ext_name)
     logger.info(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
@@ -389,4 +390,4 @@ def start_downloader(gallery_list=None):
 
     #update_skipped_galleries(True) # Report all skipped galleries at end
     log_clarification()
-    logger.info(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
+    log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
