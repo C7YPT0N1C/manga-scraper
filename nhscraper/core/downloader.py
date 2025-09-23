@@ -124,12 +124,12 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     doujin_folder = build_gallery_path(meta, iteration)
 
     if num_pages == 0:
-        log_clarification()
         logger.warning(
             f"Downloader: Skipping Gallery: {gallery_id}\n"
             "Reason: No Pages.\n"
             f"Title: {gallery_title}\n"
         )
+        log_clarification()
         update_skipped_galleries(False, meta, "No Pages.")
         return False
 
@@ -141,13 +141,13 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             for i in range(num_pages)
         )
         if all_exist:
-            log_clarification()
             logger.info(
                 f"Downloader: Skipping Gallery: {gallery_id}\n"
                 "Reason: Already Downloaded.\n"
                 f"Title: {gallery_title}\n"
                 f"Folder: {doujin_folder}"
             )
+            log_clarification()
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
 
@@ -170,7 +170,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             blocked_langs = gallery_langs[:]
 
     if blocked_tags or blocked_langs:
-        log_clarification()
         logger.info(
             f"Downloader: Skipping Gallery: {gallery_id}\n"
             "Reason: Blocked Tags In Metadata.\n"
@@ -178,6 +177,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Filtered tags: {blocked_tags}\n"
             f"Filtered languages: {blocked_langs}"
         )
+        log_clarification()
         update_skipped_galleries(False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}")
         return False
 
@@ -331,6 +331,7 @@ def start_batch(batch_list=None):
     log_clarification()
     logger.info(f"Galleries to process: {batch_list[0]} -> {batch_list[-1]} ({len(batch_list)})"
                 if len(batch_list) > 1 else f"Galleries to process: {batch_list[0]} ({len(batch_list)})")
+    log_clarification()
 
     thread_map(
         lambda gid: process_galleries([gid]),
