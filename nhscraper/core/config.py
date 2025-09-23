@@ -93,7 +93,7 @@ logger.addHandler(logging.NullHandler())
 # ------------------------------------------------------------
 def log_clarification():
     if logger.getEffectiveLevel() == logging.INFO:
-        print("") # new line in terminal
+        print("-----") # new line in terminal
     else:
         logger.debug("") # add a blank debug line
 

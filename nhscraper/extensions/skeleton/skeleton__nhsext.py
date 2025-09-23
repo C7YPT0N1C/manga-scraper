@@ -350,7 +350,6 @@ def post_run_hook():
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
     
-    log_clarification()
     clean_directories(True)
     
     #log_clarification()
