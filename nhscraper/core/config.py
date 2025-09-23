@@ -257,7 +257,7 @@ config = {
     "THREADS_IMAGES": getenv_int("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_int("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "MIN_SLEEP": getenv_int("MIN_SLEEP", DEFAULT_MIN_SLEEP),
-    "MIN_SLEEP": getenv_int("MAX_SLEEP", DEFAULT_MAX_SLEEP),
+    "MAX_SLEEP": getenv_int("MAX_SLEEP", DEFAULT_MAX_SLEEP),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
