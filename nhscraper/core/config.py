@@ -83,7 +83,7 @@ def setup_logger(calm=False, debug=False):
     
     return logger
 
-# --- Placeholder logger so imports don’t crash before setup_logger() runs ---
+# --- Placeholder logger so logging during module imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
