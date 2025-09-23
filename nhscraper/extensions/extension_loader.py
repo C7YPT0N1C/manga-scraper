@@ -379,8 +379,3 @@ def get_selected_extension(name: str = "skeleton"):
     # If we reach here, something went really wrong
     logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
     return None
-
-# ------------------------------------------------------------
-# Run on import
-# ------------------------------------------------------------
-load_installed_extensions()
