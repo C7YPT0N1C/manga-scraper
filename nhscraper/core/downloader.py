@@ -188,7 +188,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     return True
 
-def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_creator_name):
+def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, safe_creator_name):
     """
     Submit download tasks for a single creator's pages.
     """
@@ -196,7 +196,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
     futures = [
         executor.submit(
             active_extension.download_images_hook,
-            gallery_id, page, urls, path, session, None, safe_creator_name
+            gallery_id, page, urls, path, local_session, None, safe_creator_name
         )
         for page, urls, path, _ in creator_tasks
     ]
