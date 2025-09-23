@@ -117,7 +117,6 @@ def pre_run_hook():
     This is one this module's entrypoints.
     """
     
-    log_clarification()
     logger.debug(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     
@@ -965,8 +964,6 @@ def pre_batch_hook(gallery_list):
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
     global LOCAL_SOURCE_ID, CATEGORY_ID
-    
-    #pre_run_hook() # Ensure pre-run hook is called at least once.
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()

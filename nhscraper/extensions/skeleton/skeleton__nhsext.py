@@ -53,7 +53,6 @@ def pre_run_hook():
     This is one this module's entrypoints.
     """
     
-    log_clarification()
     logger.debug(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     
@@ -286,8 +285,6 @@ def pre_batch_hook(gallery_list):
     
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
-    
-    #pre_run_hook() # Ensure pre-run hook is called at least once.
     
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS

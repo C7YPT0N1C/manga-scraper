@@ -372,7 +372,7 @@ def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = Fal
             logger.debug(f"Selected extension: {final_name}")
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
-            if not skip_pre_run_hook: # Call the extension's pre run hook if not skipped
+            if skip_pre_run_hook == False: # Call the extension's pre run hook if not skipped
                 if hasattr(ext, "pre_run_hook"):
                     ext.pre_run_hook()
             return ext
