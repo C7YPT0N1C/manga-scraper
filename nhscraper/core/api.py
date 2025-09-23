@@ -89,7 +89,7 @@ def session_builder(rebuild: bool = False):
             session.proxies = {}
             logger.info("Not using Tor proxy")
         
-        #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
+        logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
         #return session
 
 def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
@@ -772,7 +772,3 @@ if __name__ == "__main__":
     port=5000,
     debug=config.get("DEBUG", DEFAULT_DEBUG)
 )
-    
-log_clarification()
-logger.info("API: Ready.")
-log("API: Debugging Started.", "debug")
