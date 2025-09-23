@@ -4,7 +4,7 @@
 import os, time, random, concurrent.futures
 from tqdm.contrib.concurrent import thread_map
 
-from nhscraper.core.config import *
+from nhscraper.core.configurator import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
