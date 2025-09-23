@@ -7,10 +7,12 @@ from tqdm.contrib.concurrent import thread_map
 from nhscraper.core.config import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
-    build_session, session, dynamic_sleep, fetch_gallery_metadata,
+    build_session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, safe_name, clean_title
 )
 from nhscraper.extensions.extension_loader import get_selected_extension  # Import active extension
+
+session = build_session(rebuild=True)
 
 ####################################################################################################
 # Global Variables
