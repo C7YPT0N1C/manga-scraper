@@ -369,9 +369,12 @@ def main():
     if not any(gallery_args):
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
-    # Update Config
+    # Update Config With CLI Args
     # Allows session to use correct config values on creation
     update_config(args)
+    
+    log_clarification("debug")
+    log(f"Updated Config:\n{config}", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
