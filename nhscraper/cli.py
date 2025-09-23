@@ -373,6 +373,8 @@ def main():
     # Allows session to use correct config values on creation
     update_config(args)
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     # Build initial session.
     get_session(referrer="CLI", status="build")
     
@@ -393,7 +395,6 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    fetch_env_vars() # Refresh env vars in case config changed.
     start_downloader(gallery_list) # Start download
 
 if __name__ == "__main__":
