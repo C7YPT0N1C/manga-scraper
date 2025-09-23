@@ -94,7 +94,7 @@ def session_builder(rebuild: bool = False):
             logger.info("Not using Tor proxy")
         
         #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
-        return session
+        #return session
 
 def build_session(rebuild=False):
     """
@@ -104,19 +104,19 @@ def build_session(rebuild=False):
     
     global session
     
-    if session is None:
+    if not rebuild:
         # First build
-        returned_session = session_builder(rebuild=False)
-    elif rebuild:
+        session_builder(rebuild=False)
+    else:
         # Close old session before rebuilding
         try:
             session.close()
             logger.debug("Closed old session before rebuilding")
         except Exception as e:
             logger.debug(f"Failed to close old session: {e}")
-        returned_session = session_builder(rebuild=True)
-        
-        return returned_session
+        session_builder(rebuild=True)
+
+build_session(rebuild=False) # Initial build
         
 ################################################################################################################
 # GLOBAL VARIABLES

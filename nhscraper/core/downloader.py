@@ -7,12 +7,10 @@ from tqdm.contrib.concurrent import thread_map
 from nhscraper.core.config import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
-    build_session, dynamic_sleep, fetch_gallery_metadata,
+    build_session, session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, safe_name, clean_title
 )
 from nhscraper.extensions.extension_loader import get_selected_extension  # Import active extension
-
-session = build_session(rebuild=True)
 
 ####################################################################################################
 # Global Variables
@@ -209,8 +207,6 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
 # CORE
 ####################################################################################################
 def process_galleries(gallery_ids):
-    global session
-    
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not downloader_dry_run:
@@ -334,11 +330,9 @@ def start_batch(batch_list=None):
     batch_ids = batch_list
     
     active_extension.pre_batch_hook(batch_ids)
-
-    log_clarification()
-    if not batch_ids:
-        logger.error("No galleries specified. Use --galleries or --range.")
-        return
+    
+    # Rebuild session.
+    build_session(rebuild=True)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"
@@ -367,6 +361,11 @@ def start_downloader(gallery_list=None):
     
     gallery_ids = gallery_list
     
+    log_clarification()
+    if not gallery_ids:
+        logger.error("No galleries specified. Use --galleries or --range.")
+        return
+    
     worst_case_time_estimate(f"Run", gallery_ids)
     
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
@@ -377,9 +376,6 @@ def start_downloader(gallery_list=None):
         
         log_clarification()
         logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_ids)} Galleries...")
-        
-        # Build scraper session.
-        build_session(rebuild=True)
     
         start_batch(batch_ids) # Start batch.
         
