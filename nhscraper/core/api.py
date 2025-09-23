@@ -23,9 +23,9 @@ def session_builder(rebuild: bool = False):
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
     
+    global session
+    
     with session_lock:
-        global session
-        
         if rebuild:
             log("Rebuilding HTTP session with cloudscraper", "debug")
         else:
@@ -46,7 +46,8 @@ def session_builder(rebuild: bool = False):
         ]
         browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
-        built_session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
+        if session is None or rebuild:
+            session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
 
         # Random User-Agents (only randomized if flag is True)
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -70,7 +71,8 @@ def session_builder(rebuild: bool = False):
         ]
         referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
 
-        built_session.headers.update({
+        # Update headers (mutate existing session)
+        session.headers.update({
             "User-Agent": ua,
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
@@ -82,20 +84,23 @@ def session_builder(rebuild: bool = False):
         else:
             log("Built HTTP session with cloudscraper", "debug")
         
+        # Update proxies (mutate existing session)
         if session_use_tor:
             proxy = "socks5h://127.0.0.1:9050"
-            built_session.proxies = {"http": proxy, "https": proxy}
+            session.proxies = {"http": proxy, "https": proxy}
             logger.info(f"Using Tor proxy: {proxy}")
         else:
+            session.proxies = {}
             logger.info("Not using Tor proxy")
         
-        session = built_session # Update global session
         #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
         return session
 
 def build_session(rebuild=False):
-    # Ensure session is ready
-    # Uses cloudscraper session by default.
+    """
+    Ensure session is ready.
+    If rebuild=True, calls session_builder to rebuild the session.
+    """
     if session is None:
         # First build
         session_builder(rebuild=False)
