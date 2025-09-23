@@ -28,7 +28,7 @@ skipped_galleries = []
 def load_extension(suppess_pre_run_hook: bool = False):
     global active_extension, download_location
 
-    ext_name = extension
+    ext_name = configurator.extension
     active_extension = get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
     
     # Prefer extension-specific download path, fallback to config/global default
