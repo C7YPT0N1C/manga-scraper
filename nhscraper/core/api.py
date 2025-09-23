@@ -768,7 +768,7 @@ if __name__ == "__main__":
     """
     
     log_clarification()
-    logger.info("API: Ready.")
+    logger.debug("API: Ready.")
     log("API: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.

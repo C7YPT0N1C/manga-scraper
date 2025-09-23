@@ -98,7 +98,7 @@ def log_clarification():
         logger.debug("") # add a blank debug line
 
 log_clarification()
-logger.info("Logger: Ready.")
+logger.debug("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
 def log(message: str, log_type: str = "info"):
