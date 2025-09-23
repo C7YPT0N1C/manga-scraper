@@ -22,12 +22,12 @@ logger = logging.getLogger("nhscraper")
 if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
     placeholder_formatter = logging.Formatter("[%(levelname)s] %(message)s")
     placeholder_console = logging.StreamHandler()
-    placeholder_console.setLevel(logging.WARNING)   # Default to WARNING
+    placeholder_console.setLevel(logging.INFO)   # Default to INFO
     placeholder_console.setFormatter(placeholder_formatter)
     logger.addHandler(placeholder_console)
 
-    # Default logger level = WARNING
-    logger.setLevel(logging.WARNING)
+    # Default logger level = INFO
+    logger.setLevel(logging.INFO)
 
 # ------------------------------------------------------------
 # LOG CLARIFICATION
@@ -56,10 +56,10 @@ class ConditionalFormatter(logging.Formatter):
             self._style._fmt = "[%(levelname)s] %(message)s"
         return super().format(record)
 
-def setup_logger(verbose=False, debug=False):
+def setup_logger(calm=False, debug=False):
     """
     Configure the nhscraper logger.
-    - Console respects verbose/debug flags with conditional formatting
+    - Console respects calm/debug flags with conditional formatting
     - File logs always DEBUG with full level info
     """
     
@@ -72,10 +72,10 @@ def setup_logger(verbose=False, debug=False):
     ch = logging.StreamHandler()
     if debug:
         ch.setLevel(logging.DEBUG)
-    elif verbose:
-        ch.setLevel(logging.INFO)
-    else:
+    elif calm:
         ch.setLevel(logging.WARNING)
+    else:
+        ch.setLevel(logging.INFO)
     ch.setFormatter(ConditionalFormatter())
     logger.addHandler(ch)
 
@@ -92,7 +92,7 @@ def setup_logger(verbose=False, debug=False):
 
     # Initialisation summary
     logger.info("Logger initialised. Console level: %s",
-                "DEBUG" if debug else "INFO" if verbose else "WARNING")
+                "DEBUG" if debug else "WARNING" if calm else "INFO")
     
     return logger
 
@@ -100,7 +100,7 @@ def setup_logger(verbose=False, debug=False):
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
 
-def log(message: str, log_type: str = "warning"):
+def log(message: str, log_type: str = "info"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
@@ -207,8 +207,8 @@ DEFAULT_USE_TOR=True
 use_tor = DEFAULT_USE_TOR # Load initial value to public variable on import
 DEFAULT_DRY_RUN=False
 dry_run = DEFAULT_DRY_RUN # Load initial value to public variable on import
-DEFAULT_VERBOSE=False
-verbose = DEFAULT_VERBOSE # Load initial value to public variable on import
+DEFAULT_CALM=True
+calm = DEFAULT_CALM # Load initial value to public variable on import
 DEFAULT_DEBUG=False
 debug = DEFAULT_DEBUG # Load initial value to public variable on import
 
@@ -260,7 +260,7 @@ config = {
     "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
-    "VERBOSE": str(os.getenv("VERBOSE", DEFAULT_VERBOSE)).lower() == "true",
+    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "true",
     "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
 }
 
@@ -293,7 +293,7 @@ def fetch_env_vars():
     global download_path, doujin_txt_path, extension, extension_download_path, nhentai_api_base, nhentai_mirrors
     global homepage_range_start, homepage_range_end, range_start, range_end, galleries, excluded_tags
     global language, title_type, threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-    global use_tor, dry_run, verbose, debug
+    global use_tor, dry_run, calm, debug
     
     # Update variables from config
     download_path = config.get("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
@@ -317,7 +317,7 @@ def fetch_env_vars():
     max_sleep = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
     dry_run = config.get("DRY_RUN", DEFAULT_DRY_RUN)
-    verbose = config.get("VERBOSE", DEFAULT_VERBOSE)
+    calm = config.get("CALM", DEFAULT_CALM)
     debug = config.get("DEBUG", DEFAULT_DEBUG)
 
 # ------------------------------------------------------------
@@ -349,7 +349,7 @@ def normalise_config():
         "MAX_SLEEP": DEFAULT_MAX_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
-        "VERBOSE": DEFAULT_VERBOSE,
+        "CALM": DEFAULT_CALM,
         "DEBUG": DEFAULT_DEBUG,
     }
 

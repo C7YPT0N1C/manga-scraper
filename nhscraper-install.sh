@@ -181,7 +181,7 @@ MAX_SLEEP=
 # Download Options
 USE_TOR=true
 DRY_RUN=false
-VERBOSE=false
+CALM=false
 DEBUG=false
 EOF
     echo "Environment file created at $ENV_FILE"

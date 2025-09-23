@@ -165,10 +165,10 @@ def parse_args():
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
     
-    # Make verbose/debug mutually exclusive
+    # Make calm/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--verbose", action="store_true", default=DEFAULT_VERBOSE, help="Enable verbose logging (logger.info)")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging (logger.info, logger.debug)")
+    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (logger.critical - logger.warning) (default: {DEFAULT_CALM})")
+    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (logger.critical - logger.debug) (default: {DEFAULT_DEBUG})")
 
     return parser.parse_args()
 
@@ -312,7 +312,7 @@ def update_config(args):
     update_env("MAX_SLEEP", args.max_sleep)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
-    update_env("VERBOSE", args.verbose)
+    update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)
 
 # ------------------------------------------------------------
@@ -328,7 +328,7 @@ def main():
     args = parse_args()
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(verbose=args.verbose, debug=args.debug)
+    logger = setup_logger(calm=args.calm, debug=args.debug)
     
     log_clarification()
     log("====================================================")
