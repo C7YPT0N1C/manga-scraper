@@ -27,8 +27,7 @@ skipped_galleries = []
 def load_extension():
     global active_extension, download_location
 
-    #ext_name = extension
-    ext_name = "suwayomi"
+    ext_name = extension
     logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
     active_extension = get_selected_extension(ext_name)
     logger.info(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
