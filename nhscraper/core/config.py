@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # core/config.py
 
-import os, logging
+import os, sys, logging
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 from nhscraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
@@ -58,10 +58,19 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------------------------------------
 def log_clarification():
-    if logger.getEffectiveLevel() == logging.INFO:
-        print("", flush=True) # new line in terminal, flush to terminal immediately
+    """
+    Prints a blank line in the terminal if logging level is INFO,
+    or adds a blank debug line to the log otherwise.
+    """
+    logger = logging.getLogger("nhscraper")
+    level = logger.getEffectiveLevel()
+
+    if level == logging.INFO:
+        # Force flush so it immediately shows in terminal
+        sys.stdout.write("\n")
+        sys.stdout.flush()
     else:
-        logger.debug("") # add a blank debug line
+        logger.debug("")  # blank debug line
 
 def setup_logger(calm=False, debug=False):
     """
