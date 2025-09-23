@@ -322,12 +322,12 @@ def main():
     This is one this module's entrypoints.
     """
     
-    normalise_config() # Populate config immediately.
-    
     args = parse_args()
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(calm=args.calm, debug=args.debug)
+    
+    normalise_config() # Populate config immediately.
     
     log_clarification()
     log("====================================================")
