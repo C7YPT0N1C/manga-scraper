@@ -372,7 +372,7 @@ def start_downloader(gallery_list=None):
         logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_ids)} Galleries...")
         
         # Build scraper session.
-        build_session()
+        build_session(rebuild=False)
     
         start_batch(batch_ids) # Start batch.
         

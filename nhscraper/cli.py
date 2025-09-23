@@ -66,7 +66,7 @@ def parse_args():
     )
     parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
-    parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download")
+    parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download. Must be incased in quotes if multiple. (e.g. '123456, 654321')")
     # Allow multiple --artist, --group, etc. each with their own arguments
     parser.add_argument(
         "--artist",
@@ -365,7 +365,7 @@ def main():
     update_config(args)
     
     # Build scraper session.
-    build_session()
+    build_session(rebuild=False)
     
     # Build Gallery List (make sure not empty.)
     log_clarification()

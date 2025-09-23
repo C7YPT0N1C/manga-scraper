@@ -18,25 +18,65 @@ session = None
 session_lock = Lock()
 session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
-def session_builder():
+def session_builder(rebuild: bool = False):
     log_clarification()
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
+    
+    if rebuild:
+        log("Rebuilding HTTP session with cloudscraper", "debug")
+    else:
+        log("Building HTTP session with cloudscraper", "debug")
 
-    log("Building HTTP session with cloudscraper", "debug")
+    # Random browser profiles (only randomized if flag is True)
+    DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
+    RandomiseBrowserProfile = True
+    
+    browsers = [
+        {"browser": "chrome", "platform": "windows", "mobile": False},
+        {"browser": "firefox", "platform": "windows", "mobile": False},
+        {"browser": "chrome", "platform": "linux", "mobile": False},
+        {"browser": "safari", "platform": "macos", "mobile": False},
+    ]
+    browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
-    s = cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'mobile': False, 'platform': 'windows'}
-    )
+    s = cloudscraper.create_scraper(browser=browser_profile)
+
+    # Random User-Agents (only randomized if flag is True)
+    DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    RandomiseUserAgent = False
+    
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1",
+    ]
+    ua = random.choice(user_agents) if RandomiseUserAgent else DefaultUserAgent # Select random User-Agent
+
+    # Random Referers (only randomized if flag is True)
+    DefaultReferer = "https://nhentai.net/"
+    RandomiseReferer = False
+    
+    referers = [
+        "https://nhentai.net/",
+        "https://google.com/",
+        "https://duckduckgo.com/",
+        "https://bing.com/",
+    ]
+    referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
 
     s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": ua,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://nhentai.net/",
+        "Referer": referer,
     })
-    
-    log(f"Built HTTP session with cloudscraper", "debug")
+
+    if rebuild:
+        log("Rebuilt HTTP session with cloudscraper", "debug")
+    else:
+        log("Built HTTP session with cloudscraper", "debug")
     
     if session_use_tor:
         proxy = "socks5h://127.0.0.1:9050"
@@ -47,36 +87,17 @@ def session_builder():
     
     return s
 
-def build_session():
+def build_session(rebuild=False):
     global session
     
     # Ensure session is ready
     # Uses cloudscraper session by default.
     if session is None:
-        session = session_builder()
-
-def rotate_tor(control_host="127.0.0.1", control_port=9051):
-    """
-    Ask Tor via ControlPort for a new circuit (NEWNYM).
-    Works if Tor is configured with ControlPort and cookie auth (default).
-    """
-    try:
-        s = socket.create_connection((control_host, control_port), timeout=10)
-        f = s.makefile("rw")
-        f.write("AUTHENTICATE\r\n")   # no password
-        f.flush()
-        resp = f.readline()
-        if not resp.startswith("250"):
-            f.close(); s.close()
-            return False
-        f.write("SIGNAL NEWNYM\r\n")
-        f.flush()
-        resp = f.readline()
-        f.close(); s.close()
-        return resp.startswith("250")
-    except Exception as e:
-        logger.debug(f"rotate_tor failed: {e}")
-        return False
+        with session_lock:
+            if rebuild:
+                session = session_builder(rebuild=True)
+            else:
+                session = session_builder(rebuild=False)
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -459,9 +480,10 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     if attempt >= max_api_retries:
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
-                        # Rotate Tor and try again once
-                        if rotate_tor():
+                        # Rebuild session with Tor and try again once
+                        if session_use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
+                            session = build_session(rebuild=True)
                             try:
                                 resp = session.get(url, timeout=10)
                                 resp.raise_for_status()
@@ -531,9 +553,10 @@ def fetch_gallery_metadata(gallery_id: int):
                 return None
             if attempt >= max_api_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # Rotate Tor and try again once
-                if rotate_tor():
+                # Rebuild session with Tor and try again once
+                if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
+                    session = build_session(rebuild=True)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()
@@ -547,9 +570,10 @@ def fetch_gallery_metadata(gallery_id: int):
         except requests.RequestException as e:
             if attempt >= max_api_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
-                # Rotate Tor and try again once
-                if rotate_tor():
+                # Rebuild session with Tor and try again once
+                if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
+                    session = build_session(rebuild=True)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()
