@@ -329,7 +329,7 @@ def main():
     
     normalise_config() # Populate config immediately.
     
-    log_clarification()
+    log_clarification("debug")
     log("====================================================")
     log("                  nhentai-scraper                   ")
     log("====================================================")
@@ -366,7 +366,7 @@ def main():
     if not any(gallery_args):
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
-    log_clarification()
+    log_clarification("debug")
     log("Updating Config...", "debug")
     
     # Update Config
@@ -377,7 +377,7 @@ def main():
     get_session(referrer="CLI", status="build")
     
     # Build Gallery List (make sure not empty.)
-    log_clarification()
+    log_clarification("debug")
     log(f"Parsing galleries from NHentai. This may take a while...")
     gallery_list = build_gallery_list(args)
     if not gallery_list:
@@ -387,7 +387,7 @@ def main():
     # Update Config with Built Gallery List
     update_env("GALLERIES", gallery_list)
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Updated Config:\n{config}", "debug")
     
     # ------------------------------------------------------------

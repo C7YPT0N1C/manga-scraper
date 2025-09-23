@@ -53,7 +53,7 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
     # Logger level: DEBUG ensures all messages reach file handler
     logger.setLevel(logging.DEBUG)
 
-def log_clarification():
+def log_clarification(clarification_type: str = "info"):
     """
     Prints a blank line in the terminal if the console handler is at INFO,
     or adds a blank debug line otherwise.
@@ -61,7 +61,7 @@ def log_clarification():
     logger = logging.getLogger("nhscraper")
 
     console_handler = next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
-    if console_handler and console_handler.level == logging.INFO:
+    if console_handler and console_handler.level == logging.INFO and clarification_type != "debug":
         # direct blank line to console
         console_handler.stream.write("\n")
         console_handler.flush()
@@ -356,7 +356,7 @@ def fetch_env_vars():
 # Normalise config with defaults
 # ------------------------------------------------------------
 def normalise_config():
-    log_clarification()
+    log_clarification("debug")
     log("Populating Config...", "debug")
     
     defaults = {

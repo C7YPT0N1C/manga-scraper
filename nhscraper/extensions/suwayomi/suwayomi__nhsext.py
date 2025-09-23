@@ -251,7 +251,7 @@ def test_hook():
     Call this function at the start of any function that uses any these variables to ensure they are up to date.
     """
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
@@ -473,7 +473,7 @@ def ensure_category(category_name=None):
 # ----------------------------
 
 def update_suwayomi_category(category_id: int):
-    log_clarification()
+    log_clarification("debug")
     log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
     
     poll_interval = 2
@@ -960,7 +960,7 @@ def pre_batch_hook(gallery_list):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
     global LOCAL_SOURCE_ID, CATEGORY_ID
@@ -976,7 +976,7 @@ def pre_gallery_download_hook(gallery_id):
     if dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
@@ -985,7 +985,7 @@ def during_gallery_download_hook(gallery_id):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
@@ -994,7 +994,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
 
     # Thread-safe append
@@ -1010,7 +1010,7 @@ def post_batch_hook():
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
@@ -1019,7 +1019,7 @@ def post_run_hook():
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
     
     clean_directories(True)
@@ -1028,5 +1028,5 @@ def post_run_hook():
     process_deferred_creators()
     
     # Update Suwayomi category at end
-    log_clarification()
+    log_clarification("debug")
     log("Please update the library manually and / or run a small download to reflect any changes.")

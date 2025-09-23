@@ -340,7 +340,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     # max_sleep = Maximum Gallery sleep time
     api_min_sleep, api_max_sleep = 0.5, 0.75 # API sleep range
 
-    log_clarification()
+    log_clarification("debug")
     log("------------------------------", "debug")
     log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
     log_clarification()

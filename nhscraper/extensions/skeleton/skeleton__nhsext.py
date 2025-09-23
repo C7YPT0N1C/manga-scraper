@@ -143,7 +143,7 @@ def uninstall_extension():
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
@@ -283,7 +283,7 @@ def pre_batch_hook(gallery_list):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
     #log_clarification()
@@ -296,7 +296,7 @@ def pre_gallery_download_hook(gallery_id):
     if dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification()
@@ -308,7 +308,7 @@ def during_gallery_download_hook(gallery_id):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification()
@@ -320,7 +320,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     #log_clarification()
@@ -332,7 +332,7 @@ def post_batch_hook():
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
     
     #log_clarification()
@@ -344,7 +344,7 @@ def post_run_hook():
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
-    log_clarification()
+    log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
     
     clean_directories(True)
