@@ -305,7 +305,8 @@ def process_galleries(gallery_ids):
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
                         if not downloader_dry_run:
-                            submit_creator_tasks(executor, tasks, gallery_id, get_session(referrer="Downloader", build_status="rebuild", return_session=True), primary_creator)
+                            local_session = get_session(referrer="Downloader", build_status="none", return_session=True)
+                            submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                         else:
                             for _ in tasks:
                                 time.sleep(0.1)  # fake delay

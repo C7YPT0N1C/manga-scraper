@@ -107,7 +107,7 @@ def get_session(referrer: str = "Undisclosed Module", build_status: str = "build
     log_clarification()
     logger.debug(f"{referrer}: Requesting session.")
     
-    if return_session:
+    if build_status == "none" or return_session:
         return session
     else: 
         if build_status == "build":
@@ -482,6 +482,8 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
     ids: set[int] = set()
     page = start_page
     
+    gallery_ids_session = get_session(referrer="API", build_status="none", return_session=True)
+    
     try:
         log_clarification()
         if query_value is None:
@@ -499,7 +501,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             resp = None
             for attempt in range(1, max_api_retries + 1):
                 try:
-                    resp = session.get(url, timeout=10)
+                    resp = gallery_ids_session.get(url, timeout=10)
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=(attempt))
                         logger.warning(f"Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
@@ -514,9 +516,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         # Rebuild session with Tor and try again once
                         if session_use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                            gallery_ids_session = get_session(referrer="API", build_status="rebuild", return_session=False)
                             try:
-                                resp = session.get(url, timeout=10)
+                                resp = gallery_ids_session.get(url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 logger.warning(f"Page {page}: Still failed after Tor rotate: {e2}")
@@ -552,13 +554,15 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 # FETCH DOUJINSHI METADATA
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
+    metadata_session = get_session(referrer="API", build_status="none", return_session=True)
+    
     url = f"{API_BASE}/gallery/{gallery_id}"
     for attempt in range(1, max_api_retries + 1):
         try:
             log_clarification()
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
-            resp = session.get(url, timeout=10)
+            resp = metadata_session.get(url, timeout=10)
             if resp.status_code == 429:
                 wait = dynamic_sleep("api", attempt=(attempt))
                 logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
@@ -587,9 +591,9 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                    metadata_session = get_session(referrer="API", build_status="rebuild", return_session=False)
                     try:
-                        resp = session.get(url, timeout=10)
+                        resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
@@ -604,9 +608,9 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                    metadata_session = get_session(referrer="API", build_status="rebuild", return_session=False)
                     try:
-                        resp = session.get(url, timeout=10)
+                        resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
