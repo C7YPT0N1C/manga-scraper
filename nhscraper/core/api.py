@@ -130,8 +130,6 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
 
         return session # Return the current session
 
-#get_session(referrer="API", status="build") # Initial build
-
 ################################################################################################################
 
 broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
