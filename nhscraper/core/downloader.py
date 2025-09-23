@@ -28,17 +28,17 @@ skipped_galleries = []
 def load_extension(suppess_pre_run_hook: bool = False):
     global active_extension, download_location
 
-    ext_name = configurator.extension
+    ext_name = extension
     active_extension = get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
     
     # Prefer extension-specific download path, fallback to config/global default
-    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or configurator.download_path
+    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
     
     if suppess_pre_run_hook==False:
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
         logger.info(f"Downloading Gallery To: {download_location}")
 
-    if not configurator.dry_run:
+    if not dry_run:
         os.makedirs(download_location, exist_ok=True)
     else:
         if suppess_pre_run_hook==False:
@@ -53,7 +53,7 @@ def worst_case_time_estimate(context: str, id_list: list):
     current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
     worst_time_secs = (
-        ((current_run_num_of_galleries / configurator.threads_galleries) * configurator.max_sleep ) +
+        ((current_run_num_of_galleries / threads_galleries) * configurator.max_sleep ) +
         ((current_run_num_of_galleries / BATCH_SIZE) * current_batch_sleep_time)
     )
     
@@ -63,7 +63,7 @@ def worst_case_time_estimate(context: str, id_list: list):
     
     #log_clarification()
     #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
-    #logger.info(f"Number of Threads: Gallery: {configurator.threads_galleries}, Image: {configurator.threads_images}") # DEBUGGING
+    #logger.info(f"Number of Threads: Gallery: {threads_galleries}, Image: {threads_images}") # DEBUGGING
     #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
     #logger.info(f"Max Sleep Time: {configurator.max_sleep}") # DEBUGGING
     log_clarification("debug")
@@ -95,6 +95,8 @@ def build_gallery_path(meta, iteration: dict = None):
 
 def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Reason Given."):
     global skipped_galleries
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
     if ReturnReport:
         log_clarification("debug")
@@ -134,7 +136,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         return False
 
     # Skip only if NOT in dry-run
-    if not configurator.dry_run and os.path.exists(doujin_folder):
+    if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
             any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
                 for ext in ("jpg", "png", "gif", "webp"))
@@ -151,11 +153,11 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
 
-    excluded_gallery_tags = [t.lower() for t in configurator.excluded_tags]
+    excluded_gallery_tags = [t.lower() for t in excluded_tags]
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
-    allowed_gallery_language = [l.lower() for l in configurator.language]
+    allowed_gallery_language = [l.lower() for l in language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
@@ -205,7 +207,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
 def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        if not configurator.dry_run:
+        if not dry_run:
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
@@ -213,19 +215,19 @@ def process_galleries(batch_ids):
 
         gallery_attempts = 0
 
-        while gallery_attempts < configurator.max_retries:
+        while gallery_attempts < max_retries:
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
                 log_clarification("debug")
                 logger.debug("######################## GALLERY START ########################")
                 log_clarification("debug")
-                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{configurator.max_retries})")
+                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_retries})")
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
-                    if not configurator.dry_run and gallery_attempts >= configurator.max_retries:
+                    if not dry_run and gallery_attempts >= max_retries:
                         db.mark_gallery_failed(gallery_id)
                     continue
 
@@ -246,7 +248,7 @@ def process_galleries(batch_ids):
                         break
 
                 if skip_gallery:
-                    if not configurator.dry_run:
+                    if not dry_run:
                         db.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
@@ -258,7 +260,7 @@ def process_galleries(batch_ids):
                 log(f"Downloader: Primary Creator for Gallery {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
-                if configurator.dry_run:
+                if dry_run:
                     log(f"[DRY RUN] Downloader: Would create primary folder for {creators[0]}: {primary_folder}", "debug")
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
@@ -270,7 +272,7 @@ def process_galleries(batch_ids):
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
-                    if configurator.dry_run:
+                    if dry_run:
                         log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {primary_folder}", "debug")
                     else:
                         if os.path.islink(extra_folder):
@@ -297,15 +299,15 @@ def process_galleries(batch_ids):
 
                 # --- Download images (once, in primary creator’s folder) ---
                 if tasks:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=configurator.threads_images) as executor:
-                        if not configurator.dry_run:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=threads_images) as executor:
+                        if not dry_run:
                             local_session = get_session(referrer="Downloader", status="return")
                             submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                         else:
                             for _ in tasks:
                                 time.sleep(0.1)  # fake delay
 
-                if not configurator.dry_run:
+                if not dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
 
@@ -315,7 +317,7 @@ def process_galleries(batch_ids):
 
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery {gallery_id}: {e}")
-                if not configurator.dry_run and gallery_attempts >= configurator.max_retries:
+                if not dry_run and gallery_attempts >= max_retries:
                     db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
@@ -336,7 +338,7 @@ def start_batch(batch_list=None):
     thread_map(
         lambda gid: process_galleries([gid]),
         batch_list,
-        max_workers=configurator.threads_galleries,
+        max_workers=threads_galleries,
         desc="Processing galleries",
         unit="gallery"
     )
