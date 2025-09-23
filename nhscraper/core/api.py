@@ -33,9 +33,13 @@ def session_builder(rebuild: bool = False):
     RandomiseBrowserProfile = True
     browsers = [
         {"browser": "chrome", "platform": "windows", "mobile": False},
-        {"browser": "firefox", "platform": "windows", "mobile": False},
+        {"browser": "chrome", "platform": "windows", "mobile": True},
         {"browser": "chrome", "platform": "linux", "mobile": False},
-        {"browser": "safari", "platform": "macos", "mobile": False},
+        {"browser": "chrome", "platform": "linux", "mobile": True},    
+        {"browser": "firefox", "platform": "windows", "mobile": False},
+        {"browser": "firefox", "platform": "windows", "mobile": True},
+        {"browser": "firefox", "platform": "linux", "mobile": False},
+        {"browser": "firefox", "platform": "linux", "mobile": True},
     ]
     browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
