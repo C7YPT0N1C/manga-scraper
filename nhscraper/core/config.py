@@ -39,7 +39,7 @@ def log_clarification():
     logger.debug("")
 
 log_clarification()
-logger.info("Logger: Ready.")
+logger.debug("Logger: Ready.")
 logger.debug("Logger: Debugging Started.")
 
 class ConditionalFormatter(logging.Formatter):
