@@ -13,15 +13,6 @@ lock = threading.Lock()
 # DB INITIALISATION
 # ===============================
 def init_db():
-    """
-    This is one this module's entrypoints.
-    """
-
-    global session
-
-    log_clarification("debug")
-    logger.debug("Database: Ready.")
-    log("Database: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
@@ -112,3 +103,7 @@ def list_galleries(status=None):
         else:
             cursor.execute("SELECT id, status, started_at, completed_at FROM galleries")
         return cursor.fetchall()
+
+log_clarification("debug")
+logger.debug("Database: Ready.")
+log("Database: Debugging Started.", "debug")
