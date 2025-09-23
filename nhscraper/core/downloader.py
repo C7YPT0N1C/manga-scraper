@@ -332,7 +332,7 @@ def start_batch(batch_list=None):
     active_extension.pre_batch_hook(batch_ids)
     
     # Rebuild session.
-    build_session(referrer="Downloader", rebuild=True)
+    #build_session(referrer="Downloader", rebuild=True)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"
