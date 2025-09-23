@@ -369,7 +369,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    get_session(referrer="CLI", rebuild=True, return_session=False)
+    get_session(referrer="CLI", build_status="rebuild", return_session=False)
     
     # Build Gallery List (make sure not empty.)
     log_clarification()

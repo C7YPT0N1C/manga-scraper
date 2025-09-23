@@ -15,7 +15,6 @@ from nhscraper.extensions.extension_loader import get_selected_extension  # Impo
 ####################################################################################################
 # Global Variables
 ####################################################################################################
-session = None
 
 active_extension = "skeleton"
 download_location = ""
@@ -306,7 +305,7 @@ def process_galleries(gallery_ids):
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
                         if not downloader_dry_run:
-                            submit_creator_tasks(executor, tasks, gallery_id, session, primary_creator)
+                            submit_creator_tasks(executor, tasks, gallery_id, get_session(referrer="Downloader", build_status="rebuild", return_session=True), primary_creator)
                         else:
                             for _ in tasks:
                                 time.sleep(0.1)  # fake delay
@@ -329,13 +328,9 @@ def process_galleries(gallery_ids):
 ####################################################################################################
 
 def start_batch(batch_list=None):
-    global session
     batch_ids = batch_list
     
     active_extension.pre_batch_hook(batch_ids)
-    
-    # Rebuild session.
-    session = get_session(referrer="Downloader", rebuild=True, return_session=True)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"

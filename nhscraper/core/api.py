@@ -18,11 +18,11 @@ session = None
 session_lock = Lock()
 session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
-def session_builder(rebuild: bool = False):
+def session_builder(build_status: str = "build"):
     global session
     
     with session_lock:
-        if rebuild:
+        if build_status=="rebuild":
             log("Rebuilding HTTP session with cloudscraper", "debug")
         else:
             log("Building HTTP session with cloudscraper", "debug")
@@ -42,7 +42,7 @@ def session_builder(rebuild: bool = False):
         ]
         browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
-        if session is None or rebuild:
+        if session is None or build_status == "rebuild":
             session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
 
         # Random User-Agents (only randomized if flag is True)
@@ -75,7 +75,7 @@ def session_builder(rebuild: bool = False):
             "Referer": referer,
         })
 
-        if rebuild:
+        if build_status=="rebuild":
             log("Rebuilt HTTP session with cloudscraper", "debug")
         else:
             log("Built HTTP session with cloudscraper", "debug")
@@ -92,10 +92,10 @@ def session_builder(rebuild: bool = False):
         logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
         return session
 
-def get_session(referrer: str = "Undisclosed Module", rebuild: bool = False, return_session: bool = False):
+def get_session(referrer: str = "Undisclosed Module", build_status: str = "build", return_session: bool = False):
     """
     Ensure session is ready.
-    If rebuild=True, calls session_builder to rebuild the session.
+    If build_status="rebuild", calls session_builder to rebuild the session.
     """
     
     global session
@@ -107,23 +107,23 @@ def get_session(referrer: str = "Undisclosed Module", rebuild: bool = False, ret
     log_clarification()
     logger.debug(f"{referrer}: Requesting session.")
     
-    if not rebuild:
-        # First build
-        session_builder(rebuild=False)
-    else:
-        # Close old session before rebuilding
-        try:
-            session.close()
-            logger.debug("Closed old session.")
-        except Exception as e:
-            logger.debug(f"Failed to close old session: {e}")
-        
-        session_builder(rebuild=True)
-    
     if return_session:
         return session
+    else: 
+        if build_status == "build":
+            # First build
+            session_builder(build_status="build")
+        else:
+            # Close old session before rebuilding
+            try:
+                session.close()
+                logger.debug("Closed old session.")
+            except Exception as e:
+                logger.debug(f"Failed to close old session: {e}")
+            
+            session_builder(build_status="rebuild")
 
-get_session(referrer="API", rebuild=False, return_session=False) # Initial build
+get_session(referrer="API", build_status="build", return_session=False) # Initial build
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -514,7 +514,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         # Rebuild session with Tor and try again once
                         if session_use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            session = get_session(referrer="API", rebuild=True, return_session=False)
+                            session = get_session(referrer="API", build_status="rebuild", return_session=False)
                             try:
                                 resp = session.get(url, timeout=10)
                                 resp.raise_for_status()
@@ -587,7 +587,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = get_session(referrer="API", rebuild=True, return_session=False)
+                    session = get_session(referrer="API", build_status="rebuild", return_session=False)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()
@@ -604,7 +604,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = get_session(referrer="API", rebuild=True, return_session=False)
+                    session = get_session(referrer="API", build_status="rebuild", return_session=False)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()
