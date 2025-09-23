@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, re, json, socket
+import os, time, random, cloudscraper, requests, re, json, threading, socket
 from flask import Flask, jsonify, request
 from datetime import datetime
 import urllib.parse
@@ -18,7 +18,7 @@ from nhscraper.core.configurator import *
 
 download_path = get_download_path() # Get download path from config
 
-file_lock = Lock()
+file_lock = threading.Lock()
 
 # ===============================
 # SCRAPER API
@@ -33,7 +33,7 @@ state_lock = Lock()
 # HTTP SESSION
 ################################################################################################################
 session = None
-session_lock = Lock()
+file_lock = threading.Lock()
 
 def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     """
