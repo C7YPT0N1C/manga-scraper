@@ -141,7 +141,7 @@ def sparse_clone(extension_name: str, url: str):
 # ------------------------------------------------------------
 # Extension Loader
 # ------------------------------------------------------------
-def load_installed_extensions():
+def load_installed_extensions(suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
     
@@ -168,7 +168,9 @@ def load_installed_extensions():
             try:
                 module = importlib.import_module(module_name)
                 INSTALLED_EXTENSIONS.append(module)
-                log(f"Extension: {ext['name']}: Loaded.", "debug")
+                if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+                    log(f"Extension: {ext['name']}: Loaded.", "debug")
+            
             except Exception as e:
                 logger.warning(f"Extension: {ext['name']}: Failed to load: {e}. Is an external program managing it?")
         else:
@@ -319,7 +321,7 @@ def uninstall_selected_extension(extension_name: str):
 
 # ------------------------------------------------------------
 # Get selected extension (with skeleton fallback)
-def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = False):
+def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
     
@@ -332,9 +334,10 @@ def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = Fal
     
     original_name = name  # Save the originally requested extension
 
-    log_clarification()
-    logger.debug("Extension Loader: Ready.")
-    log("Extension Loader: Debugging Started.", "debug")
+    if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+        log_clarification()
+        logger.debug("Extension Loader: Ready.")
+        log("Extension Loader: Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -369,12 +372,14 @@ def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = Fal
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             log_clarification()
-            logger.debug(f"Selected extension: {final_name}")
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
-            if skip_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+            if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
                 if hasattr(ext, "pre_run_hook"):
                     ext.pre_run_hook()
+                
+                logger.debug(f"Selected extension: {final_name}")
+            
             return ext
 
     # If we reach here, something went really wrong

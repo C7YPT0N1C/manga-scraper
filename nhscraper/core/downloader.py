@@ -24,17 +24,17 @@ skipped_galleries = []
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-def load_extension(skip_pre_run_hook=False):
+def load_extension(suppess_pre_run_hook=False):
     global active_extension, download_location
 
     ext_name = extension
     #logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
-    active_extension = get_selected_extension(ext_name, skip_pre_run_hook=skip_pre_run_hook)
+    active_extension = get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
     
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
     
-    if skip_pre_run_hook==False:
+    if suppess_pre_run_hook==False:
         logger.info(f"Using extension: {ext_name}")
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
         logger.info(f"Downloading Gallery To: {download_location}")
@@ -42,7 +42,7 @@ def load_extension(skip_pre_run_hook=False):
     if not dry_run:
         os.makedirs(download_location, exist_ok=True)
     else:
-        if skip_pre_run_hook==False:
+        if suppess_pre_run_hook==False:
             logger.info(f"[DRY RUN] Downloader: Skipping creation of: {download_location}")
 
 ####################################################################################################
@@ -337,7 +337,7 @@ def start_batch(batch_list=None):
         unit="gallery"
     )
 
-    load_extension(skip_pre_run_hook=False) # Reload extension to reset any state
+    load_extension(suppess_pre_run_hook=False) # Reload extension to reset any state
     active_extension.post_batch_hook()
 
 def start_downloader(gallery_list=None):
@@ -355,12 +355,12 @@ def start_downloader(gallery_list=None):
     
     worst_case_time_estimate(f"Run", gallery_list)
     
-    load_extension(skip_pre_run_hook=False) # Load extension and call pre_run_hook.
+    load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
     
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-        load_extension(skip_pre_run_hook=True) # Load extension without calling pre_run_hook again.
+        load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
     
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
