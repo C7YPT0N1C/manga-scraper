@@ -167,8 +167,8 @@ def parse_args():
     
     # Make calm/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (logger.critical - logger.warning) (default: {DEFAULT_CALM})")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (logger.critical - logger.debug) (default: {DEFAULT_DEBUG})")
+    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (warnings and higher) (default: {DEFAULT_CALM})")
+    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (critical errors and lower) (default: {DEFAULT_DEBUG})")
 
     return parser.parse_args()
 

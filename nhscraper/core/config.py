@@ -93,9 +93,9 @@ logger.addHandler(logging.NullHandler())
 # ------------------------------------------------------------
 def log_clarification():
     if logger.getEffectiveLevel() == logging.INFO:
-        logger.info("") # Only print new line if log level is INFO
-    elif logger.getEffectiveLevel() <= logging.DEBUG:
-        logger.debug("")
+        logger.info("") # new line in terminal
+    else:
+        logger.debug("") # add a blank debug line
 
 log_clarification()
 logger.debug("Logger: Ready.")
