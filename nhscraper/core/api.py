@@ -64,9 +64,9 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         
         # Log if building or rebuilding session
         if status == "rebuild":
-            log("Rebuilding HTTP session with cloudscraper", "debug")
+            log(f"Rebuilding HTTP session with cloudscraper for {referrer}", "debug")
         else:
-            log("Building HTTP session with cloudscraper", "debug")
+            log(f"Building HTTP session with cloudscraper for {referrer}", "debug")
 
         # Random browser profiles (only randomised if flag is True)
         DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
@@ -128,9 +128,9 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
             
         # Log completion of building/rebuilding
         if status == "rebuild":
-            log("Rebuilt HTTP session with cloudscraper", "debug")
+            log("Rebuilt HTTP session.", "debug")
         else:
-            log("Built HTTP session with cloudscraper", "debug")
+            log("Built HTTP session.", "debug")
         #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed.
 
         return session # Return the current session
@@ -514,7 +514,6 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                 except requests.RequestException as e:
                     if attempt >= max_retries:
                         log_clarification("debug")
-                        logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         # Rebuild session with Tor and try again once

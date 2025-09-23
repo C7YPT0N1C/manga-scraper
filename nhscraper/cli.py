@@ -374,9 +374,18 @@ def main():
     update_config(args)
     
     log_clarification("debug")
+    log("TEST 1", "debug")
     log(f"Updated Config:\n{config}", "debug")
+    log_clarification("debug")
+    logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
     
     fetch_env_vars() # Refresh env vars in case config changed.
+    
+    log_clarification("debug")
+    log("TEST 2", "debug")
+    log(f"Updated Config:\n{config}", "debug")
+    log_clarification("debug")
+    logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
     
     # Build initial session.
     get_session(referrer="CLI", status="build")
