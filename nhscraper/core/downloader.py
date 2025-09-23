@@ -28,8 +28,9 @@ def load_extension():
     global active_extension, download_location
 
     ext_name = extension
-    logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
+    #logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
     active_extension = get_selected_extension(ext_name)
+    logger.info(f"Using extension: {ext_name}, {active_extension}")
     logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
     # Prefer extension-specific download path, fallback to config/global default
@@ -350,13 +351,13 @@ def start_downloader(gallery_list=None):
     
     start_time = time.perf_counter()  # Start timer
     
-    # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-    load_extension()
-    
     worst_case_time_estimate(f"Run", gallery_list)
     
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
+        # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+        load_extension()
+    
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
         worst_case_time_estimate(f"Batch {batch_num}", batch_list)
