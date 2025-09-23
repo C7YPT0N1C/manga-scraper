@@ -24,12 +24,12 @@ skipped_galleries = []
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-def load_extension():
+def load_extension(skip_pre_run_hook=False):
     global active_extension, download_location
 
     ext_name = extension
     #logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
-    active_extension = get_selected_extension(ext_name)
+    active_extension = get_selected_extension(ext_name, skip_pre_run_hook=skip_pre_run_hook)
     logger.info(f"Using extension: {ext_name}")
     logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({{active_extension}})")
 
@@ -335,7 +335,7 @@ def start_batch(batch_list=None):
         unit="gallery"
     )
 
-    load_extension()
+    load_extension(skip_pre_run_hook=False) # Reload extension to reset any state
     active_extension.post_batch_hook()
 
 def start_downloader(gallery_list=None):
@@ -357,7 +357,7 @@ def start_downloader(gallery_list=None):
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-            load_extension()
+            load_extension(skip_pre_run_hook=False) # Load extension and call pre_run_hook.
         
             batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
             
@@ -376,6 +376,7 @@ def start_downloader(gallery_list=None):
             log_clarification()
             logger.info(f"All batches complete.")
     
+    load_extension(skip_pre_run_hook=True) # Load extension without calling pre_run_hook again.
     active_extension.post_run_hook()
     
     end_time = time.perf_counter()  # End timer

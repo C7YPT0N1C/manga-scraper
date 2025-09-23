@@ -964,9 +964,7 @@ def pre_batch_hook(gallery_list):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
-    global LOCAL_SOURCE_ID, CATEGORY_ID  
-    
-    pre_run_hook()
+    global LOCAL_SOURCE_ID, CATEGORY_ID
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()

@@ -319,7 +319,7 @@ def uninstall_selected_extension(extension_name: str):
 
 # ------------------------------------------------------------
 # Get selected extension (with skeleton fallback)
-def get_selected_extension(name: str = "skeleton"):
+def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
     
@@ -370,8 +370,9 @@ def get_selected_extension(name: str = "skeleton"):
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
-            #if hasattr(ext, "pre_run_hook"): # The extension does this in it's pre run hook.
-            #    ext.pre_run_hook()
+            if not skip_pre_run_hook: # Call the extension's pre run hook if not skipped
+                if hasattr(ext, "pre_run_hook"):
+                    ext.pre_run_hook()
             log_clarification()
             logger.debug(f"Selected extension: {final_name}")
             return ext
