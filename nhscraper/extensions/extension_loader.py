@@ -90,7 +90,7 @@ def update_local_manifest_from_remote():
         if remote_ext["name"] not in local_names:
             remote_ext["installed"] = False  # new extension default
             local_manifest["extensions"].append(remote_ext)
-            log_clarification()
+            log_clarification("debug")
             log(f"Added new extension to local manifest: {remote_ext['name']}", "debug")
 
     save_local_manifest(local_manifest)
@@ -335,7 +335,7 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
     original_name = name  # Save the originally requested extension
 
     if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
-        log_clarification()
+        log_clarification("debug")
         logger.debug("Extension Loader: Ready.")
         log("Extension Loader: Debugging Started.", "debug")
 
@@ -371,7 +371,6 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
-            log_clarification()
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
             if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped

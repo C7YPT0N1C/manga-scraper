@@ -150,7 +150,7 @@ def test_hook():
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
-    log_clarification()
+    log_clarification("debug")
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
@@ -286,7 +286,7 @@ def pre_batch_hook(gallery_list):
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
     
     return gallery_list
@@ -299,7 +299,7 @@ def pre_gallery_download_hook(gallery_id):
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
@@ -311,7 +311,7 @@ def during_gallery_download_hook(gallery_id):
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
@@ -323,7 +323,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
@@ -335,7 +335,7 @@ def post_batch_hook():
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
@@ -349,5 +349,5 @@ def post_run_hook():
     
     clean_directories(True)
     
-    #log_clarification()
+    #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS

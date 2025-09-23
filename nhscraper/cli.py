@@ -286,7 +286,7 @@ def build_gallery_list(args):
             )
         )
     
-    #log_clarification()
+    #log_clarification("debug")
     #log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
@@ -329,7 +329,7 @@ def main():
     
     normalise_config() # Populate config immediately.
     
-    log_clarification("debug")
+    log_clarification()
     log("====================================================")
     log("                  nhentai-scraper                   ")
     log("====================================================")

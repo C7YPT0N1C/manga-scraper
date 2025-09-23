@@ -43,13 +43,13 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
 
     global session
 
-    log_clarification()
+    log_clarification("debug")
     logger.debug("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    log_clarification()
+    log_clarification("debug")
     # If status is "none", report that Referrer is requesting to only retrieve session, else report build / rebuild.
     # Session is always returned.
     logger.debug(f"{referrer}: Requesting to {status if status != 'none' else status + ' and retrieve session'}.")
@@ -343,7 +343,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     log_clarification("debug")
     log("------------------------------", "debug")
     log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
-    log_clarification()
+    log_clarification("debug")
 
     # ------------------------------------------------------------
     # API STAGE
@@ -395,7 +395,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # --------------------------------------------------------
         unit_factor = (current_load) / gallery_cap
         if debug:
-            log_clarification()
+            log_clarification("debug")
             log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
 
         # --------------------------------------------------------
@@ -430,7 +430,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # --------------------------------------------------------
         # 6. Final result
         # --------------------------------------------------------
-        log_clarification()
+        log_clarification("debug")
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
         log("------------------------------", "debug")
         return sleep_time
@@ -479,7 +479,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
     gallery_ids_session = get_session(referrer="API", status="return")
     
     try:
-        log_clarification()
+        log_clarification("debug")
         if query_value is None:
             log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
@@ -553,7 +553,7 @@ def fetch_gallery_metadata(gallery_id: int):
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, max_retries + 1):
         try:
-            log_clarification()
+            log_clarification("debug")
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
             resp = metadata_session.get(url, timeout=10)
@@ -572,7 +572,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                 return None
 
-            log_clarification()
+            log_clarification("debug")
             log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
             #log(f"Fetcher: Metadata for Gallery: {gallery_id}: {data}", "debug") # DEBUGGING
             return data
@@ -767,7 +767,7 @@ if __name__ == "__main__":
     This is one this module's entrypoints.
     """
     
-    log_clarification()
+    log_clarification("debug")
     logger.debug("API: Ready.")
     log("API: Debugging Started.", "debug")
     

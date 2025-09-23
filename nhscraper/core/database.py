@@ -19,7 +19,7 @@ def init_db():
 
     global session
 
-    log_clarification()
+    log_clarification("debug")
     logger.debug("Database: Ready.")
     log("Database: Debugging Started.", "debug")
     

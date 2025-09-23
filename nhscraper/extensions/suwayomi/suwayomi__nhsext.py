@@ -258,7 +258,7 @@ def test_hook():
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
-    log_clarification()
+    log_clarification("debug")
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
@@ -422,12 +422,12 @@ def get_local_source_id():
         log_clarification()
         logger.error("GraphQL: Failed to fetch sources")
         return LOCAL_SOURCE_ID
-
+    
     for node in result["data"]["sources"]["nodes"]:
+        #log_clarification("debug")
         #log(f"GraphQL: Checking source node {node}", "debug")
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
-            log_clarification()
             #log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
@@ -637,7 +637,7 @@ def update_creator_manga(meta):
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
     
-    log_clarification()
+    log_clarification("debug")
     
     if dry_run:
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
@@ -765,7 +765,7 @@ def process_deferred_creators():
     still_deferred = set()
     
     while process_creators_attempt <= max_retries:
-        log_clarification()
+        log_clarification("debug")
         log(f"Processing creators (attempt {process_creators_attempt}/{max_retries})...")
         
         update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first

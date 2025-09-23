@@ -61,11 +61,12 @@ def worst_case_time_estimate(context: str, id_list: list):
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
-    log_clarification()
+    #log_clarification()
     #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
     #logger.info(f"Number of Threads: Gallery: {threads_galleries}, Image: {threads_images}") # DEBUGGING
     #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
     #logger.info(f"Max Sleep Time: {max_sleep}") # DEBUGGING
+    log_clarification("debug")
     log(f"{context} Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
@@ -96,7 +97,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
     global skipped_galleries
 
     if ReturnReport:
-        log_clarification()
+        log_clarification("debug")
         skipped_report = "\n".join(skipped_galleries)
         log(f"All Skipped Galleries:\n{skipped_report}")
     else:
@@ -106,7 +107,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
 
         gallery_id = meta.get("id", "Unknown")
         gallery_title = clean_title(meta)
-        log_clarification()
+        log_clarification("debug")
         skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
 
@@ -216,9 +217,9 @@ def process_galleries(batch_ids):
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
-                log_clarification()
+                log_clarification("debug")
                 logger.debug("######################## GALLERY START ########################")
-                log_clarification()
+                log_clarification("debug")
                 logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_retries})")
 
                 meta = fetch_gallery_metadata(gallery_id)
@@ -346,7 +347,7 @@ def start_downloader(gallery_list=None):
     This is one this module's entrypoints.
     """
     
-    log_clarification()
+    log_clarification("debug")
     logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
     
