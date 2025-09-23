@@ -209,6 +209,8 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, session, safe_crea
 # CORE
 ####################################################################################################
 def process_galleries(gallery_ids):
+    global session
+    
     for gallery_id in gallery_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not downloader_dry_run:
