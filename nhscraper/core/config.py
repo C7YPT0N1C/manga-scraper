@@ -78,7 +78,7 @@ def setup_logger(calm=False, debug=False):
     logger.setLevel(logging.DEBUG)
 
     # Initialisation summary
-    logger.info("Logger initialised. Console level: %s",
+    logger.debug("Logger initialised. Console level: %s",
                 "DEBUG" if debug else "WARNING" if calm else "INFO")
     
     return logger
