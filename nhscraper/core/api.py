@@ -501,7 +501,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             log(f"Fetcher: Requesting URL: {url}", "debug")
 
             resp = None
-            for attempt in range(1, max_retries + 1):
+            for attempt in range(1, config.max_retries + 1):
+                log_clarification("debug")
+                log(f"Maximum retries: {config.max_retries}", "debug")
                 try:
                     resp = gallery_ids_session.get(url, timeout=10)
                     if resp.status_code == 429:
@@ -512,7 +514,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= max_retries:
+                    if attempt >= config.max_retries:
                         log_clarification("debug")
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
@@ -562,7 +564,7 @@ def fetch_gallery_metadata(gallery_id: int):
     metadata_session = get_session(referrer="API", status="return")
     
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(1, config.max_retries + 1):
         try:
             log_clarification("debug")
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
@@ -591,7 +593,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if "404 Client Error: Not Found for url" in str(e):
                 logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
-            if attempt >= max_retries:
+            if attempt >= config.max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
@@ -608,7 +610,7 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
-            if attempt >= max_retries:
+            if attempt >= config.max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
@@ -726,8 +728,8 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
             else:
                 entry["download_attempts"] += 1
                 entry["download_status"] = "failed"
-                if entry["download_attempts"] >= max_retries:
-                    logger.error(f"Gallery {gallery_id} download failed after {max_retries} attempts")
+                if entry["download_attempts"] >= config.max_retries:
+                    logger.error(f"Gallery {gallery_id} download failed after {config.max_retries} attempts")
 
         entry["last_checked"] = datetime.now().isoformat()
         logger.info(f"Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
