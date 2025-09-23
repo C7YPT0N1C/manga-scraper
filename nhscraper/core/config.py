@@ -65,8 +65,8 @@ def log_clarification(clarification_type: str = "info"):
         # direct blank line to console
         console_handler.stream.write("\n")
         #console_handler.flush()
-    else:
-        logger.debug("")  # goes to file (and console if debug mode)
+        print("")
+    logger.debug("")  # goes to file (and console if debug mode)
 
 def setup_logger(calm=False, debug=False):
     """
