@@ -368,13 +368,13 @@ def get_selected_extension(name: str = "skeleton", skip_pre_run_hook: bool = Fal
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
+            log_clarification()
+            logger.debug(f"Selected extension: {final_name}")
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
             if not skip_pre_run_hook: # Call the extension's pre run hook if not skipped
                 if hasattr(ext, "pre_run_hook"):
                     ext.pre_run_hook()
-            log_clarification()
-            logger.debug(f"Selected extension: {final_name}")
             return ext
 
     # If we reach here, something went really wrong

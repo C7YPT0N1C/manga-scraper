@@ -31,7 +31,7 @@ def load_extension(skip_pre_run_hook=False):
     #logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
     active_extension = get_selected_extension(ext_name, skip_pre_run_hook=skip_pre_run_hook)
     logger.info(f"Using extension: {ext_name}")
-    logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({{active_extension}})")
+    logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
 
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
