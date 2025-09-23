@@ -479,6 +479,8 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
 # FETCH GALLERY IDS
 # ===============================
 def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     ids: set[int] = set()
     page = start_page
     
@@ -554,6 +556,8 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 # FETCH DOUJINSHI METADATA
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
+    fetch_env_vars() # Refresh env vars in case config changed.
+
     metadata_session = get_session(referrer="API", status="return")
     
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
@@ -629,6 +633,8 @@ def fetch_image_urls(meta: dict, page: int):
     Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
     Handles missing metadata, unknown types, and defaulting to webp.
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
     
     try:
         #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
