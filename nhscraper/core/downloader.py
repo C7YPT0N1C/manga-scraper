@@ -24,7 +24,7 @@ skipped_galleries = []
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
-def load_extension(suppess_pre_run_hook=False):
+def load_extension(suppess_pre_run_hook: bool = False):
     global active_extension, download_location
 
     ext_name = extension
@@ -35,7 +35,6 @@ def load_extension(suppess_pre_run_hook=False):
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
     
     if suppess_pre_run_hook==False:
-        logger.info(f"Using extension: {ext_name}")
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
         logger.info(f"Downloading Gallery To: {download_location}")
 

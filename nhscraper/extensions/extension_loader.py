@@ -378,7 +378,8 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
                 if hasattr(ext, "pre_run_hook"):
                     ext.pre_run_hook()
                 
-                logger.debug(f"Selected extension: {final_name}")
+                log_clarification()
+                logger.info(f"Selected extension: {final_name}")
             
             return ext
 
