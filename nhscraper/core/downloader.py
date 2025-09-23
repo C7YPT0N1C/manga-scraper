@@ -353,30 +353,31 @@ def start_downloader(gallery_list=None):
     
     worst_case_time_estimate(f"Run", gallery_list)
     
+    load_extension(skip_pre_run_hook=False) # Load extension and call pre_run_hook.
+    
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
-            # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-            load_extension(skip_pre_run_hook=False) # Load extension and call pre_run_hook.
-        
-            batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
-            
-            worst_case_time_estimate(f"Batch {batch_num}", batch_list)
-            
-            log_clarification()
-            logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_list)} Galleries...")
-        
-            start_batch(batch_list) # Start batch.
-            
-            if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
-                log_clarification()
-                logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
-                time.sleep(BATCH_SLEEP_TIME) # Pause between batches
-        
-            else: # Last batch
-                log_clarification()
-                logger.info(f"All batches complete.")
+        # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+        load_extension(skip_pre_run_hook=True) # Load extension without calling pre_run_hook again.
     
-    load_extension(skip_pre_run_hook=False) # Load extension without calling pre_run_hook again.
+        batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
+        
+        worst_case_time_estimate(f"Batch {batch_num}", batch_list)
+        
+        log_clarification()
+        logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_list)} Galleries...")
+    
+        start_batch(batch_list) # Start batch.
+        
+        if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
+            log_clarification()
+            logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
+            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
+    
+        else: # Last batch
+            log_clarification()
+            logger.info(f"All batches complete.")   
+
     active_extension.post_run_hook()
     
     end_time = time.perf_counter()  # End timer
