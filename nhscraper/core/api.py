@@ -120,7 +120,7 @@ def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
         
         session_builder(rebuild=True)
 
-build_session(rebuild=False) # Initial build
+build_session(referrer="API", rebuild=False) # Initial build
         
 ################################################################################################################
 # GLOBAL VARIABLES
