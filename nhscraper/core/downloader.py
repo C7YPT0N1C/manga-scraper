@@ -53,14 +53,9 @@ def load_extension():
 def worst_case_time_estimate(context: str, id_list: list):
     current_run_num_of_galleries = len(id_list)
     current_run_gallery_threads = gallery_threads
+    current_run_image_threads = image_threads
     current_run_gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)
     current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
-    
-    log_clarification()
-    #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
-    #logger.info(f"Number of Gallery Threads: {current_run_gallery_threads}") # DEBUGGING
-    #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
-    #logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}") # DEBUGGING
     
     worst_time_secs = (
         ((current_run_num_of_galleries / current_run_gallery_threads) * current_run_gallery_sleep_max ) +
@@ -71,6 +66,11 @@ def worst_case_time_estimate(context: str, id_list: list):
     worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
     worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
     
+    log_clarification()
+    #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
+    #logger.info(f"Number of Threads: Gallery: {current_run_gallery_threads}, Image: {current_run_image_threads}") # DEBUGGING
+    #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
+    #logger.info(f"Max Sleep Time: {current_run_gallery_sleep_max}") # DEBUGGING
     log(f"{context} Worst Case Time Estimate = {worst_time_mins:.2f} Minutes / {worst_time_days:.2f} Hours / {worst_time_hours:.2f} Days")
 
 def build_gallery_path(meta, iteration: dict = None):
