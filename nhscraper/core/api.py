@@ -16,7 +16,7 @@ from nhscraper.core.configurator import *
 # GLOBAL VARIABLES
 ################################################################################################################
 
-download_path = get_download_path() # Get download path from config
+configurator.download_path = get_download_path() # Get download path from config
 
 # ===============================
 # SCRAPER API
@@ -119,7 +119,7 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         })
 
         # Update proxies
-        if use_tor:
+        if configurator.use_tor:
             proxy = "socks5h://127.0.0.1:9050"
             session.proxies = {"http": proxy, "https": proxy}
             logger.info(f"Using Tor proxy: {proxy}")
@@ -230,7 +230,7 @@ def clean_title(meta_or_title):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     # Ensure global broken symbols file path is set
-    broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+    broken_symbols_file = os.path.join(configurator.download_path, "possible_broken_symbols.json")
 
     def load_possible_broken_symbols() -> dict[str, str]:
         """
@@ -265,7 +265,7 @@ def clean_title(meta_or_title):
     if isinstance(meta_or_title, dict):
         meta = meta_or_title
         title_obj = meta.get("title", {}) or {}
-        desired_title_type = title_type.lower()
+        desired_title_type = configurator.title_type.lower()
         title = (
             title_obj.get(desired_title_type)
             or title_obj.get("english")
@@ -341,8 +341,8 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     # Configurable parameters
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
-    # min_sleep = Minimum Gallery sleep time
-    # max_sleep = Maximum Gallery sleep time
+    # configurator.min_sleep = Minimum Gallery sleep time
+    # configurator.max_sleep = Maximum Gallery sleep time
     api_min_sleep, api_max_sleep = 0.5, 0.75 # API sleep range
 
     log_clarification("debug")
@@ -371,19 +371,19 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # --------------------------------------------------------
         num_of_galleries = max(1, len(batch_ids))
         
-        if debug:
+        if configurator.debug:
             log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
 
-        if threads_galleries is None or threads_images is None:
+        if configurator.threads_galleries is None or configurator.threads_images is None:
             # Base gallery threads = 2, scale with number of galleries
             gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
             image_threads = gallery_threads * 5  # Keep ratio 1:5
-            if debug:
+            if configurator.debug:
                 log(f"→ Optimised Threads: {gallery_threads} gallery, {image_threads} image", "debug")
         else:
-            gallery_threads = threads_galleries
-            image_threads = threads_images
-            if debug:
+            gallery_threads = configurator.threads_galleries
+            image_threads = configurator.threads_images
+            if configurator.debug:
                 log(f"→  threads: {gallery_threads} gallery, {image_threads} image", "debug")
                 log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
 
@@ -392,7 +392,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # --------------------------------------------------------        
         concurrency = gallery_threads * image_threads
         current_load = (concurrency * attempt) * num_of_galleries
-        if debug:
+        if configurator.debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
             log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
@@ -400,7 +400,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # 3. Unit-based scaling
         # --------------------------------------------------------
         unit_factor = (current_load) / gallery_cap
-        if debug:
+        if configurator.debug:
             log_clarification("debug")
             log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
 
@@ -418,9 +418,9 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, min_sleep)
+        scaled_sleep = max(scaled_sleep, configurator.min_sleep)
         
-        if debug:
+        if configurator.debug:
             log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
             log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
 
@@ -428,10 +428,10 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), max_sleep)
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), configurator.max_sleep)
         
-        if debug:
-            log(f"→ Sleep after jitter (Capped at {max_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+        if configurator.debug:
+            log(f"→ Sleep after jitter (Capped at {configurator.max_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
         # --------------------------------------------------------
         # 6. Final result
@@ -455,7 +455,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
 
     # Homepage
     if query_lower == "homepage":
-        return f"{nhentai_api_base}/galleries/all?page={page}&sort=date"
+        return f"{configurator.nhentai_api_base}/galleries/all?page={page}&sort=date"
 
     # Tag-based queries (artist, group, tag, parody)
     if query_lower in ("artist", "group", "tag", "parody"):
@@ -463,7 +463,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
-        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
+        return f"{configurator.nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
     
     # Search queries
     if query_lower == "search":
@@ -472,7 +472,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(search_value, safe='"')
-        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort=date"
+        return f"{configurator.nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort=date"
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
@@ -518,7 +518,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         # Rebuild session with Tor and try again once
-                        if use_tor:
+                        if configurator.use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
@@ -562,7 +562,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
     metadata_session = get_session(referrer="API", status="return")
     
-    url = f"{nhentai_api_base}/gallery/{gallery_id}"
+    url = f"{configurator.nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, configurator.max_retries + 1):
         try:
             log_clarification("debug")
@@ -595,7 +595,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if attempt >= configurator.max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
-                if use_tor:
+                if configurator.use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
@@ -612,7 +612,7 @@ def fetch_gallery_metadata(gallery_id: int):
             if attempt >= configurator.max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
-                if use_tor:
+                if configurator.use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
@@ -666,7 +666,7 @@ def fetch_image_urls(meta: dict, page: int):
         # Try each mirror in order
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in nhentai_mirrors
+            for mirror in configurator.nhentai_mirrors
         ]
 
         log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
@@ -689,7 +689,7 @@ def get_tor_ip():
     Fetch current IP, through Tor if enabled.
     """
     try:
-        if use_tor:
+        if configurator.use_tor:
             r = requests.get("https://httpbin.org/ip",
                              proxies={
                                  "http": "socks5h://127.0.0.1:9050",

@@ -60,7 +60,7 @@ def pre_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
@@ -99,7 +99,7 @@ def install_extension():
         # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -122,7 +122,7 @@ def uninstall_extension():
     
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
     
@@ -157,7 +157,7 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -228,7 +228,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
@@ -239,7 +239,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
     # Loop through mirrors
     for url in urls:
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(1, configurator.max_retries + 1):
             try:
                 r = downloader_session.get(url, timeout=10, stream=True)
                 if r.status_code == 429:
@@ -267,11 +267,11 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                 time.sleep(wait)
 
         # If all retries for this mirror failed, move to next mirror
-        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {max_retries} attempts, trying next mirror")
+        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {configurator.max_retries} attempts, trying next mirror")
 
     # If no mirrors succeeded
     log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {max_retries} retries each: {urls}")
+    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {configurator.max_retries} retries each: {urls}")
     
     if pbar and creator:
         pbar.set_postfix_str(f"Failed Creator: {creator}")
@@ -280,7 +280,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
 # Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
@@ -294,7 +294,7 @@ def pre_batch_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
     log_clarification("debug")
@@ -305,7 +305,7 @@ def pre_gallery_download_hook(gallery_id):
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
@@ -317,7 +317,7 @@ def during_gallery_download_hook(gallery_id):
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
@@ -329,7 +329,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
@@ -341,7 +341,7 @@ def post_batch_hook():
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     

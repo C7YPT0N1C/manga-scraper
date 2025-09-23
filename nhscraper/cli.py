@@ -303,8 +303,8 @@ def update_config(args):
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
     else:
         # Use whatever excluded tags were already in config (env or default)
-        if isinstance(excluded_tags, str):
-            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in excluded_tags.split(",")])
+        if isinstance(configurator.excluded_tags, str):
+            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in configurator.excluded_tags.split(",")])
     
     update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)
