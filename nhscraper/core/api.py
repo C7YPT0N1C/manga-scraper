@@ -12,6 +12,22 @@ from pathlib import Path
 from nhscraper.core.config import *
 
 ################################################################################################################
+# GLOBAL VARIABLES
+################################################################################################################
+
+download_path = get_download_path() # Get download path from config
+max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+
+# ===============================
+# SCRAPER API
+# ===============================
+app = Flask(__name__)
+last_gallery_id = None
+running_galleries = []
+gallery_metadata = {}  # global state for /status/galleries, key=gallery_id, value={'meta': {...}, 'status': ..., 'last_checked': ...}
+state_lock = Lock()
+
+################################################################################################################
 # HTTP SESSION
 ################################################################################################################
 session = None
@@ -114,14 +130,9 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
 
         return session # Return the current session
 
-get_session(referrer="API", status="build") # Initial build
-        
-################################################################################################################
-# GLOBAL VARIABLES
-################################################################################################################
+#get_session(referrer="API", status="build") # Initial build
 
-download_path = get_download_path() # Get download path from config
-max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+################################################################################################################
 
 broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
 
@@ -151,14 +162,7 @@ def save_possible_broken_symbols(symbols: dict[str, str]):
     except Exception as e:
         logger.warning(f"Could not save broken symbols file: {e}")
 
-# ===============================
-# SCRAPER API
-# ===============================
-app = Flask(__name__)
-last_gallery_id = None
-running_galleries = []
-gallery_metadata = {}  # global state for /status/galleries, key=gallery_id, value={'meta': {...}, 'status': ..., 'last_checked': ...}
-state_lock = Lock()
+
 
 # ===============================
 # NHentai API
