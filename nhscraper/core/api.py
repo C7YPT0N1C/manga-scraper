@@ -19,10 +19,6 @@ session_lock = Lock()
 session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
 def session_builder(rebuild: bool = False):
-    log_clarification()
-    logger.info("Fetcher: Ready.")
-    log("Fetcher: Debugging Started.", "debug")
-    
     global session
     
     with session_lock:
@@ -105,7 +101,11 @@ def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
     global session
     
     log_clarification()
-    logger.info(f"{referrer}: Requesting session.")
+    logger.info("Fetcher: Ready.")
+    log("Fetcher: Debugging Started.", "debug")
+    
+    log_clarification()
+    logger.debug(f"{referrer}: Requesting session.")
     
     if not rebuild:
         # First build
@@ -114,7 +114,7 @@ def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
         # Close old session before rebuilding
         try:
             session.close()
-            logger.debug("Closed old session before rebuilding")
+            logger.debug("Closed old session.")
         except Exception as e:
             logger.debug(f"Failed to close old session: {e}")
         
@@ -772,3 +772,7 @@ if __name__ == "__main__":
     port=5000,
     debug=config.get("DEBUG", DEFAULT_DEBUG)
 )
+    
+log_clarification()
+logger.info("API: Ready.")
+log("API: Debugging Started.", "debug")
