@@ -784,8 +784,6 @@ if __name__ == "__main__":
     logger.debug("API: Ready.")
     log("API: Debugging Started.", "debug")
     
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
     app.run(
     host="0.0.0.0",
     port=5000,

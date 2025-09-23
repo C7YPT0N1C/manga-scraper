@@ -316,6 +316,8 @@ def update_config(args):
     update_env("USE_TOR", args.use_tor)
     update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
 # ------------------------------------------------------------
 # Main
@@ -373,20 +375,6 @@ def main():
     # Allows session to use correct config values on creation
     update_config(args)
     
-    log_clarification("debug")
-    log("TEST 1", "debug")
-    log(f"Updated Config:\n{config}", "debug")
-    log_clarification("debug")
-    logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
-    
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
-    log_clarification("debug")
-    log("TEST 2", "debug")
-    log(f"Updated Config:\n{config}", "debug")
-    log_clarification("debug")
-    logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
-    
     # Build initial session.
     get_session(referrer="CLI", status="build")
     
@@ -402,7 +390,7 @@ def main():
     update_env("GALLERIES", gallery_list)
     
     log_clarification("debug")
-    log(f"Updated Config:\n{config}", "debug")
+    log(f"Final Config:\n{config}", "debug")
     
     # ------------------------------------------------------------
     # Download galleries
