@@ -215,19 +215,19 @@ def process_galleries(batch_ids):
 
         gallery_attempts = 0
 
-        while gallery_attempts < max_retries:
+        while gallery_attempts < configurator.max_retries:
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
                 log_clarification("debug")
                 logger.debug("######################## GALLERY START ########################")
                 log_clarification("debug")
-                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_retries})")
+                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{configurator.max_retries})")
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
-                    if not dry_run and gallery_attempts >= max_retries:
+                    if not dry_run and gallery_attempts >= configurator.max_retries:
                         db.mark_gallery_failed(gallery_id)
                     continue
 
@@ -317,7 +317,7 @@ def process_galleries(batch_ids):
 
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery {gallery_id}: {e}")
-                if not dry_run and gallery_attempts >= max_retries:
+                if not dry_run and gallery_attempts >= configurator.max_retries:
                     db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################

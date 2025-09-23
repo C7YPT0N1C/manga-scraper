@@ -767,9 +767,9 @@ def process_deferred_creators():
     
     still_deferred = set()
     
-    while process_creators_attempt <= max_retries:
+    while process_creators_attempt <= configurator.max_retries:
         log_clarification("debug")
-        log(f"Processing creators (attempt {process_creators_attempt}/{max_retries})...")
+        log(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
         
         update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
 
@@ -918,7 +918,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
     # Loop through mirrors
     for url in urls:
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(1, configurator.max_retries + 1):
             try:
                 r = downloader_session.get(url, timeout=10, stream=True)
                 if r.status_code == 429:
@@ -946,11 +946,11 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                 time.sleep(wait)
         
         # If all retries for this mirror failed, move to next mirror
-        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {max_retries} attempts, trying next mirror")
+        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {configurator.max_retries} attempts, trying next mirror")
 
     # If no mirrors succeeded
     log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {max_retries} retries each: {urls}")
+    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {configurator.max_retries} retries each: {urls}")
     
     if pbar and creator:
         pbar.set_postfix_str(f"Failed Creator: {creator}")
