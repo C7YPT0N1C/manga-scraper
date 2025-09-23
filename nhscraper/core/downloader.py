@@ -322,6 +322,9 @@ def process_galleries(batch_ids):
 ####################################################################################################
 
 def start_batch(batch_list=None):
+    # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+    load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
+    
     active_extension.pre_batch_hook(batch_list)
 
     log_clarification()
@@ -336,7 +339,6 @@ def start_batch(batch_list=None):
         unit="gallery"
     )
 
-    load_extension(suppess_pre_run_hook=False) # Reload extension to reset any state
     active_extension.post_batch_hook()
 
 def start_downloader(gallery_list=None):
@@ -358,9 +360,6 @@ def start_downloader(gallery_list=None):
     
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
-        # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-        load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
-    
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
         worst_case_time_estimate(f"Batch {batch_num}", batch_list)
