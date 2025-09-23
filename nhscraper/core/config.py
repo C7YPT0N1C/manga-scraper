@@ -92,9 +92,10 @@ logger.addHandler(logging.NullHandler())
 # Prints Blank Line To Make Logs Look Cleaner)
 # ------------------------------------------------------------
 def log_clarification():
-    if logger.getEffectiveLevel == 20:
-        logger.info("TESTINGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG") # Only print new line if log level is INFO
-    logger.debug("")
+    if logger.getEffectiveLevel() == logging.INFO:
+        logger.info("") # Only print new line if log level is INFO
+    elif logger.getEffectiveLevel() <= logging.DEBUG:
+        logger.debug("")
 
 log_clarification()
 logger.debug("Logger: Ready.")
