@@ -23,76 +23,77 @@ def session_builder(rebuild: bool = False):
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
     
-    if rebuild:
-        log("Rebuilding HTTP session with cloudscraper", "debug")
-    else:
-        log("Building HTTP session with cloudscraper", "debug")
+    with session_lock:
+        global session
+        
+        if rebuild:
+            log("Rebuilding HTTP session with cloudscraper", "debug")
+        else:
+            log("Building HTTP session with cloudscraper", "debug")
 
-    # Random browser profiles (only randomized if flag is True)
-    DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
-    RandomiseBrowserProfile = True
-    browsers = [
-        {"browser": "chrome", "platform": "windows", "mobile": False},
-        {"browser": "chrome", "platform": "windows", "mobile": True},
-        {"browser": "chrome", "platform": "linux", "mobile": False},
-        {"browser": "chrome", "platform": "linux", "mobile": True},    
-        {"browser": "firefox", "platform": "windows", "mobile": False},
-        {"browser": "firefox", "platform": "windows", "mobile": True},
-        {"browser": "firefox", "platform": "linux", "mobile": False},
-        {"browser": "firefox", "platform": "linux", "mobile": True},
-    ]
-    browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
+        # Random browser profiles (only randomized if flag is True)
+        DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
+        RandomiseBrowserProfile = True
+        browsers = [
+            {"browser": "chrome", "platform": "windows", "mobile": False},
+            {"browser": "chrome", "platform": "windows", "mobile": True},
+            {"browser": "chrome", "platform": "linux", "mobile": False},
+            {"browser": "chrome", "platform": "linux", "mobile": True},    
+            {"browser": "firefox", "platform": "windows", "mobile": False},
+            {"browser": "firefox", "platform": "windows", "mobile": True},
+            {"browser": "firefox", "platform": "linux", "mobile": False},
+            {"browser": "firefox", "platform": "linux", "mobile": True},
+        ]
+        browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
-    built_session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
+        built_session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
 
-    # Random User-Agents (only randomized if flag is True)
-    DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    RandomiseUserAgent = True    
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
-        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1",
-    ]
-    ua = random.choice(user_agents) if RandomiseUserAgent else DefaultUserAgent # Select random User-Agent
+        # Random User-Agents (only randomized if flag is True)
+        DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        RandomiseUserAgent = True    
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1",
+        ]
+        ua = random.choice(user_agents) if RandomiseUserAgent else DefaultUserAgent # Select random User-Agent
 
-    # Random Referers (only randomized if flag is True)
-    DefaultReferer = "https://nhentai.net/"
-    RandomiseReferer = False   
-    referers = [
-        "https://nhentai.net/",
-        "https://google.com/",
-        "https://duckduckgo.com/",
-        "https://bing.com/",
-    ]
-    referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
+        # Random Referers (only randomized if flag is True)
+        DefaultReferer = "https://nhentai.net/"
+        RandomiseReferer = False   
+        referers = [
+            "https://nhentai.net/",
+            "https://google.com/",
+            "https://duckduckgo.com/",
+            "https://bing.com/",
+        ]
+        referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
 
-    built_session.headers.update({
-        "User-Agent": ua,
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": referer,
-    })
+        built_session.headers.update({
+            "User-Agent": ua,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": referer,
+        })
 
-    if rebuild:
-        log("Rebuilt HTTP session with cloudscraper", "debug")
-    else:
-        log("Built HTTP session with cloudscraper", "debug")
-    
-    if session_use_tor:
-        proxy = "socks5h://127.0.0.1:9050"
-        built_session.proxies = {"http": proxy, "https": proxy}
-        logger.info(f"Using Tor proxy: {proxy}")
-    else:
-        logger.info("Not using Tor proxy")
-    
-    session = built_session # Update global session
-    logger.debug(f"Session ready: {session}")
-    return session
+        if rebuild:
+            log("Rebuilt HTTP session with cloudscraper", "debug")
+        else:
+            log("Built HTTP session with cloudscraper", "debug")
+        
+        if session_use_tor:
+            proxy = "socks5h://127.0.0.1:9050"
+            built_session.proxies = {"http": proxy, "https": proxy}
+            logger.info(f"Using Tor proxy: {proxy}")
+        else:
+            logger.info("Not using Tor proxy")
+        
+        session = built_session # Update global session
+        #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
+        return session
 
 def build_session(rebuild=False):
-    global session
-    
     # Ensure session is ready
     # Uses cloudscraper session by default.
     with session_lock:
