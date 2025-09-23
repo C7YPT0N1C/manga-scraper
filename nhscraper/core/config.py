@@ -67,8 +67,7 @@ def log_clarification():
 
     if level == logging.INFO:
         # Force flush so it immediately shows in terminal
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        logger.info("")
     else:
         logger.debug("")  # blank debug line
 
