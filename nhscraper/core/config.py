@@ -53,7 +53,7 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
     # Logger level: DEBUG ensures all messages reach file handler
     logger.setLevel(logging.DEBUG)
 
-def log_clarification(clarification_type: str = "debug"):
+def log_clarification(clarification_type: str = "info"):
     """
     Prints a blank line in the terminal if the console handler is at INFO,
     or adds a blank debug line otherwise.
