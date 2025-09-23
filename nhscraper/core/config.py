@@ -63,8 +63,8 @@ def log_clarification(clarification_type: str = "info"):
     console_handler = next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
     if console_handler and console_handler.level == logging.INFO and clarification_type == "info":
         # direct blank line to console
-        console_handler.stream.write("\n")
-        #console_handler.flush()
+        #console_handler.stream.write("\n")
+        console_handler.flush()
         print("")
     logger.debug("")  # goes to file (and console if debug mode)
 
