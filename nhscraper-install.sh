@@ -179,10 +179,10 @@ MIN_SLEEP=
 MAX_SLEEP=
 
 # Download Options
-USE_TOR=true
-DRY_RUN=false
-CALM=false
-DEBUG=false
+USE_TOR=True
+DRY_RUN=False
+CALM=False
+DEBUG=False
 EOF
     echo "Environment file created at $ENV_FILE"
     echo "Environment updated."

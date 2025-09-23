@@ -150,6 +150,7 @@ BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
 DEFAULT_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
 download_path = DEFAULT_DOWNLOAD_PATH # Load initial value to public variable on import
 
+
 DEFAULT_DOUJIN_TXT_PATH="/root/Doujinshi_IDs.txt"
 if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
     # Create an empty file with a comment line
@@ -158,59 +159,82 @@ if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
     logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
 doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH # Load initial value to public variable on import
 
+
 # Extensions
 DEFAULT_EXTENSION="skeleton"
 extension = DEFAULT_EXTENSION # Load initial value to public variable on import
+
 DEFAULT_EXTENSION_DOWNLOAD_PATH="/opt/nhentai-scraper/downloads"
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH # Load initial value to public variable on import
+
 
 # APIs and Mirrors
 DEFAULT_NHENTAI_API_BASE="https://nhentai.net/api"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE # Load initial value to public variable on import
+
 DEFAULT_NHENTAI_MIRRORS="https://i.nhentai.net"
 nhentai_mirrors = DEFAULT_NHENTAI_MIRRORS # Load initial value to public variable on import
+
 
 # Gallery ID selection
 DEFAULT_PAGE_RANGE_START=1
 homepage_range_start = DEFAULT_PAGE_RANGE_START # Load initial value to public variable on import
+
 DEFAULT_PAGE_RANGE_END=2
 homepage_range_end = DEFAULT_PAGE_RANGE_END # Load initial value to public variable on import
+
 DEFAULT_RANGE_START=500000
 range_start = DEFAULT_RANGE_START # Load initial value to public variable on import
+
 DEFAULT_RANGE_END=600000
 range_end = DEFAULT_RANGE_END # Load initial value to public variable on import
+
 DEFAULT_GALLERIES=""
 galleries = DEFAULT_GALLERIES # Load initial value to public variable on import
+
 
 # Filters
 DEFAULT_EXCLUDED_TAGS="snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated"
 excluded_tags = DEFAULT_EXCLUDED_TAGS # Load initial value to public variable on import
+
 DEFAULT_LANGUAGE="english"
 language = DEFAULT_LANGUAGE # Load initial value to public variable on import
+
 DEFAULT_TITLE_TYPE="english"
 title_type = DEFAULT_TITLE_TYPE # Load initial value to public variable on import
+
 
 # Threads
 DEFAULT_THREADS_GALLERIES=2
 threads_galleries = DEFAULT_THREADS_GALLERIES # Load initial value to public variable on import
+
 DEFAULT_THREADS_IMAGES=10
 threads_images = DEFAULT_THREADS_IMAGES # Load initial value to public variable on import
+
 DEFAULT_MAX_RETRIES=3
 max_retries = DEFAULT_MAX_RETRIES # Load initial value to public variable on import
+
 DEFAULT_MIN_SLEEP=0.5
 min_sleep = DEFAULT_MIN_SLEEP # Load initial value to public variable on import
+
 DEFAULT_MAX_SLEEP=100
 max_sleep = DEFAULT_MAX_SLEEP # Load initial value to public variable on import
+
 
 # Download Options
 DEFAULT_USE_TOR=True
 use_tor = DEFAULT_USE_TOR # Load initial value to public variable on import
+
 DEFAULT_DRY_RUN=False
 dry_run = DEFAULT_DRY_RUN # Load initial value to public variable on import
-DEFAULT_CALM=True
+
+
+DEFAULT_CALM=False
 calm = DEFAULT_CALM # Load initial value to public variable on import
+
 DEFAULT_DEBUG=False
 debug = DEFAULT_DEBUG # Load initial value to public variable on import
+
 
 # ------------------------------------------------------------
 # Helper: safe int from env
