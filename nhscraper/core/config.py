@@ -35,7 +35,7 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
 # ------------------------------------------------------------
 def log_clarification():
     if logger.getEffectiveLevel == 20:
-        print() # Only print new line if log level is INFO
+        print("") # Only print new line if log level is INFO
     logger.debug("")
 
 log_clarification()

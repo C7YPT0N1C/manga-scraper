@@ -30,7 +30,7 @@ def load_extension():
     ext_name = extension
     logger.debug(f"'Extension' Value: {extension}") # DEBUGGING
     active_extension = get_selected_extension(ext_name)
-    logger.info(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
+    logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')}")
 
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
@@ -40,7 +40,7 @@ def load_extension():
     else:
         logger.info(f"[DRY RUN] Downloader: Skipping creation of: {download_location}")
 
-    logger.info(f"Downloader: Using download location: {download_location}")
+    logger.info(f"Downloading Gallery To: {download_location}")
 
 ####################################################################################################
 # UTILITIES
@@ -215,9 +215,9 @@ def process_galleries(batch_ids):
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
                 log_clarification()
-                logger.info("######################## GALLERY START ########################")
+                logger.debug("######################## GALLERY START ########################")
                 log_clarification()
-                logger.info(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_retries})")
+                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{max_retries})")
 
                 meta = fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
@@ -323,8 +323,8 @@ def start_batch(batch_list=None):
     active_extension.pre_batch_hook(batch_list)
 
     log_clarification()
-    logger.info(f"Downloader: Galleries to process: {batch_list[0]} -> {batch_list[-1]} ({len(batch_list)})"
-                if len(batch_list) > 1 else f"Downloader: Galleries to process: {batch_list[0]} ({len(batch_list)})")
+    logger.info(f"Galleries to process: {batch_list[0]} -> {batch_list[-1]} ({len(batch_list)})"
+                if len(batch_list) > 1 else f"Galleries to process: {batch_list[0]} ({len(batch_list)})")
 
     thread_map(
         lambda gid: process_galleries([gid]),
@@ -343,7 +343,7 @@ def start_downloader(gallery_list=None):
     """
     
     log_clarification()
-    logger.info("Downloader: Ready.")
+    logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -352,10 +352,6 @@ def start_downloader(gallery_list=None):
     
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     load_extension()
-    
-    log_clarification()
-    if not gallery_list:
-        logger.error("No galleries specified. Use --galleries or --range.")
     
     worst_case_time_estimate(f"Run", gallery_list)
     
