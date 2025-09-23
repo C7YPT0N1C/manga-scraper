@@ -343,7 +343,7 @@ def start_downloader(gallery_list=None):
     """
     
     log_clarification()
-    logger.info("Downloader: Ready.")
+    logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
