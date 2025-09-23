@@ -54,7 +54,7 @@ def pre_run_hook():
     """
     
     log_clarification()
-    logger.debug(f"Extension: {EXTENSION_NAME}: Ready.")
+    logger.info(f"Extension: {EXTENSION_NAME}: Ready.")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.

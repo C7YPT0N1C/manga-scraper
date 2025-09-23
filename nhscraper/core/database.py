@@ -20,7 +20,7 @@ def init_db():
     global session
 
     log_clarification()
-    logger.debug("Database: Ready.")
+    logger.info("Database: Ready.")
     log("Database: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
