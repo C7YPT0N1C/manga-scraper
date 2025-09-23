@@ -8,7 +8,7 @@ from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
 from nhscraper.core.config import *
-from nhscraper.core.api import get_meta_tags, safe_name, clean_title
+from nhscraper.core.api import get_meta_tags, make_filesystem_safe, clean_title
 
 ####################################################################################################################
 # Global variables
@@ -637,7 +637,7 @@ def update_creator_manga(meta):
         return
 
     gallery_meta = return_gallery_metas(meta)
-    creators = [safe_name(c) for c in gallery_meta.get("creator", [])]
+    creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
     if not creators:
         return
 

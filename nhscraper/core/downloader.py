@@ -8,7 +8,7 @@ from nhscraper.core.config import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
-    fetch_image_urls, get_meta_tags, safe_name, clean_title
+    fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title
 )
 from nhscraper.extensions.extension_loader import get_selected_extension  # Import active extension
 
@@ -94,7 +94,7 @@ def build_gallery_path(meta, iteration: dict = None):
             value = value[0] if value else "Unknown"
         if not isinstance(value, str):
             value = str(value)
-        path_parts.append(safe_name(value))
+        path_parts.append(make_filesystem_safe(value))
 
     return os.path.join(*path_parts)
 
@@ -260,7 +260,7 @@ def process_galleries(gallery_ids):
                     break  # exit retry loop, skip gallery
 
                 # --- Prepare primary folder (first creator only) ---
-                primary_creator = safe_name(creators[0]) if creators else "Unknown"
+                primary_creator = make_filesystem_safe(creators[0]) if creators else "Unknown"
                 log(f"Downloader: Primary Creator for Gallery {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
@@ -271,7 +271,7 @@ def process_galleries(gallery_ids):
 
                 # --- Symlink all additional creators to the primary folder ---
                 for extra_creator in creators[1:]:
-                    extra_creator_safe = safe_name(extra_creator)
+                    extra_creator_safe = make_filesystem_safe(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
@@ -305,7 +305,7 @@ def process_galleries(gallery_ids):
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=image_threads) as executor:
                         if not downloader_dry_run:
-                            local_session = get_session(referrer="Downloader", build_status="none", return_session=True)
+                            local_session = get_session(referrer="Downloader", status="return")
                             submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                         else:
                             for _ in tasks:

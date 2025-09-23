@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # core/config_helper.py
 
-import os, logging
-
 # ------------------------------------------------------------
 # Gallery Title Cleaning
 # ------------------------------------------------------------

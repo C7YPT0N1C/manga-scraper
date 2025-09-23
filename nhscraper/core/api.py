@@ -18,16 +18,36 @@ session = None
 session_lock = Lock()
 session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
-def session_builder(build_status: str = "build"):
+def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
+    """
+    Ensure and return a ready cloudscraper session.
+    - If status="rebuild", rebuilds the session.
+    - If return_session=True, returns the current session without rebuilding.
+    """
+
     global session
-    
+
+    log_clarification()
+    logger.info("Fetcher: Ready.")
+    log("Fetcher: Debugging Started.", "debug")
+
+    log_clarification()
+    # If status is "none", report that Referrer is requesting to only retrieve session, else report build / rebuild.
+    # Session is always returned.
+    logger.debug(f"{referrer}: Requesting to {status if status != 'none' else status + ' and retrieve session'}.")
+
     with session_lock:
-        if build_status=="rebuild":
+        # Return current session if no build requested
+        if status not in ["build", "rebuild"]:
+            return session
+        
+        # Log if building or rebuilding session
+        if status == "rebuild":
             log("Rebuilding HTTP session with cloudscraper", "debug")
         else:
             log("Building HTTP session with cloudscraper", "debug")
 
-        # Random browser profiles (only randomized if flag is True)
+        # Random browser profiles (only randomised if flag is True)
         DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
         RandomiseBrowserProfile = True
         browsers = [
@@ -40,12 +60,13 @@ def session_builder(build_status: str = "build"):
             {"browser": "firefox", "platform": "linux", "mobile": False},
             {"browser": "firefox", "platform": "linux", "mobile": True},
         ]
-        browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
+        browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile
 
-        if session is None or build_status == "rebuild":
-            session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
+        # Create or rebuild session if needed
+        if session is None or status == "rebuild":
+            session = cloudscraper.create_scraper(browser=browser_profile)
 
-        # Random User-Agents (only randomized if flag is True)
+        # Random User-Agents (only randomised if flag is True)
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         RandomiseUserAgent = True    
         user_agents = [
@@ -54,9 +75,9 @@ def session_builder(build_status: str = "build"):
             "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
             "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1",
         ]
-        ua = random.choice(user_agents) if RandomiseUserAgent else DefaultUserAgent # Select random User-Agent
+        ua = random.choice(user_agents) if RandomiseUserAgent else DefaultUserAgent
 
-        # Random Referers (only randomized if flag is True)
+        # Random Referers (only randomised if flag is True)
         DefaultReferer = "https://nhentai.net/"
         RandomiseReferer = False   
         referers = [
@@ -65,9 +86,9 @@ def session_builder(build_status: str = "build"):
             "https://duckduckgo.com/",
             "https://bing.com/",
         ]
-        referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
+        referer = random.choice(referers) if RandomiseReferer else DefaultReferer
 
-        # Update headers (mutate existing session)
+        # Update headers
         session.headers.update({
             "User-Agent": ua,
             "Accept": "application/json, text/plain, */*",
@@ -75,12 +96,7 @@ def session_builder(build_status: str = "build"):
             "Referer": referer,
         })
 
-        if build_status=="rebuild":
-            log("Rebuilt HTTP session with cloudscraper", "debug")
-        else:
-            log("Built HTTP session with cloudscraper", "debug")
-        
-        # Update proxies (mutate existing session)
+        # Update proxies
         if session_use_tor:
             proxy = "socks5h://127.0.0.1:9050"
             session.proxies = {"http": proxy, "https": proxy}
@@ -88,42 +104,17 @@ def session_builder(build_status: str = "build"):
         else:
             session.proxies = {}
             logger.info("Not using Tor proxy")
-        
-        logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
-        return session
-
-def get_session(referrer: str = "Undisclosed Module", build_status: str = "build", return_session: bool = False):
-    """
-    Ensure session is ready.
-    If build_status="rebuild", calls session_builder to rebuild the session.
-    """
-    
-    global session
-    
-    log_clarification()
-    logger.info("Fetcher: Ready.")
-    log("Fetcher: Debugging Started.", "debug")
-    
-    log_clarification()
-    logger.debug(f"{referrer}: Requesting session.")
-    
-    if build_status == "none" or return_session:
-        return session
-    else: 
-        if build_status == "build":
-            # First build
-            session_builder(build_status="build")
-        else:
-            # Close old session before rebuilding
-            try:
-                session.close()
-                logger.debug("Closed old session.")
-            except Exception as e:
-                logger.debug(f"Failed to close old session: {e}")
             
-            session_builder(build_status="rebuild")
+        # Log completion of building/rebuilding
+        if status == "rebuild":
+            log("Rebuilt HTTP session with cloudscraper", "debug")
+        else:
+            log("Built HTTP session with cloudscraper", "debug")
+        #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed.
 
-get_session(referrer="API", build_status="build", return_session=False) # Initial build
+        return session # Return the current session
+
+get_session(referrer="API", status="build") # Initial build
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -243,7 +234,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
     #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug") # DEBUGGING
     return names
 
-def safe_name(s: str) -> str:
+def make_filesystem_safe(s: str) -> str:
     return s.replace("/", "-").replace("\\", "-").strip()
 
 def clean_title(meta_or_title):
@@ -324,7 +315,7 @@ def clean_title(meta_or_title):
     if possible_broken_symbols:
         save_possible_broken_symbols(possible_broken_symbols)
 
-    return safe_name(title)
+    return make_filesystem_safe(title)
 
 ################################################################################################################
 #  NHentai API Handling
@@ -482,7 +473,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
     ids: set[int] = set()
     page = start_page
     
-    gallery_ids_session = get_session(referrer="API", build_status="none", return_session=True)
+    gallery_ids_session = get_session(referrer="API", status="return")
     
     try:
         log_clarification()
@@ -516,7 +507,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         # Rebuild session with Tor and try again once
                         if session_use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            gallery_ids_session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                            gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
                                 resp = gallery_ids_session.get(url, timeout=10)
                                 resp.raise_for_status()
@@ -554,7 +545,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 # FETCH DOUJINSHI METADATA
 # ===============================
 def fetch_gallery_metadata(gallery_id: int):
-    metadata_session = get_session(referrer="API", build_status="none", return_session=True)
+    metadata_session = get_session(referrer="API", status="return")
     
     url = f"{API_BASE}/gallery/{gallery_id}"
     for attempt in range(1, max_api_retries + 1):
@@ -591,7 +582,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    metadata_session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                    metadata_session = get_session(referrer="API", status="rebuild")
                     try:
                         resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
@@ -608,7 +599,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    metadata_session = get_session(referrer="API", build_status="rebuild", return_session=False)
+                    metadata_session = get_session(referrer="API", status="rebuild")
                     try:
                         resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
