@@ -966,7 +966,7 @@ def pre_batch_hook(gallery_list):
     
     global LOCAL_SOURCE_ID, CATEGORY_ID
     
-    pre_run_hook() # Ensure pre-run hook is called at least once.
+    #pre_run_hook() # Ensure pre-run hook is called at least once.
     
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()

@@ -355,7 +355,6 @@ def start_downloader(gallery_list=None):
     
     BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
-        if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
             load_extension(skip_pre_run_hook=False) # Load extension and call pre_run_hook.
         
@@ -368,13 +367,14 @@ def start_downloader(gallery_list=None):
         
             start_batch(batch_list) # Start batch.
             
-            log_clarification()
-            logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
-            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
+            if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
+                log_clarification()
+                logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
+                time.sleep(BATCH_SLEEP_TIME) # Pause between batches
         
-        else: # Last batch
-            log_clarification()
-            logger.info(f"All batches complete.")
+            else: # Last batch
+                log_clarification()
+                logger.info(f"All batches complete.")
     
     load_extension(skip_pre_run_hook=True) # Load extension without calling pre_run_hook again.
     active_extension.post_run_hook()

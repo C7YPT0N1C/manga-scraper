@@ -287,7 +287,7 @@ def pre_batch_hook(gallery_list):
     log_clarification()
     log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
     
-    pre_run_hook() # Ensure pre-run hook is called at least once.
+    #pre_run_hook() # Ensure pre-run hook is called at least once.
     
     #log_clarification()
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
