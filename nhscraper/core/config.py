@@ -53,10 +53,6 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
     # Logger level: DEBUG ensures all messages reach file handler
     logger.setLevel(logging.DEBUG)
 
-# ------------------------------------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------------------------------------
 def log_clarification():
     """
     Prints a blank line in the terminal if logging level is INFO,
@@ -64,10 +60,13 @@ def log_clarification():
     """
     logger = logging.getLogger("nhscraper")
     level = logger.getEffectiveLevel()
-
+    
     if level == logging.INFO:
-        # Force flush so it immediately shows in terminal
-        logger.info("")
+        # Log a newline and immediately flush the handler
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                handler.stream.write("\n")
+                handler.flush()
     else:
         logger.debug("")  # blank debug line
 
