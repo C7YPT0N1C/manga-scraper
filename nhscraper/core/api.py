@@ -77,7 +77,7 @@ def session_builder(rebuild: bool = False):
     
     if session_use_tor:
         proxy = "socks5h://127.0.0.1:9050"
-        session.proxies = {"http": proxy, "https": proxy}
+        built_session.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
     else:
         logger.info("Not using Tor proxy")
