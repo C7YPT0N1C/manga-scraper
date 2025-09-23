@@ -386,8 +386,7 @@ def normalise_config():
             config[key] = default_val
             update_env(key, default_val)
 
-# Run normalisation immediately so .env is populated
-normalise_config()
+# normalise_config() is called by CLI to normalise and populate .env
 
 # ------------------------------------------------------------
 # Dynamic download path
