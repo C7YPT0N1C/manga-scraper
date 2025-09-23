@@ -57,7 +57,7 @@ MAX_GENRES_PARSED = 100
 ############################################
 
 # Keep a persistent session for cookie-based login
-_session = None
+graphql_session = None
 
 # Thread locks for file operations
 _popular_genres_lock = threading.Lock()
@@ -347,7 +347,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
     
-    global _session
+    global graphql_session
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
@@ -356,9 +356,9 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
         return None
 
     try:
-        if _session is None:
+        if graphql_session is None:
             # Initialise session and login once
-            _session = requests.Session()
+            graphql_session = requests.Session()
             login_payload = {
                 "username": AUTH_USERNAME,
                 "password": AUTH_PASSWORD,
@@ -366,7 +366,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
             
             login_url = GRAPHQL_URL.replace("/graphql", "/auth/login")
             
-            resp = _session.post(login_url, json=login_payload, headers={"Content-Type": "application/json"})
+            resp = graphql_session.post(login_url, json=login_payload, headers={"Content-Type": "application/json"})
             resp.raise_for_status()
             if resp.status_code != 200:
                 logger.error(f"GraphQL: Login failed with status {resp.status_code}: {resp.text}")
@@ -377,7 +377,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
         if debug == True:
             log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
         
-        response = _session.post(
+        response = graphql_session.post(
             GRAPHQL_URL,
             headers=headers,
             json=payload
@@ -393,6 +393,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     except requests.RequestException as e:
         logger.error(f"GraphQL: Request failed: {e}")
         return None
+    
     except ValueError as e:
         logger.error(f"GraphQL: Failed to decode JSON response: {e}")
         logger.error(f"Raw response: {response.text if response else 'No response'}")
