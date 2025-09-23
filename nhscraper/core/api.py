@@ -96,18 +96,17 @@ def session_builder(rebuild: bool = False):
 def build_session(rebuild=False):
     # Ensure session is ready
     # Uses cloudscraper session by default.
-    with session_lock:
-        if session is None:
-            # First build
-            session_builder(rebuild=False)
-        elif rebuild:
-            # Close old session before rebuilding
-            try:
-                session.close()
-                logger.debug("Closed old session before rebuilding")
-            except Exception as e:
-                logger.debug(f"Failed to close old session: {e}")
-            session_builder(rebuild=True)
+    if session is None:
+        # First build
+        session_builder(rebuild=False)
+    elif rebuild:
+        # Close old session before rebuilding
+        try:
+            session.close()
+            logger.debug("Closed old session before rebuilding")
+        except Exception as e:
+            logger.debug(f"Failed to close old session: {e}")
+        session_builder(rebuild=True)
         
 ################################################################################################################
 # GLOBAL VARIABLES
