@@ -259,13 +259,14 @@ def clean_title(meta_or_title):
         """
         
         try:
+            os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
             with file_lock:
                 existing_symbols = load_possible_broken_symbols()
                 existing_symbols.update(symbols)
                 with open(broken_symbols_file, "w", encoding="utf-8") as f:
                     json.dump(existing_symbols, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.warning(f"Saving broken symbols file failed: {e}")
+            logger.error(f"Saving broken symbols file failed: {e}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
