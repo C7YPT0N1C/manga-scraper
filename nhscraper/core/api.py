@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from threading import Thread, Lock
 from pathlib import Path
 
+from nhscraper.core import configurator
 from nhscraper.core.configurator import *
 
 ################################################################################################################
