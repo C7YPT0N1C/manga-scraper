@@ -235,7 +235,7 @@ def clean_title(meta_or_title):
     broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
     
     log_clarification("debug")
-    logger.info(f"Broken symbols file: {broken_symbols_file}")
+    logger.debug(f"Broken symbols file: {broken_symbols_file}")
 
     def load_possible_broken_symbols() -> dict[str, str]:
         """
