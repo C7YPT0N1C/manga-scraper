@@ -52,7 +52,10 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     log_clarification("debug")
     # If status is "none", report that Referrer is requesting to only retrieve session, else report build / rebuild.
     # Session is always returned.
-    logger.debug(f"{referrer}: Requesting to {status if status != 'none' else status + ' and retrieve session'}.")
+    if status == "none":
+        logger.debug(f"{referrer}: Requesting to only retrieve session.")
+    else:
+        logger.debug(f"{referrer}: Requesting to {status} session.")
 
     with session_lock:
         # Return current session if no build requested
@@ -134,7 +137,7 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
 
 ################################################################################################################
 
-broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+broken_symbols_file = None # Path to possible broken symbols file, set in clean_title()
 
 def load_possible_broken_symbols() -> dict[str, str]:
     """
@@ -161,8 +164,6 @@ def save_possible_broken_symbols(symbols: dict[str, str]):
             json.dump(symbols, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning(f"Could not save broken symbols file: {e}")
-
-
 
 # ===============================
 # NHentai API
@@ -252,6 +253,9 @@ def clean_title(meta_or_title):
     Returns:
         str: Sanitised title.
     """
+    
+    # Ensure global broken symbols file path is set
+    broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
@@ -354,6 +358,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         sleep_time = random.uniform(base_min, base_max)
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
         log("------------------------------", "debug")
+        log_clarification()
         return sleep_time
 
     # ------------------------------------------------------------
@@ -433,6 +438,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         log_clarification("debug")
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
         log("------------------------------", "debug")
+        log_clarification()
         return sleep_time
 
 #####################################################################################################################################################################
