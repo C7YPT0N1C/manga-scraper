@@ -427,4 +427,4 @@ def get_mirrors():
     mirrors = [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
     return mirrors
 
-MIRRORS = get_mirrors()
+MIRRORS = get_mirrors() # Global mirrors list
