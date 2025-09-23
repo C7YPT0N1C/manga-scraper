@@ -376,7 +376,7 @@ def start_downloader(gallery_list=None):
                 log_clarification()
                 logger.info(f"All batches complete.")
     
-    load_extension(skip_pre_run_hook=True) # Load extension without calling pre_run_hook again.
+    load_extension(skip_pre_run_hook=False) # Load extension without calling pre_run_hook again.
     active_extension.post_run_hook()
     
     end_time = time.perf_counter()  # End timer
