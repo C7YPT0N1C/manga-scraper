@@ -29,19 +29,6 @@ if not logger.handlers: # Only add default handler if none exist (prevents dupli
     # Default logger level = INFO
     logger.setLevel(logging.INFO)
 
-# ------------------------------------------------------------
-# LOG CLARIFICATION
-# Prints Blank Line To Make Logs Look Cleaner)
-# ------------------------------------------------------------
-def log_clarification():
-    if logger.getEffectiveLevel == 20:
-        logger.info("") # Only print new line if log level is INFO
-    logger.debug("")
-
-log_clarification()
-logger.debug("Logger: Ready.")
-logger.debug("Logger: Debugging Started.")
-
 class ConditionalFormatter(logging.Formatter):
     """
     Custom formatter:
@@ -99,6 +86,19 @@ def setup_logger(calm=False, debug=False):
 # --- Placeholder logger so imports don’t crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 logger.addHandler(logging.NullHandler())
+
+# ------------------------------------------------------------
+# LOG CLARIFICATION
+# Prints Blank Line To Make Logs Look Cleaner)
+# ------------------------------------------------------------
+def log_clarification():
+    if logger.getEffectiveLevel == 20:
+        logger.info("") # Only print new line if log level is INFO
+    logger.debug("")
+
+log_clarification()
+logger.debug("Logger: Ready.")
+logger.debug("Logger: Debugging Started.")
 
 def log(message: str, log_type: str = "info"):
     """
