@@ -18,6 +18,8 @@ from nhscraper.core.configurator import *
 
 configurator.download_path = get_download_path() # Get download path from config
 
+file_lock = Lock()
+
 # ===============================
 # SCRAPER API
 # ===============================
@@ -231,6 +233,9 @@ def clean_title(meta_or_title):
     
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(configurator.download_path, "possible_broken_symbols.json")
+    
+    log_clarification("debug")
+    logger.info(f"Broken symbols file: {broken_symbols_file}")
 
     def load_possible_broken_symbols() -> dict[str, str]:
         """
@@ -239,10 +244,11 @@ def clean_title(meta_or_title):
         
         if os.path.exists(broken_symbols_file):
             try:
-                with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, dict):
-                        return data
+                with file_lock:
+                    with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, dict):
+                            return data
             except Exception as e:
                 logger.warning(f"Could not load broken symbols file: {e}")
         return {}
@@ -253,8 +259,11 @@ def clean_title(meta_or_title):
         """
         
         try:
-            with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                json.dump(symbols, f, ensure_ascii=False, indent=2)
+            with file_lock:
+                existing_symbols = load_possible_broken_symbols()
+                existing_symbols.update(symbols)
+                with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                    json.dump(existing_symbols, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"Could not save broken symbols file: {e}")
     
