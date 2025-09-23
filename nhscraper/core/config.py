@@ -10,24 +10,12 @@ from nhscraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKL
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = "/opt/nhentai-scraper/logs"
+LOG_DIR = "/tmp/nhentai-scraper/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 RUNTIME_LOG_FILE = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
-
-# --- Placeholder logger so imports don’t crash before setup_logger() runs ---
-logger = logging.getLogger("nhscraper")
-if not logger.handlers: # Only add default handler if none exist (prevents duplicates on reload)
-    placeholder_formatter = logging.Formatter("[%(levelname)s] %(message)s")
-    placeholder_console = logging.StreamHandler()
-    placeholder_console.setLevel(logging.INFO)   # Default to INFO
-    placeholder_console.setFormatter(placeholder_formatter)
-    logger.addHandler(placeholder_console)
-
-    # Default logger level = INFO
-    logger.setLevel(logging.INFO)
 
 class ConditionalFormatter(logging.Formatter):
     """
@@ -35,7 +23,6 @@ class ConditionalFormatter(logging.Formatter):
     - INFO: only show message
     - Other levels: include [LEVEL] prefix
     """
-    
     def format(self, record):
         if record.levelno == logging.INFO:
             self._style._fmt = "%(message)s"
@@ -43,19 +30,39 @@ class ConditionalFormatter(logging.Formatter):
             self._style._fmt = "[%(levelname)s] %(message)s"
         return super().format(record)
 
+# --- Placeholder logger so logging during module imports don’t crash before setup_logger() runs ---
+logger = logging.getLogger("nhscraper")
+if not logger.handlers:  # Only add default handler if none exist (prevents duplicates on reload)
+    
+    # Console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)  # Default to INFO for imports
+    ch.setFormatter(ConditionalFormatter())
+    logger.addHandler(ch)
+
+    # File handler: always DEBUG
+    try:
+        fh = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        logger.addHandler(fh)
+    except Exception as e:
+        # Silently ignore file handler errors in placeholder
+        pass
+
+    # Logger level: DEBUG ensures all messages reach file handler
+    logger.setLevel(logging.DEBUG)
+
 def setup_logger(calm=False, debug=False):
     """
     Configure the nhscraper logger.
     - Console respects calm/debug flags with conditional formatting
     - File logs always DEBUG with full level info
     """
-    
     logger = logging.getLogger("nhscraper")
     logger.handlers.clear()  # Remove previous handlers
 
-    # ----------------------------
     # Console handler
-    # ----------------------------
     ch = logging.StreamHandler()
     if debug:
         ch.setLevel(logging.DEBUG)
@@ -66,9 +73,7 @@ def setup_logger(calm=False, debug=False):
     ch.setFormatter(ConditionalFormatter())
     logger.addHandler(ch)
 
-    # ----------------------------
     # File handler: always DEBUG
-    # ----------------------------
     fh = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8")
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
@@ -79,13 +84,9 @@ def setup_logger(calm=False, debug=False):
 
     # Initialisation summary
     logger.debug("Logger initialised. Console level: %s",
-                "DEBUG" if debug else "WARNING" if calm else "INFO")
-    
-    return logger
+                 "DEBUG" if debug else "WARNING" if calm else "INFO")
 
-# --- Placeholder logger so logging during module imports don’t crash before setup_logger() runs ---
-logger = logging.getLogger("nhscraper")
-logger.addHandler(logging.NullHandler())
+    return logger
 
 # ------------------------------------------------------------
 # LOG CLARIFICATION
