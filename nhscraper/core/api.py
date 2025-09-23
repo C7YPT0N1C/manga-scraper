@@ -16,7 +16,6 @@ from nhscraper.core.config import *
 ################################################################################################################
 
 download_path = get_download_path() # Get download path from config
-max_api_retries = config.get("MAX_RETRIES", DEFAULT_MAX_RETRIES)
 
 # ===============================
 # SCRAPER API
@@ -32,10 +31,11 @@ state_lock = Lock()
 ################################################################################################################
 session = None
 session_lock = Lock()
-session_use_tor = config.get("USE_TOR", DEFAULT_USE_TOR)
 
 def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     """
+    This is one this module's entrypoints.
+    
     Ensure and return a ready cloudscraper session.
     - If status="rebuild", rebuilds the session.
     - If return_session=True, returns the current session without rebuilding.
@@ -46,6 +46,8 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     log_clarification()
     logger.info("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
     log_clarification()
     # If status is "none", report that Referrer is requesting to only retrieve session, else report build / rebuild.
@@ -113,7 +115,7 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         })
 
         # Update proxies
-        if session_use_tor:
+        if use_tor:
             proxy = "socks5h://127.0.0.1:9050"
             session.proxies = {"http": proxy, "https": proxy}
             logger.info(f"Using Tor proxy: {proxy}")
@@ -167,7 +169,6 @@ def save_possible_broken_symbols(symbols: dict[str, str]):
 # ===============================
 # NHentai API Endpoints
 #
-API_BASE = config.get("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
 # Default base URL: https://nhentai.net/api
 #
 # 1. Homepage
@@ -259,9 +260,9 @@ def clean_title(meta_or_title):
     if isinstance(meta_or_title, dict):
         meta = meta_or_title
         title_obj = meta.get("title", {}) or {}
-        title_type = config.get("TITLE_TYPE", DEFAULT_TITLE_TYPE).lower()
+        desired_title_type = title_type.lower()
         title = (
-            title_obj.get(title_type)
+            title_obj.get(desired_title_type)
             or title_obj.get("english")
             or title_obj.get("pretty")
             or title_obj.get("japanese")
@@ -323,21 +324,21 @@ def clean_title(meta_or_title):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, attempt: int = 1):
+def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
     """
-
-    DYNAMIC_SLEEP_DEBUG = config.get("DEBUG", DEFAULT_DEBUG)  # Enable detailed debug logs
+    
+    #debug = True  # Forcefully enable detailed debug logs
 
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
-    gallery_sleep_min = config.get("MIN_SLEEP", DEFAULT_MIN_SLEEP)  # Minimum Gallery sleep time
-    gallery_sleep_max = config.get("MAX_SLEEP", DEFAULT_MAX_SLEEP)  # Maximum Gallery sleep time
-    api_sleep_min, api_sleep_max = 0.5, 0.75 # API sleep range
+    # min_sleep = Minimum Gallery sleep time
+    # max_sleep = Maximum Gallery sleep time
+    api_min_sleep, api_max_sleep = 0.5, 0.75 # API sleep range
 
     log_clarification()
     log("------------------------------", "debug")
@@ -349,7 +350,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     # ------------------------------------------------------------
     if stage == "api":
         attempt_scale = attempt ** 2
-        base_min, base_max = api_sleep_min * attempt_scale, api_sleep_max * attempt_scale
+        base_min, base_max = api_min_sleep * attempt_scale, api_max_sleep * attempt_scale
         sleep_time = random.uniform(base_min, base_max)
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
         log("------------------------------", "debug")
@@ -362,30 +363,30 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = max(1, len(config.get("GALLERIES", DEFAULT_GALLERIES)))
-        if DYNAMIC_SLEEP_DEBUG:
+        num_of_galleries = max(1, len(batch_ids))
+        
+        if debug:
             log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
 
-        gallery_threads = config.get("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        image_threads = config.get("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
-
-        if gallery_threads is None or image_threads is None:
+        if threads_galleries is None or threads_images is None:
             # Base gallery threads = 2, scale with number of galleries
             gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
             image_threads = gallery_threads * 5  # Keep ratio 1:5
-            if DYNAMIC_SLEEP_DEBUG:
-                log(f"→ Optimised threads: {gallery_threads} gallery, {image_threads} image", "debug")
-
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Gallery weight: {num_of_galleries}", "debug")
-            log(f"→ Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
+            if debug:
+                log(f"→ Optimised Threads: {gallery_threads} gallery, {image_threads} image", "debug")
+        else:
+            gallery_threads = threads_galleries
+            image_threads = threads_images
+            if debug:
+                log(f"→  threads: {gallery_threads} gallery, {image_threads} image", "debug")
+                log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
 
         # --------------------------------------------------------
         # 2. Calculate total load (Units Of Work)
         # --------------------------------------------------------        
         concurrency = gallery_threads * image_threads
         current_load = (concurrency * attempt) * num_of_galleries
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
             log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
@@ -393,7 +394,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 3. Unit-based scaling
         # --------------------------------------------------------
         unit_factor = (current_load) / gallery_cap
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             log_clarification()
             log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
 
@@ -411,9 +412,9 @@ def dynamic_sleep(stage, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, gallery_sleep_min)
+        scaled_sleep = max(scaled_sleep, min_sleep)
         
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
             log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
 
@@ -421,10 +422,10 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), max_sleep)
         
-        if DYNAMIC_SLEEP_DEBUG:
-            log(f"→ Sleep after jitter (Capped at {gallery_sleep_max}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+        if debug:
+            log(f"→ Sleep after jitter (Capped at {max_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
         # --------------------------------------------------------
         # 6. Final result
@@ -447,7 +448,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
 
     # Homepage
     if query_lower == "homepage":
-        return f"{API_BASE}/galleries/all?page={page}&sort=date"
+        return f"{nhentai_api_base}/galleries/all?page={page}&sort=date"
 
     # Tag-based queries (artist, group, tag, parody)
     if query_lower in ("artist", "group", "tag", "parody"):
@@ -455,7 +456,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
-        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
+        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
     
     # Search queries
     if query_lower == "search":
@@ -464,7 +465,7 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(search_value, safe='"')
-        return f"{API_BASE}/galleries/search?query={encoded}&page={page}&sort=date"
+        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort=date"
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
@@ -492,7 +493,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             log(f"Fetcher: Requesting URL: {url}", "debug")
 
             resp = None
-            for attempt in range(1, max_api_retries + 1):
+            for attempt in range(1, max_retries + 1):
                 try:
                     resp = gallery_ids_session.get(url, timeout=10)
                     if resp.status_code == 429:
@@ -503,11 +504,11 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     resp.raise_for_status()
                     break
                 except requests.RequestException as e:
-                    if attempt >= max_api_retries:
+                    if attempt >= max_retries:
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         # Rebuild session with Tor and try again once
-                        if session_use_tor:
+                        if use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
@@ -549,8 +550,8 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
 def fetch_gallery_metadata(gallery_id: int):
     metadata_session = get_session(referrer="API", status="return")
     
-    url = f"{API_BASE}/gallery/{gallery_id}"
-    for attempt in range(1, max_api_retries + 1):
+    url = f"{nhentai_api_base}/gallery/{gallery_id}"
+    for attempt in range(1, max_retries + 1):
         try:
             log_clarification()
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
@@ -579,10 +580,10 @@ def fetch_gallery_metadata(gallery_id: int):
             if "404 Client Error: Not Found for url" in str(e):
                 logger.warning(f"Gallery: {gallery_id}: Not found (404), skipping retries.")
                 return None
-            if attempt >= max_api_retries:
+            if attempt >= max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
-                if session_use_tor:
+                if use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
@@ -596,10 +597,10 @@ def fetch_gallery_metadata(gallery_id: int):
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
         except requests.RequestException as e:
-            if attempt >= max_api_retries:
+            if attempt >= max_retries:
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
-                if session_use_tor:
+                if use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
@@ -651,7 +652,7 @@ def fetch_image_urls(meta: dict, page: int):
         # Try each mirror in order
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in config.get("NHENTAI_MIRRORS", [])
+            for mirror in nhentai_mirrors
         ]
 
         log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
@@ -674,7 +675,7 @@ def get_tor_ip():
     Fetch current IP, through Tor if enabled.
     """
     try:
-        if session_use_tor:
+        if use_tor:
             r = requests.get("https://httpbin.org/ip",
                              proxies={
                                  "http": "socks5h://127.0.0.1:9050",
@@ -700,7 +701,6 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
     # Unified function to update gallery state per stage.
     # stage: 'download' or 'graphql'
     # success: True if stage completed, False if failed
-    max_attempts = max_api_retries
     
     with state_lock:
         entry = gallery_metadata.setdefault(gallery_id, {"meta": None})
@@ -713,8 +713,8 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
             else:
                 entry["download_attempts"] += 1
                 entry["download_status"] = "failed"
-                if entry["download_attempts"] >= max_attempts:
-                    logger.error(f"Gallery {gallery_id} download failed after {max_attempts} attempts")
+                if entry["download_attempts"] >= max_retries:
+                    logger.error(f"Gallery {gallery_id} download failed after {max_retries} attempts")
 
         entry["last_checked"] = datetime.now().isoformat()
         logger.info(f"Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
@@ -763,12 +763,18 @@ def all_galleries_status():
 # MAIN ENTRYPOINT
 ##################################################################################################################################
 if __name__ == "__main__":
+    """
+    This is one this module's entrypoints.
+    """
+    
     log_clarification()
     logger.info("API: Ready.")
     log("API: Debugging Started.", "debug")
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     app.run(
     host="0.0.0.0",
     port=5000,
-    debug=config.get("DEBUG", DEFAULT_DEBUG)
+    debug=debug
 )

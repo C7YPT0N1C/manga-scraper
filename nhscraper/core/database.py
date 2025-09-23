@@ -6,14 +6,26 @@ from datetime import datetime, timezone
 
 from nhscraper.core.config import *
 
-DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper/core/nhscraper.db")
+DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
 # DB INITIALISATION
 # ===============================
 def init_db():
-    os.makedirs(NHENTAI_DIR, exist_ok=True)
+    """
+    This is one this module's entrypoints.
+    """
+
+    global session
+
+    log_clarification()
+    logger.info("Database: Ready.")
+    log("Database: Debugging Started.", "debug")
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    os.makedirs(SCRAPER_DIR, exist_ok=True)
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""

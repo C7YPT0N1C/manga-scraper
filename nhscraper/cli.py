@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, time, sys, argparse, re
+import os, time, sys, argparse, re, subprocess
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import start_downloader
 from nhscraper.core.api import get_session, fetch_gallery_ids
-from nhscraper.extensions.extension_loader import *
+from nhscraper.extensions.extension_loader import install_selected_extension, uninstall_selected_extension
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
@@ -292,31 +292,35 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args): # Update config   
-    config["EXTENSION"] = args.extension
+    update_env("EXTENSION", args.extension)
     
     if args.excluded_tags is not None: # Use new excluded tags.
-        config["EXCLUDED_TAGS"] = [t.strip().lower() for t in args.excluded_tags.split(",")]
+        update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
     else:
         # Use whatever excluded tags were already in config (env or default)
-        if isinstance(config["EXCLUDED_TAGS"], str):
-            config["EXCLUDED_TAGS"] = [t.strip().lower() for t in config["EXCLUDED_TAGS"].split(",")]
+        if isinstance(excluded_tags, str):
+            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in excluded_tags.split(",")])
     
-    config["LANGUAGE"] = [lang.strip().lower() for lang in args.language.split(",")]
-    config["TITLE_TYPE"] = args.title_type
-    config["THREADS_GALLERIES"] = args.threads_galleries
-    config["THREADS_IMAGES"] = args.threads_images
-    config["MAX_RETRIES"] = args.max_retries
-    config["MIN_SLEEP"] = args.min_sleep
-    config["MAX_SLEEP"] = args.max_sleep
-    config["DRY_RUN"] = args.dry_run
-    config["USE_TOR"] = args.use_tor
-    config["VERBOSE"] = args.verbose
-    config["DEBUG"] = args.debug
+    update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
+    update_env("TITLE_TYPE", args.title_type)
+    update_env("THREADS_GALLERIES", args.threads_galleries)
+    update_env("THREADS_IMAGES", args.threads_images)
+    update_env("MAX_RETRIES", args.max_retries)
+    update_env("MIN_SLEEP", args.min_sleep)
+    update_env("MAX_SLEEP", args.max_sleep)
+    update_env("DRY_RUN", args.dry_run)
+    update_env("USE_TOR", args.use_tor)
+    update_env("VERBOSE", args.verbose)
+    update_env("DEBUG", args.debug)
 
 # ------------------------------------------------------------
 # Main
 # ------------------------------------------------------------
 def main():
+    """
+    This is one this module's entrypoints.
+    """
+    
     normalise_config() # Populate config immediately.
     
     args = parse_args()
@@ -388,6 +392,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
+    fetch_env_vars() # Refresh env vars in case config changed.
     start_downloader(gallery_list) # Start download
 
 if __name__ == "__main__":

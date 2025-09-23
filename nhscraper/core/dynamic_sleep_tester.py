@@ -1,23 +1,27 @@
 import random
 
+set_num_of_galleries = None
+
+set_gallery_threads = None
+threads_galleries = set_gallery_threads
+set_image_threads = None
+threads_images = set_image_threads
+
 set_gallery_sleep_min = None
 set_gallery_sleep_max = None
-set_num_of_galleries = None
-set_gallery_threads = None
-set_image_threads = None
 
 gallery_list = []
 
 BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
 
-def dynamic_sleep(stage, attempt: int = 1):
+def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
     """
 
-    DYNAMIC_SLEEP_DEBUG = True  # Enable detailed debug logs
+    debug = True  # Forcefully enable detailed debug logs
 
     # ------------------------------------------------------------
     # Configurable parameters
@@ -50,21 +54,19 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = set_num_of_galleries
-        if DYNAMIC_SLEEP_DEBUG:
+        num_of_galleries = max(1, len(batch_ids))
+        if debug:
             print(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})")
 
-        gallery_threads = set_gallery_threads
-        image_threads = set_image_threads
 
-        if gallery_threads is None or image_threads is None:
+        if threads_galleries is None or threads_images is None:
             # Base gallery threads = 2, scale with number of galleries
             gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
             image_threads = gallery_threads * 5  # Keep ratio 1:5
-            if DYNAMIC_SLEEP_DEBUG:
+            if debug:
                 print(f"→ Optimised threads: {gallery_threads} gallery, {image_threads} image")
 
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print(f"→ Gallery weight: {num_of_galleries}")
             print(f"→ Threads: Gallery = {gallery_threads}, Image = {image_threads}")
 
@@ -73,7 +75,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------        
         concurrency = gallery_threads * image_threads
         current_load = (concurrency * attempt) * num_of_galleries
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}")
             print(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work")
 
@@ -81,7 +83,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 3. Unit-based scaling
         # --------------------------------------------------------
         unit_factor = (current_load) / gallery_cap
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print()
             print(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery")
 
@@ -101,7 +103,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # Enforce the minimum sleep time
         scaled_sleep = max(scaled_sleep, gallery_sleep_min)
         
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print(f"→ Thread factor = (({gallery_threads} / {BASE_GALLERY_THREADS}) ** {gallery_thread_damper}) * (({image_threads} / {BASE_IMAGE_THREADS}) ** {image_thread_damper}) = {thread_factor:.2f}")
             print(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s")
 
@@ -111,7 +113,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         jitter_min, jitter_max = 0.9, 1.1
         sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), gallery_sleep_max)
         
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print(f"→ Sleep after jitter (Capped at {gallery_sleep_max}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s")
 
         # --------------------------------------------------------
@@ -119,7 +121,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # --------------------------------------------------------
         print()
         print(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)")
-        if DYNAMIC_SLEEP_DEBUG:
+        if debug:
             print("------------------------------\n")
 
         return sleep_time
@@ -163,6 +165,6 @@ for gallery in range (1, (set_num_of_galleries + 1)):
 
 for test in range(1, set_num_of_galleries):
     for attempt in range(1, (max_attempts + 1)):
-        dynamic_sleep("gallery", attempt=attempt)
+        dynamic_sleep("gallery", set_num_of_galleries, attempt=attempt)
 
 worst_case_time_estimate(gallery_list)

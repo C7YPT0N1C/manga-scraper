@@ -143,8 +143,12 @@ def sparse_clone(extension_name: str, url: str):
 # ------------------------------------------------------------
 def load_installed_extensions():
     """
+    This is one this module's entrypoints.
+    
     Load installed extensions dynamically; reinstall if missing.
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
     
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
@@ -317,10 +321,14 @@ def uninstall_selected_extension(extension_name: str):
 # Get selected extension (with skeleton fallback)
 def get_selected_extension(name: str = "skeleton"):
     """
+    This is one this module's entrypoints.
+    
     Returns the selected extension module.
     If the extension is not installed, installs it first.
     Ensures 'skeleton' is always installed to provide a valid download path.
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
     
     original_name = name  # Save the originally requested extension
 

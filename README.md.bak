@@ -220,7 +220,7 @@ The basics of the flow of data is: (CLI → Config → Downloader → Extensions
 - Reads default .env values
 - Updates config dictionary with CLI args overrides
 - Provides helper functions:
-  - `get_download_path()` returns NHENTAI_DIR/downloads
+  - `get_download_path()` returns SCRAPER_DIR/downloads
   - `get_extension_path()` returns EXTENSION_DOWNLOAD_PATH if set
 - Ensures dynamic path resolution for extensions
 
