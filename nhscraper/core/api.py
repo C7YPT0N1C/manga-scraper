@@ -33,7 +33,7 @@ state_lock = Lock()
 # HTTP SESSION
 ################################################################################################################
 session = None
-file_lock = threading.Lock()
+session_lock = threading.Lock()
 
 def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     """
