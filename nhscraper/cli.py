@@ -5,7 +5,7 @@ import os, time, sys, argparse, re
 
 from nhscraper.core.config import *
 from nhscraper.core.downloader import start_downloader
-from nhscraper.core.api import build_session, fetch_gallery_ids
+from nhscraper.core.api import get_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import *
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
@@ -369,7 +369,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    build_session(referrer="CLI", rebuild=True)
+    get_session(referrer="CLI", rebuild=True, return_session=False)
     
     # Build Gallery List (make sure not empty.)
     log_clarification()

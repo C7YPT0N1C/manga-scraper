@@ -90,9 +90,9 @@ def session_builder(rebuild: bool = False):
             logger.info("Not using Tor proxy")
         
         logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed
-        #return session
+        return session
 
-def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
+def get_session(referrer: str = "Undisclosed Module", rebuild: bool = False, return_session: bool = False):
     """
     Ensure session is ready.
     If rebuild=True, calls session_builder to rebuild the session.
@@ -119,8 +119,11 @@ def build_session(referrer: str = "Undisclosed Module", rebuild: bool = False):
             logger.debug(f"Failed to close old session: {e}")
         
         session_builder(rebuild=True)
+    
+    if return_session:
+        return session
 
-build_session(referrer="API", rebuild=False) # Initial build
+get_session(referrer="API", rebuild=False, return_session=False) # Initial build
         
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -511,7 +514,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                         # Rebuild session with Tor and try again once
                         if session_use_tor:
                             logger.info("Rotated Tor IP, retrying page fetch with new session")
-                            session = build_session(referrer="API", rebuild=True)
+                            session = get_session(referrer="API", rebuild=True, return_session=False)
                             try:
                                 resp = session.get(url, timeout=10)
                                 resp.raise_for_status()
@@ -584,7 +587,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = build_session(referrer="API", rebuild=True)
+                    session = get_session(referrer="API", rebuild=True, return_session=False)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()
@@ -601,7 +604,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 # Rebuild session with Tor and try again once
                 if session_use_tor:
                     logger.info("Rotated Tor IP, retrying metadata fetch with new session")
-                    session = build_session(referrer="API", rebuild=True)
+                    session = get_session(referrer="API", rebuild=True, return_session=False)
                     try:
                         resp = session.get(url, timeout=10)
                         resp.raise_for_status()

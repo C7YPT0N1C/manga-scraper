@@ -7,7 +7,7 @@ from tqdm.contrib.concurrent import thread_map
 from nhscraper.core.config import *
 from nhscraper.core import database as db
 from nhscraper.core.api import (
-    build_session, session, dynamic_sleep, fetch_gallery_metadata,
+    get_session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, safe_name, clean_title
 )
 from nhscraper.extensions.extension_loader import get_selected_extension  # Import active extension
@@ -15,6 +15,8 @@ from nhscraper.extensions.extension_loader import get_selected_extension  # Impo
 ####################################################################################################
 # Global Variables
 ####################################################################################################
+session = None
+
 active_extension = "skeleton"
 download_location = ""
 
@@ -327,12 +329,13 @@ def process_galleries(gallery_ids):
 ####################################################################################################
 
 def start_batch(batch_list=None):
+    global session
     batch_ids = batch_list
     
     active_extension.pre_batch_hook(batch_ids)
     
     # Rebuild session.
-    #build_session(referrer="Downloader", rebuild=True)
+    session = get_session(referrer="Downloader", rebuild=True, return_session=True)
 
     log_clarification()
     logger.info(f"Downloader: Galleries to process: {batch_ids[0]} -> {batch_ids[-1]} ({len(batch_ids)})"
