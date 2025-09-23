@@ -70,6 +70,8 @@ def pre_run_hook():
         logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
 def return_gallery_metas(meta):
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     artists = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
     groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
     creators = artists or groups or ["Unknown Creator"]

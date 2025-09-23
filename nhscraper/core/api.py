@@ -250,7 +250,7 @@ def clean_title(meta_or_title):
                         if isinstance(data, dict):
                             return data
             except Exception as e:
-                logger.warning(f"Could not load broken symbols file: {e}")
+                logger.warning(f"Loading broken symbols file failed: {e}")
         return {}
 
     def save_possible_broken_symbols(symbols: dict[str, str]):
@@ -265,7 +265,7 @@ def clean_title(meta_or_title):
                 with open(broken_symbols_file, "w", encoding="utf-8") as f:
                     json.dump(existing_symbols, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.warning(f"Could not save broken symbols file: {e}")
+            logger.warning(f"Saving broken symbols file failed: {e}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
