@@ -31,7 +31,6 @@ def session_builder(rebuild: bool = False):
     # Random browser profiles (only randomized if flag is True)
     DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
     RandomiseBrowserProfile = True
-    
     browsers = [
         {"browser": "chrome", "platform": "windows", "mobile": False},
         {"browser": "firefox", "platform": "windows", "mobile": False},
@@ -40,12 +39,11 @@ def session_builder(rebuild: bool = False):
     ]
     browser_profile = random.choice(browsers) if RandomiseBrowserProfile else DefaultBrowserProfile # Select random browser profile
 
-    s = cloudscraper.create_scraper(browser=browser_profile)
+    built_session = cloudscraper.create_scraper(browser=browser_profile) # Create cloudscraper session
 
     # Random User-Agents (only randomized if flag is True)
     DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    RandomiseUserAgent = True
-    
+    RandomiseUserAgent = True    
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
@@ -56,8 +54,7 @@ def session_builder(rebuild: bool = False):
 
     # Random Referers (only randomized if flag is True)
     DefaultReferer = "https://nhentai.net/"
-    RandomiseReferer = False
-    
+    RandomiseReferer = False   
     referers = [
         "https://nhentai.net/",
         "https://google.com/",
@@ -66,7 +63,7 @@ def session_builder(rebuild: bool = False):
     ]
     referer = random.choice(referers) if RandomiseReferer else DefaultReferer # Select random Referer
 
-    s.headers.update({
+    built_session.headers.update({
         "User-Agent": ua,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
@@ -80,12 +77,14 @@ def session_builder(rebuild: bool = False):
     
     if session_use_tor:
         proxy = "socks5h://127.0.0.1:9050"
-        s.proxies = {"http": proxy, "https": proxy}
+        session.proxies = {"http": proxy, "https": proxy}
         logger.info(f"Using Tor proxy: {proxy}")
     else:
         logger.info("Not using Tor proxy")
     
-    return s
+    session = built_session # Update global session
+    logger.debug(f"Session ready: {session}")
+    return session
 
 def build_session(rebuild=False):
     global session
@@ -95,7 +94,7 @@ def build_session(rebuild=False):
     with session_lock:
         if session is None:
             # First build
-            session = session_builder(rebuild=False)
+            session_builder(rebuild=False)
         elif rebuild:
             # Close old session before rebuilding
             try:
@@ -103,9 +102,7 @@ def build_session(rebuild=False):
                 logger.debug("Closed old session before rebuilding")
             except Exception as e:
                 logger.debug(f"Failed to close old session: {e}")
-            session = session_builder(rebuild=True)
-
-        return session
+            session_builder(rebuild=True)
         
 ################################################################################################################
 # GLOBAL VARIABLES
