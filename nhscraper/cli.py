@@ -292,6 +292,9 @@ def build_gallery_list(args):
     return gallery_list
 
 def update_config(args):
+    log_clarification("debug")
+    log("Updating Config...", "debug")
+    
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
     
@@ -365,9 +368,6 @@ def main():
                     args.group, args.tag, args.parody, args.search]
     if not any(gallery_args):
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
-    
-    log_clarification("debug")
-    log("Updating Config...", "debug")
     
     # Update Config
     # Allows session to use correct config values on creation

@@ -513,6 +513,8 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     break
                 except requests.RequestException as e:
                     if attempt >= max_retries:
+                        log_clarification("debug")
+                        logger.debug(f"Max Retries = {max_retries}") # DEBUGGING
                         logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
                         resp = None
                         # Rebuild session with Tor and try again once
