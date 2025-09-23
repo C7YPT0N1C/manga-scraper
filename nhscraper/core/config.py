@@ -93,7 +93,7 @@ logger.addHandler(logging.NullHandler())
 # ------------------------------------------------------------
 def log_clarification():
     if logger.getEffectiveLevel == 20:
-        logger.info("") # Only print new line if log level is INFO
+        logger.info("TESTINGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG") # Only print new line if log level is INFO
     logger.debug("")
 
 log_clarification()
