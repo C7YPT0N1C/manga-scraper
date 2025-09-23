@@ -291,8 +291,10 @@ def build_gallery_list(args):
     
     return gallery_list
 
-def update_config(args): # Update config   
-    update_env("EXTENSION", args.extension)
+def update_config(args):
+    if args.extension is not None:
+        quoted_ext = f"\"{args.extension.strip('\"')}\""  # ensure wrapped in double quotes
+        update_env("EXTENSION", quoted_ext)
     
     if args.excluded_tags is not None: # Use new excluded tags.
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
