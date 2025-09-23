@@ -137,34 +137,6 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
 
 ################################################################################################################
 
-broken_symbols_file = None # Path to possible broken symbols file, set in clean_title()
-
-def load_possible_broken_symbols() -> dict[str, str]:
-    """
-    Load possible broken symbols as a mapping { "symbol": "_" }.
-    """
-    
-    if os.path.exists(broken_symbols_file):
-        try:
-            with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-        except Exception as e:
-            logger.warning(f"Could not load broken symbols file: {e}")
-    return {}
-
-def save_possible_broken_symbols(symbols: dict[str, str]):
-    """
-    Save possible broken symbols as a mapping { "symbol": "_" }.
-    """
-    
-    try:
-        with open(broken_symbols_file, "w", encoding="utf-8") as f:
-            json.dump(symbols, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save broken symbols file: {e}")
-
 # ===============================
 # NHentai API
 # ===============================
@@ -256,6 +228,32 @@ def clean_title(meta_or_title):
     
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+
+    def load_possible_broken_symbols() -> dict[str, str]:
+        """
+        Load possible broken symbols as a mapping { "symbol": "_" }.
+        """
+        
+        if os.path.exists(broken_symbols_file):
+            try:
+                with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+            except Exception as e:
+                logger.warning(f"Could not load broken symbols file: {e}")
+        return {}
+
+    def save_possible_broken_symbols(symbols: dict[str, str]):
+        """
+        Save possible broken symbols as a mapping { "symbol": "_" }.
+        """
+        
+        try:
+            with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                json.dump(symbols, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save broken symbols file: {e}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
