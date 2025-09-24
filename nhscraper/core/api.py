@@ -15,7 +15,7 @@ from nhscraper.core.configurator import *
 # GLOBAL VARIABLES
 ################################################################################################################
 
-file_lock = threading.Lock()
+possible_broken_symbols_lock = threading.Lock()
 
 # ===============================
 # SCRAPER API
@@ -240,35 +240,36 @@ def clean_title(meta_or_title):
         Also attempts to recover from JSON errors by truncating after the last closing brace.
         """
         
-        if not os.path.exists(broken_symbols_file):
-            try:
-                os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
-                with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                    json.dump({}, f, ensure_ascii=False, indent=2)
-                logger.debug(f"Created new broken symbols file: {broken_symbols_file}")
-            except Exception as e:
-                logger.error(f"Could not create broken symbols file: {e}")
-            return {}
-
-        try:
-            with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                content = f.read().strip()
+        with possible_broken_symbols_lock:
+            if not os.path.exists(broken_symbols_file):
                 try:
-                    return json.loads(content)
-                except json.JSONDecodeError as e:
-                    logger.info(f"JSON error: '{e}', attempting auto-recovery.")
-                    logger.info("This is handled automatically. You can (probably) safely ignore this if you don't see this too often or issues arise.")
+                    os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
+                    with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                        json.dump({}, f, ensure_ascii=False, indent=2)
+                    logger.debug(f"Created new broken symbols file: {broken_symbols_file}")
+                except Exception as e:
+                    logger.error(f"Could not create broken symbols file: {e}")
+                return {}
 
-                    # Try to recover: cut everything after the last closing brace
-                    if "}" in content:
-                        fixed = content[: content.rfind("}") + 1]
-                        try:
-                            return json.loads(fixed)
-                        except Exception:
-                            pass
-        except Exception as e:
-            logger.warning(f"Could not load broken symbols file: {e}")
-        return {}
+            try:
+                with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    try:
+                        return json.loads(content)
+                    except json.JSONDecodeError as e:
+                        logger.info(f"JSON error: '{e}', attempting auto-recovery.")
+                        logger.info("This is handled automatically. You can (probably) safely ignore this if you don't see this too often or issues arise.")
+
+                        # Try to recover: cut everything after the last closing brace
+                        if "}" in content:
+                            fixed = content[: content.rfind("}") + 1]
+                            try:
+                                return json.loads(fixed)
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.warning(f"Could not load broken symbols file: {e}")
+            return {}
 
     def save_possible_broken_symbols(symbols: dict[str, str]):
         """
@@ -276,12 +277,13 @@ def clean_title(meta_or_title):
         Also cleans out any empty or invisible symbols.
         """
         
-        try:
-            cleaned = {s: "_" for s in symbols if s.strip()}  # drop empty or invisible
-            with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                json.dump(cleaned, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Could not save broken symbols: {e}")
+        with possible_broken_symbols_lock:
+            try:
+                cleaned = {s: "_" for s in symbols if s.strip()}  # drop empty or invisible
+                with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                    json.dump(cleaned, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Could not save broken symbols: {e}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
