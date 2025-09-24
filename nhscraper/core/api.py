@@ -286,6 +286,24 @@ def clean_title(meta_or_title):
             except Exception as e:
                 logger.error(f"Could not save broken symbols: {e}")
     
+    def is_cjk(char: str) -> bool:
+        """Return True if char is a Chinese/Japanese/Korean character."""
+        code = ord(char)
+        return (
+            0x4E00 <= code <= 0x9FFF   # CJK Unified Ideographs
+            or 0x3400 <= code <= 0x4DBF  # CJK Unified Ideographs Extension A
+            or 0x20000 <= code <= 0x2A6DF  # Extension B
+            or 0x2A700 <= code <= 0x2B73F  # Extension C
+            or 0x2B740 <= code <= 0x2B81F  # Extension D
+            or 0x2B820 <= code <= 0x2CEAF  # Extension E
+            or 0x2CEB0 <= code <= 0x2EBEF  # Extension F
+            or 0x3000 <= code <= 0x303F  # CJK Symbols and Punctuation
+            or 0x3040 <= code <= 0x309F  # Hiragana
+            or 0x30A0 <= code <= 0x30FF  # Katakana
+            or 0x31F0 <= code <= 0x31FF  # Katakana Phonetic Extensions
+            or 0xFF65 <= code <= 0xFF9F  # Half-width Katakana
+        )
+    
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
 
@@ -306,8 +324,9 @@ def clean_title(meta_or_title):
     else:
         title = meta_or_title
 
-    # Detect non-ASCII symbols in the current title
-    symbols = {c for c in title if ord(c) > 127}
+    # Detect non-ASCII symbols in the current title that aren't Japanese Characters, Chinese Characters, Korean Characters
+    # or in ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
+    symbols = {c for c in title if ord(c) > 127 and not is_cjk(c)}
     known_symbols = set(ALLOWED_SYMBOLS).union(
         BROKEN_SYMBOL_REPLACEMENTS.keys(),
         BROKEN_SYMBOL_BLACKLIST,
