@@ -554,7 +554,8 @@ def update_suwayomi_category(category_id: int):
                 logger.info(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
                 
                 # Wait a bit to ensure Suwayomi has populated all data
-                time.sleep(wait_time) # Adaptive polling
+                wait = max(wait_time, (1 + (total_jobs or 0) / 50)) # Adaptive waiting (1000 jobs = 20s)
+                time.sleep(wait) # Adaptive polling
                 break
 
             time.sleep(max(poll_interval, (1 + (total_jobs or 0) / 1000))) # Adaptive polling
