@@ -381,8 +381,8 @@ def start_downloader(gallery_list=None):
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
-        current_batch_number = (batch_num // (BATCH_SIZE + 1), 1)
-        total_batch_numbers = (len(gallery_list) // BATCH_SIZE, 1)
+        current_batch_number = (batch_num // (BATCH_SIZE + 1) + 1)
+        total_batch_numbers = (len(gallery_list) // BATCH_SIZE + 1)
         current_out_of_total_batch_number = f"{current_batch_number} / {total_batch_numbers}"
         
         worst_case_time_estimate(f"Batch {current_out_of_total_batch_number}", batch_list)
