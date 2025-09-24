@@ -238,7 +238,9 @@ def clean_title(meta_or_title):
         """
         Load possible broken symbols as a mapping { "symbol": "_" }.
         Always creates the file if missing.
+        Also attempts to recover from JSON errors by truncating after the last closing brace.
         """
+        
         if not os.path.exists(broken_symbols_file):
             try:
                 os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
@@ -251,9 +253,19 @@ def clean_title(meta_or_title):
 
         try:
             with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
+                content = f.read().strip()
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"JSON error: {e}. Attempting recovery...")
+
+                    # Try to recover: cut everything after the last closing brace
+                    if "}" in content:
+                        fixed = content[: content.rfind("}") + 1]
+                        try:
+                            return json.loads(fixed)
+                        except Exception:
+                            pass
         except Exception as e:
             logger.warning(f"Could not load broken symbols file: {e}")
         return {}
@@ -261,16 +273,15 @@ def clean_title(meta_or_title):
     def save_possible_broken_symbols(symbols: dict[str, str]):
         """
         Save possible broken symbols as a mapping { "symbol": "_" }.
+        Also cleans out any empty or invisible symbols.
         """
+        
         try:
-            os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
+            cleaned = {s: "_" for s in symbols if s.strip()}  # drop empty or invisible
             with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                json.dump(symbols, f, ensure_ascii=False, indent=2)
+                json.dump(cleaned, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.warning(f"Could not save broken symbols file: {e}")
-    
-    #log_clarification("debug")
-    #logger.debug(f"Broken symbols file: {broken_symbols_file}")
+            logger.error(f"Could not save broken symbols: {e}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
