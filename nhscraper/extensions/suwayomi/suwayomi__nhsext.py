@@ -547,7 +547,7 @@ def update_suwayomi_category(category_id: int, attempt: int):
     }
     """
     
-    wait_time = 2
+    wait_time = 10
 
     try:
         # Fetch all mangas in the category update
@@ -588,10 +588,10 @@ def update_suwayomi_category(category_id: int, attempt: int):
                 pbar.n = pbar.total
                 pbar.refresh()
                 logger.warning(f"Suwayomi library update for Category ID {category_id} completed.")
-                logger.warning(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
                 
                 # Wait a bit to ensure Suwayomi has populated all data
-                wait = max(wait_time * 10, (1 + (total_jobs or 0) / 100)) # Adaptive waiting (1000 jobs = 10s)
+                wait = max(wait_time * 3, (1 + (total_jobs or 0) / 50)) # Adaptive waiting (1000 jobs = 20s)
+                logger.warning(f"Waiting {wait}s for Suwayomi to reflect all changes...")
                 time.sleep(wait) # Adaptive polling
                 break
 
