@@ -512,6 +512,7 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
             built_url = f"{nhentai_api_base}/galleries/all?page={page}"
         else:
             built_url = f"{nhentai_api_base}/galleries/all?page={page}&sort={sort_value}"
+        return built_url
 
     # Artist / Group / Tag / Character / Parody
     if query_lower in ("artist", "group", "tag", "character", "parody"):
@@ -524,7 +525,6 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
         else:
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
-
         return built_url
 
     # Search queries
@@ -538,7 +538,6 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
         else:
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
-
         return built_url
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
