@@ -156,7 +156,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             return False
 
     # --- Excluded Tags ---
-    excluded_tags = configurator.excluded_tags
+    #excluded_tags = configurator.excluded_tags
     if isinstance(excluded_tags, str):
         excluded_tags = [excluded_tags]
 
@@ -169,7 +169,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
 
     # --- Allowed Languages ---
-    language = configurator.language
+    #language = configurator.language
     if isinstance(language, str):
         language = [language]
 
