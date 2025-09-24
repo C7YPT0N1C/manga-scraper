@@ -233,40 +233,29 @@ def clean_title(meta_or_title):
     
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
-    
-    log_clarification("debug")
-    logger.debug(f"Broken symbols file: {broken_symbols_file}")
 
-    def load_possible_broken_symbols() -> dict[str, str]:
-        """
-        Load possible broken symbols as a mapping { "symbol": "_" }.
-        """
-        
+    def load_possible_broken_symbols() -> set[str]:
         if os.path.exists(broken_symbols_file):
             try:
-                with file_lock:
-                    with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        if isinstance(data, dict):
-                            return data
+                with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                    return set(json.load(f))
             except Exception as e:
-                logger.warning(f"Loading broken symbols file failed: {e}")
-        return {}
+                logger.warning(f"Could not load broken symbols file: {e}")
+        return set()
 
-    def save_possible_broken_symbols(symbols: dict[str, str]):
+    def save_possible_broken_symbols(symbols: set[str]):
         """
         Save possible broken symbols as a mapping { "symbol": "_" }.
         """
-        
         try:
-            os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
-            with file_lock:
-                existing_symbols = load_possible_broken_symbols()
-                existing_symbols.update(symbols)
-                with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                    json.dump(existing_symbols, f, ensure_ascii=False, indent=2)
+            symbol_map = {s: "_" for s in sorted(symbols)}
+            with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                json.dump(symbol_map, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"Saving broken symbols file failed: {e}")
+            logger.warning(f"Could not save broken symbols file: {e}")
+    
+    log_clarification("debug")
+    logger.debug(f"Broken symbols file: {broken_symbols_file}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()

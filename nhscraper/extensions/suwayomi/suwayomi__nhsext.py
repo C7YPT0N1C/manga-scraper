@@ -871,7 +871,7 @@ def process_deferred_creators():
             for creator_name in processed_creators:
                 remove_from_deferred(creator_name)
         
-        # If no creators remain, we’re done early
+        # If no creators remain, we're done early
         if not still_deferred:
             logger.info("Successfully processed all deferred creators.")
             return
