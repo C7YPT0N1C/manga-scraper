@@ -105,7 +105,7 @@ def setup_logger(calm=False, debug=False):
 
     return logger
 
-def log(message: str, log_type: str = "info"):
+def log(message: str, log_type: str = "warning"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
