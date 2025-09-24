@@ -149,7 +149,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
                 f"Downloader: Skipping Gallery: {gallery_id}\n"
                 "Reason: Already Downloaded.\n"
                 f"Title: {gallery_title}\n"
-                f"Folder: {doujin_folder}"
+                f"In Folder: {doujin_folder.removesuffix(gallery_title)}"
             )
             log_clarification()
             update_skipped_galleries(False, meta, "Already downloaded.")
