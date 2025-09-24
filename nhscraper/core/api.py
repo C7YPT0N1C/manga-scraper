@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # nhscraper/api.py
 
-import os, time, random, cloudscraper, requests, re, json, threading, socket
+import os, time, random, cloudscraper, requests, re, json, threading, socket, urllib.parse
+
 from flask import Flask, jsonify, request
 from datetime import datetime
-import urllib.parse
 from urllib.parse import urljoin
 from pathlib import Path
 
@@ -493,65 +493,84 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
 # BUILD API URLS
 # ===============================
 def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> str:
+    """
+    Build the NHentai API URL for a given query type, value, sort type, and page number.
+
+    query_type: homepage, artist, group, tag, character, parody, search
+    query_value: string value of query (None for homepage)
+    sort_value: date / recent / today / week / popular / all_time
+    page: page number (1-based)
+    """
     query_lower = query_type.lower()
-    
+
+    # Normalise sort
     if sort_value not in ("date", "recent", "today", "week", "popular", "all_time"):
-        sort_value = "date"
-        
+        sort_value = DEFAULT_PAGE_SORT
     if sort_value == "recent":
         sort_value = "date"
-        
     if sort_value == "all_time":
         sort_value = "popular"
-    
-    sort_type = sort_value # CHANGE SORTING HERE
-    sort_lower = sort_type.lower()
 
     # Homepage
     if query_lower == "homepage":
-        return f"{nhentai_api_base}/galleries/all?page={page}&sort={sort_lower}"
+        return f"{nhentai_api_base}/galleries/all?page={page}&sort={sort_value}"
 
-    # Tag-based queries (artist, group, tag, character, parody)
+    # Artist / Group / Tag / Character / Parody
     if query_lower in ("artist", "group", "tag", "character", "parody"):
         search_value = query_value
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
-        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
-    
+        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
+
     # Search queries
     if query_lower == "search":
-        # Wrap search term in quotes for exact match if it contains spaces
         search_value = query_value
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(search_value, safe='"')
-        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
+        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
 # ===============================
 # FETCH GALLERY IDS
 # ===============================
-def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
-    fetch_env_vars() # Refresh env vars in case config changed.
+def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAULT_PAGE_SORT, start_page: int = 1, end_page: int | None = None) -> set[int]:
+    """
+    Fetch gallery IDs from NHentai based on query type, value, and optional sort type.
     
+    query_type: homepage, artist, group, tag, character, parody, search
+    query_value: string query value (None for homepage)
+    sort_value: date / recent / today / week / popular / all_time (defaults to 'date')
+    start_page, end_page: pagination
+    """
+    fetch_env_vars()  # Refresh env vars in case config changed.
+
+    # Normalise sort
+    if sort_value not in ("date", "recent", "today", "week", "popular", "all_time"):
+        sort_value = DEFAULT_PAGE_SORT
+    if sort_value == "recent":
+        sort_value = "date"
+    if sort_value == "all_time":
+        sort_value = "popular"
+
     ids: set[int] = set()
     page = start_page
-    
+
     gallery_ids_session = get_session(referrer="API", status="return")
-    
+
     try:
         log_clarification("debug")
         if query_value is None:
             log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
             log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
-        
+
         while True:
             if end_page is not None and page > end_page:
                 break
-            
+
             url = build_url(query_type, query_value, sort_value, page)
             log(f"Fetcher: Requesting URL: {url}", "debug")
 

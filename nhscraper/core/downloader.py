@@ -2,6 +2,7 @@
 # nhscraper/downloader.py
 
 import os, time, random, concurrent.futures
+
 from tqdm.contrib.concurrent import thread_map
 
 from nhscraper.core import configurator

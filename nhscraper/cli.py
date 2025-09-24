@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
 
-import os, time, sys, argparse, re, subprocess
+import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from nhscraper.core import configurator
 from nhscraper.core.configurator import *
@@ -68,51 +68,72 @@ def parse_args():
             "If no path is given, uses the default file."
         )
     )
-    parser.add_argument("--homepage", nargs=2, type=int, metavar=("START","END"), help=f"Page range of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END}). Passing no gallery flags (--gallery, --artist, etc) defaults here.")
+    
+    # NHentai mirror URLs
+    parser.add_argument(
+        "--mirrors",
+        type=str,
+        default=DEFAULT_NHENTAI_MIRRORS,
+        help=(
+            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS}). "
+            "Use this if the main site is down or to rotate mirrors."
+        )
+    )
+    
     parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
     parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download. Must be incased in quotes if multiple. (e.g. '123456, 654321')")
+    
+    parser.add_argument(
+        "--homepage",
+        nargs="+",  # All args after this flag are collected
+        metavar="ARGS",
+        help=(
+            f"Page range or sort type of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END})."
+        )
+    )
+
     # Allow multiple --artist, --group, etc. each with their own arguments
     parser.add_argument(
         "--artist",
         action="append",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
-        help="Download galleries by artist. Usage: --artist ARTIST [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by artist. Usage: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
         "--group",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by group. Usage: --group GROUP [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by group. Usage: --group GROUP [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
         "--tag",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by tag. Usage: --tag TAG [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
         "--character",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by character. Usage: --character CHARACTER [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by character. Usage: --character CHARACTER [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
         "--parody",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by parody. Usage: --parody PARODY [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by parody. Usage: --parody PARODY [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
         "--search",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by search. Usage: --search SEARCH [START_PAGE] [END_PAGE]. Can be repeated."
+        help="Download galleries by search. Usage: --search SEARCH [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
     )
 
     # Filters
@@ -182,10 +203,14 @@ def parse_args():
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     """
-    Parse CLI args and call fetch_gallery_ids for any query type.
+    Parse CLI args or file URLs and call fetch_gallery_ids for any query type.
+    Supports optional sort type in flags: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE]
+    Defaults: sort='date', start_page=1, end_page=DEFAULT_PAGE_RANGE_END
 
-    Supports repeated flags like --tag "big boobs" --tag "big ass"
-    and optional page ranges. Defaults to start_page=1, end_page=None.
+    File input supports:
+      - Plain gallery IDs
+      - Full gallery URLs /g/ID/
+      - Artist / group / tag / character / parody / search URLs
     """
     
     if not arg_list:
@@ -193,6 +218,8 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     gallery_ids = set()
     query_lower = query_type.lower()
+    
+    valid_sorts = ("date", "recent", "today", "week", "popular", "all_time")
 
     # --- File input ---
     if query_lower == "file":
@@ -205,34 +232,102 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 line = line.strip()
                 if not line:
                     continue
-                m = re.search(r"/g/(\d+)/", line)
-                if m:
-                    gallery_ids.add(int(m.group(1)))
-                elif line.isdigit():
+
+                # Plain numeric ID
+                if line.isdigit():
                     gallery_ids.add(int(line))
+                    continue
+
+                # Full gallery URL "/g/ID/"
+                m_gallery = re.search(r"nhentai\.net/g/(\d+)", line)
+                if m_gallery:
+                    gallery_ids.add(int(m_gallery.group(1)))
+                    continue
+
+                # Creator / group / tag / character / parody / search URLs
+                # Determine type from path
+                m_query = re.search(
+                    r"nhentai\.net/(artist|group|tag|character|parody)/([^/?]+)(?:/(popular-today|popular-week|popular))?(?:\?page=(\d+))?",
+                    line
+                )
+                m_search = re.search(r"nhentai\.net/search/\?q=([^&]+)(?:&page=(\d+))?", line)
+                
+                if m_query:
+                    qtype, qvalue, sort_path, page_q = m_query.groups()
+                    qvalue = urllib.parse.unquote(qvalue)
+                    sort_val = DEFAULT_PAGE_SORT
+                    if sort_path == "popular-today":
+                        sort_val = "today"
+                    elif sort_path == "popular-week":
+                        sort_val = "week"
+                    elif sort_path == "popular":
+                        sort_val = "popular"
+
+                    start_page = 1
+                    end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
+
+                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page))
+                    continue
+
+                elif m_search:
+                    search_q, page_q = m_search.groups()
+                    search_q = urllib.parse.unquote(search_q)
+                    sort_val = DEFAULT_PAGE_SORT
+                    start_page = 1
+                    end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
+                    gallery_ids.update(fetch_gallery_ids("search", search_q, sort_val, start_page, end_page))
+                    continue
+
+                else:
+                    logger.warning(f"Unrecognized line in file, skipping: {line}")
+
         return gallery_ids
 
     # --- Homepage ---
     if query_lower == "homepage":
-        # Use defaults if no pages are provided
-        start_page = int(arg_list[0]) if len(arg_list) > 0 else DEFAULT_PAGE_RANGE_START
-        end_page = int(arg_list[1]) if len(arg_list) > 1 else DEFAULT_PAGE_RANGE_END
-        gallery_ids.update(fetch_gallery_ids("homepage", None, "date", start_page, end_page))
+        sort_val = DEFAULT_PAGE_SORT
+        start_page = DEFAULT_PAGE_RANGE_START
+        end_page = DEFAULT_PAGE_RANGE_END
+
+        if arg_list:
+            first = str(arg_list[0]).lower()
+            if first in valid_sorts:
+                sort_val = first
+                if len(arg_list) > 1:
+                    start_page = int(arg_list[1])
+                if len(arg_list) > 2:
+                    end_page = int(arg_list[2])
+            else:
+                start_page = int(arg_list[0])
+                if len(arg_list) > 1:
+                    end_page = int(arg_list[1])
+
+        gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
         return gallery_ids
 
-    # --- Artist / Group / Tag / Character / Parody / Search ---
+    # --- Other queries (CLI flags) ---
     for entry in arg_list:
-        # Each entry may already be a list from argparse 'append' + 'nargs'
         if isinstance(entry, str):
             entry = [entry]
 
-        name = str(entry[0]).strip()  # First element is always the query value
+        name = str(entry[0]).strip()
+        sort_val = DEFAULT_PAGE_SORT
+        start_page = DEFAULT_PAGE_RANGE_START
+        end_page = DEFAULT_PAGE_RANGE_END
 
-        # Use homepage defaults if start/end not provided
-        start_page = int(entry[1]) if len(entry) > 1 else DEFAULT_PAGE_RANGE_START
-        end_page = int(entry[2]) if len(entry) > 2 else DEFAULT_PAGE_RANGE_END
+        if len(entry) > 1 and str(entry[1]).lower() in valid_sorts:
+            sort_val = str(entry[1]).lower()
+            if len(entry) > 2:
+                start_page = int(entry[2])
+            if len(entry) > 3:
+                end_page = int(entry[3])
+        else:
+            if len(entry) > 1:
+                start_page = int(entry[1])
+            if len(entry) > 2:
+                end_page = int(entry[2])
 
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, "date", start_page, end_page))
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
 
     return gallery_ids
 
@@ -308,6 +403,9 @@ def update_config(args):
     
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
+        
+    if getattr(args, "mirrors", None):
+        update_env("NHENTAI_MIRRORS", args.mirrors)
     
     if args.excluded_tags is not None: # Use new excluded tags.
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])

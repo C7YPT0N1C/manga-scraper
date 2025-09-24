@@ -2,6 +2,7 @@
 # nhscraper/core/db.py
 
 import os, sqlite3, threading
+
 from datetime import datetime, timezone
 
 from nhscraper.core import configurator

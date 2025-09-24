@@ -4,6 +4,7 @@
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile
+
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 

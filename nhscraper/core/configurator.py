@@ -2,8 +2,10 @@
 # core/config.py
 
 import os, sys, logging
+
 from datetime import datetime
 from dotenv import load_dotenv, set_key
+
 from nhscraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
 
 ##########################################################################################
@@ -156,11 +158,17 @@ download_path = DEFAULT_DOWNLOAD_PATH  # public variable
 
 DEFAULT_DOUJIN_TXT_PATH = "/root/Doujinshi_IDs.txt"
 if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
-    # Create an empty file with a comment line
+    # Create an empty file with instructions for the user
     with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
-        f.write("# Add one nhentai URL or gallery ID per line. Example: https://nhentai.net/g/123456/ or 123456")
-        f.write("# Text-based pages (such as https://nhentai.net/artist/ARTST/) MUST be in a link.\n")
-    logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
+        f.write(
+            "# Add one NHentai gallery per line. Supported formats:\n"
+            "# 1) Plain gallery ID: e.g. 123456\n"
+            "# 2) Full gallery URL: e.g. https://nhentai.net/g/123456/\n"
+            "# 3) Artist / Group / Tag / Character / Parody URLs: e.g. https://nhentai.net/artist/ARTIST/ or https://nhentai.net/group/GROUP/popular-week, etc\n"
+            "#    Optional page parameter supported: ?page=3 (fetches pages 1 to 3)\n"
+            "# 4) Search URLs: e.g. https://nhentai.net/search/?q=QUERY\n"
+            "# Lines that do not match these formats will be skipped.\n"
+        )
 doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 
 
@@ -188,6 +196,9 @@ nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 # ------------------------------------------------------------
 # Gallery ID selection
 # ------------------------------------------------------------
+DEFAULT_PAGE_SORT = "date"
+page_sort = DEFAULT_PAGE_SORT
+
 DEFAULT_PAGE_RANGE_START = 1
 homepage_range_start = DEFAULT_PAGE_RANGE_START
 
@@ -282,8 +293,9 @@ config = {
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "HOMEPAGE_RANGE_START": getenv_numeric_value("HOMEPAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
-    "HOMEPAGE_RANGE_END": getenv_numeric_value("HOMEPAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
+    "PAGE_SORT": os.getenv("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "PAGE_RANGE_START": getenv_numeric_value("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
     "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
     "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
     "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
@@ -319,8 +331,9 @@ def normalise_config():
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
-        "HOMEPAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
-        "HOMEPAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
+        "PAGE_SORT": DEFAULT_PAGE_SORT,
+        "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+        "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
         "RANGE_START": DEFAULT_RANGE_START,
         "RANGE_END": DEFAULT_RANGE_END,
         "GALLERIES": DEFAULT_GALLERIES,
@@ -405,7 +418,7 @@ def fetch_env_vars():
     Refresh runtime globals from config with normalized values.
     """
     global download_path, doujin_txt_path, extension, extension_download_path
-    global nhentai_api_base, nhentai_mirrors, homepage_range_start, homepage_range_end
+    global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
     global range_start, range_end, galleries, excluded_tags, language, title_type
     global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
     global use_tor, dry_run, calm, debug
@@ -417,8 +430,9 @@ def fetch_env_vars():
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
-        "HOMEPAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
-        "HOMEPAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
+        "PAGE_SORT": DEFAULT_PAGE_SORT,
+        "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+        "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
         "RANGE_START": DEFAULT_RANGE_START,
         "RANGE_END": DEFAULT_RANGE_END,
         "GALLERIES": DEFAULT_GALLERIES,
