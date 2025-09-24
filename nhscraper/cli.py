@@ -259,6 +259,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if m_query:
                     qtype, qvalue, sort_path, page_q = m_query.groups()
                     qvalue = urllib.parse.unquote(qvalue)
+                    sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
 
                     start_page = 1
@@ -270,6 +271,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 elif m_search:
                     search_query, page_q = m_search.groups()
                     search_query = urllib.parse.unquote(search_query)
+                    sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
@@ -283,6 +285,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- Homepage ---
     if query_lower == "homepage":
+        sort_val = DEFAULT_PAGE_SORT
         sort_val = get_valid_sort_value(sort_val)
         start_page = DEFAULT_PAGE_RANGE_START
         end_page = DEFAULT_PAGE_RANGE_END
@@ -309,6 +312,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             entry = [entry]
 
         name = str(entry[0]).strip()
+        sort_val = DEFAULT_PAGE_SORT
         sort_val = get_valid_sort_value(sort_val)
         start_page = DEFAULT_PAGE_RANGE_START
         end_page = DEFAULT_PAGE_RANGE_END
