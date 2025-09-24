@@ -479,9 +479,6 @@ def update_suwayomi_category(category_id: int, attempt: int):
     log_clarification()
     logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
-    poll_interval = 2 # seconds between status checks
-    wait_time = 20 # seconds to wait after completion to ensure Suwayomi has populated all data
-    
     # Mutation to fetch source mangas
     trigger_category_update = f"""
     mutation TriggerCategoryUpdate {{
@@ -536,6 +533,8 @@ def update_suwayomi_category(category_id: int, attempt: int):
       }
     }
     """
+    
+    wait_time = 2
 
     try:
         # Fetch all mangas in the category update
@@ -553,7 +552,7 @@ def update_suwayomi_category(category_id: int, attempt: int):
             result = graphql_request(update_status_query, debug=False)
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
-                time.sleep(poll_interval)
+                time.sleep(wait_time)
                 continue
 
             jobs_info = result.get("data", {}).get("libraryUpdateStatus", {}).get("jobsInfo", {})
@@ -579,11 +578,11 @@ def update_suwayomi_category(category_id: int, attempt: int):
                 logger.warning(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
                 
                 # Wait a bit to ensure Suwayomi has populated all data
-                wait = max(wait_time, (1 + (total_jobs or 0) / 50)) # Adaptive waiting (1000 jobs = 20s)
+                wait = max(wait_time * 10, (1 + (total_jobs or 0) / 100)) # Adaptive waiting (1000 jobs = 10s)
                 time.sleep(wait) # Adaptive polling
                 break
 
-            time.sleep(max(poll_interval, (1 + (total_jobs or 0) / 1000))) # Adaptive polling
+            time.sleep(max(wait_time, (1 + (total_jobs or 0) / 1000))) # Adaptive polling
 
         pbar.close()
 
