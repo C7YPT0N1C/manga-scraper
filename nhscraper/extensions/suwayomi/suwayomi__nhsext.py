@@ -477,7 +477,7 @@ def ensure_category(category_name=None):
 
 def update_suwayomi_category(category_id: int):
     log_clarification()
-    logger.info(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
+    logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
     poll_interval = 2 # seconds between status checks
     wait_time = 20 # seconds to wait after completion to ensure Suwayomi has populated all data
@@ -543,7 +543,6 @@ def update_suwayomi_category(category_id: int):
         
         # Trigger the global update
         graphql_request(trigger_global_update, debug=False)
-        logger.info(f"Suwayomi library update triggered. Waiting for completion...")
 
         # Initialize progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update", unit="job", dynamic_ncols=True)
