@@ -206,7 +206,7 @@ galleries = DEFAULT_GALLERIES
 # ------------------------------------------------------------
 # Filters
 # ------------------------------------------------------------
-DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated"
+DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore"
 # normalized into a list at import
 excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
 
