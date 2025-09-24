@@ -380,8 +380,9 @@ def main():
     get_session(referrer="CLI", status="build")
     
     # Build Gallery List (make sure not empty.)
-    log_clarification("debug")
+    log_clarification()
     log(f"Parsing galleries from NHentai. This may take a while...")
+    log_clarification()
     gallery_list = build_gallery_list(args)
     if not gallery_list:
         logger.warning("No galleries provided. Exiting.")

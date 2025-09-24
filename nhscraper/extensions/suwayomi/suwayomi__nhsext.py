@@ -385,7 +385,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
             logger.info("GraphQL: Successfully logged in and obtained session cookie.")
 
         if debug == True:
-            log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}")
+            log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # DEBUGGING
         
         response = graphql_session.post(
             GRAPHQL_URL,
@@ -396,7 +396,7 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
         result = response.json()
         
         if debug == True:
-            log(f"GraphQL Request Response: {json.dumps(result, indent=2)}")
+            log(f"GraphQL Request Response: {json.dumps(result, indent=2)}", "debug") # DEBUGGING
         
         return result
 
@@ -476,7 +476,7 @@ def ensure_category(category_name=None):
 # ----------------------------
 
 def update_suwayomi_category(category_id: int):
-    log_clarification("debug")
+    log_clarification()
     log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
     
     poll_interval = 2 # seconds between status checks
@@ -774,7 +774,7 @@ def process_deferred_creators():
     still_deferred = set()
     
     while process_creators_attempt <= configurator.max_retries:
-        log_clarification("debug")
+        log_clarification()
         log(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
         
         update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
@@ -1037,5 +1037,5 @@ def post_run_hook():
     process_deferred_creators()
     
     # Update Suwayomi category at end
-    log_clarification("debug")
+    log_clarification()
     log("Please update the library manually and / or run a small download to reflect any changes.")

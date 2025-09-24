@@ -99,7 +99,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
     fetch_env_vars() # Refresh env vars in case config changed.
 
     if ReturnReport:
-        log_clarification("debug")
+        log_clarification()
         skipped_report = "\n".join(skipped_galleries)
         log(f"All Skipped Galleries:\n{skipped_report}")
     else:
@@ -408,5 +408,5 @@ def start_downloader(gallery_list=None):
     human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
 
     #update_skipped_galleries(True) # Report all skipped galleries at end
-    log_clarification("debug")
+    log_clarification()
     log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
