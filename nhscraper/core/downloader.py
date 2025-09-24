@@ -36,13 +36,13 @@ def load_extension(suppess_pre_run_hook: bool = False):
     
     if suppess_pre_run_hook==False:
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
-        logger.info(f"Downloading Gallery To: {download_location}")
+        logger.info(f"Downloading Galleries To: {download_location}")
 
     if not dry_run:
         os.makedirs(download_location, exist_ok=True)
     else:
         if suppess_pre_run_hook==False:
-            logger.info(f"[DRY RUN] Downloader: Skipping creation of: {download_location}")
+            logger.info(f"[DRY RUN] Would Download Galleries To: {download_location}")
 
 ####################################################################################################
 # UTILITIES
@@ -159,11 +159,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     excluded_tags = configurator.excluded_tags or DEFAULT_EXCLUDED_TAGS
     if isinstance(excluded_tags, str):
         excluded_tags = [excluded_tags]
-
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
-    log_clarification("debug")
-    log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
-
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
@@ -171,13 +167,13 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     language = configurator.language or DEFAULT_LANGUAGE
     if isinstance(language, str):
         language = [language]
-
     allowed_gallery_language = [lang.lower() for lang in language]
-    log_clarification("debug")
-    log(f"Allowed Languages: {allowed_gallery_language}", "debug")
-
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
+    
+    log_clarification("debug")
+    log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
+    log(f"Allowed Languages: {allowed_gallery_language}", "debug")
 
     # --- Filtering ---
     for tag in gallery_tags:

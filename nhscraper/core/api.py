@@ -16,8 +16,6 @@ from nhscraper.core.configurator import *
 # GLOBAL VARIABLES
 ################################################################################################################
 
-download_path = get_download_path() # Get download path from config
-
 file_lock = threading.Lock()
 
 # ===============================
@@ -232,7 +230,7 @@ def clean_title(meta_or_title):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     # Ensure global broken symbols file path is set
-    broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
+    broken_symbols_file = os.path.join(configurator.download_path, "possible_broken_symbols.json")
 
     def load_possible_broken_symbols() -> dict[str, str]:
         """
@@ -269,8 +267,8 @@ def clean_title(meta_or_title):
         except Exception as e:
             logger.warning(f"Could not save broken symbols file: {e}")
     
-    log_clarification("debug")
-    logger.debug(f"Broken symbols file: {broken_symbols_file}")
+    #log_clarification("debug")
+    #logger.debug(f"Broken symbols file: {broken_symbols_file}")
     
     # Load persisted broken symbols (mapping)
     possible_broken_symbols = load_possible_broken_symbols()
@@ -677,12 +675,12 @@ def fetch_image_urls(meta: dict, page: int):
         filename = f"{page}.{ext}"
 
         # Try each mirror in order
-        nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS
-        if isinstance(nhentai_mirrors, str):
-            nhentai_mirrors = [nhentai_mirrors]
+        #nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS # Normalised in configurator
+        #if isinstance(nhentai_mirrors, str):
+        #    nhentai_mirrors = [nhentai_mirrors]
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in nhentai_mirrors
+            for mirror in MIRRORS
         ]
 
         log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
