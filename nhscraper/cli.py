@@ -248,8 +248,18 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     gallery_ids.add(int(m_gallery.group(1)))
                     continue
 
+                # Homepage pagination URL → treat same as --homepage
+                m_homepage = re.search(r"nhentai\.net/\?page=(\d+)", line)
+                if m_homepage:
+                    page_q = int(m_homepage.group(1))
+                    sort_val = DEFAULT_PAGE_SORT
+                    sort_val = get_valid_sort_value(sort_val)
+                    start_page = 1
+                    end_page = page_q if page_q else DEFAULT_PAGE_RANGE_END
+                    gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page))
+                    continue
+
                 # Creator / group / tag / character / parody / search URLs
-                # Determine type from path
                 m_query = re.search(
                     r"nhentai\.net/(artist|group|tag|character|parody)/([^/?]+)(?:/(popular-today|popular-week|popular))?(?:\?page=(\d+))?",
                     line
@@ -260,18 +270,15 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     qtype, qvalue, sort_path, page_q = m_query.groups()
                     qvalue = urllib.parse.unquote(qvalue)
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
-
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-
                     gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page))
                     continue
 
                 elif m_search:
                     search_query, page_q = m_search.groups()
                     search_query = urllib.parse.unquote(search_query)
-                    sort_val = DEFAULT_PAGE_SORT
-                    sort_val = get_valid_sort_value(sort_val)
+                    sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
                     gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page))
