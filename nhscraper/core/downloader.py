@@ -156,17 +156,17 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             return False
 
     # --- Excluded Tags ---
-    excluded_tags = configurator.excluded_tags or DEFAULT_EXCLUDED_TAGS
-    if isinstance(excluded_tags, str):
-        excluded_tags = [excluded_tags]
+    #excluded_tags = configurator.excluded_tags or DEFAULT_EXCLUDED_TAGS # Normalised in configurator
+    #if isinstance(excluded_tags, str):
+    #    excluded_tags = [excluded_tags]
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
     # --- Allowed Languages ---
-    language = configurator.language or DEFAULT_LANGUAGE
-    if isinstance(language, str):
-        language = [language]
+    #language = configurator.language or DEFAULT_LANGUAGE # Normalised in configurator
+    #if isinstance(language, str):
+    #    language = [language]
     allowed_gallery_language = [lang.lower() for lang in language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
