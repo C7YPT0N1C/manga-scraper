@@ -230,7 +230,7 @@ def clean_title(meta_or_title):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     # Ensure global broken symbols file path is set
-    broken_symbols_file = os.path.join(configurator.download_path, "possible_broken_symbols.json")
+    broken_symbols_file = os.path.join(configurator.extension_download_path, "possible_broken_symbols.json")
     
     log_clarification("debug")
     log(f"Broken Symbols File at {broken_symbols_file}", "debug")
