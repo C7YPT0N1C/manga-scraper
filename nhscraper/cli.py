@@ -248,15 +248,14 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     gallery_ids.add(int(m_gallery.group(1)))
                     continue
 
-                # Homepage pagination URL → treat same as --homepage
+                # Homepage URLs (e.g. https://nhentai.net/?page=6)
                 m_homepage = re.search(r"nhentai\.net/\?page=(\d+)", line)
                 if m_homepage:
-                    page_q = int(m_homepage.group(1))
+                    end_page = int(m_homepage.group(1))
                     sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
-                    start_page = 1
-                    end_page = page_q if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page))
+                    start_page = DEFAULT_PAGE_RANGE_START
+                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
