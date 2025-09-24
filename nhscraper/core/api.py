@@ -257,7 +257,8 @@ def clean_title(meta_or_title):
                 try:
                     return json.loads(content)
                 except json.JSONDecodeError as e:
-                    logger.warning(f"JSON error: '{e}', attempting auto-recovery. You can (probably) safely ignore this if you don't see this *too* often.")
+                    logger.info(f"JSON error: '{e}', attempting auto-recovery.")
+                    logger.info("This is handled automatically. You can (probably) safely ignore this if you don't see this too often or issues arise.")
 
                     # Try to recover: cut everything after the last closing brace
                     if "}" in content:
