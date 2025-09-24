@@ -677,6 +677,9 @@ def fetch_image_urls(meta: dict, page: int):
         filename = f"{page}.{ext}"
 
         # Try each mirror in order
+        nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS
+        if isinstance(nhentai_mirrors, str):
+            nhentai_mirrors = [nhentai_mirrors]
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
             for mirror in nhentai_mirrors
