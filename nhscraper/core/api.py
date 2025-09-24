@@ -286,7 +286,7 @@ def clean_title(meta_or_title):
             except Exception as e:
                 logger.error(f"Could not save broken symbols: {e}")
     
-    def is_cjk(char: str) -> bool:
+    def is_cjk(char: str) -> bool: # Add a flag for this? # TEST
         """Return True if char is a Chinese/Japanese/Korean character."""
         code = ord(char)
         return (
