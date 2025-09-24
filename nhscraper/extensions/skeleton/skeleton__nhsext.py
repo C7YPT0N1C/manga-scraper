@@ -60,7 +60,7 @@ def pre_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
@@ -96,12 +96,14 @@ def install_extension():
     """
     
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -124,7 +126,9 @@ def uninstall_extension():
     
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
     
@@ -146,6 +150,13 @@ def uninstall_extension():
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
+    """
+    Update environment variables used by this module.
+    Call this function at the start of any function that uses any these variables to ensure they are up to date.
+    """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
@@ -153,13 +164,15 @@ def test_hook():
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     log_clarification("debug")
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -218,6 +231,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Updates tqdm progress bar with current creator.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
         if pbar and creator:
@@ -230,7 +245,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
@@ -282,7 +297,9 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
 # Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
@@ -296,7 +313,9 @@ def pre_batch_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
     log_clarification("debug")
@@ -307,7 +326,9 @@ def pre_gallery_download_hook(gallery_id):
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
@@ -319,7 +340,9 @@ def during_gallery_download_hook(gallery_id):
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
@@ -331,7 +354,9 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
@@ -343,7 +368,9 @@ def post_batch_hook():
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     

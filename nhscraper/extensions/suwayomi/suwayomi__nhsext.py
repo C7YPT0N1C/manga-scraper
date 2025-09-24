@@ -125,7 +125,7 @@ def pre_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
         return
     try:
@@ -160,11 +160,13 @@ TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
 def install_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
     if not DEDICATED_DOWNLOAD_PATH:
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -221,8 +223,10 @@ WantedBy=multi-user.target
 
 def uninstall_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -255,6 +259,8 @@ def test_hook():
     Call this function at the start of any function that uses any these variables to ensure they are up to date.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
@@ -262,13 +268,15 @@ def test_hook():
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     log_clarification("debug")
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
@@ -322,12 +330,14 @@ def graphql_request(query: str, variables: dict = None, debug: bool = False):
     Framework for making requests to GraphQL
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     #debug = True  # DEBUGGING
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
@@ -357,12 +367,14 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     global graphql_session, AUTH_USERNAME, AUTH_PASSWORD
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
         return None
 
@@ -671,9 +683,11 @@ def update_creator_manga(meta):
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+        
     log_clarification("debug")
     
-    if dry_run:
+    if configurator.dry_run:
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
@@ -750,7 +764,7 @@ def update_creator_manga(meta):
     save_creators_metadata(metadata)
 
     # --- Update manga cover ---
-    if not dry_run:
+    if not configurator.dry_run:
         try:
             for creator_name in creators:
                 creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
@@ -794,6 +808,8 @@ def process_deferred_creators():
     Adds all existing local mangas to library + category if they exist on disk.
     Cleans up creators_metadata.json so successful creators are removed from deferred creators.
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
     
     process_creators_attempt = 1
     
@@ -927,6 +943,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Updates tqdm progress bar with current creator.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
         if pbar and creator:
@@ -939,7 +957,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if dry_run:
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
@@ -991,7 +1009,9 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
 # Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
         return
     
@@ -1008,7 +1028,9 @@ def pre_batch_hook(gallery_list):
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
     
     log_clarification("debug")
@@ -1016,7 +1038,9 @@ def pre_gallery_download_hook(gallery_id):
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
         return
     
@@ -1025,7 +1049,9 @@ def during_gallery_download_hook(gallery_id):
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
         return
     
@@ -1041,7 +1067,9 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
         return
     
@@ -1050,7 +1078,9 @@ def post_batch_hook():
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
-    if dry_run:
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    if configurator.dry_run:
         logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
         return
     
