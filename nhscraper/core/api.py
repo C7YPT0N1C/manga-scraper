@@ -231,6 +231,9 @@ def clean_title(meta_or_title):
     
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(configurator.download_path, "possible_broken_symbols.json")
+    
+    log_clarification("debug")
+    log(f"Broken Symbols File at {broken_symbols_file}", "debug")
 
     def load_possible_broken_symbols() -> dict[str, str]:
         """
