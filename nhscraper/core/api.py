@@ -501,15 +501,10 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     sort_value: date / recent / today / week / popular / all_time
     page: page number (1-based)
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     query_lower = query_type.lower()
-
-    # Normalise sort
-    if sort_value not in ("date", "recent", "today", "week", "popular", "all_time"):
-        sort_value = DEFAULT_PAGE_SORT
-    if sort_value == "recent":
-        sort_value = "date"
-    if sort_value == "all_time":
-        sort_value = "popular"
 
     # Homepage
     if query_lower == "homepage":
@@ -545,15 +540,8 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     sort_value: date / recent / today / week / popular / all_time (defaults to 'date')
     start_page, end_page: pagination
     """
+    
     fetch_env_vars()  # Refresh env vars in case config changed.
-
-    # Normalise sort
-    if sort_value not in ("date", "recent", "today", "week", "popular", "all_time"):
-        sort_value = DEFAULT_PAGE_SORT
-    if sort_value == "recent":
-        sort_value = "date"
-    if sort_value == "all_time":
-        sort_value = "popular"
 
     ids: set[int] = set()
     page = start_page

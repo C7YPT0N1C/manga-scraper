@@ -219,7 +219,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     gallery_ids = set()
     query_lower = query_type.lower()
     
-    valid_sorts = ("date", "recent", "today", "week", "popular", "all_time")
+    valid_sorts = ("date", "recent", "popular_today", "today", "popular_week", "week", "popular", "all_time")
 
     # --- File input ---
     if query_lower == "file":
@@ -231,6 +231,10 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             for line in f:
                 line = line.strip()
                 if not line:
+                    continue
+                
+                # Skip comments without warning 
+                if line.startswith("#"):
                     continue
 
                 # Plain numeric ID
@@ -255,13 +259,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if m_query:
                     qtype, qvalue, sort_path, page_q = m_query.groups()
                     qvalue = urllib.parse.unquote(qvalue)
-                    sort_val = DEFAULT_PAGE_SORT
-                    if sort_path == "popular-today":
-                        sort_val = "today"
-                    elif sort_path == "popular-week":
-                        sort_val = "week"
-                    elif sort_path == "popular":
-                        sort_val = "popular"
+                    sort_val = get_valid_sort_value(sort_val)
 
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
@@ -270,12 +268,12 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     continue
 
                 elif m_search:
-                    search_q, page_q = m_search.groups()
-                    search_q = urllib.parse.unquote(search_q)
-                    sort_val = DEFAULT_PAGE_SORT
+                    search_query, page_q = m_search.groups()
+                    search_query = urllib.parse.unquote(search_query)
+                    sort_val = get_valid_sort_value(sort_val)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_q, sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page))
                     continue
 
                 else:
@@ -285,7 +283,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- Homepage ---
     if query_lower == "homepage":
-        sort_val = DEFAULT_PAGE_SORT
+        sort_val = get_valid_sort_value(sort_val)
         start_page = DEFAULT_PAGE_RANGE_START
         end_page = DEFAULT_PAGE_RANGE_END
 
@@ -311,7 +309,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             entry = [entry]
 
         name = str(entry[0]).strip()
-        sort_val = DEFAULT_PAGE_SORT
+        sort_val = get_valid_sort_value(sort_val)
         start_page = DEFAULT_PAGE_RANGE_START
         end_page = DEFAULT_PAGE_RANGE_END
 

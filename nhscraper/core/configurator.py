@@ -317,6 +317,8 @@ config = {
     "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
 }
 
+##################
+
 # ------------------------------------------------------------
 # Normalise config with defaults
 # ------------------------------------------------------------
@@ -450,3 +452,25 @@ def fetch_env_vars():
         "DEBUG": DEFAULT_DEBUG,
     }.items():
         globals()[key.lower()] = normalise_value(key, config.get(key, default))
+
+def get_valid_sort_value(sort_value):
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    valid_sort_value = DEFAULT_PAGE_SORT # Set to default.
+    
+    if sort_value in ("date", "recent"):
+        valid_sort_value = "date"       
+    
+    if sort_value in ("popular-today", "popular_today", "today"):
+        valid_sort_value = "popular-today"
+    
+    if sort_value in ("popular-week", "popular_week", "week"):
+        valid_sort_value = "popular-week"       
+    
+    if sort_value in ("popular", "all_time"):
+        valid_sort_value = "popular"
+    
+    else:
+        valid_sort_value = DEFAULT_PAGE_SORT # Fallback to default.
+    
+    return valid_sort_value
