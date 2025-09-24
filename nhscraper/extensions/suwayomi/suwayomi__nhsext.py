@@ -475,7 +475,7 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi_category(category_id: int):
+def update_suwayomi_category(category_id: int, attempt: int):
     log_clarification()
     logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
@@ -545,7 +545,7 @@ def update_suwayomi_category(category_id: int):
         graphql_request(trigger_global_update, debug=False)
 
         # Initialize progress bar
-        pbar = tqdm(total=0, desc=f"Suwayomi Update", unit="job", dynamic_ncols=True)
+        pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
@@ -801,9 +801,9 @@ def process_deferred_creators():
     
     while process_creators_attempt <= configurator.max_retries:
         log_clarification()
-        log(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
+        logger.info(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
         
-        update_suwayomi_category(CATEGORY_ID) # Update Suwayomi category first
+        update_suwayomi_category(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
 
         # ----------------------------
         # Add mangas not yet in library

@@ -143,7 +143,7 @@ def worst_case_time_estimate(context: str, id_list: list):
     #logger.info(f"Number of Threads: Gallery: {threads_galleries}, Image: {threads_images}") # DEBUGGING
     #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
     #logger.info(f"Max Sleep Time: {max_sleep}") # DEBUGGING
-    print(f"{context}: Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes")
+    print(f"{context} ({current_run_num_of_galleries} Galleries): Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes")
 
 # ------------------------------
 # Example Test Run

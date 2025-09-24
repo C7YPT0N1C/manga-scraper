@@ -67,7 +67,7 @@ def worst_case_time_estimate(context: str, id_list: list):
     #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
     #logger.info(f"Max Sleep Time: {configurator.max_sleep}") # DEBUGGING
     log_clarification()
-    logger.warning(f"{context}: Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes")
+    logger.warning(f"{context} ({current_run_num_of_galleries} Galleries): Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes")
 
 def build_gallery_path(meta, iteration: dict = None):
     """
@@ -381,8 +381,8 @@ def start_downloader(gallery_list=None):
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
-        current_batch_number = batch_num // (BATCH_SIZE + 1)
-        total_batch_numbers = len(gallery_list) // BATCH_SIZE
+        current_batch_number = (batch_num // (BATCH_SIZE + 1), 1)
+        total_batch_numbers = (len(gallery_list) // BATCH_SIZE, 1)
         current_out_of_total_batch_number = f"{current_batch_number} / {total_batch_numbers}"
         
         worst_case_time_estimate(f"Batch {current_out_of_total_batch_number}", batch_list)
