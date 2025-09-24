@@ -279,7 +279,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     continue
 
                 else:
-                    logger.warning(f"Unrecognized line in file, skipping: {line}")
+                    logger.warning(f"Unrecognised line in file, skipping: {line}")
 
         return gallery_ids
 
