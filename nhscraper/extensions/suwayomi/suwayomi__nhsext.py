@@ -481,10 +481,33 @@ def update_suwayomi_category(category_id: int):
     
     poll_interval = 2 # seconds between status checks
     wait_time = 20 # seconds to wait after completion to ensure Suwayomi has populated all data
+    
+    # Mutation to fetch source mangas
+    trigger_category_update = f"""
+    mutation TriggerCategoryUpdate {{
+    fetchSourceManga(
+        input: {{
+        source: {category_id}
+        page: 1
+        type: LATEST
+        }}
+    ) {{
+        hasNextPage
+        mangas {{
+        id
+        title
+        thumbnailUrl
+        inLibrary
+        initialized
+        sourceId
+        }}
+    }}
+    }}
+    """
 
     # Mutation to trigger the update once
-    trigger_mutation = f"""
-    mutation UpdateLibraryCategory {{
+    trigger_global_update = f"""
+    mutation TriggerGlobalUpdate {{
       updateLibrary(input: {{ categories: [{category_id}] }}) {{
         updateStatus {{
           jobsInfo {{
@@ -500,7 +523,7 @@ def update_suwayomi_category(category_id: int):
     """
 
     # Query to check the status repeatedly
-    status_query = """
+    update_status_query = """
     query CheckLibraryCategoryUpdateStatus {
       libraryUpdateStatus {
         jobsInfo {
@@ -515,17 +538,20 @@ def update_suwayomi_category(category_id: int):
     """
 
     try:
-        # Trigger the update once
-        graphql_request(trigger_mutation, debug=False)
-        logger.info(f"Suwayomi library update triggered for Category ID {category_id}. Waiting for completion...")
+        # Fetch all mangas in the category update
+        graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
+        
+        # Trigger the global update
+        graphql_request(trigger_global_update, debug=False)
+        logger.info(f"Suwayomi library update triggered. Waiting for completion...")
 
         # Initialize progress bar
-        pbar = tqdm(total=0, desc=f"Suwayomi Category {category_id} Update", unit="job", dynamic_ncols=True)
+        pbar = tqdm(total=0, desc=f"Suwayomi Update", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
         while True:
-            result = graphql_request(status_query, debug=False)
+            result = graphql_request(update_status_query, debug=False)
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
                 time.sleep(poll_interval)
