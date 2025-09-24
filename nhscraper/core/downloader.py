@@ -377,21 +377,25 @@ def start_downloader(gallery_list=None):
     
     load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
     
-    BATCH_SLEEP_TIME = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
+    batch_sleep_time = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
-        worst_case_time_estimate(f"Batch {batch_num} (Galleries {batch_num} - {batch_num + len(batch_list)})", batch_list)
+        current_batch_number = batch_num // (BATCH_SIZE + 1)
+        total_batch_numbers = len(gallery_list) // BATCH_SIZE
+        current_out_of_total_batch_number = f"{current_batch_number} / {total_batch_numbers}"
+        
+        worst_case_time_estimate(f"Batch {current_out_of_total_batch_number}", batch_list)
         
         log_clarification()
-        logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_list)} Galleries...")
+        logger.info(f"Downloading Batch {current_out_of_total_batch_number} with {len(batch_list)} Galleries...")
     
         start_batch(batch_list) # Start batch.
         
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             log_clarification()
-            logger.info(f"Batch {batch_num//BATCH_SIZE + 1} complete. Sleeping {BATCH_SLEEP_TIME}s before next batch...")
-            time.sleep(BATCH_SLEEP_TIME) # Pause between batches
+            logger.info(f"Batch {current_out_of_total_batch_number} complete. Sleeping {batch_sleep_time}s before next batch...")
+            time.sleep(batch_sleep_time) # Pause between batches
     
         else: # Last batch
             log_clarification()
