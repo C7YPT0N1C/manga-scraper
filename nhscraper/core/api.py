@@ -604,7 +604,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                                 resp = None
                         break
                     wait = dynamic_sleep("api", attempt=(attempt))
-                    logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
+                    logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
                     time.sleep(wait)
 
             if resp is None:
@@ -731,7 +731,7 @@ def fetch_gallery_metadata(gallery_id: int):
                         logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             wait = dynamic_sleep("api", attempt=(attempt))
-            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
+            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s")
             time.sleep(wait)
         except requests.RequestException as e:
             if attempt >= configurator.max_retries:
@@ -748,7 +748,7 @@ def fetch_gallery_metadata(gallery_id: int):
                         logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             wait = dynamic_sleep("api", attempt=(attempt))
-            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
+            logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s")
             time.sleep(wait)
 
 ##################################################################################################################################

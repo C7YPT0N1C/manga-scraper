@@ -280,7 +280,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             except Exception as e:
                 wait = 2 ** attempt
                 log_clarification()
-                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait}s")
+                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s")
                 time.sleep(wait)
 
         # If all retries for this mirror failed, move to next mirror
