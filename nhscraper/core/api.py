@@ -234,23 +234,38 @@ def clean_title(meta_or_title):
     # Ensure global broken symbols file path is set
     broken_symbols_file = os.path.join(download_path, "possible_broken_symbols.json")
 
-    def load_possible_broken_symbols() -> set[str]:
-        if os.path.exists(broken_symbols_file):
+    def load_possible_broken_symbols() -> dict[str, str]:
+        """
+        Load possible broken symbols as a mapping { "symbol": "_" }.
+        Always creates the file if missing.
+        """
+        if not os.path.exists(broken_symbols_file):
             try:
-                with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                    return set(json.load(f))
+                os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
+                with open(broken_symbols_file, "w", encoding="utf-8") as f:
+                    json.dump({}, f, ensure_ascii=False, indent=2)
+                logger.debug(f"Created new broken symbols file: {broken_symbols_file}")
             except Exception as e:
-                logger.warning(f"Could not load broken symbols file: {e}")
-        return set()
+                logger.error(f"Could not create broken symbols file: {e}")
+            return {}
 
-    def save_possible_broken_symbols(symbols: set[str]):
+        try:
+            with open(broken_symbols_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            logger.warning(f"Could not load broken symbols file: {e}")
+        return {}
+
+    def save_possible_broken_symbols(symbols: dict[str, str]):
         """
         Save possible broken symbols as a mapping { "symbol": "_" }.
         """
         try:
-            symbol_map = {s: "_" for s in sorted(symbols)}
+            os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
             with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                json.dump(symbol_map, f, ensure_ascii=False, indent=2)
+                json.dump(symbols, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"Could not save broken symbols file: {e}")
     
@@ -318,9 +333,8 @@ def clean_title(meta_or_title):
     if not title:
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
-    # Persist updated broken symbols mapping
-    if possible_broken_symbols:
-        save_possible_broken_symbols(possible_broken_symbols)
+    # Persist updated broken symbols mapping (always save to guarantee file exists)
+    save_possible_broken_symbols(possible_broken_symbols)
 
     return make_filesystem_safe(title)
 
