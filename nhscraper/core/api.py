@@ -135,58 +135,6 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed.
 
         return session # Return the current session
-
-################################################################################################################
-
-# ===============================
-# NHentai API
-# ===============================
-# NHentai API Endpoints
-#
-# Default base URL: https://nhentai.net/api
-#
-# 1. Homepage
-#    GET /galleries
-#    - Returns the most recent galleries
-#
-# 2. Gallery by ID
-#    GET /gallery/{id}
-#    - Fetch gallery information for a specific gallery ID
-#
-# 3. Search
-#    GET /galleries/search
-#    - Parameters:
-#        query=<search terms>
-#        page=<page number>
-#
-# 4. Tag
-#    GET /galleries/tag/{tag}
-#    - Fetch galleries by a specific tag
-#
-# 5. Artist
-#    GET /galleries/artist/{artist}
-#    - Fetch galleries by a specific artist
-#
-# 6. Group
-#    GET /galleries/group/{group}
-#    - Fetch galleries by a specific circle/group
-#
-# 7. Parody
-#    GET /galleries/parody/{parody}
-#    - Fetch galleries by a specific parody/series
-#
-# 8. Character
-#    GET /galleries/character/{character}
-#    - Fetch galleries by a specific character
-#
-# 9. Popular / Trending (if supported) # ADD SUPPORT FOR THESE # TEST
-#    GET /galleries/popular
-#    GET /galleries/trending
-#
-# Notes:
-# - Pagination is typically handled via the `page` query parameter.
-# - Responses are in JSON format with metadata, tags, images, and media info.
-# - Image URLs are usually served via https://i.nhentai.net/galleries/{media_id}/{page}.{ext}
     
 ################################################################################################################
 # METADATA CLEANING
@@ -491,17 +439,68 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
 #####################################################################################################################################################################
 
 # ===============================
+# NHentai API
+# ===============================
+# NHentai API Endpoints
+#
+# Default base URL: https://nhentai.net/api
+#
+# 1. Homepage
+#    GET /galleries
+#    - Returns the most recent galleries
+#
+# 2. Gallery by ID
+#    GET /gallery/{id}
+#    - Fetch gallery information for a specific gallery ID
+#
+# 3. Search
+#    GET /galleries/search
+#    - Parameters:
+#        query=<search terms>
+#        page=<page number>
+#        sort=<date / popular-today / popular-week / popular>
+#
+# 4. Tag
+#    GET /galleries/tag/{tag}
+#    - Fetch galleries by a specific tag
+#
+# 5. Artist
+#    GET /galleries/artist/{artist}
+#    - Fetch galleries by a specific artist
+#
+# 6. Group
+#    GET /galleries/group/{group}
+#    - Fetch galleries by a specific circle/group
+#
+# 7. Parody
+#    GET /galleries/parody/{parody}
+#    - Fetch galleries by a specific parody/series
+#
+# 8. Character
+#    GET /galleries/character/{character}
+#    - Fetch galleries by a specific character
+#
+# 9. Popular / Trending (if supported) # ADD SUPPORT FOR THESE # TEST
+#    GET /galleries/popular
+#    GET /galleries/trending
+#
+# Notes:
+# - Pagination is typically handled via the `page` query parameter.
+# - Responses are in JSON format with metadata, tags, images, and media info.
+# - Image URLs are usually served via https://i.nhentai.net/galleries/{media_id}/{page}.{ext}
+
+# ===============================
 # BUILD API URLS
 # ===============================
-def build_url(query_type: str, query_value: str, page: int) -> str:
+def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> str:
     query_lower = query_type.lower()
     
-    sort = "date" # MOVE TO CLI AT SOME POINT # TEST
+    sort = "date" # CHANGE SORTING HERE
     sort_lower = sort.lower()
 
     # Homepage
     if query_lower == "homepage":
-        return f"{nhentai_api_base}/galleries/all?page={page}&sort=date"
+        return f"{nhentai_api_base}/galleries/all?page={page}&sort={sort_lower}"
 
     # Tag-based queries (artist, group, tag, character, parody)
     if query_lower in ("artist", "group", "tag", "character", "parody"):
