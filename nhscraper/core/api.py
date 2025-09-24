@@ -609,8 +609,58 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str, start_
         return set()
 
 # ===============================
-# FETCH DOUJINSHI METADATA
+# FETCH IMAGE URLS AND DOUJINSHI METADATA
 # ===============================
+def fetch_image_urls(meta: dict, page: int):
+    """
+    Returns the full image URL for a gallery page.
+    Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
+    Handles missing metadata, unknown types, and defaulting to webp.
+    """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    try:
+        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
+
+        pages = meta.get("images", {}).get("pages", [])
+        if page - 1 >= len(pages):
+            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Not in metadata")
+            return None
+
+        page_info = pages[page - 1]
+        if not page_info:
+            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Metadata is None")
+            return None
+
+        # Map type codes to extensions
+        ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
+        type_code = page_info.get("t", "w")  # default to webp
+        if type_code not in ext_map:
+            log_clarification()
+            logger.warning(
+                f"Unknown image type '{type_code}' for Gallery {meta.get('id','?')}: Page {page}: Defaulting to webp"
+            )
+
+        ext = ext_map.get(type_code, "webp")
+        filename = f"{page}.{ext}"
+
+        # Try each mirror in order
+        #nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS # Normalised in configurator
+        #if isinstance(nhentai_mirrors, str):
+        #    nhentai_mirrors = [nhentai_mirrors]
+        urls = [
+            f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
+            for mirror in configurator.nhentai_mirrors
+        ]
+
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
+        return urls  # return list so downloader can try them in order
+
+    except Exception as e:
+        logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
+        return None
+
 def fetch_gallery_metadata(gallery_id: int):
     fetch_env_vars() # Refresh env vars in case config changed.
 
@@ -679,59 +729,6 @@ def fetch_gallery_metadata(gallery_id: int):
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait}s")
             time.sleep(wait)
-
-# ===============================
-# FETCH IMAGE URLS
-# ===============================
-def fetch_image_urls(meta: dict, page: int):
-    """
-    Returns the full image URL for a gallery page.
-    Tries mirrors from NHENTAI_MIRRORS in order until one succeeds.
-    Handles missing metadata, unknown types, and defaulting to webp.
-    """
-    
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
-    try:
-        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
-
-        pages = meta.get("images", {}).get("pages", [])
-        if page - 1 >= len(pages):
-            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Not in metadata")
-            return None
-
-        page_info = pages[page - 1]
-        if not page_info:
-            logger.warning(f"Gallery {meta.get('id','?')}: Page {page}: Metadata is None")
-            return None
-
-        # Map type codes to extensions
-        ext_map = {"j": "jpg", "p": "png", "g": "gif", "w": "webp"}
-        type_code = page_info.get("t", "w")  # default to webp
-        if type_code not in ext_map:
-            log_clarification()
-            logger.warning(
-                f"Unknown image type '{type_code}' for Gallery {meta.get('id','?')}: Page {page}: Defaulting to webp"
-            )
-
-        ext = ext_map.get(type_code, "webp")
-        filename = f"{page}.{ext}"
-
-        # Try each mirror in order
-        #nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS # Normalised in configurator
-        #if isinstance(nhentai_mirrors, str):
-        #    nhentai_mirrors = [nhentai_mirrors]
-        urls = [
-            f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in configurator.nhentai_mirrors
-        ]
-
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
-        return urls  # return list so downloader can try them in order
-
-    except Exception as e:
-        logger.warning(f"Failed to build image URL for Gallery {meta.get('id','?')}: Page {page}: {e}")
-        return None
 
 ##################################################################################################################################
 ##################################################################################################################################
