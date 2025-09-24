@@ -461,13 +461,13 @@ def get_valid_sort_value(sort_value):
     if sort_value in ("date", "recent"):
         valid_sort_value = "date"       
     
-    if sort_value in ("popular-today", "popular_today", "today"):
+    elif sort_value in ("popular-today", "popular_today", "today"):
         valid_sort_value = "popular-today"
     
-    if sort_value in ("popular-week", "popular_week", "week"):
+    elif sort_value in ("popular-week", "popular_week", "week"):
         valid_sort_value = "popular-week"       
     
-    if sort_value in ("popular", "all_time"):
+    elif sort_value in ("popular", "all_time"):
         valid_sort_value = "popular"
     
     else:
