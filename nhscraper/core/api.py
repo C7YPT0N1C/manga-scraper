@@ -680,7 +680,7 @@ def fetch_image_urls(meta: dict, page: int):
         #    nhentai_mirrors = [nhentai_mirrors]
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in DEFAULT_NHENTAI_MIRRORS
+            for mirror in configurator.nhentai_mirrors
         ]
 
         log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
