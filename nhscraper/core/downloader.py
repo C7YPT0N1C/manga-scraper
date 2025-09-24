@@ -113,7 +113,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
         gallery_id = meta.get("id", "Unknown")
         gallery_title = clean_title(meta)
         log_clarification("debug")
-        skipped_galleries.append(f"Gallery {gallery_id}: {Reason}")
+        skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
@@ -277,7 +277,7 @@ def process_galleries(batch_ids):
 
                 # --- Prepare primary folder (first creator only) ---
                 primary_creator = make_filesystem_safe(creators[0]) if creators else "Unknown"
-                log(f"Downloader: Primary Creator for Gallery {gallery_id}: {primary_creator}", "debug")
+                log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
                 if configurator.dry_run:
@@ -336,7 +336,7 @@ def process_galleries(batch_ids):
                 break  # exit retry loop on success
 
             except Exception as e:
-                logger.error(f"Downloader: Error processing Gallery {gallery_id}: {e}")
+                logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not configurator.dry_run and gallery_attempts >= configurator.max_retries:
                     db.mark_gallery_failed(gallery_id)
 

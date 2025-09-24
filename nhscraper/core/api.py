@@ -594,7 +594,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            logger.info("Rotated Tor IP, retrying page fetch with new session")
+                            wait = dynamic_sleep("api", attempt=(attempt))
+                            logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s")
+                            time.sleep(wait)
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
                                 resp = gallery_ids_session.get(url, timeout=10)
@@ -721,14 +723,16 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
+                    wait = dynamic_sleep("api", attempt=(attempt))
+                    logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s")
+                    time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
                         resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
+                        logger.warning(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s")
@@ -738,14 +742,16 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    logger.info("Rotated Tor IP, retrying metadata fetch with new session")
+                    wait = dynamic_sleep("api", attempt=(attempt))
+                    logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s")
+                    time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
                         resp = metadata_session.get(url, timeout=10)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
-                        logger.warning(f"Gallery {gallery_id}: Still failed after Tor rotate: {e2}")
+                        logger.warning(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}")
                 return None
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s")
@@ -804,10 +810,10 @@ def update_gallery_state(gallery_id: int, stage="download", success=True):
                 entry["download_attempts"] += 1
                 entry["download_status"] = "failed"
                 if entry["download_attempts"] >= configurator.max_retries:
-                    logger.error(f"Gallery {gallery_id} download failed after {configurator.max_retries} attempts")
+                    logger.error(f"Gallery {gallery_id}: Download failed after {configurator.max_retries} attempts")
 
         entry["last_checked"] = datetime.now().isoformat()
-        logger.info(f"Gallery {gallery_id} {stage} stage updated: {'success' if success else 'failure'}")
+        logger.info(f"Gallery {gallery_id}: {stage} stage updated: {'success' if success else 'failure'}")
 
 ##################################################################################################################################
 # FLASK ENDPOINTS
