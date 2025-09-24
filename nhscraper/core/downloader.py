@@ -140,9 +140,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     # Skip only if NOT in dry-run
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
-            any(os.path.exists(os.path.join(doujin_folder, f"{page+1}.{ext}"))
+            any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
                 for ext in ("jpg", "png", "gif", "webp"))
-            for page in range(num_pages)
+            for i in range(num_pages)
         )
         if all_exist:
             logger.info(
