@@ -159,7 +159,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
-    allowed_gallery_language = [l.lower() for l in configurator.language]
+    allowed_gallery_language = [l.lower() for l in language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
