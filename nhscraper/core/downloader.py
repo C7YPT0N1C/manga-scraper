@@ -118,6 +118,8 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     Decide whether to download a gallery or skip it.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     if not meta:
         update_skipped_galleries(False, meta, "Not Meta.")
         return False
@@ -138,9 +140,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     # Skip only if NOT in dry-run
     if not dry_run and os.path.exists(doujin_folder):
         all_exist = all(
-            any(os.path.exists(os.path.join(doujin_folder, f"{i+1}.{ext}"))
+            any(os.path.exists(os.path.join(doujin_folder, f"{page+1}.{ext}"))
                 for ext in ("jpg", "png", "gif", "webp"))
-            for i in range(num_pages)
+            for page in range(num_pages)
         )
         if all_exist:
             logger.info(
@@ -157,7 +159,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
-    allowed_gallery_language = [l.lower() for l in language]
+    allowed_gallery_language = [l.lower() for l in configurator.language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
