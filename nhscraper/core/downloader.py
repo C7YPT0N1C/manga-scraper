@@ -155,16 +155,33 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
 
-    excluded_gallery_tags = [t.lower() for t in excluded_tags]
+    # --- Excluded Tags ---
+    excluded_tags = configurator.excluded_tags
+    if isinstance(excluded_tags, str):
+        excluded_tags = [excluded_tags]
+
+    excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
+    log_clarification("debug")
+    log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
+
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
 
-    allowed_gallery_language = [l.lower() for l in language]
+
+    # --- Allowed Languages ---
+    language = configurator.language
+    if isinstance(language, str):
+        language = [language]
+
+    allowed_gallery_language = [lang.lower() for lang in language]
     log_clarification("debug")
     log(f"Allowed Languages: {allowed_gallery_language}", "debug")
+
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
+
+    # --- Filtering ---
     for tag in gallery_tags:
         if tag in excluded_gallery_tags:
             blocked_tags.append(tag)
