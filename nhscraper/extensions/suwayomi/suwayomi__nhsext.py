@@ -749,7 +749,8 @@ def update_creator_manga(meta):
                             os.remove(os.path.join(creator_folder, f))
                             logger.info(f"Removed old cover file: {os.path.join(creator_folder, f)}")
                         except Exception as e:
-                            logger.warning(f"Failed to remove old cover file {f}: {e}")
+                            logger.info(f"Failed to remove old cover file for {creator_folder}: {e}")
+                            logger.info("You can safely ignore this. Suwayomi will generate it automatically.")
 
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
                 
