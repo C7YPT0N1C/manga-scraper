@@ -381,7 +381,7 @@ def start_downloader(gallery_list=None):
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
-        worst_case_time_estimate(f"Batch {batch_num} - {batch_num + len(batch_list)}", batch_list)
+        worst_case_time_estimate(f"Batch {batch_num} (Galleries {batch_num} - {batch_num + len(batch_list)})", batch_list)
         
         log_clarification()
         logger.info(f"Downloading Batch {batch_num//BATCH_SIZE + 1} with {len(batch_list)} Galleries...")
