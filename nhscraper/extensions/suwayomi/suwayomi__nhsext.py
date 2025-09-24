@@ -477,7 +477,7 @@ def ensure_category(category_name=None):
 
 def update_suwayomi_category(category_id: int):
     log_clarification()
-    log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
+    logger.info(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
     
     poll_interval = 2 # seconds between status checks
     wait_time = 20 # seconds to wait after completion to ensure Suwayomi has populated all data
@@ -550,8 +550,8 @@ def update_suwayomi_category(category_id: int):
             if total_jobs is not None and not is_running and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
-                logger.info(f"Suwayomi library update for Category ID {category_id} completed.")
-                logger.info(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
+                logger.warning(f"Suwayomi library update for Category ID {category_id} completed.")
+                logger.warning(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
                 
                 # Wait a bit to ensure Suwayomi has populated all data
                 wait = max(wait_time, (1 + (total_jobs or 0) / 50)) # Adaptive waiting (1000 jobs = 20s)
