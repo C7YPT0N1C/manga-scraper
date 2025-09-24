@@ -495,8 +495,17 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
 def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> str:
     query_lower = query_type.lower()
     
-    sort = "date" # CHANGE SORTING HERE
-    sort_lower = sort.lower()
+    if sort_value not in ("date", "recent", "today", "week", "popular", "all_time"):
+        sort_value = "date"
+        
+    if sort_value == "recent":
+        sort_value = "date"
+        
+    if sort_value == "all_time":
+        sort_value = "popular"
+    
+    sort_type = sort_value # CHANGE SORTING HERE
+    sort_lower = sort_type.lower()
 
     # Homepage
     if query_lower == "homepage":
@@ -517,14 +526,14 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(search_value, safe='"')
-        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort=date"
+        return f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_lower}"
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
 # ===============================
 # FETCH GALLERY IDS
 # ===============================
-def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
+def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str, start_page: int = 1, end_page: int | None = None) -> set[int]:
     fetch_env_vars() # Refresh env vars in case config changed.
     
     ids: set[int] = set()
@@ -543,7 +552,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
             if end_page is not None and page > end_page:
                 break
             
-            url = build_url(query_type, query_value, page)
+            url = build_url(query_type, query_value, sort_value, page)
             log(f"Fetcher: Requesting URL: {url}", "debug")
 
             resp = None

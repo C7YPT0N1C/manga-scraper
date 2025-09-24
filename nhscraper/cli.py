@@ -217,7 +217,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         # Use defaults if no pages are provided
         start_page = int(arg_list[0]) if len(arg_list) > 0 else DEFAULT_PAGE_RANGE_START
         end_page = int(arg_list[1]) if len(arg_list) > 1 else DEFAULT_PAGE_RANGE_END
-        gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
+        gallery_ids.update(fetch_gallery_ids("homepage", None, "date", start_page, end_page))
         return gallery_ids
 
     # --- Artist / Group / Tag / Character / Parody / Search ---
@@ -232,7 +232,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         start_page = int(entry[1]) if len(entry) > 1 else DEFAULT_PAGE_RANGE_START
         end_page = int(entry[2]) if len(entry) > 2 else DEFAULT_PAGE_RANGE_END
 
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, start_page, end_page))
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, "date", start_page, end_page))
 
     return gallery_ids
 
