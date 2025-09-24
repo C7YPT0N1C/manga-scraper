@@ -479,7 +479,8 @@ def update_suwayomi_category(category_id: int):
     log_clarification("debug")
     log(f"GraphQL: Updating Suwayomi library for Category ID {category_id}")
     
-    poll_interval = 2
+    poll_interval = 2 # seconds between status checks
+    wait_time = 20 # seconds to wait after completion to ensure Suwayomi has populated all data
 
     # Mutation to trigger the update once
     trigger_mutation = f"""
@@ -550,9 +551,13 @@ def update_suwayomi_category(category_id: int):
                 pbar.n = pbar.total
                 pbar.refresh()
                 logger.info(f"Suwayomi library update for Category ID {category_id} completed.")
+                logger.info(f"Waiting {wait_time}s for Suwayomi to reflect all changes...")
+                
+                # Wait a bit to ensure Suwayomi has populated all data
+                time.sleep(wait_time) # Adaptive polling
                 break
 
-            time.sleep(poll_interval)
+            time.sleep(max(poll_interval, (1 + (total_jobs or 0) / 1000))) # Adaptive polling
 
         pbar.close()
 
