@@ -6,7 +6,6 @@ from flask import Flask, jsonify, request
 from datetime import datetime
 import urllib.parse
 from urllib.parse import urljoin
-from threading import Thread, Lock
 from pathlib import Path
 
 from nhscraper.core import configurator
@@ -25,7 +24,7 @@ app = Flask(__name__)
 last_gallery_id = None
 running_galleries = []
 gallery_metadata = {}  # global state for /status/galleries, key=gallery_id, value={'meta': {...}, 'status': ..., 'last_checked': ...}
-state_lock = Lock()
+state_lock = threading.Lock()
 
 ################################################################################################################
 # HTTP SESSION
