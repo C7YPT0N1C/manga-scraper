@@ -158,7 +158,8 @@ DEFAULT_DOUJIN_TXT_PATH = "/root/Doujinshi_IDs.txt"
 if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
     # Create an empty file with a comment line
     with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
-        f.write("# Add one nhentai URL or gallery ID per line\n")
+        f.write("# Add one nhentai URL or gallery ID per line. Example: https://nhentai.net/g/123456/ or 123456")
+        f.write("# Text-based pages (such as https://nhentai.net/artist/ARTST/) MUST be in a link.\n")
     logger.info(f"Created default gallery file: {DEFAULT_DOUJIN_TXT_PATH}")
 doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 

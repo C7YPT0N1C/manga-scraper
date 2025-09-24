@@ -94,6 +94,13 @@ def parse_args():
         help="Download galleries by tag. Usage: --tag TAG [START_PAGE] [END_PAGE]. Can be repeated."
     )
     parser.add_argument(
+        "--character",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help="Download galleries by character. Usage: --character CHARACTER [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    parser.add_argument(
         "--parody",
         action="append",
         nargs="+",
@@ -213,7 +220,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         gallery_ids.update(fetch_gallery_ids("homepage", None, start_page, end_page))
         return gallery_ids
 
-    # --- Artist / Group / Tag / Parody / Search ---
+    # --- Artist / Group / Tag / Character / Parody / Search ---
     for entry in arg_list:
         # Each entry may already be a list from argparse 'append' + 'nargs'
         if isinstance(entry, str):
@@ -254,7 +261,7 @@ def build_gallery_list(args):
         gallery_ids.update(ids)
     
     # ------------------------------------------------------------
-    # Artist / Group / Tag / Parody / Search
+    # Artist / Group / Tag / Character / Parody / Search
     # ------------------------------------------------------------
     if args.homepage:
         gallery_ids.update(_handle_gallery_args(args.homepage, "homepage"))
@@ -267,6 +274,9 @@ def build_gallery_list(args):
 
     if args.tag:
         gallery_ids.update(_handle_gallery_args(args.tag, "tag"))
+        
+    if args.character:
+        gallery_ids.update(_handle_gallery_args(args.character, "character"))
 
     if args.parody:
         gallery_ids.update(_handle_gallery_args(args.parody, "parody"))
@@ -368,7 +378,7 @@ def main():
     
     # If no gallery input is provided, default to homepage 1 1
     gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                    args.group, args.tag, args.parody, args.search]
+                    args.group, args.tag, args.character, args.parody, args.search]
     if not any(gallery_args):
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     

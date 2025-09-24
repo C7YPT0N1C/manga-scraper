@@ -503,8 +503,8 @@ def build_url(query_type: str, query_value: str, page: int) -> str:
     if query_lower == "homepage":
         return f"{nhentai_api_base}/galleries/all?page={page}&sort=date"
 
-    # Tag-based queries (artist, group, tag, parody)
-    if query_lower in ("artist", "group", "tag", "parody"):
+    # Tag-based queries (artist, group, tag, character, parody)
+    if query_lower in ("artist", "group", "tag", "character", "parody"):
         search_value = query_value
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
