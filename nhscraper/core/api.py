@@ -531,7 +531,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                     resp = gallery_ids_session.get(url, timeout=10)
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=(attempt))
-                        logger.warning(f"Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
+                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
                         time.sleep(wait)
                         continue
                     resp.raise_for_status()
@@ -553,7 +553,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, start_page: int = 1, en
                                 resp = None
                         break
                     wait = dynamic_sleep("api", attempt=(attempt))
-                    logger.warning(f"Fetcher: Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
+                    logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait}s")
                     time.sleep(wait)
 
             if resp is None:
