@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from nhscraper.core import configurator
 from nhscraper.core.configurator import *
-from nhscraper.core.api import get_meta_tags, make_filesystem_safe, clean_title
+from nhscraper.core.api import get_meta_tags, make_filesystem_safe, clean_title, clean_title
 
 ####################################################################################################################
 # Global variables
@@ -1048,9 +1048,9 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current creator.
     """
-    
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
+
+    fetch_env_vars()  # Refresh env vars in case config changed.
+
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
         if pbar and creator:
@@ -1072,46 +1072,63 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     if not isinstance(downloader_session, requests.Session):
         downloader_session = requests.Session()
 
-    # Loop through mirrors
-    for url in urls:
-        for attempt in range(1, configurator.max_retries + 1):
-            try:
-                r = downloader_session.get(url, timeout=10, stream=True)
-                if r.status_code == 429:
-                    wait = 2 ** attempt
-                    logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+    def try_download(session, mirrors, retries, tor_rotate=False):
+        """Try downloading with a given session and retry count."""
+        for url in mirrors:
+            for attempt in range(1, retries + 1):
+                try:
+                    r = session.get(url, timeout=10, stream=True)
+                    if r.status_code == 429:
+                        wait = 2 ** attempt
+                        logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
+                        time.sleep(wait)
+                        continue
+                    r.raise_for_status()
+
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+
+                    log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
+                    if pbar and creator:
+                        pbar.set_postfix_str(f"Creator: {creator}")
+                    return True
+
+                except Exception as e:
+                    wait = dynamic_sleep("gallery", attempt=attempt)
+                    log_clarification()
+                    logger.warning(
+                        f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s"
+                    )
                     time.sleep(wait)
-                    continue
-                r.raise_for_status()
 
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
+            logger.warning(
+                f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror"
+            )
+        return False
 
-                log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
-                if pbar and creator:
-                    pbar.set_postfix_str(f"Creator: {creator}")
-                return True
+    # First attempt: normal retries
+    success = try_download(downloader_session, urls, configurator.max_retries)
 
-            except Exception as e:
-                wait = 2 ** attempt
-                log_clarification()
-                logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s")
-                time.sleep(wait)
-        
-        # If all retries for this mirror failed, move to next mirror
-        logger.warning(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {configurator.max_retries} attempts, trying next mirror")
+    # If still failed, rebuild Tor session once and retry
+    if not success and configurator.use_tor:
+        logger.warning(
+            f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more..."
+        )
+        downloader_session = get_session(referrer=f"{EXTENSION_NAME}", status="rebuild")
+        success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
-    # If no mirrors succeeded
-    log_clarification()
-    logger.error(f"Gallery {gallery}: Page {page}: All mirrors failed after {configurator.max_retries} retries each: {urls}")
-    
-    if pbar and creator:
-        pbar.set_postfix_str(f"Failed Creator: {creator}")
-    
-    return False
+    if not success:
+        log_clarification()
+        logger.error(
+            f"Gallery {gallery}: Page {page}: All mirrors failed after Tor rotate too: {urls}"
+        )
+        if pbar and creator:
+            pbar.set_postfix_str(f"Failed Creator: {creator}")
+
+    return success
 
 # Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
@@ -1196,6 +1213,9 @@ def post_run_hook():
     clean_directories(True)
     
     if configurator.skip_post_run:
+        log_clarification("debug")
+        log(f"Extension: {EXTENSION_NAME}: Post-run Hook Skipped.", "debug")
+    else:
         # Add all creators to Suwayomi
         process_deferred_creators()
         
