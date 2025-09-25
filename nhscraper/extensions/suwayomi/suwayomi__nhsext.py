@@ -446,7 +446,7 @@ def get_local_source_id():
         #log(f"GraphQL: Checking source node {node}", "debug")
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
-            #log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
+            log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
@@ -495,11 +495,13 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
     Turn debug on for the GraphQL queries and the logs will get VERY long.
     """
     
+    LOCAL_SOURCE_ID = get_local_source_id() # Fetch again in case
+    
     if operation == "category":
         # Query to fetch available filters and meta for a source
         query = f"""
         query FetchSourceBrowse {{
-        source(id: "{LOCAL_SOURCE_ID}") {{
+        source(id: {LOCAL_SOURCE_ID}) {{
             id
             name
             displayName
@@ -600,40 +602,12 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         """
         graphql_request(query, debugging)
         
-        # Mutation to fetch source mangas, one mutation to sort by latest and one to sort by popularity
-        trigger_source_fetch_latest_popular = f"""
-        mutation TriggerSourceFetch {{
-        latestMangas: fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: LATEST }}) {{
-            hasNextPage
-            mangas {{
-            id
-            title
-            thumbnailUrl
-            inLibrary
-            initialized
-            sourceId
-            }}
-        }}
-        popularMangas: fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: POPULAR }}) {{
-            hasNextPage
-            mangas {{
-            id
-            title
-            thumbnailUrl
-            inLibrary
-            initialized
-            sourceId
-            }}
-        }}
-        }}
-        """
-        
         # Mutation to fetch source mangas, sorted by latest
         trigger_source_fetch_latest = f"""
         mutation TriggerSourceFetchLatest {{
         fetchSourceManga(
             input: {{
-            source: "{LOCAL_SOURCE_ID}"
+            source: {LOCAL_SOURCE_ID}
             page: 1
             type: LATEST
             }}
@@ -656,7 +630,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         mutation TriggerSourceFetchPopular {{
         fetchSourceManga(
             input: {{
-            source: "{LOCAL_SOURCE_ID}"
+            source: {LOCAL_SOURCE_ID}
             page: 1
             type: POPULAR
             }}
@@ -674,7 +648,6 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         }}
         """
         graphql_request(trigger_source_fetch_latest, debugging)
-        graphql_request(trigger_source_fetch_latest_popular, debugging)
     
     if operation == "library":
         # Mutation to trigger the update once
