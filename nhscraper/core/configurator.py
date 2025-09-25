@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # core/config.py
 
-import os, sys, logging
+import os, sys, logging, threading
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
@@ -132,6 +132,16 @@ def log(message: str, log_type: str = "warning"):
 ##########################################################################################
 # CONFIGS
 ##########################################################################################
+
+_env_lock = threading.Lock() # Make all necessary operations thread safe.
+
+def with_env_lock(func, *args, **kwargs):
+    """
+    Execute a function while holding the environment lock.
+    Returns the function's result.
+    """
+    with _env_lock:
+        return func(*args, **kwargs)
 
 # ------------------------------------------------------------
 # Paths & Env
@@ -402,58 +412,63 @@ def normalise_value(key: str, value):
 
 def update_env(key, value):
     """
-    Update a single variable in the .env file.
-    If the key doesn't exist, append it.
+    Update a single variable in the .env file safely under lock.
     """
-    
-    if not os.path.exists(ENV_FILE):
-        # create empty file if missing
-        with open(ENV_FILE, "w") as f:
-            f.write("")
+    def _update():
+        if not os.path.exists(ENV_FILE):
+            with open(ENV_FILE, "w") as f:
+                f.write("")
 
-    # Use set_key from dotenv to safely update
-    set_key(ENV_FILE, key, str(value))
+        # Safely update .env
+        set_key(ENV_FILE, key, str(value))
+        
+        # Update runtime config
+        config[key] = normalise_value(key, value)
 
-    # Update runtime config
-    config[key] = normalise_value(key, value)
+    with_env_lock(_update)
 
 def fetch_env_vars():
     """
     Refresh runtime globals from config with normalized values.
     """
-    global download_path, doujin_txt_path, extension, extension_download_path
-    global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
-    global range_start, range_end, galleries, excluded_tags, language, title_type
-    global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-    global use_tor, dry_run, calm, debug
+    
+    def _update_globals():
+        global download_path, doujin_txt_path, extension, extension_download_path
+        global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
+        global range_start, range_end, galleries, excluded_tags, language, title_type
+        global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
+        global use_tor, dry_run, calm, debug
 
-    for key, default in {
-        "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
-        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
-        "EXTENSION": DEFAULT_EXTENSION,
-        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
-        "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
-        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
-        "PAGE_SORT": DEFAULT_PAGE_SORT,
-        "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
-        "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
-        "RANGE_START": DEFAULT_RANGE_START,
-        "RANGE_END": DEFAULT_RANGE_END,
-        "GALLERIES": DEFAULT_GALLERIES,
-        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
-        "LANGUAGE": DEFAULT_LANGUAGE,
-        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
-        "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
-        "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
-        "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-        "MIN_SLEEP": DEFAULT_MIN_SLEEP,
-        "MAX_SLEEP": DEFAULT_MAX_SLEEP,
-        "USE_TOR": DEFAULT_USE_TOR,
-        "DRY_RUN": DEFAULT_DRY_RUN,
-        "CALM": DEFAULT_CALM,
-        "DEBUG": DEFAULT_DEBUG,
-    }.items():
-        globals()[key.lower()] = normalise_value(key, config.get(key, default))
+        for key, default in {
+            "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
+            "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
+            "EXTENSION": DEFAULT_EXTENSION,
+            "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
+            "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
+            "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+            "PAGE_SORT": DEFAULT_PAGE_SORT,
+            "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+            "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
+            "RANGE_START": DEFAULT_RANGE_START,
+            "RANGE_END": DEFAULT_RANGE_END,
+            "GALLERIES": DEFAULT_GALLERIES,
+            "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
+            "LANGUAGE": DEFAULT_LANGUAGE,
+            "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+            "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
+            "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+            "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+            "MIN_SLEEP": DEFAULT_MIN_SLEEP,
+            "MAX_SLEEP": DEFAULT_MAX_SLEEP,
+            "USE_TOR": DEFAULT_USE_TOR,
+            "DRY_RUN": DEFAULT_DRY_RUN,
+            "CALM": DEFAULT_CALM,
+            "DEBUG": DEFAULT_DEBUG,
+        }.items():
+            globals()[key.lower()] = normalise_value(key, config.get(key, default))
+    
+    # Execute the update under the lock
+    with_env_lock(_update_globals)
 
 def get_valid_sort_value(sort_value):
     fetch_env_vars() # Refresh env vars in case config changed.
