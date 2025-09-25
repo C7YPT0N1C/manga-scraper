@@ -7,7 +7,7 @@ import os, time, json, requests
 
 from nhscraper.core import configurator
 from nhscraper.core.configurator import *
-from nhscraper.core.api import get_meta_tags, make_filesystem_safe, clean_title, clean_title
+from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
 
 # This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
 

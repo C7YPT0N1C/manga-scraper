@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from nhscraper.core import configurator
 from nhscraper.core.configurator import *
-from nhscraper.core.api import get_meta_tags, make_filesystem_safe, clean_title, clean_title
+from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
 
 ####################################################################################################################
 # Global variables
