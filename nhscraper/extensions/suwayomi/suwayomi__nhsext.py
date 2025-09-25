@@ -325,13 +325,14 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 
 ############################################
 
-def graphql_request(query: str, variables: dict = None, debug: bool = False):
+def graphql_request(query: str, variables: dict = None):
     """
     Framework for making requests to GraphQL
     """
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
+    debug = configurator.debug
     #debug = True  # DEBUGGING
     
     headers = {"Content-Type": "application/json"}
@@ -367,9 +368,12 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
     
+    global graphql_session, AUTH_USERNAME, AUTH_PASSWORD
+    
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    global graphql_session, AUTH_USERNAME, AUTH_PASSWORD
+    debug = configurator.debug
+    #debug = True  # DEBUGGING
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
@@ -433,7 +437,7 @@ def get_local_source_id():
       }
     }
     """
-    result = graphql_request(query, debug=False)
+    result = graphql_request(query)
     if not result:
         log_clarification()
         logger.error("GraphQL: Failed to fetch sources")
@@ -462,7 +466,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(query, {"name": name}, debug=False)
+    result = graphql_request(query, {"name": name})
     
     #log(f"GraphQL: Category query result: {result}", "debug")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
@@ -479,7 +483,7 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(mutation, {"name": name}, debug=False)
+    result = graphql_request(mutation, {"name": name})
     log(f"GraphQL: Create category result: {result}", "debug")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
     return CATEGORY_ID
@@ -488,10 +492,12 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi(operation: str, category_id, debug: bool = False):
+def update_suwayomi(operation: str, category_id):
     """
     Turn debug on for the GraphQL queries and the logs will get VERY long.
     """
+    
+    debug = configurator.debug
     
     if operation == "category":
         # Query to fetch available filters and meta for a source
@@ -596,7 +602,7 @@ def update_suwayomi(operation: str, category_id, debug: bool = False):
         }}
         }}
         """
-        graphql_request(query, debug=debug)
+        graphql_request(query)
         
         # Mutation to fetch source mangas, one mutation to sort by latest and one to sort by popularity
         trigger_source_fetch_latest_popular = f"""
@@ -671,8 +677,8 @@ def update_suwayomi(operation: str, category_id, debug: bool = False):
         }}
         }}
         """
-        graphql_request(trigger_source_fetch_latest, debug=debug)
-        graphql_request(trigger_source_fetch_latest_popular, debug=debug)
+        graphql_request(trigger_source_fetch_latest)
+        graphql_request(trigger_source_fetch_latest_popular)
     
     if operation == "library":
         # Mutation to trigger the update once
@@ -691,7 +697,7 @@ def update_suwayomi(operation: str, category_id, debug: bool = False):
         }}
         }}
         """
-        graphql_request(query, debug=debug)
+        graphql_request(query)
 
     if operation == "status":
         # Query to check the status repeatedly
@@ -708,7 +714,7 @@ def update_suwayomi(operation: str, category_id, debug: bool = False):
         }
         }
         """
-        result = graphql_request(query, debug=debug)
+        result = graphql_request(query)
         return result
 
 def populate_suwayomi(category_id: int, attempt: int):
@@ -719,10 +725,10 @@ def populate_suwayomi(category_id: int, attempt: int):
 
     try:
         # Fetch all mangas in the category update
-        update_suwayomi("category", category_id, debug=True)
+        update_suwayomi("category", category_id)
         
         # Trigger the global update
-        update_suwayomi("library", category_id, debug=False)
+        update_suwayomi("library", category_id)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
@@ -730,7 +736,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id, debug=False)
+            result = update_suwayomi("status", category_id)
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
@@ -806,7 +812,7 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids}, debug=False)
+    result = graphql_request(mutation, {"ids": ids})
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
@@ -820,7 +826,7 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id}, debug=False)
+    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
     
@@ -847,7 +853,7 @@ def fetch_creators_suwayomi_metadata(creator_name: str):
       }
     }
     """
-    result = graphql_request(query, {"title": creator_name}, debug=False)
+    result = graphql_request(query, {"title": creator_name})
     if not result:
         return []
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
@@ -1026,7 +1032,7 @@ def process_deferred_creators():
         }
         }
         """
-        result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID}, debug=False)
+        result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         new_ids = []
@@ -1088,7 +1094,7 @@ def process_deferred_creators():
                 still_deferred.add(creator_name)
                 continue
 
-            result = graphql_request(query, {"creatorName": creator_name}, debug=False)
+            result = graphql_request(query, {"creatorName": creator_name})
             mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
             if not mangas:
