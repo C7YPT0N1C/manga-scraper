@@ -491,9 +491,9 @@ def ensure_category(category_name=None):
 def update_suwayomi(operation: str, category_id):
     
     # Query to fetch available filters and meta for a source
-    fetch_category_browse = f"""
-    query FetchCategoryBrowse {{
-    source(id: "{category_id}") {{
+    fetch_source_browse = f"""
+    query FetchSourceBrowse {{
+    source(id: "{LOCAL_SOURCE_ID}") {{
         id
         name
         displayName
@@ -649,7 +649,7 @@ def update_suwayomi(operation: str, category_id):
     """
     
     if operation == "category":
-        graphql_request(fetch_category_browse, debug=True) # Turn debug on and the logs will get VERY long. # DEBUGGING
+        graphql_request(fetch_source_browse, debug=True) # Turn debug on and the logs will get VERY long. # DEBUGGING
         graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
     if operation == "library":
         graphql_request(trigger_global_update, debug=False)
