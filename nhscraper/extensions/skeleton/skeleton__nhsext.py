@@ -379,5 +379,6 @@ def post_run_hook():
     
     clean_directories(True)
     
-    #log_clarification("debug")
-    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
+    if configurator.skip_post_run:
+        log_clarification("debug")
+        log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS

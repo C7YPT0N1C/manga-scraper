@@ -1195,9 +1195,10 @@ def post_run_hook():
     
     clean_directories(True)
     
-    # Add all creators to Suwayomi
-    process_deferred_creators()
-    
-    # Update Suwayomi category at end
-    log_clarification()
-    log("Please update the library manually and / or run a small download to reflect any changes.")
+    if configurator.skip_post_run:
+        # Add all creators to Suwayomi
+        process_deferred_creators()
+        
+        # Update Suwayomi category at end
+        log_clarification()
+        log("Please update the library manually and / or run a small download to reflect any changes.")

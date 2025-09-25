@@ -264,6 +264,9 @@ max_sleep = DEFAULT_MAX_SLEEP
 # ------------------------------------------------------------
 # Download Options
 # ------------------------------------------------------------
+DEFAULT_SKIP_POST_RUN = False
+skip_post_run = DEFAULT_SKIP_POST_RUN
+
 DEFAULT_USE_TOR = True
 use_tor = DEFAULT_USE_TOR
 
@@ -323,6 +326,7 @@ config = {
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "MIN_SLEEP": getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP),
     "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
+    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "true",
@@ -359,6 +363,7 @@ def normalise_config():
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
         "MIN_SLEEP": DEFAULT_MIN_SLEEP,
         "MAX_SLEEP": DEFAULT_MAX_SLEEP,
+        "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
         "USE_TOR": DEFAULT_USE_TOR,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "CALM": DEFAULT_CALM,
@@ -398,7 +403,7 @@ def normalise_value(key: str, value):
         # Ensure default mirror is first
         return [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
 
-    if key in ("USE_TOR", "DRY_RUN", "CALM", "DEBUG"):
+    if key in ("SKIP_POST_RUN", "USE_TOR", "DRY_RUN", "CALM", "DEBUG"):
         return str(value).lower() == "true"
 
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
@@ -437,7 +442,7 @@ def fetch_env_vars():
         global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
         global range_start, range_end, galleries, excluded_tags, language, title_type
         global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-        global use_tor, dry_run, calm, debug
+        global skip_post_run, use_tor, dry_run, calm, debug
 
         for key, default in {
             "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -460,6 +465,7 @@ def fetch_env_vars():
             "MAX_RETRIES": DEFAULT_MAX_RETRIES,
             "MIN_SLEEP": DEFAULT_MIN_SLEEP,
             "MAX_SLEEP": DEFAULT_MAX_SLEEP,
+            "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
             "USE_TOR": DEFAULT_USE_TOR,
             "DRY_RUN": DEFAULT_DRY_RUN,
             "CALM": DEFAULT_CALM,
