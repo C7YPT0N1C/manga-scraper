@@ -332,7 +332,10 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    debug = debugging
+    if debugging:
+        debug = debugging
+    else:
+        debug = configurator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": request, "variables": variables or {}}
@@ -343,6 +346,7 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
 
     try:
         if debug == True:
+            log_clarification("debug")
             log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
         
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
@@ -362,7 +366,7 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-def new_graphql_request(request: str, variables: dict = None, debug: bool = False, debugging: bool = False):
+def new_graphql_request(request: str, variables: dict = None, debugging: bool = False):
     """
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
@@ -371,7 +375,10 @@ def new_graphql_request(request: str, variables: dict = None, debug: bool = Fals
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    debug = debugging
+    if debugging:
+        debug = debugging
+    else:
+        debug = configurator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": request, "variables": variables or {}}
@@ -400,6 +407,7 @@ def new_graphql_request(request: str, variables: dict = None, debug: bool = Fals
             logger.info("GraphQL: Successfully logged in and obtained session cookie.")
 
         if debug == True:
+            log_clarification("debug")
             log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # DEBUGGING
         
         response = graphql_session.post(
@@ -624,10 +632,10 @@ def populate_suwayomi(category_id: int, attempt: int):
 
     try:
         # Fetch all mangas in the category update
-        update_suwayomi("category", category_id, debugging = True)
+        update_suwayomi("category", category_id, debugging=False)
         
         # Trigger the global update
-        update_suwayomi("library", category_id, debugging = False)
+        update_suwayomi("library", category_id, debugging=False)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
@@ -635,7 +643,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id, debugging = False)
+            result = update_suwayomi("status", category_id, debugging=False)
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
