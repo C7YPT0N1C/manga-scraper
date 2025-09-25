@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nhscraper/downloader.py
+# nhscraper/core/downloader.py
 
 import os, time, random, concurrent.futures
 

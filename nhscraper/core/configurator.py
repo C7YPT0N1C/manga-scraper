@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# core/configurator.py
+# nhscraper/core/configurator.py
 
 import os, sys, logging, threading
 

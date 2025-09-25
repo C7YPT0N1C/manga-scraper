@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nhscraper/api.py
+# nhscraper/core/api.py
 
 import os, time, random, cloudscraper, requests, re, json, threading, socket, urllib.parse
 

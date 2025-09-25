@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# extensions/extension_loader.py
+# nhscraper/extensions/extension_loader.py
 
 import os, json, importlib, shutil, subprocess
 

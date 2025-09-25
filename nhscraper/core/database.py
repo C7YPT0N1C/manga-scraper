@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nhscraper/core/db.py
+# nhscraper/core/database.py
 
 import os, sqlite3, threading
 
