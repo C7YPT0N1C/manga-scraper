@@ -501,7 +501,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
     if operation == "category":
         # Query to fetch available filters and meta for a source
         query = """
-        query FetchSourceBrowse($sourceId: String!) {
+        query FetchSourceBrowse($sourceId: LongString!) {
           source(id: $sourceId) {
             id
             name
@@ -544,7 +544,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
 
         # Mutation to fetch source mangas, sorted by latest
         latest_query = """
-        mutation TriggerSourceFetchLatest($sourceId: String!, $page: Int!) {
+        mutation TriggerSourceFetchLatest($sourceId: LongString!, $page: Int!) {
           fetchSourceManga(input: { source: $sourceId, page: $page, type: LATEST }) {
             hasNextPage
             mangas {
@@ -561,7 +561,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
 
         # Mutation to fetch source mangas, sorted by popularity
         popular_query = """
-        mutation TriggerSourceFetchPopular($sourceId: String!, $page: Int!) {
+        mutation TriggerSourceFetchPopular($sourceId: LongString!, $page: Int!) {
           fetchSourceManga(input: { source: $sourceId, page: $page, type: POPULAR }) {
             hasNextPage
             mangas {
