@@ -325,7 +325,7 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 
 ############################################
 
-def graphql_request(query: str, variables: dict = None, debugging: bool = False):
+def graphql_request(request: str, variables: dict = None, debugging: bool = False):
     """
     Framework for making requests to GraphQL
     """
@@ -335,10 +335,10 @@ def graphql_request(query: str, variables: dict = None, debugging: bool = False)
     debug = debugging
     
     headers = {"Content-Type": "application/json"}
-    payload = {"query": query, "variables": variables or {}}
+    payload = {"request": request, "variables": variables or {}}
 
     if configurator.dry_run:
-        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
         return None
 
     try:
@@ -362,7 +362,7 @@ def graphql_request(query: str, variables: dict = None, debugging: bool = False)
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-def new_graphql_request(query: str, variables: dict = None, debug: bool = False, debugging: bool = False):
+def new_graphql_request(request: str, variables: dict = None, debug: bool = False, debugging: bool = False):
     """
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
@@ -374,10 +374,10 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False,
     debug = debugging
     
     headers = {"Content-Type": "application/json"}
-    payload = {"query": query, "variables": variables or {}}
+    payload = {"request": request, "variables": variables or {}}
 
     if configurator.dry_run:
-        logger.info(f"[DRY RUN] GraphQL: Would make request: {query} with variables {variables}")
+        logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
         return None
 
     try:
@@ -464,8 +464,8 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(query, {"name": name})
-    
+    query_variables = {"name": name}
+    result = graphql_request(query, query_variables)   
     #log(f"GraphQL: Category query result: {result}", "debug")
     nodes = result.get("data", {}).get("categories", {}).get("nodes", [])
     if nodes:
@@ -481,7 +481,8 @@ def ensure_category(category_name=None):
       }
     }
     """
-    result = graphql_request(mutation, {"name": name})
+    query_variables = {"name": name}
+    result = graphql_request(mutation, query_variables)
     log(f"GraphQL: Create category result: {result}", "debug")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
     return CATEGORY_ID
@@ -494,184 +495,125 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
     """
     Turn debug on for the GraphQL queries and the logs will get VERY long.
     """
-    
-    LOCAL_SOURCE_ID = get_local_source_id() # Fetch again in case
-    
+
+    LOCAL_SOURCE_ID = get_local_source_id()  # Fetch again in case
+
     if operation == "category":
         # Query to fetch available filters and meta for a source
-        query = f"""
-        query FetchSourceBrowse {{
-        source(id: {LOCAL_SOURCE_ID}) {{
+        query = """
+        query FetchSourceBrowse($sourceId: String!) {
+          source(id: $sourceId) {
             id
             name
             displayName
             lang
             isConfigurable
             supportsLatest
-            meta {{
-            sourceId
-            key
-            value
-            }}
-            filters {{
-            ... on CheckBoxFilter {{
-                type: __typename
-                CheckBoxFilterDefault: default
-                name
-            }}
-            ... on HeaderFilter {{
-                type: __typename
-                name
-            }}
-            ... on SelectFilter {{
-                type: __typename
-                SelectFilterDefault: default
-                name
-                values
-            }}
-            ... on TriStateFilter {{
-                type: __typename
-                TriStateFilterDefault: default
-                name
-            }}
-            ... on TextFilter {{
-                type: __typename
-                TextFilterDefault: default
-                name
-            }}
-            ... on SortFilter {{
-                type: __typename
-                SortFilterDefault: default {{
-                ascending
-                index
-                }}
-                name
-                values
-            }}
-            ... on SeparatorFilter {{
+            meta {
+              sourceId
+              key
+              value
+            }
+            filters {
+              ... on CheckBoxFilter { type: __typename CheckBoxFilterDefault: default name }
+              ... on HeaderFilter { type: __typename name }
+              ... on SelectFilter { type: __typename SelectFilterDefault: default name values }
+              ... on TriStateFilter { type: __typename TriStateFilterDefault: default name }
+              ... on TextFilter { type: __typename TextFilterDefault: default name }
+              ... on SortFilter { type: __typename SortFilterDefault: default { ascending index } name values }
+              ... on SeparatorFilter { type: __typename name }
+              ... on GroupFilter {
                 type: __typename
                 name
-            }}
-            ... on GroupFilter {{
-                type: __typename
-                name
-                filters {{
-                ... on CheckBoxFilter {{
-                    type: __typename
-                    CheckBoxFilterDefault: default
-                    name
-                }}
-                ... on HeaderFilter {{
-                    type: __typename
-                    name
-                }}
-                ... on SelectFilter {{
-                    type: __typename
-                    SelectFilterDefault: default
-                    name
-                    values
-                }}
-                ... on TriStateFilter {{
-                    type: __typename
-                    TriStateFilterDefault: default
-                    name
-                }}
-                ... on TextFilter {{
-                    type: __typename
-                    TextFilterDefault: default
-                    name
-                }}
-                ... on SortFilter {{
-                    type: __typename
-                    SortFilterDefault: default {{
-                    ascending
-                    index
-                    }}
-                    name
-                    values
-                }}
-                ... on SeparatorFilter {{
-                    type: __typename
-                    name
-                }}
-                }}
-            }}
-            }}
-        }}
-        }}
+                filters {
+                  ... on CheckBoxFilter { type: __typename CheckBoxFilterDefault: default name }
+                  ... on HeaderFilter { type: __typename name }
+                  ... on SelectFilter { type: __typename SelectFilterDefault: default name values }
+                  ... on TriStateFilter { type: __typename TriStateFilterDefault: default name }
+                  ... on TextFilter { type: __typename TextFilterDefault: default name }
+                  ... on SortFilter { type: __typename SortFilterDefault: default { ascending index } name values }
+                  ... on SeparatorFilter { type: __typename name }
+                }
+              }
+            }
+          }
+        }
         """
-        graphql_request(query, debugging)
-        
+        query_variables = {"sourceId": LOCAL_SOURCE_ID}
+        graphql_request(query, query_variables, debugging)
+
         # Mutation to fetch source mangas, sorted by latest
-        trigger_source_fetch_latest = f"""
-        mutation TriggerSourceFetchLatest {{
-        fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: LATEST }}) {{
+        latest_query = """
+        mutation TriggerSourceFetchLatest($sourceId: String!, $page: Int!) {
+          fetchSourceManga(input: { source: $sourceId, page: $page, type: LATEST }) {
             hasNextPage
-            mangas {{
-            id
-            title
-            thumbnailUrl
-            inLibrary
-            initialized
-            sourceId
-            }}
-        }}
-        }}
+            mangas {
+              id
+              title
+              thumbnailUrl
+              inLibrary
+              initialized
+              sourceId
+            }
+          }
+        }
         """
-        
+
         # Mutation to fetch source mangas, sorted by popularity
-        trigger_source_fetch_popular = f"""
-        mutation TriggerSourceFetchPopular {{
-        fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: POPULAR }}) {{
+        popular_query = """
+        mutation TriggerSourceFetchPopular($sourceId: String!, $page: Int!) {
+          fetchSourceManga(input: { source: $sourceId, page: $page, type: POPULAR }) {
             hasNextPage
-            mangas {{
-            id
-            title
-            thumbnailUrl
-            inLibrary
-            initialized
-            sourceId
-            }}
-        }}
-        }}
+            mangas {
+              id
+              title
+              thumbnailUrl
+              inLibrary
+              initialized
+              sourceId
+            }
+          }
+        }
         """
-        graphql_request(trigger_source_fetch_latest, debugging)
-    
+        query_variables = {"sourceId": LOCAL_SOURCE_ID, "page": 1}
+        graphql_request(popular_query, query_variables, debugging)
+
     if operation == "library":
         # Mutation to trigger the update once
-        query = f"""
-        mutation TriggerGlobalUpdate {{
-        updateLibrary(input: {{ categories: [{category_id}] }}) {{
-            updateStatus {{
-            jobsInfo {{
+        query = """
+        mutation TriggerGlobalUpdate($categoryId: Int!) {
+          updateLibrary(input: { categories: [$categoryId] }) {
+            updateStatus {
+              jobsInfo {
                 isRunning
                 totalJobs
                 finishedJobs
                 skippedCategoriesCount
                 skippedMangasCount
-            }}
-            }}
-        }}
-        }}
+              }
+            }
+          }
+        }
         """
-        graphql_request(query, debugging)
+        query_variables = {"categoryId": category_id}
+        graphql_request(query, query_variables, debugging)
 
     if operation == "status":
         # Query to check the status repeatedly
         query = """
         query CheckLibraryCategoryUpdateStatus {
-        libraryUpdateStatus {
+          libraryUpdateStatus {
             jobsInfo {
-            isRunning
-            totalJobs
-            finishedJobs
-            skippedCategoriesCount
-            skippedMangasCount
+              isRunning
+              totalJobs
+              finishedJobs
+              skippedCategoriesCount
+              skippedMangasCount
             }
-        }
+          }
         }
         """
-        result = graphql_request(query, debugging)
+        result = graphql_request(query, debugging=debugging)
         return result
 
 def populate_suwayomi(category_id: int, attempt: int):
@@ -769,7 +711,7 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids})
+    result = graphql_request(mutation, {"ids": ids}) 
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
@@ -1041,6 +983,7 @@ def process_deferred_creators():
         }
         }
         """
+        
         new_ids = set()
         processed_creators = set()
 
