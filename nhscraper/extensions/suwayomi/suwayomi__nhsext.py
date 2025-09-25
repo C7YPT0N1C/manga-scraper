@@ -649,12 +649,12 @@ def update_suwayomi(operation: str, category_id):
     """
     
     if operation == "category":
-        graphql_request(fetch_category_browse, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
+        graphql_request(fetch_category_browse, debug=True) # Turn debug on and the logs will get VERY long. # DEBUGGING
         graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
     if operation == "library":
         graphql_request(trigger_global_update, debug=False)
     if operation == "status":
-        result = graphql_request(update_status_query, debug=False)
+        result = graphql_request(update_status_query, debug=True)
         return result
 
 def populate_suwayomi_category(category_id: int, attempt: int):
@@ -677,15 +677,25 @@ def populate_suwayomi_category(category_id: int, attempt: int):
 
         while True:
             result = update_suwayomi("status", category_id)
+
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
                 time.sleep(wait_time)
                 continue
 
-            jobs_info = result.get("data", {}).get("libraryUpdateStatus", {}).get("jobsInfo", {})
-            is_running = jobs_info.get("isRunning", False)
-            finished = jobs_info.get("finishedJobs", 0)
-            total = jobs_info.get("totalJobs", 0)
+            try:
+                jobs_info = result["data"]["libraryUpdateStatus"]["jobsInfo"]
+                is_running = any(job.get("isRunning", False) for job in jobs_info)
+                finished = sum(job.get("finishedJobs", 0) for job in jobs_info)
+                total = sum(job.get("totalJobs", 0) for job in jobs_info)
+            except (KeyError, TypeError):
+                logger.warning("Unexpected status response format, retrying...")
+                time.sleep(wait_time)
+                continue
+
+            if not is_running:
+                logger.info("GraphQL: Suwayomi Update has been stopped either by the user or Suwayomi. Exiting.")
+                break  # Immediate exit if update stopped
 
             # Set total if available
             if total_jobs is None and total > 0:
@@ -697,19 +707,18 @@ def populate_suwayomi_category(category_id: int, attempt: int):
             pbar.update(finished - last_finished)
             last_finished = finished
 
-            # Exit only when update is finished
-            if total_jobs is not None and not is_running and finished >= total_jobs:
+            # Exit when all jobs are finished
+            if total_jobs is not None and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
                 logger.warning(f"Suwayomi library update for Category ID {category_id} completed.")
-                
-                # Wait a bit to ensure Suwayomi has populated all data
-                wait = max(wait_time * 5, (1 + (total_jobs or 0) / 50)) # Adaptive waiting (1000 jobs = 20s)
+                wait = max(wait_time * 5, (1 + total_jobs / 50))
                 logger.warning(f"Waiting {wait}s for Suwayomi to reflect all changes...")
-                time.sleep(wait) # Adaptive polling
+                time.sleep(wait)
                 break
 
-            time.sleep(max(wait_time, (1 + (total_jobs or 0) / 1000))) # Adaptive polling
+            # Adaptive polling
+            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
         pbar.close()
 
