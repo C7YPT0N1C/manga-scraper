@@ -671,6 +671,7 @@ def update_suwayomi(operation: str, category_id, debug: bool = False):
         }}
         }}
         """
+        graphql_request(trigger_source_fetch_latest, debug=debug)
         graphql_request(trigger_source_fetch_latest_popular, debug=debug)
     
     if operation == "library":
@@ -718,7 +719,7 @@ def populate_suwayomi(category_id: int, attempt: int):
 
     try:
         # Fetch all mangas in the category update
-        update_suwayomi("category", category_id, debug=False)
+        update_suwayomi("category", category_id, debug=True)
         
         # Trigger the global update
         update_suwayomi("library", category_id, debug=False)
