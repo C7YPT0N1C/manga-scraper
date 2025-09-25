@@ -335,7 +335,7 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
     debug = debugging
     
     headers = {"Content-Type": "application/json"}
-    payload = {"request": request, "variables": variables or {}}
+    payload = {"query": request, "variables": variables or {}}
 
     if configurator.dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
@@ -374,7 +374,7 @@ def new_graphql_request(request: str, variables: dict = None, debug: bool = Fals
     debug = debugging
     
     headers = {"Content-Type": "application/json"}
-    payload = {"request": request, "variables": variables or {}}
+    payload = {"query": request, "variables": variables or {}}
 
     if configurator.dry_run:
         logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
