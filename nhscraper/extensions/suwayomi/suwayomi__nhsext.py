@@ -427,7 +427,7 @@ def new_graphql_request(request: str, variables: dict = None, debug: bool = Fals
 def get_local_source_id():
     global LOCAL_SOURCE_ID
 
-    log("GraphQL: Fetching Local source ID", "debug")
+    #log("GraphQL: Fetching Local source ID", "debug")
     query = """
     query FetchLocalSourceID {
       sources {
@@ -446,7 +446,7 @@ def get_local_source_id():
         #log(f"GraphQL: Checking source node {node}", "debug")
         if node["name"].lower() == "local source":
             LOCAL_SOURCE_ID = str(node["id"])  # must be a string in queries
-            log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
+            #log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
     logger.error("GraphQL: Could not find 'Local source' in sources")
