@@ -605,13 +605,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         # Mutation to fetch source mangas, sorted by latest
         trigger_source_fetch_latest = f"""
         mutation TriggerSourceFetchLatest {{
-        fetchSourceManga(
-            input: {{
-            source: {LOCAL_SOURCE_ID}
-            page: 1
-            type: LATEST
-            }}
-        ) {{
+        fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: LATEST }}) {{
             hasNextPage
             mangas {{
             id
@@ -628,13 +622,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         # Mutation to fetch source mangas, sorted by popularity
         trigger_source_fetch_popular = f"""
         mutation TriggerSourceFetchPopular {{
-        fetchSourceManga(
-            input: {{
-            source: {LOCAL_SOURCE_ID}
-            page: 1
-            type: POPULAR
-            }}
-        ) {{
+        fetchSourceManga(input: {{ source: "{LOCAL_SOURCE_ID}", page: 1, type: POPULAR }}) {{
             hasNextPage
             mangas {{
             id
