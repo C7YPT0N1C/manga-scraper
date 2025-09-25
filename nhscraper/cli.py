@@ -64,7 +64,7 @@ def parse_args():
         nargs="?",                  # Makes the argument optional
         const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
         help=(
-            "Path to a file containing gallery URLs or IDs (one per line). "
+            "Path to a file containing gallery URLs or IDs (one per line).\n"
             "If no path is given, uses the default file."
         )
     )
@@ -75,7 +75,7 @@ def parse_args():
         type=str,
         default=DEFAULT_NHENTAI_MIRRORS,
         help=(
-            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS}). "
+            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS})\n"
             "Use this if the main site is down or to rotate mirrors."
         )
     )
@@ -88,7 +88,7 @@ def parse_args():
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
         help=(
-            f"Page range or sort type of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START}-{DEFAULT_PAGE_RANGE_END})."
+            f"Page range or sort type of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START} - {DEFAULT_PAGE_RANGE_END})"
         )
     )
 
@@ -144,7 +144,7 @@ def parse_args():
         choices=["english","japanese","pretty"],
         default=DEFAULT_TITLE_TYPE,
         help=(
-            f"What title type to use. (default: {DEFAULT_TITLE_TYPE})"
+            f"What title type to use (default: {DEFAULT_TITLE_TYPE})\n"
             "Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be filesystem compatible."
         )
     )
@@ -155,7 +155,7 @@ def parse_args():
         type=int,
         default=DEFAULT_THREADS_GALLERIES,
         help=(
-            f"Number of threads downloading galleries at once. (default: {DEFAULT_THREADS_GALLERIES})"
+            f"Number of threads downloading galleries at once (default: {DEFAULT_THREADS_GALLERIES})\n"
             f"Be careful setting this any higher than {DEFAULT_THREADS_GALLERIES}"
         )
     )
@@ -165,7 +165,7 @@ def parse_args():
         type=int,
         default=DEFAULT_THREADS_IMAGES,
         help=(
-            f"Number of threads per gallery downloading images at once. (default: {DEFAULT_THREADS_IMAGES})"
+            f"Number of threads per gallery downloading images at once (default: {DEFAULT_THREADS_IMAGES})\n"
             f"Be careful setting this any higher than {DEFAULT_THREADS_IMAGES}"
         )
     )
@@ -176,7 +176,7 @@ def parse_args():
         type=int,
         default=DEFAULT_MIN_SLEEP,
         help=(
-            f"Minimum amount of time each thread should sleep before starting a new download. (default: {DEFAULT_MIN_SLEEP})"
+            f"Minimum amount of time each thread should sleep before starting a new download (default: {DEFAULT_MIN_SLEEP})\n"
             f"Set this to a higher number if you are hitting API limits."
         )
     )
@@ -185,7 +185,7 @@ def parse_args():
         type=int,
         default=DEFAULT_MAX_SLEEP,
         help=(
-            f"Maximum amount of time each thread can sleep before starting a new download. (default: {DEFAULT_MAX_SLEEP})"
+            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_SLEEP})\n"
             f"Setting this to a number lower than {DEFAULT_MAX_SLEEP}, may result in hitting API limits."
         )
     )
@@ -196,7 +196,7 @@ def parse_args():
         action="store_true",
         default=DEFAULT_USE_TOR,
         help=(
-            f"Skips the extra post download actions (default: {DEFAULT_SKIP_POST_RUN})"
+            f"Skips the extra post download actions (default: {DEFAULT_SKIP_POST_RUN})\n"
             "For example, if you're using the Suwayomi extension, the download directory is still cleaned, but things like updating Suwayomi are skipped."
         )
     )

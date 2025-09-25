@@ -396,7 +396,7 @@ def post_run_hook():
     
     clean_directories(True)
     
-    if configurator.skip_post_run:
+    if configurator.skip_post_run == True:
         log_clarification("debug")
         log(f"Extension: {EXTENSION_NAME}: Post-run Hook Skipped.", "debug")
     else:
