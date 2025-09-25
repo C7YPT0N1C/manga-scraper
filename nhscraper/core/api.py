@@ -42,11 +42,11 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     - If return_session=True, returns the current session without rebuilding.
     """
 
-    global session
-
     log_clarification("debug")
     logger.debug("Fetcher: Ready.")
     log("Fetcher: Debugging Started.", "debug")
+    
+    global session
     
     fetch_env_vars() # Refresh env vars in case config changed.
 
