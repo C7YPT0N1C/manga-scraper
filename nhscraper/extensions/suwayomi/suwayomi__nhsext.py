@@ -594,8 +594,8 @@ def update_suwayomi(operation: str, category_id):
     """
     
     # Mutation to fetch source mangas
-    trigger_category_update = f"""
-    mutation TriggerCategoryUpdate {{
+    trigger_category_fetch = f"""
+    mutation TriggerCategoryFetch {{
     fetchSourceManga(
         input: {{
         source: {category_id}
@@ -650,7 +650,7 @@ def update_suwayomi(operation: str, category_id):
     
     if operation == "category":
         graphql_request(fetch_source_browse, debug=False)
-        graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long.
+        graphql_request(trigger_category_fetch, debug=False) # Turn debug on and the logs will get VERY long.
     if operation == "library":
         graphql_request(trigger_global_update, debug=False)
     if operation == "status":
