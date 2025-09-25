@@ -325,15 +325,17 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
 
 ############################################
 
-def graphql_request(query: str, variables: dict = None):
+def graphql_request(query: str, variables: dict = None, debug_override: bool = False):
     """
     Framework for making requests to GraphQL
     """
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    debug = configurator.debug
-    #debug = True  # DEBUGGING
+    if debug_override:
+        debug = debug_override
+    else:
+        debug = configurator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
@@ -363,7 +365,7 @@ def graphql_request(query: str, variables: dict = None):
         logger.error(f"Raw response: {response.text if response else 'No response'}")
         return None
 
-def new_graphql_request(query: str, variables: dict = None, debug: bool = False):
+def new_graphql_request(query: str, variables: dict = None, debug: bool = False, debug_override: bool = False):
     """
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
@@ -372,8 +374,10 @@ def new_graphql_request(query: str, variables: dict = None, debug: bool = False)
     
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    debug = configurator.debug
-    #debug = True  # DEBUGGING
+    if debug_override:
+        debug = debug_override
+    else:
+        debug = configurator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": query, "variables": variables or {}}
@@ -492,12 +496,17 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi(operation: str, category_id):
+def update_suwayomi(operation: str, category_id, debug_override: bool = True):
     """
     Turn debug on for the GraphQL queries and the logs will get VERY long.
     """
     
-    debug = configurator.debug
+    debugging = False
+    
+    if debug_override == True:
+        debugging = False
+    else: 
+        debugging = True
     
     if operation == "category":
         # Query to fetch available filters and meta for a source
@@ -602,7 +611,7 @@ def update_suwayomi(operation: str, category_id):
         }}
         }}
         """
-        graphql_request(query)
+        graphql_request(query, debugging)
         
         # Mutation to fetch source mangas, one mutation to sort by latest and one to sort by popularity
         trigger_source_fetch_latest_popular = f"""
@@ -677,8 +686,8 @@ def update_suwayomi(operation: str, category_id):
         }}
         }}
         """
-        graphql_request(trigger_source_fetch_latest)
-        graphql_request(trigger_source_fetch_latest_popular)
+        graphql_request(trigger_source_fetch_latest, debugging)
+        graphql_request(trigger_source_fetch_latest_popular, debugging)
     
     if operation == "library":
         # Mutation to trigger the update once
@@ -697,7 +706,7 @@ def update_suwayomi(operation: str, category_id):
         }}
         }}
         """
-        graphql_request(query)
+        graphql_request(query, debugging)
 
     if operation == "status":
         # Query to check the status repeatedly
@@ -714,7 +723,7 @@ def update_suwayomi(operation: str, category_id):
         }
         }
         """
-        result = graphql_request(query)
+        result = graphql_request(query, debugging)
         return result
 
 def populate_suwayomi(category_id: int, attempt: int):
@@ -725,10 +734,10 @@ def populate_suwayomi(category_id: int, attempt: int):
 
     try:
         # Fetch all mangas in the category update
-        update_suwayomi("category", category_id)
+        update_suwayomi("category", category_id, debug_override = False)
         
         # Trigger the global update
-        update_suwayomi("library", category_id)
+        update_suwayomi("library", category_id, debug_override = True)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
@@ -736,7 +745,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id)
+            result = update_suwayomi("status", category_id, debug_override = True)
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
