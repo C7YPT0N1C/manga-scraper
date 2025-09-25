@@ -488,9 +488,110 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi_category(category_id: int, attempt: int):
-    log_clarification()
-    logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
+def update_suwayomi(operation: str, category_id):
+    
+    # Query to fetch available filters and meta for a source
+    fetch_category_browse = f"""
+    query FetchCategoryBrowse {{
+    source(id: "{category_id}") {{
+        id
+        name
+        displayName
+        lang
+        isConfigurable
+        supportsLatest
+        meta {{
+        sourceId
+        key
+        value
+        }}
+        filters {{
+        ... on CheckBoxFilter {{
+            type: __typename
+            CheckBoxFilterDefault: default
+            name
+        }}
+        ... on HeaderFilter {{
+            type: __typename
+            name
+        }}
+        ... on SelectFilter {{
+            type: __typename
+            SelectFilterDefault: default
+            name
+            values
+        }}
+        ... on TriStateFilter {{
+            type: __typename
+            TriStateFilterDefault: default
+            name
+        }}
+        ... on TextFilter {{
+            type: __typename
+            TextFilterDefault: default
+            name
+        }}
+        ... on SortFilter {{
+            type: __typename
+            SortFilterDefault: default {{
+            ascending
+            index
+            }}
+            name
+            values
+        }}
+        ... on SeparatorFilter {{
+            type: __typename
+            name
+        }}
+        ... on GroupFilter {{
+            type: __typename
+            name
+            filters {{
+            ... on CheckBoxFilter {{
+                type: __typename
+                CheckBoxFilterDefault: default
+                name
+            }}
+            ... on HeaderFilter {{
+                type: __typename
+                name
+            }}
+            ... on SelectFilter {{
+                type: __typename
+                SelectFilterDefault: default
+                name
+                values
+            }}
+            ... on TriStateFilter {{
+                type: __typename
+                TriStateFilterDefault: default
+                name
+            }}
+            ... on TextFilter {{
+                type: __typename
+                TextFilterDefault: default
+                name
+            }}
+            ... on SortFilter {{
+                type: __typename
+                SortFilterDefault: default {{
+                ascending
+                index
+                }}
+                name
+                values
+            }}
+            ... on SeparatorFilter {{
+                type: __typename
+                name
+            }}
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
     
     # Mutation to fetch source mangas
     trigger_category_update = f"""
@@ -514,55 +615,68 @@ def update_suwayomi_category(category_id: int, attempt: int):
     }}
     }}
     """
-
+    
     # Mutation to trigger the update once
     trigger_global_update = f"""
     mutation TriggerGlobalUpdate {{
-      updateLibrary(input: {{ categories: [{category_id}] }}) {{
+    updateLibrary(input: {{ categories: [{category_id}] }}) {{
         updateStatus {{
-          jobsInfo {{
+        jobsInfo {{
             isRunning
             totalJobs
             finishedJobs
             skippedCategoriesCount
             skippedMangasCount
-          }}
         }}
-      }}
+        }}
+    }}
     }}
     """
 
     # Query to check the status repeatedly
     update_status_query = """
     query CheckLibraryCategoryUpdateStatus {
-      libraryUpdateStatus {
+    libraryUpdateStatus {
         jobsInfo {
-          isRunning
-          totalJobs
-          finishedJobs
-          skippedCategoriesCount
-          skippedMangasCount
+        isRunning
+        totalJobs
+        finishedJobs
+        skippedCategoriesCount
+        skippedMangasCount
         }
-      }
+    }
     }
     """
+    
+    if operation == "category":
+        graphql_request(fetch_category_browse, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
+        graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
+    if operation == "library":
+        graphql_request(trigger_global_update, debug=False)
+    if operation == "status":
+        result = graphql_request(update_status_query, debug=False)
+        return result
+
+def populate_suwayomi_category(category_id: int, attempt: int):
+    log_clarification()
+    logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
     wait_time = 4
 
     try:
         # Fetch all mangas in the category update
-        graphql_request(trigger_category_update, debug=False) # Turn debug on and the logs will get VERY long. # DEBUGGING
+        update_suwayomi("category", category_id)
         
         # Trigger the global update
-        graphql_request(trigger_global_update, debug=False)
+        update_suwayomi("library", category_id)
 
-        # Initialize progress bar
+        # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
         while True:
-            result = graphql_request(update_status_query, debug=False)
+            result = update_suwayomi("status", category_id)
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
                 time.sleep(wait_time)
@@ -819,7 +933,7 @@ def process_deferred_creators():
         log_clarification()
         logger.info(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
         
-        update_suwayomi_category(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
+        populate_suwayomi_category(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
 
         # ----------------------------
         # Add mangas not yet in library
