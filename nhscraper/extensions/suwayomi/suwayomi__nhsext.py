@@ -684,10 +684,25 @@ def populate_suwayomi_category(category_id: int, attempt: int):
                 continue
 
             try:
-                jobs_info = result["data"]["libraryUpdateStatus"]["jobsInfo"]
-                is_running = any(job.get("isRunning", False) for job in jobs_info)
-                finished = sum(job.get("finishedJobs", 0) for job in jobs_info)
-                total = sum(job.get("totalJobs", 0) for job in jobs_info)
+                jobs_info = result.get("data", {}).get("libraryUpdateStatus", {}).get("jobsInfo", {})
+
+                # If it's a list of jobs, keep current logic
+                if isinstance(jobs_info, list):
+                    is_running = any(job.get("isRunning", False) for job in jobs_info)
+                    finished = sum(job.get("finishedJobs", 0) for job in jobs_info)
+                    total = sum(job.get("totalJobs", 0) for job in jobs_info)
+
+                # If it's a single dict
+                elif isinstance(jobs_info, dict):
+                    is_running = jobs_info.get("isRunning", False)
+                    finished = jobs_info.get("finishedJobs", 0)
+                    total = jobs_info.get("totalJobs", 0)
+
+                else:
+                    logger.warning("Unexpected jobsInfo format, retrying...")
+                    time.sleep(wait_time)
+                    continue
+            
             except (KeyError, TypeError):
                 logger.warning("Unexpected status response format, retrying...")
                 time.sleep(wait_time)
