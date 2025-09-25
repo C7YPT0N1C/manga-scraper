@@ -648,13 +648,14 @@ def update_suwayomi(operation: str, category_id):
     }
     """
     
+    # Turn debug on and the logs will get VERY long.
     if operation == "category":
         graphql_request(fetch_source_browse, debug=False)
-        graphql_request(trigger_category_fetch, debug=False) # Turn debug on and the logs will get VERY long.
+        graphql_request(trigger_category_fetch, debug=False)
     if operation == "library":
         graphql_request(trigger_global_update, debug=False)
     if operation == "status":
-        result = graphql_request(update_status_query, debug=True)
+        result = graphql_request(update_status_query, debug=False)
         return result
 
 def populate_suwayomi_category(category_id: int, attempt: int):
