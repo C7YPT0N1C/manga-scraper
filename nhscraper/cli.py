@@ -185,7 +185,7 @@ def parse_args():
         type=int,
         default=DEFAULT_MAX_SLEEP,
         help=(
-            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_SLEEP})"
+            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_SLEEP}). "
             f"Setting this to a number lower than {DEFAULT_MAX_SLEEP}, may result in hitting API limits."
         )
     )
