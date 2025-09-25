@@ -585,8 +585,15 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         logger.warning(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
                         time.sleep(wait)
                         continue
+                    if resp.status_code == 403:
+                        wait = dynamic_sleep("api", attempt=(attempt))
+                        time.sleep(wait)
+                        continue
+                    
                     resp.raise_for_status()
+                    
                     break
+                
                 except requests.RequestException as e:
                     if attempt >= configurator.max_retries:
                         log_clarification("debug")
@@ -594,17 +601,20 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = dynamic_sleep("api", attempt=(attempt))
+                            wait = dynamic_sleep("api", attempt=(attempt)) * 2
                             logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s")
                             time.sleep(wait)
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
                                 resp = gallery_ids_session.get(url, timeout=10)
                                 resp.raise_for_status()
+                            
                             except Exception as e2:
                                 logger.warning(f"Page {page}: Still failed after Tor rotate: {e2}")
                                 resp = None
+                        
                         break
+                    
                     wait = dynamic_sleep("api", attempt=(attempt))
                     logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
                     time.sleep(wait)
@@ -698,7 +708,11 @@ def fetch_gallery_metadata(gallery_id: int):
             resp = metadata_session.get(url, timeout=10)
             if resp.status_code == 429:
                 wait = dynamic_sleep("api", attempt=(attempt))
-                logger.warning(f"429 rate limit hit for Gallery: {gallery_id}, waiting {wait}s")
+                logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
+                time.sleep(wait)
+                continue
+            if resp.status_code == 403:
+                wait = dynamic_sleep("api", attempt=(attempt))
                 time.sleep(wait)
                 continue
             
@@ -723,7 +737,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    wait = dynamic_sleep("api", attempt=(attempt))
+                    wait = dynamic_sleep("api", attempt=(attempt)) * 2
                     logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s")
                     time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
@@ -742,7 +756,7 @@ def fetch_gallery_metadata(gallery_id: int):
                 logger.warning(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    wait = dynamic_sleep("api", attempt=(attempt))
+                    wait = dynamic_sleep("api", attempt=(attempt)) * 2
                     logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s")
                     time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
