@@ -191,16 +191,16 @@ def parse_args():
     )
     
     # Download / runtime options
+    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument(
         "--skip-post-run",
         action="store_true",
-        default=DEFAULT_USE_TOR,
+        default=DEFAULT_SKIP_POST_RUN,
         help=(
             f"Skips the extra post download actions (default: {DEFAULT_SKIP_POST_RUN})\n"
             "For example, if you're using the Suwayomi extension, the download directory is still cleaned, but things like updating Suwayomi are skipped."
         )
     )
-    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
     
     # Make calm/debug mutually exclusive
@@ -438,8 +438,8 @@ def update_config(args):
     update_env("MIN_SLEEP", args.min_sleep)
     update_env("MAX_SLEEP", args.max_sleep)
     update_env("DRY_RUN", args.dry_run)
-    update_env("SKIP_POST_RUN", args.skip_post_run)
     update_env("USE_TOR", args.use_tor)
+    update_env("SKIP_POST_RUN", args.skip_post_run)
     update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)
     

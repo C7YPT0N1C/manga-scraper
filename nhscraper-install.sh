@@ -180,8 +180,8 @@ MIN_SLEEP=
 MAX_SLEEP=
 
 # Download Options
-SKIP_POST_RUN=False
 USE_TOR=True
+SKIP_POST_RUN=False
 DRY_RUN=False
 CALM=False
 DEBUG=False
