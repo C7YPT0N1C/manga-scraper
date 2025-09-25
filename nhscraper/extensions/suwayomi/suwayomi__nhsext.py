@@ -488,65 +488,27 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi(operation: str, category_id):
+def update_suwayomi(operation: str, category_id, debug: bool = False):
+    """
+    Turn debug on for the GraphQL queries and the logs will get VERY long.
+    """
     
-    # Query to fetch available filters and meta for a source
-    fetch_source_browse = f"""
-    query FetchSourceBrowse {{
-    source(id: "{LOCAL_SOURCE_ID}") {{
-        id
-        name
-        displayName
-        lang
-        isConfigurable
-        supportsLatest
-        meta {{
-        sourceId
-        key
-        value
-        }}
-        filters {{
-        ... on CheckBoxFilter {{
-            type: __typename
-            CheckBoxFilterDefault: default
+    if operation == "category":
+        # Query to fetch available filters and meta for a source
+        query = f"""
+        query FetchSourceBrowse {{
+        source(id: "{LOCAL_SOURCE_ID}") {{
+            id
             name
-        }}
-        ... on HeaderFilter {{
-            type: __typename
-            name
-        }}
-        ... on SelectFilter {{
-            type: __typename
-            SelectFilterDefault: default
-            name
-            values
-        }}
-        ... on TriStateFilter {{
-            type: __typename
-            TriStateFilterDefault: default
-            name
-        }}
-        ... on TextFilter {{
-            type: __typename
-            TextFilterDefault: default
-            name
-        }}
-        ... on SortFilter {{
-            type: __typename
-            SortFilterDefault: default {{
-            ascending
-            index
+            displayName
+            lang
+            isConfigurable
+            supportsLatest
+            meta {{
+            sourceId
+            key
+            value
             }}
-            name
-            values
-        }}
-        ... on SeparatorFilter {{
-            type: __typename
-            name
-        }}
-        ... on GroupFilter {{
-            type: __typename
-            name
             filters {{
             ... on CheckBoxFilter {{
                 type: __typename
@@ -586,79 +548,169 @@ def update_suwayomi(operation: str, category_id):
                 type: __typename
                 name
             }}
+            ... on GroupFilter {{
+                type: __typename
+                name
+                filters {{
+                ... on CheckBoxFilter {{
+                    type: __typename
+                    CheckBoxFilterDefault: default
+                    name
+                }}
+                ... on HeaderFilter {{
+                    type: __typename
+                    name
+                }}
+                ... on SelectFilter {{
+                    type: __typename
+                    SelectFilterDefault: default
+                    name
+                    values
+                }}
+                ... on TriStateFilter {{
+                    type: __typename
+                    TriStateFilterDefault: default
+                    name
+                }}
+                ... on TextFilter {{
+                    type: __typename
+                    TextFilterDefault: default
+                    name
+                }}
+                ... on SortFilter {{
+                    type: __typename
+                    SortFilterDefault: default {{
+                    ascending
+                    index
+                    }}
+                    name
+                    values
+                }}
+                ... on SeparatorFilter {{
+                    type: __typename
+                    name
+                }}
+                }}
+            }}
             }}
         }}
         }}
-    }}
-    }}
-    """
-    
-    # Mutation to fetch source mangas
-    trigger_category_fetch = f"""
-    mutation TriggerCategoryFetch {{
-    fetchSourceManga(
-        input: {{
-        source: {category_id}
-        page: 1
-        type: LATEST
+        """
+        graphql_request(query, debug=debug)
+        
+        # Mutation to fetch source mangas, one mutation to sort by latest and one to sort by popularity
+        trigger_source_fetch_latest_popular = f"""
+        mutation TriggerSourceFetch {{
+        latestMangas: fetchSourceManga(input: {{ source: {LOCAL_SOURCE_ID}, page: 1, type: LATEST }}) {{
+            hasNextPage
+            mangas {{
+            id
+            title
+            thumbnailUrl
+            inLibrary
+            initialized
+            sourceId
+            }}
         }}
-    ) {{
-        hasNextPage
-        mangas {{
-        id
-        title
-        thumbnailUrl
-        inLibrary
-        initialized
-        sourceId
+        popularMangas: fetchSourceManga(input: {{ source: {LOCAL_SOURCE_ID}, page: 1, type: POPULAR }}) {{
+            hasNextPage
+            mangas {{
+            id
+            title
+            thumbnailUrl
+            inLibrary
+            initialized
+            sourceId
+            }}
         }}
-    }}
-    }}
-    """
+        }}
+        """
+        
+        # Mutation to fetch source mangas, sorted by latest
+        trigger_source_fetch_latest = f"""
+        mutation TriggerSourceFetchLatest {{
+        fetchSourceManga(
+            input: {{
+            source: {LOCAL_SOURCE_ID}
+            page: 1
+            type: LATEST
+            }}
+        ) {{
+            hasNextPage
+            mangas {{
+            id
+            title
+            thumbnailUrl
+            inLibrary
+            initialized
+            sourceId
+            }}
+        }}
+        }}
+        """
+        
+        # Mutation to fetch source mangas, sorted by popularity
+        trigger_source_fetch_popular = f"""
+        mutation TriggerSourceFetchPopular {{
+        fetchSourceManga(
+            input: {{
+            source: {LOCAL_SOURCE_ID}
+            page: 1
+            type: POPULAR
+            }}
+        ) {{
+            hasNextPage
+            mangas {{
+            id
+            title
+            thumbnailUrl
+            inLibrary
+            initialized
+            sourceId
+            }}
+        }}
+        }}
+        """
+        graphql_request(trigger_source_fetch_latest_popular, debug=debug)
     
-    # Mutation to trigger the update once
-    trigger_global_update = f"""
-    mutation TriggerGlobalUpdate {{
-    updateLibrary(input: {{ categories: [{category_id}] }}) {{
-        updateStatus {{
-        jobsInfo {{
+    if operation == "library":
+        # Mutation to trigger the update once
+        query = f"""
+        mutation TriggerGlobalUpdate {{
+        updateLibrary(input: {{ categories: [{category_id}] }}) {{
+            updateStatus {{
+            jobsInfo {{
+                isRunning
+                totalJobs
+                finishedJobs
+                skippedCategoriesCount
+                skippedMangasCount
+            }}
+            }}
+        }}
+        }}
+        """
+        graphql_request(query, debug=debug)
+
+    if operation == "status":
+        # Query to check the status repeatedly
+        query = """
+        query CheckLibraryCategoryUpdateStatus {
+        libraryUpdateStatus {
+            jobsInfo {
             isRunning
             totalJobs
             finishedJobs
             skippedCategoriesCount
             skippedMangasCount
-        }}
-        }}
-    }}
-    }}
-    """
-
-    # Query to check the status repeatedly
-    update_status_query = """
-    query CheckLibraryCategoryUpdateStatus {
-    libraryUpdateStatus {
-        jobsInfo {
-        isRunning
-        totalJobs
-        finishedJobs
-        skippedCategoriesCount
-        skippedMangasCount
+            }
         }
-    }
-    }
-    """
-    
-    # Turn debug on and the logs will get VERY long.
-    if operation == "category":
-        graphql_request(fetch_source_browse, debug=False)
-        graphql_request(trigger_category_fetch, debug=False)
-    if operation == "library":
-        graphql_request(trigger_global_update, debug=False)
-    if operation == "status":
-        result = graphql_request(update_status_query, debug=False)
+        }
+        """
+        result = graphql_request(query, debug=debug)
         return result
 
-def populate_suwayomi_category(category_id: int, attempt: int):
+def populate_suwayomi(category_id: int, attempt: int):
     log_clarification()
     logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
@@ -666,10 +718,10 @@ def populate_suwayomi_category(category_id: int, attempt: int):
 
     try:
         # Fetch all mangas in the category update
-        update_suwayomi("category", category_id)
+        update_suwayomi("category", category_id, debug=False)
         
         # Trigger the global update
-        update_suwayomi("library", category_id)
+        update_suwayomi("library", category_id, debug=False)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
@@ -677,7 +729,7 @@ def populate_suwayomi_category(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id)
+            result = update_suwayomi("status", category_id, debug=False)
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
@@ -958,7 +1010,7 @@ def process_deferred_creators():
         log_clarification()
         logger.info(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
         
-        populate_suwayomi_category(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
+        populate_suwayomi(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
 
         # ----------------------------
         # Add mangas not yet in library
