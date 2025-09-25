@@ -2,13 +2,14 @@
 
 - [**Overview and Disclaimer**](#overview-and-disclaimer)
 - [**Features**](#features)
+  - [Important Notes and Known Pitfalls](#important-notes-and-known-pitfalls)
   - [**TO-DO LIST**](#to-do-list)
 - [**Installation**](#installation)
   - [System Requirements](#system-requirements)
   - [Installation Commands](#installation-commands)
 - [**Post Install**](#post-install)
 - [**Usage**](#usage)
-  a- [CLI Arguments](#cli-arguments)
+  - [CLI Arguments](#cli-arguments)
   - [Examples](#examples)
 - [**Documentation**](#documentation
   - [Directory Layout](#directory-layout)
@@ -39,6 +40,12 @@ Automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)*
   - Tags listed in `SUWAYOMI_IGNORED_CATEGORIES` (default: `Favs`) are not created as automated categories.
 - `COMING SOON` Automatic Suwayomi metadata generation
 - Flask monitoring endpoint (Systemd service)
+
+## Important Notes and Known Pitfalls
+- Downloads are skipped if a gallery folder exists and **every page has at least one valid image file**. (Bug fix required: see below.)
+- When running with `threads_galleries>1`, terminal progress bars (`tqdm`) can interfere. The code can switch off progress bars automatically for multi-galley concurrency.
+- Logging is verbose by default (DEBUG). `--verbose` currently sets the log level as an override; code checks `config["dry_run"]` before network or write actions.
+- GraphQL calls are verified: success is detected by checking `data` returned and `errors` entries.
 
 ## Installation
 ### System Requirements

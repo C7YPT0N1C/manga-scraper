@@ -22,12 +22,11 @@ fi
 # ===============================
 # VARIABLES
 # ===============================
-NHENTAI_DIR="/opt/nhentai-scraper"
-SUWAYOMI_DIR="/opt/suwayomi"
+SCRAPER_DIR="/opt/nhentai-scraper"
 FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
-ENV_FILE="$NHENTAI_DIR/nhentai-scraper.env"
-REQUIRED_PYTHON_VERSION="3.9" # Minimum required Python version # Updatable, update as needed.
+ENV_FILE="$SCRAPER_DIR/nhentai-scraper.env"
+REQUIRED_PYTHON_VERSION="3.9"
 
 # ===============================
 # INSTALL FUNCTIONS
@@ -52,12 +51,10 @@ install_system_packages() {
 
 install_python_packages() {
     echo "Installing Python requirements..."
-    source "$NHENTAI_DIR/venv/bin/activate"
-    
-    # Upgrade pip/setuptools/wheel first
-    "$NHENTAI_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$NHENTAI_DIR/venv/bin/pip" install --editable "$NHENTAI_DIR" "requests[socks]" "tqdm"
-    export PATH="$NHENTAI_DIR/venv/bin:$PATH"
+    source "$SCRAPER_DIR/venv/bin/activate"
+    "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
+    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm"
+    export PATH="$SCRAPER_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
 
@@ -109,38 +106,38 @@ install_filebrowser() {
 install_scraper() {
     echo -e "\nInstalling nhentai-scraper..."
     #branch="main"
-    branch="dev"  # Change to 'dev' for testing latest features
+    branch="dev-testing"  # Change to 'dev' for testing latest features
 
-    if [ ! -d "$NHENTAI_DIR/.git" ]; then
+    if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning nhentai-scraper repo (branch: $branch)..."
-        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || \
-        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$NHENTAI_DIR" || {
+        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
+        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || {
             echo "Failed to clone nhentai-scraper repo."
             exit 1
         }
     else
         echo "Updating existing repo (branch: $branch)..."
-        git -C "$NHENTAI_DIR" fetch origin "$branch" && git -C "$NHENTAI_DIR" checkout "$branch" && git -C "$NHENTAI_DIR" pull || {
+        git -C "$SCRAPER_DIR" fetch origin "$branch" && git -C "$SCRAPER_DIR" checkout "$branch" && git -C "$SCRAPER_DIR" pull || {
             echo "Could not update repo on branch $branch"
         }
     fi
 
     # Setup Python venv
-    if [ ! -d "$NHENTAI_DIR/venv" ]; then
-        python3 -m venv "$NHENTAI_DIR/venv"
+    if [ ! -d "$SCRAPER_DIR/venv" ]; then
+        python3 -m venv "$SCRAPER_DIR/venv"
     fi
-    source "$NHENTAI_DIR/venv/bin/activate"
+    source "$SCRAPER_DIR/venv/bin/activate"
 
 >>>>>>> dev
     install_python_packages
 
     # Symlink CLI
-    ln -sf "$NHENTAI_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
+    ln -sf "$SCRAPER_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
 
     # Symlink Local Manifest
-    ln -sf "$NHENTAI_DIR/nhscraper/extensions/local_manifest.json" $NHENTAI_DIR/local_manifest.json
+    ln -sf "$SCRAPER_DIR/nhscraper/extensions/local_manifest.json" $SCRAPER_DIR/local_manifest.json
 
-    echo -e "\nnhentai-scraper (branch: $branch) installed at $NHENTAI_DIR"
+    echo -e "\nnhentai-scraper (branch: $branch) installed at $SCRAPER_DIR"
 }
 
 create_env_file() {
@@ -156,7 +153,7 @@ AUTH_USERNAME = "Username"
 AUTH_PASSWORD = "Password"
 
 # Directories
-NHENTAI_DIR=/opt/nhentai-scraper
+SCRAPER_DIR=/opt/nhentai-scraper
 
 # Default Paths
 DOWNLOAD_PATH=
@@ -171,8 +168,9 @@ NHENTAI_API_BASE=
 NHENTAI_MIRRORS=
 
 # Gallery ID selection
-HOMEPAGE_RANGE_START=
-HOMEPAGE_RANGE_END=
+PAGE_SORT=
+PAGE_RANGE_START=
+PAGE_RANGE_END=
 RANGE_START=
 RANGE_END=
 GALLERIES=
@@ -190,10 +188,11 @@ MIN_SLEEP=
 MAX_SLEEP=
 
 # Download Options
-USE_TOR=true
-DRY_RUN=false
-VERBOSE=false
-DEBUG=false
+USE_TOR=True
+SKIP_POST_RUN=False
+DRY_RUN=False
+CALM=False
+DEBUG=False
 EOF
     echo "Environment file created at $ENV_FILE"
     echo "Environment updated."
@@ -229,8 +228,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$NHENTAI_DIR
-ExecStart=$NHENTAI_DIR/venv/bin/python3 $NHENTAI_DIR/nhscraper/core/api.py
+WorkingDirectory=$SCRAPER_DIR
+ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/nhscraper/core/api.py
 Restart=always
 EnvironmentFile=$ENV_FILE
 
@@ -275,7 +274,7 @@ start_uninstall() {
 
             echo ""
             # Remove Directories and files with status reporting
-            for target in /opt/filebrowser/ "$NHENTAI_DIR"; do
+            for target in /opt/filebrowser/ "$SCRAPER_DIR"; do
                 if [ -e "$target" ]; then
                     rm -rf "$target" && echo "Removed: $target" || echo "Failed to remove: $target"
                 else
@@ -341,16 +340,16 @@ start_update() {
     branch=${branch:-main}  # default to main if empty
 
     echo "Updating repository to branch '$branch'..."
-    cd "$NHENTAI_DIR" || { echo "Error: could not cd into $NHENTAI_DIR"; return 1; }
+    cd "$SCRAPER_DIR" || { echo "Error: could not cd into $SCRAPER_DIR"; return 1; }
 
     # Reset and fetch branch (force overwrite local changes)
     git fetch origin
     git reset --hard "origin/$branch" || { echo "Branch '$branch' not found!"; return 1; }
 
     # Update Python environment
-    source "$NHENTAI_DIR/venv/bin/activate"
+    source "$SCRAPER_DIR/venv/bin/activate"
     pip install --upgrade pip setuptools wheel
-    pip install --editable "$NHENTAI_DIR"
+    pip install --editable "$SCRAPER_DIR"
 
     check_python_version
     install_system_packages

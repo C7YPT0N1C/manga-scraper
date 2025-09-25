@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-# extensions/extension_loader.py
+# nhscraper/extensions/extension_loader.py
 
 import os, json, importlib, shutil, subprocess
+
 from urllib.request import urlopen
 
-from nhscraper.core.config import *
+from nhscraper.core import configurator
+from nhscraper.core.configurator import *
 from nhscraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------
@@ -33,7 +35,10 @@ INSTALLED_EXTENSIONS = []
 # Helpers
 #######################################################################
 def load_local_manifest():
-    """Load the local manifest, create it from remote if it doesn't exist."""
+    """
+    Load the local manifest, create it from remote if it doesn't exist.
+    """
+    
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         logger.warning("Local manifest not found. Creating from remote...")
         update_local_manifest_from_remote()
@@ -43,12 +48,18 @@ def load_local_manifest():
         return json_load
 
 def save_local_manifest(manifest: dict):
-    """Save the local manifest to disk."""
+    """
+    Save the local manifest to disk.
+    """
+    
     with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 def fetch_remote_manifest():
-    """Fetch remote manifest.json with backup fallback."""
+    """
+    Fetch remote manifest.json with backup fallback.
+    """
+    
     try:
         with urlopen(REMOTE_MANIFEST_URL) as response:
             return json.load(response)
@@ -65,7 +76,10 @@ def fetch_remote_manifest():
             return {"extensions": []}
 
 def update_local_manifest_from_remote():
-    """Merge remote manifest into local manifest, keeping installed flags intact."""
+    """
+    Merge remote manifest into local manifest, keeping installed flags intact.
+    """
+    
     remote_manifest = fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
@@ -78,7 +92,7 @@ def update_local_manifest_from_remote():
         if remote_ext["name"] not in local_names:
             remote_ext["installed"] = False  # new extension default
             local_manifest["extensions"].append(remote_ext)
-            log_clarification()
+            log_clarification("debug")
             log(f"Added new extension to local manifest: {remote_ext['name']}", "debug")
 
     save_local_manifest(local_manifest)
@@ -88,7 +102,10 @@ def update_local_manifest_from_remote():
 # Refresh manifest and installed extensions
 # ------------------------------------------------------------
 def _reload_extensions():
-    """Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS."""
+    """
+    Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS.
+    """
+    
     update_local_manifest_from_remote()
     load_installed_extensions()
     return load_local_manifest()
@@ -126,8 +143,15 @@ def sparse_clone(extension_name: str, url: str):
 # ------------------------------------------------------------
 # Extension Loader
 # ------------------------------------------------------------
-def load_installed_extensions():
-    """Load installed extensions dynamically; reinstall if missing."""
+def load_installed_extensions(suppess_pre_run_hook: bool = False):
+    """
+    This is one this module's entrypoints.
+    
+    Load installed extensions dynamically; reinstall if missing.
+    """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
     
@@ -146,7 +170,9 @@ def load_installed_extensions():
             try:
                 module = importlib.import_module(module_name)
                 INSTALLED_EXTENSIONS.append(module)
-                log(f"Extension: {ext['name']}: Loaded.", "debug")
+                if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+                    log(f"Extension: {ext['name']}: Loaded.", "debug")
+            
             except Exception as e:
                 logger.warning(f"Extension: {ext['name']}: Failed to load: {e}. Is an external program managing it?")
         else:
@@ -160,6 +186,7 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     Compares semantic version strings (e.g., "1.2.3").
     Returns True if remote_version > local_version.
     """
+    
     def parse(v):
         return [int(x) for x in v.split(".") if x.isdigit()]
     
@@ -172,6 +199,10 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     return rv > lv
 
 def install_selected_extension(extension_name: str, reinstall: bool = False):
+    """
+    Installs an extension. If reinstall is True, forces reinstallation. Runs install hook if available.
+    """
+    
     manifest = update_local_manifest_from_remote()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry:
@@ -265,7 +296,10 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     save_local_manifest(manifest)
 
 def uninstall_selected_extension(extension_name: str):
-    """Uninstall an extension."""
+    """
+    Uninstalls an extension. Runs uninstall hook if available.
+    """
+    
     manifest = load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
@@ -289,17 +323,23 @@ def uninstall_selected_extension(extension_name: str):
 
 # ------------------------------------------------------------
 # Get selected extension (with skeleton fallback)
-def get_selected_extension(name: str = "skeleton"):
+def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     """
+    This is one this module's entrypoints.
+    
     Returns the selected extension module.
     If the extension is not installed, installs it first.
     Ensures 'skeleton' is always installed to provide a valid download path.
     """
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     original_name = name  # Save the originally requested extension
 
-    log_clarification()
-    logger.warning("Extension Loader: Ready.")
-    log("Extension Loader: Debugging Started.", "debug")
+    if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+        log_clarification("debug")
+        logger.debug("Extension Loader: Ready.")
+        log("Extension Loader: Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -335,17 +375,15 @@ def get_selected_extension(name: str = "skeleton"):
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
-            #if hasattr(ext, "update_extension_download_path"): # The extension does this in it's pre run hook.
-            #    ext.update_extension_download_path()
-            log_clarification()
-            logger.warning(f"Selected extension: {final_name}")
+            if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
+                if hasattr(ext, "pre_run_hook"):
+                    ext.pre_run_hook()
+                
+                log_clarification()
+                logger.info(f"Selected extension: {final_name}")
+            
             return ext
 
     # If we reach here, something went really wrong
     logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
     return None
-
-# ------------------------------------------------------------
-# Run on import
-# ------------------------------------------------------------
-load_installed_extensions()

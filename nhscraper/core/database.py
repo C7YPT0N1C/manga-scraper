@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-# nhscraper/core/db.py
+# nhscraper/core/database.py
 
 import os, sqlite3, threading
+
 from datetime import datetime, timezone
 
-from nhscraper.core.config import *
+from nhscraper.core import configurator
+from nhscraper.core.configurator import *
 
-DB_PATH = os.path.join(NHENTAI_DIR, "nhscraper.db")
+DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")
 lock = threading.Lock()
 
 # ===============================
 # DB INITIALISATION
 # ===============================
 def init_db():
-    os.makedirs(NHENTAI_DIR, exist_ok=True)
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    os.makedirs(SCRAPER_DIR, exist_ok=True)
     with lock, sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -100,3 +105,7 @@ def list_galleries(status=None):
         else:
             cursor.execute("SELECT id, status, started_at, completed_at FROM galleries")
         return cursor.fetchall()
+
+log_clarification("debug")
+logger.debug("Database: Ready.")
+log("Database: Debugging Started.", "debug")
