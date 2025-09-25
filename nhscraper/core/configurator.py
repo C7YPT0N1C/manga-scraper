@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# core/config.py
+# core/configurator.py
 
 import os, sys, logging, threading
 
