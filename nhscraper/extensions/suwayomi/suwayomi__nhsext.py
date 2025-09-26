@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
-# nhscraper/extensions/suwayomi/suwayomi__nhsext.py
-# ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
-# PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
+# nhscraper/extensions/skeleton/skeleton__nhsext.py
+import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile
+import threading, asyncio, requests, json, shutil, tarfile, asyncio # Module-specific imports
 
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
-from nhscraper.core import configurator
-from nhscraper.core.configurator import *
-from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
+from nhscraper.core import orchestrator
+from nhscraper.core.orchestrator import *
+from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title
+
+"""
+MODULE DESCRIPTION
+Example extension for nhentai-scraper. It is also used as the default extension if none is specified.
+"""
+
+"""
+# ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
+# PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
+ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE.
+"""
 
 ####################################################################################################################
 # Global variables
@@ -28,17 +38,39 @@ LOCAL_MANIFEST_PATH = os.path.join(
 with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
     manifest = json.load(f)
 
+DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
 for ext in manifest.get("extensions", []):
     if ext.get("name") == EXTENSION_NAME:
         DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
         break
 
-if DEDICATED_DOWNLOAD_PATH is None:
+# Optional fallback
+if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
     DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
 
+# What metadata key maps to what subdirectory
+# Example: creator = SUBDIR_1, title = SUBDIR_2, etc
 SUBFOLDER_STRUCTURE = ["creator", "title"]
 
 ####################################################################
+
+# Thread locks for I/O operations
+_clean_directories_lock = asyncio.Lock()
+
+# NOTE: _gallery_meta_lock and _deferred_creators_lock remain threading.Lock() because they are used
+# in synchronous contexts; the file metadata lock is async (asyncio.Lock) because metadata read/write functions are async.
+_collected_gallery_metas = []
+_gallery_meta_lock = threading.Lock()
+
+_deferred_creators_lock = threading.Lock()
+
+_creators_metadata_file_lock = asyncio.Lock()
+
+# Lock for remove_from_deferred async modifications (async)
+_remove_from_deferred_lock = asyncio.Lock()
+
+SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
+TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 
@@ -57,57 +89,68 @@ MAX_GENRES_PARSED = 100
 # Keep a persistent session for cookie-based login
 graphql_session = None
 
-# Thread locks for file operations
-_popular_genres_lock = threading.Lock()
-
-_collected_gallery_metas = []
-_gallery_meta_lock = threading.Lock()
-
-_deferred_creators_lock = threading.Lock()
-
 creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
 
-def load_creators_metadata() -> dict:
-    if os.path.exists(creators_metadata_file):
-        try:
-            with open(creators_metadata_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialise dictionaries if missing
-    return {
-        "collected_manga_ids": [],
-        "deferred_creators": [],
-        "creators": {}
-    }
+####################################################################################################################
+# Creators metadata I/O (async wrappers that use io_to_thread)
+####################################################################################################################
 
-def save_creators_metadata(metadata: dict):
-    try:
-        os.makedirs(os.path.dirname(creators_metadata_file), exist_ok=True)
-        with open(creators_metadata_file, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save creators_metadata.json: {e}")
+async def load_creators_metadata() -> dict:
+    """
+    Async load creators_metadata.json (thread-safe via _creators_metadata_file_lock).
+    Returns dictionary with default shape if file missing or unreadable.
+    """
+    async with _creators_metadata_file_lock:
+        if os.path.exists(creators_metadata_file):
+            try:
+                # use io_to_thread to run blocking open/read/json load
+                return await io_to_thread(read_json, creators_metadata_file)
+            except Exception as e:
+                # Use log as requested
+                log(f"Could not load creators_metadata.json: {e}", "warning")
+        # Initialise dictionaries if missing
+        return {
+            "collected_manga_ids": [],
+            "deferred_creators": [],
+            "creators": {}
+        }
+
+async def save_creators_metadata(metadata: dict):
+    """
+    Async save creators_metadata.json using thread offload and protected by async lock.
+    """
+    async with _creators_metadata_file_lock:
+        try:
+            await io_to_thread(write_json, creators_metadata_file, metadata)
+        except Exception as e:
+            log(f"Could not save creators_metadata.json: {e}", "warning")
 
 # ---- Global deferred list ----
-def load_deferred_creators() -> set[str]:
-    metadata = load_creators_metadata()
+async def load_deferred_creators() -> set[str]:
+    """
+    Async wrapper that returns a set of deferred creators.
+    Call this with await from async contexts or call_appropriately(...) from sync contexts.
+    """
+    metadata = await load_creators_metadata()
     return set(metadata.get("deferred_creators", []))
 
-def save_deferred_creators(creators: set[str]):
-    metadata = load_creators_metadata()
+async def save_deferred_creators(creators: set[str]):
+    """
+    Async save deferred creators list into metadata.
+    """
+    metadata = await load_creators_metadata()
     metadata["deferred_creators"] = sorted(creators)
-    save_creators_metadata(metadata)
+    await save_creators_metadata(metadata)
 
 # ---- Collected manga IDs ----
-def load_collected_manga_ids() -> set[int]:
-    metadata = load_creators_metadata()
+async def load_collected_manga_ids() -> set[int]:
+    metadata = await load_creators_metadata()
     return set(metadata.get("collected_manga_ids", []))
 
-def save_collected_manga_ids(ids: set[int]):
-    metadata = load_creators_metadata()
+async def save_collected_manga_ids(ids: set[int]):
+    metadata = await load_creators_metadata()
     metadata["collected_manga_ids"] = sorted(ids)
-    save_creators_metadata(metadata)
+    await save_creators_metadata(metadata)
 
 ####################################################################################################################
 # CORE
@@ -116,23 +159,23 @@ def save_collected_manga_ids(ids: set[int]):
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook():
     """
-    This is one this module's entrypoints.
+    This is one of this module's entrypoints.
     """
     
-    logger.debug(f"Extension: {EXTENSION_NAME}: Ready.")
+    log(f"{EXTENSION_NAME}: Ready.", "debug")
     log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}", "info")
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.debug(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+        log(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+        log(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
 
 def return_gallery_metas(meta):
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -141,7 +184,8 @@ def return_gallery_metas(meta):
     groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
-    title = clean_title(meta)
+    # Use call_appropriately so this works from both async and sync contexts
+    title = call_appropriately(clean_title, meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
@@ -155,29 +199,32 @@ def return_gallery_metas(meta):
         "language": gallery_language,
     }
 
-SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
-TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
-
 def install_extension():
+    """
+    Install the extension and ensure the dedicated image download path exists.
+    """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     fetch_env_vars() # Refresh env vars in case config changed.
 
     if not DEDICATED_DOWNLOAD_PATH:
+        # Fallback in case manifest didn't define it
         DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
-
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}", "info")
         return
 
     try:
+        # Ensure extension install path and image download path exists.
         os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-
+        
         tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
 
         if not os.path.exists(tarball_path):
-            logger.info(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...")
+            log(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...", "info")
             r = requests.get(SUWAYOMI_TARBALL_URL, stream=True)
             with open(tarball_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -189,7 +236,7 @@ def install_extension():
                 path_parts = member.name.split("/", 1)
                 member.name = path_parts[1] if len(path_parts) > 1 else ""
             tar.extractall(path=EXTENSION_INSTALL_PATH, members=members)
-        logger.info(f"Suwayomi-Server extracted to {EXTENSION_INSTALL_PATH}")
+        log(f"Suwayomi-Server extracted to {EXTENSION_INSTALL_PATH}", "info")
 
         service_file = "/etc/systemd/system/suwayomi-server.service"
         service_content = f"""[Unit]
@@ -211,25 +258,29 @@ WantedBy=multi-user.target
             f.write(service_content)
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
-        logger.info("Suwayomi systemd service created and started")
+        log("Suwayomi systemd service created and started", "info")
         log(f"\nSuwayomi Web: http://$IP:4567/", "debug")
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
         
         pre_run_hook()
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+        log(f"Extension: {EXTENSION_NAME}: Installed.", "info")
     
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
+        log(f"Extension: {EXTENSION_NAME}: Failed to install: {e}", "error")
 
 def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     fetch_env_vars() # Refresh env vars in case config changed.
-
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
+    
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}", "info")
         return
-
+    
     try:
         subprocess.run(["systemctl", "stop", "suwayomi-server"], check=False)
         subprocess.run(["systemctl", "disable", "suwayomi-server"], check=False)
@@ -237,19 +288,20 @@ def uninstall_extension():
         if os.path.exists(service_file):
             os.remove(service_file)
         subprocess.run(["systemctl", "daemon-reload"], check=False)
-
+        
+        # Ensure extension install path and image download path is removed.
         if os.path.exists(EXTENSION_INSTALL_PATH):
-            shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
+            os.rmdir(EXTENSION_INSTALL_PATH)
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
-        logger.info(f"Extension {EXTENSION_NAME}: Uninstalled successfully")
-
+            os.rmdir(DEDICATED_DOWNLOAD_PATH)
+        
+        log(f"Extension: {EXTENSION_NAME}: Uninstalled", "info")
+    
     except Exception as e:
-        logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
-
+        log(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}", "error")
 
 ####################################################################################################################
-# CUSTOM HOOKS (thread-safe)
+# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
 ####################################################################################################################
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
@@ -265,50 +317,55 @@ def test_hook():
     log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
-def clean_directories(RemoveEmptyArtistFolder: bool = True):
+async def clean_directories(RemoveEmptyArtistFolder: bool = True):
+    async with _clean_directories_lock:
+        await io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
+
+def _clean_directories_sync(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
     
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
+    fetch_env_vars()
     log_clarification("debug")
 
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
         return
 
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}", "info")
         return
 
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+    # Pass 1: remove empty or nearly-empty dirs
+    for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+        if dirpath == DEDICATED_DOWNLOAD_PATH:
+            continue
 
-    logger.info(f"Removed empty directories.")
-    
+        try:
+            contents = os.listdir(dirpath)
+
+            # Case A: RemoveEmptyArtistFolder = True → also count dirs with only details.json
+            if RemoveEmptyArtistFolder:
+                if not contents or (len(contents) == 1 and contents[0].lower() == "details.json"):
+                    os.rmdir(dirpath)
+                    log(f"Removed empty artist folder: {dirpath}", "info")
+
+            # Case B: RemoveEmptyArtistFolder = False → only remove truly empty dirs
+            else:
+                if not dirnames and not filenames:
+                    os.rmdir(dirpath)
+                    log(f"Removed empty directory: {dirpath}", "info")
+
+        except Exception as e:
+            log(f"Could not remove empty directory: {dirpath}: {e}", "warning")
+
+    log("Removed empty directories.", "info")
     log_clarification()
-    
+
+    # Pass 2: clean broken symlinks
     if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
+        log("No valid DEDICATED_DOWNLOAD_PATH for symlink check.", "warning")
         return
-    
+
     removed = 0
     for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
         for fname in filenames:
@@ -316,13 +373,13 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
             if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
                 try:
                     os.unlink(full_path)
-                    logger.info(f"Removed broken symlink: {full_path}")
+                    log(f"Removed broken symlink: {full_path}", "info")
                     removed += 1
                 except Exception as e:
-                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
-    
-    logger.info(f"Fixed {removed} broken symlink(s).")
+                    log(f"Failed to remove broken symlink {full_path}: {e}", "warning")
 
+    log(f"Fixed {removed} broken symlink(s).", "info")
+    
 ############################################
 
 def graphql_request(request: str, variables: dict = None, debugging: bool = False):
@@ -335,13 +392,13 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
     if debugging:
         debug = debugging
     else:
-        debug = configurator.debug
+        debug = orchestrator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": request, "variables": variables or {}}
 
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}", "info")
         return None
 
     try:
@@ -358,15 +415,15 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
         return result
     
     except requests.RequestException as e:
-        logger.error(f"GraphQL: Request failed: {e}")
+        log(f"GraphQL: Request failed: {e}", "error")
         return None
     
     except ValueError as e:
-        logger.error(f"GraphQL: Failed to decode JSON response: {e}")
-        logger.error(f"Raw response: {response.text if response else 'No response'}")
+        log(f"GraphQL: Failed to decode JSON response: {e}", "error")
+        log(f"Raw response: {response.text if response else 'No response'}", "error")
         return None
 
-def new_graphql_request(request: str, variables: dict = None, debugging: bool = False):
+def graphql_request_new(request: str, variables: dict = None, debugging: bool = False):
     """
     New framework for making requests to GraphQL. Allows for authentication with the server.
     """
@@ -378,13 +435,13 @@ def new_graphql_request(request: str, variables: dict = None, debugging: bool = 
     if debugging:
         debug = debugging
     else:
-        debug = configurator.debug
+        debug = orchestrator.debug
     
     headers = {"Content-Type": "application/json"}
     payload = {"query": request, "variables": variables or {}}
 
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] GraphQL: Would make request: {request} with variables {variables}", "info")
         return None
 
     try:
@@ -401,10 +458,10 @@ def new_graphql_request(request: str, variables: dict = None, debugging: bool = 
             resp = graphql_session.post(login_url, json=login_payload, headers={"Content-Type": "application/json"})
             resp.raise_for_status()
             if resp.status_code != 200:
-                logger.error(f"GraphQL: Login failed with status {resp.status_code}: {resp.text}")
+                log(f"GraphQL: Login failed with status {resp.status_code}: {resp.text}", "error")
                 return None
             
-            logger.info("GraphQL: Successfully logged in and obtained session cookie.")
+            log("GraphQL: Successfully logged in and obtained session cookie.", "info")
 
         if debug == True:
             log_clarification("debug")
@@ -424,12 +481,12 @@ def new_graphql_request(request: str, variables: dict = None, debugging: bool = 
         return result
 
     except requests.RequestException as e:
-        logger.error(f"GraphQL: Request failed: {e}")
+        log(f"GraphQL: Request failed: {e}", "error")
         return None
     
     except ValueError as e:
-        logger.error(f"GraphQL: Failed to decode JSON response: {e}")
-        logger.error(f"Raw response: {response.text if response else 'No response'}")
+        log(f"GraphQL: Failed to decode JSON response: {e}", "error")
+        log(f"Raw response: {response.text if response else 'No response'}", "error")
         return None
 
 def get_local_source_id():
@@ -446,7 +503,7 @@ def get_local_source_id():
     result = graphql_request(query)
     if not result:
         log_clarification()
-        logger.error("GraphQL: Failed to fetch sources")
+        log("GraphQL: Failed to fetch sources", "error")
         return LOCAL_SOURCE_ID
     
     for node in result["data"]["sources"]["nodes"]:
@@ -457,7 +514,7 @@ def get_local_source_id():
             #log(f"GraphQL: Local source ID = {LOCAL_SOURCE_ID}", "debug")
             return LOCAL_SOURCE_ID
 
-    logger.error("GraphQL: Could not find 'Local source' in sources")
+    log("GraphQL: Could not find 'Local source' in sources", "error")
     LOCAL_SOURCE_ID = None
 
 def ensure_category(category_name=None):
@@ -626,7 +683,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
 
 def populate_suwayomi(category_id: int, attempt: int):
     log_clarification()
-    logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
+    log(f"Suwayomi Update Triggered. Waiting for completion...", "info")
     
     wait_time = 4
 
@@ -638,7 +695,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         update_suwayomi("library", category_id, debugging=False)
 
         # Initialise progress bar
-        pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{configurator.max_retries})", unit="job", dynamic_ncols=True)
+        pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{orchestrator.max_retries})", unit="job", dynamic_ncols=True)
         last_finished = 0
         total_jobs = None
 
@@ -646,8 +703,8 @@ def populate_suwayomi(category_id: int, attempt: int):
             result = update_suwayomi("status", category_id, debugging=False)
 
             if not result:
-                logger.warning("Failed to fetch update status, retrying...")
-                time.sleep(wait_time)
+                log("Failed to fetch update status, retrying...", "warning")
+                thread_sleep(wait_time)
                 continue
 
             try:
@@ -666,17 +723,17 @@ def populate_suwayomi(category_id: int, attempt: int):
                     total = jobs_info.get("totalJobs", 0)
 
                 else:
-                    logger.warning("Unexpected jobsInfo format, retrying...")
-                    time.sleep(wait_time)
+                    log("Unexpected jobsInfo format, retrying...", "warning")
+                    thread_sleep(wait_time)
                     continue
             
             except (KeyError, TypeError):
-                logger.warning("Unexpected status response format, retrying...")
-                time.sleep(wait_time)
+                log("Unexpected status response format, retrying...", "warning")
+                thread_sleep(wait_time)
                 continue
 
             if not is_running:
-                logger.info("GraphQL: Suwayomi Update has been stopped either by the user or Suwayomi. Exiting.")
+                log("GraphQL: Suwayomi Update has been stopped either by the user or Suwayomi. Exiting.", "info")
                 break  # Immediate exit if update stopped
 
             # Set total if available
@@ -693,21 +750,21 @@ def populate_suwayomi(category_id: int, attempt: int):
             if total_jobs is not None and finished >= total_jobs:
                 pbar.n = pbar.total
                 pbar.refresh()
-                logger.warning(f"Suwayomi library update for Category ID {category_id} completed.")
+                log(f"Suwayomi library update for Category ID {category_id} completed.", "warning")
                 wait = max(wait_time * 5, (1 + total_jobs / 50))
-                logger.warning(f"Waiting {wait}s for Suwayomi to reflect all changes...")
-                time.sleep(wait)
+                log(f"Waiting {wait}s for Suwayomi to reflect all changes...", "warning")
+                thread_sleep(wait)
                 break
 
             # Adaptive polling
-            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
+            thread_sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
         pbar.close()
 
     except Exception as e:
-        logger.warning(f"Failed during Suwayomi update for category {category_id}: {e}")
+        log(f"Failed during Suwayomi update for category {category_id}: {e}", "warning")
 
-def add_mangas_to_suwayomi(ids: list[int], category_id: int):
+async def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     if not ids:
         return
     
@@ -719,9 +776,11 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids}) 
+    
+    # Call graphql_request (sync) from async context using call_appropriately
+    result = call_appropriately(graphql_request, mutation, {"ids": ids})
     #log(f"GraphQL: updateMangas result: {result}", "debug")
-    logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
+    log(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.", "info")
     
     log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
     mutation = """
@@ -733,9 +792,9 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = graphql_request(mutation, {"ids": ids, "categoryId": category_id})
+    result = call_appropriately(graphql_request, mutation, {"ids": ids, "categoryId": category_id})
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
-    logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
+    log(f"GraphQL: Added {len(ids)} mangas to category {category_id}.", "info")
     
 def fetch_creators_suwayomi_metadata(creator_name: str):
     """
@@ -765,34 +824,38 @@ def fetch_creators_suwayomi_metadata(creator_name: str):
         return []
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
 
-def remove_from_deferred(creator_name: str):
+async def remove_from_deferred(creator_name: str):
     """
     Remove a creator from the global deferred_creators list in creators_metadata.json.
+    Uses async lock _remove_from_deferred_lock to avoid races across async callers.
     """
-    
-    metadata = load_creators_metadata()
-    deferred_creators = set(metadata.get("deferred_creators", []))
+    async with _remove_from_deferred_lock:
+        metadata = await load_creators_metadata()
+        deferred_creators = set(metadata.get("deferred_creators", []))
 
-    if creator_name in deferred_creators:
-        deferred_creators.discard(creator_name)
-        logger.info(f"Removed '{creator_name}' from deferred creators.")
-        metadata["deferred_creators"] = sorted(deferred_creators)
-        save_creators_metadata(metadata)
-    
+        if creator_name in deferred_creators:
+            deferred_creators.discard(creator_name)
+            log(f"Removed '{creator_name}' from deferred creators.", "info")
+            metadata["deferred_creators"] = sorted(deferred_creators)
+            await save_creators_metadata(metadata)
+
 # ------------------------------------------------------------
 # Update creator mangas and ensure they are added to Suwayomi
 # ------------------------------------------------------------
-def update_creator_manga(meta):
+async def update_creator_manga(meta):
     """
     Update a creator's details.json and genre metadata based on a downloaded gallery.
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
+
+    This function is async; file operations are offloaded with io_to_thread. When called from
+    sync contexts, callers should use call_appropriately(update_creator_manga, meta).
     """
     
     fetch_env_vars() # Refresh env vars in case config changed.
         
     log_clarification("debug")
     
-    if configurator.dry_run:
+    if orchestrator.dry_run:
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
@@ -808,13 +871,14 @@ def update_creator_manga(meta):
         if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
     ]
 
-    # Load all metadata at once
-    metadata = load_creators_metadata()
+    # Load all metadata at once (async)
+    metadata = await load_creators_metadata()
     collected_ids = set(metadata.get("collected_manga_ids", []))
     deferred_creators = set(metadata.get("deferred_creators", []))
     if "creators" not in metadata:
         metadata["creators"] = {}
 
+    # For writing details.json files we will offload just the file write operations
     for creator_name in creators:
         # --- Try to retrieve manga metadata from Suwayomi ---
         nodes = fetch_creators_suwayomi_metadata(creator_name)
@@ -823,14 +887,15 @@ def update_creator_manga(meta):
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)
             try:
-                add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID)
+                # add_mangas_to_suwayomi is async; call_appropriately will run it appropriately
+                call_appropriately(add_mangas_to_suwayomi, [suwayomi_id], CATEGORY_ID)
                 collected_ids.discard(suwayomi_id)
 
                 # Use helper instead of manual discard
-                remove_from_deferred(creator_name)
+                await remove_from_deferred(creator_name)
 
             except Exception as e:
-                logger.warning(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}")
+                log(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}", "warning")
                 collected_ids.discard(suwayomi_id)
                 deferred_creators.add(creator_name)
         else:
@@ -846,7 +911,7 @@ def update_creator_manga(meta):
 
         # --- Update details.json ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-        os.makedirs(creator_folder, exist_ok=True)
+        await io_to_thread(os.makedirs, creator_folder, exist_ok=True) # create folder using io_to_thread
         details_file = os.path.join(creator_folder, "details.json")
 
         most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
@@ -860,49 +925,49 @@ def update_creator_manga(meta):
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
 
-        with open(details_file, "w", encoding="utf-8") as f:
-            json.dump(details, f, ensure_ascii=False, indent=2)
+        await io_to_thread(write_json, details_file, details) # Offload JSON write
 
-    # --- Save all metadata at once ---
+    # --- Save all metadata at once (async)---
     metadata["collected_manga_ids"] = sorted(collected_ids)
     metadata["deferred_creators"] = sorted(deferred_creators)
-    save_creators_metadata(metadata)
+    await save_creators_metadata(metadata)
 
     # --- Update manga cover ---
-    if not configurator.dry_run:
+    if not orchestrator.dry_run:
         try:
             for creator_name in creators:
                 creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
                 gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
                 if not os.path.exists(gallery_folder):
-                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+                    log(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}", "info")
                     continue
 
                 candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
                 if not candidates:
-                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
+                    log(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}", "info")
                     continue
 
                 page1_file = os.path.join(gallery_folder, candidates[0])
                 _, ext = os.path.splitext(page1_file)
 
-                # Remove old cover
+                # Remove old cover - offload removal to thread
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
-                            os.remove(os.path.join(creator_folder, f))
-                            logger.info(f"Removed old cover file: {os.path.join(creator_folder, f)}")
+                            await io_to_thread(os.remove, os.path.join(creator_folder, f))
+                            log(f"Removed old cover file: {os.path.join(creator_folder, f)}", "info")
                         except Exception as e:
-                            logger.info(f"Failed to remove old cover file for {creator_folder}: {e}")
-                            logger.info("You can safely ignore this. Suwayomi will generate it automatically.")
+                            log(f"Failed to remove old cover file for {creator_folder}: {e}", "info")
+                            log("You can safely ignore this. Suwayomi will generate it automatically", "info")
 
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
                 
-                shutil.copy2(page1_file, cover_file)
-                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
+                # copy file in thread
+                await io_to_thread(shutil.copy2, page1_file, cover_file)
+                log(f"Updated manga cover for {creator_name}: {cover_file}", "info")
 
         except Exception as e:
-            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
+            log(f"Failed to update manga cover for Gallery {meta['id']}: {e}", "error")
     else:
         log(f"[DRY RUN] Would update manga cover for creators: {creators}", "debug")
 
@@ -912,6 +977,8 @@ def process_deferred_creators():
     Ensures only existing local creator folders are added.
     Adds all existing local mangas to library + category if they exist on disk.
     Cleans up creators_metadata.json so successful creators are removed from deferred creators.
+
+    This function remains synchronous. It calls async helpers via call_appropriately(...) where necessary.
     """
     
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -920,17 +987,20 @@ def process_deferred_creators():
     
     still_deferred = set()
     
-    while process_creators_attempt <= configurator.max_retries:
+    max_attempts = orchestrator.max_retries
+
+    while process_creators_attempt <= max_attempts:
         log_clarification()
-        logger.info(f"Processing creators (attempt {process_creators_attempt}/{configurator.max_retries})...")
+        log(f"Processing creators (attempt {process_creators_attempt}/{orchestrator.max_retries})", "info")
         
-        populate_suwayomi(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
+        # Update Suwayomi category first (blocking sync)
+        populate_suwayomi(CATEGORY_ID, process_creators_attempt)
 
         # ----------------------------
         # Add mangas not yet in library
         # ----------------------------
         log_clarification()
-        logger.info("GraphQL: Fetching mangas not yet in library...")
+        log("GraphQL: Fetching mangas not yet in library...", "info")
 
         query = """
         query FetchMangasNotInLibrary($sourceId: LongString!) {
@@ -945,33 +1015,34 @@ def process_deferred_creators():
         new_ids = []
 
         if not nodes:
-            logger.info("GraphQL: No mangas found outside the library.")
+            log("GraphQL: No mangas found outside the library.", "info")
         else:
             for node in nodes:
                 title = node["title"]
                 expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
                 if os.path.exists(expected_path):
                     new_ids.append(int(node["id"]))
-                    # remove from deferred if found
-                    remove_from_deferred(title)
+                    # remove from deferred if found (async) -> use call_appropriately
+                    call_appropriately(remove_from_deferred, title)
 
             if new_ids:
-                logger.info(f"GraphQL: Adding {len(new_ids)} mangas to library and category.")
-                add_mangas_to_suwayomi(new_ids, CATEGORY_ID)
+                log(f"GraphQL: Adding {len(new_ids)} mangas to library and category.", "info")
+                call_appropriately(add_mangas_to_suwayomi, new_ids, CATEGORY_ID) # add_mangas_to_suwayomi is async -> call via call_appropriately
 
         # ----------------------------
         # Process deferred creators
         # ----------------------------
         log_clarification()
 
+        # Here _deferred_creators_lock is a threading.Lock and used in sync context
         with _deferred_creators_lock:
-            deferred_creators = load_deferred_creators()
+            deferred_creators = call_appropriately(load_deferred_creators) # load_deferred_creators is async: call via call_appropriately
 
         if not deferred_creators:
-            logger.info("GraphQL: No deferred creators to process.")
+            log("GraphQL: No deferred creators to process.", "info")
             return
 
-        logger.info(f"GraphQL: Processing {len(deferred_creators)} deferred creators...")
+        log(f"GraphQL: Processing {len(deferred_creators)} deferred creators...", "info")
 
         query = """
         query FindMangaMetadataFromLocalSource($creatorName: String!) {
@@ -998,7 +1069,7 @@ def process_deferred_creators():
         for creator_name in sorted(deferred_creators):
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             if not os.path.exists(creator_folder):
-                logger.warning(f"Skipping deferred creator '{creator_name}': folder does not exist.")
+                log(f"Skipping deferred creator '{creator_name}': folder does not exist.", "warning")
                 still_deferred.add(creator_name)
                 continue
 
@@ -1006,39 +1077,42 @@ def process_deferred_creators():
             mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
             if not mangas:
-                logger.warning(f"Creator manga '{creator_name}' not found in Suwayomi local source.")
+                log(f"Creator manga '{creator_name}' not found in Suwayomi local source.", "warning")
                 still_deferred.add(creator_name)
                 continue
 
             manga_info = mangas[0]  # title is unique per creator
-            if manga_info.get("inLibrary") and CATEGORY_ID in [c["id"] for c in manga_info.get("categories", {}).get("nodes", [])]:
-                logger.info(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.")
-                remove_from_deferred(creator_name)
+            # categories nodes may have id as int or str
+            categories_nodes = manga_info.get("categories", {}).get("nodes", [])
+            category_ids = [int(c["id"]) for c in categories_nodes] if categories_nodes else []
+            if manga_info.get("inLibrary") and CATEGORY_ID in category_ids:
+                log(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.", "info")
+                call_appropriately(remove_from_deferred, creator_name)
                 continue
 
             new_ids.add(int(manga_info["id"]))
             processed_creators.add(creator_name)
-            logger.info(f"Queued manga ID {manga_info['id']} for '{creator_name}'.")
+            log(f"Queued manga ID {manga_info['id']} for '{creator_name}'.", "info")
 
         if new_ids:
-            add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID)
+            call_appropriately(add_mangas_to_suwayomi, list(new_ids), CATEGORY_ID) # add_mangas_to_suwayomi is async -> call via call_appropriately
             for creator_name in processed_creators:
-                remove_from_deferred(creator_name)
+                call_appropriately(remove_from_deferred, creator_name)
         
         # If no creators remain, we're done early
         if not still_deferred:
-            logger.info("Successfully processed all deferred creators.")
+            log("Successfully processed all deferred creators.", "info")
             return
         
         # Otherwise, try again
         process_creators_attempt += 1
 
     # After max retries, keep creators still deferred
-    save_deferred_creators(still_deferred)
-    logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
+    call_appropriately(save_deferred_creators, still_deferred)
+    log("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.", "warning")
 
 ####################################################################################################################
-# CORE HOOKS (thread-safe)
+# CORE HOOKS (Please add to the functions, do NOT change or remove any function names)
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -1049,10 +1123,10 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Updates tqdm progress bar with current creator.
     """
 
-    fetch_env_vars()  # Refresh env vars in case config changed.
+    fetch_env_vars() # Refresh env vars in case config changed.
 
     if not urls:
-        logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
+        log(f"Gallery {gallery}: Page {page}: No URLs, skipping", "warning")
         if pbar and creator:
             pbar.set_postfix_str(f"Skipped Creator: {creator}")
         return False
@@ -1063,8 +1137,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}", "info")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
@@ -1074,14 +1148,15 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
+        
         for url in mirrors:
             for attempt in range(1, retries + 1):
                 try:
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
-                        wait = 2 ** attempt
-                        logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
-                        time.sleep(wait)
+                        # Use call_appropriately so callers (sync or async) can run it; let it perform the sleep
+                        call_appropriately(dynamic_sleep, "api", attempt=attempt, is_async=False, perform_sleep=True)
+                        log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
                     r.raise_for_status()
 
@@ -1091,40 +1166,34 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                             if chunk:
                                 f.write(chunk)
 
+                    # log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
                     log(f"Downloaded Gallery {gallery}: Page {page} -> {path}", "debug")
                     if pbar and creator:
                         pbar.set_postfix_str(f"Creator: {creator}")
                     return True
 
                 except Exception as e:
-                    wait = dynamic_sleep("gallery", attempt=attempt)
+                    # For retries, ask dynamic_sleep for a sleep and perform it (sync)
+                    call_appropriately(dynamic_sleep, "gallery", attempt=attempt, is_async=False, perform_sleep=True)
                     log_clarification()
-                    logger.warning(
-                        f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s"
-                    )
-                    time.sleep(wait)
+                    log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 
-            logger.warning(
-                f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror"
-            )
+            log(f"Gallery {gallery}: Page {page}: Mirror {url} failed after {retries} attempts, trying next mirror", "warning")
         return False
 
     # First attempt: normal retries
-    success = try_download(downloader_session, urls, configurator.max_retries)
+    success = try_download(downloader_session, urls, orchestrator.max_retries)
 
     # If still failed, rebuild Tor session once and retry
-    if not success and configurator.use_tor:
-        logger.warning(
-            f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more..."
-        )
-        downloader_session = get_session(referrer=f"{EXTENSION_NAME}", status="rebuild")
+    if not success and orchestrator.use_tor:
+        log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
+        # Use call_appropriately get_session rebuild
+        downloader_session = call_appropriately(get_session, referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
         log_clarification()
-        logger.error(
-            f"Gallery {gallery}: Page {page}: All mirrors failed after Tor rotate too: {urls}"
-        )
+        log(f"Gallery {gallery}: Page {page}: All mirrors failed after Tor rotate too: {urls}", "error")
         if pbar and creator:
             pbar.set_postfix_str(f"Failed Creator: {creator}")
 
@@ -1134,8 +1203,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 def pre_batch_hook(gallery_list):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.", "info")
         return
     
     log_clarification("debug")
@@ -1146,15 +1215,15 @@ def pre_batch_hook(gallery_list):
     # Initialise globals
     LOCAL_SOURCE_ID = get_local_source_id()
     CATEGORY_ID = ensure_category(SUWAYOMI_CATEGORY_NAME)
-
+    
     return gallery_list
 
 # Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.", "info")
     
     log_clarification("debug")
     log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
@@ -1163,8 +1232,8 @@ def pre_gallery_download_hook(gallery_id):
 def during_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.", "info")
         return
     
     log_clarification("debug")
@@ -1174,26 +1243,26 @@ def during_gallery_download_hook(gallery_id):
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
-
+    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    
     # Thread-safe append
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
     
-    # Update creator's popular genres
-    update_creator_manga(meta)
+    # Update creator's popular genres - update_creator_manga is async, call via call_appropriately
+    call_appropriately(update_creator_manga, meta)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.", "info")
         return
     
     log_clarification("debug")
@@ -1203,8 +1272,8 @@ def post_batch_hook():
 def post_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    if configurator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.", "info")
         return
     
     log_clarification("debug")
@@ -1212,13 +1281,16 @@ def post_run_hook():
     
     clean_directories(True)
     
-    if configurator.skip_post_run == True:
+    if orchestrator.skip_post_run == True:
         log_clarification("debug")
         log(f"Extension: {EXTENSION_NAME}: Post-run Hook Skipped.", "debug")
     else:
+        log_clarification("debug")
+        log(f"Extension: {EXTENSION_NAME}: Post-run Hook Active.", "debug")
+        
         # Add all creators to Suwayomi
         process_deferred_creators()
         
         # Update Suwayomi category at end
         log_clarification()
-        log("Please update the library manually and / or run a small download to reflect any changes.")
+        log("Please update the library manually and / or run a small download to reflect any changes.", "info")

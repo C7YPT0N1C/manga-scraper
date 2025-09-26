@@ -46,7 +46,7 @@ install_python_packages() {
     echo "Installing Python requirements..."
     source "$SCRAPER_DIR/venv/bin/activate"
     "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm"
+    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm" "aiosqlite"
     export PATH="$SCRAPER_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
@@ -180,7 +180,7 @@ MIN_SLEEP=
 MAX_SLEEP=
 
 # Download Options
-USE_TOR=True
+USE_TOR=False
 SKIP_POST_RUN=False
 DRY_RUN=False
 CALM=False

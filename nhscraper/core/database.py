@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
 # nhscraper/core/database.py
+import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import os, sqlite3, threading
+import threading, asyncio, requests, aiosqlite # Module-specific imports
 
 from datetime import datetime, timezone
 
-from nhscraper.core import configurator
-from nhscraper.core.configurator import *
+from nhscraper.core import orchestrator
+from nhscraper.core.orchestrator import *
+
+"""
+Database management layer for the downloader.
+Handles initialization, migrations, inserts, updates,
+and queries related to galleries, images, and metadata.
+"""
 
 DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")
-lock = threading.Lock()
+lock = asyncio.Lock()
 
 # ===============================
 # DB INITIALISATION
 # ===============================
-def init_db():
-    
+async def init_db():
     fetch_env_vars() # Refresh env vars in case config changed.
-    
     os.makedirs(SCRAPER_DIR, exist_ok=True)
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
         CREATE TABLE IF NOT EXISTS galleries (
             id INTEGER PRIMARY KEY,
             status TEXT,
@@ -31,17 +35,16 @@ def init_db():
             extension_used TEXT
         )
         """)
-        conn.commit()
+        await conn.commit()
 
 # ===============================
 # UTILITY FUNCTIONS
 # ===============================
-def mark_gallery_started(gallery_id, download_location=None, extension_used=None):
-    init_db()
+async def mark_gallery_started(gallery_id, download_location=None, extension_used=None):
+    await init_db()
     now = datetime.utcnow().isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
         INSERT INTO galleries (id, status, started_at, download_location, extension_used)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
@@ -50,62 +53,58 @@ def mark_gallery_started(gallery_id, download_location=None, extension_used=None
             download_location=excluded.download_location,
             extension_used=excluded.extension_used
         """, (gallery_id, "started", now, download_location, extension_used))
-        conn.commit()
+        await conn.commit()
 
-def mark_gallery_skipped(gallery_id):
-    init_db()
+async def mark_gallery_skipped(gallery_id):
+    await init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
         UPDATE galleries
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("skipped", now, gallery_id))
-        conn.commit()
+        await conn.commit()
 
-def mark_gallery_failed(gallery_id):
-    init_db()
+async def mark_gallery_failed(gallery_id):
+    await init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
         UPDATE galleries
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("failed", now, gallery_id))
-        conn.commit()
+        await conn.commit()
 
-def mark_gallery_completed(gallery_id):
-    init_db()
+async def mark_gallery_completed(gallery_id):
+    await init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
         UPDATE galleries
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("completed", now, gallery_id))
-        conn.commit()
+        await conn.commit()
 
-def get_gallery_status(gallery_id):
-    init_db()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM galleries WHERE id=?", (gallery_id,))
-        row = cursor.fetchone()
-        return row[0] if row else None
+async def get_gallery_status(gallery_id):
+    await init_db()
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
+        async with conn.execute("SELECT status FROM galleries WHERE id=?", (gallery_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
 
-def list_galleries(status=None):
-    init_db()
-    with lock, sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
+async def list_galleries(status=None):
+    await init_db()
+    async with lock, aiosqlite.connect(DB_PATH) as conn:
         if status:
-            cursor.execute("SELECT id, status, started_at, completed_at FROM galleries WHERE status=?", (status,))
+            async with conn.execute("SELECT id, status, started_at, completed_at FROM galleries WHERE status=?", (status,)) as cursor:
+                return await cursor.fetchall()
         else:
-            cursor.execute("SELECT id, status, started_at, completed_at FROM galleries")
-        return cursor.fetchall()
+            async with conn.execute("SELECT id, status, started_at, completed_at FROM galleries") as cursor:
+                return await cursor.fetchall()
 
 log_clarification("debug")
-logger.debug("Database: Ready.")
+log("Database: Ready.", "debug")
 log("Database: Debugging Started.", "debug")

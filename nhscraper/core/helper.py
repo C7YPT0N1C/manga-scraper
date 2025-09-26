@@ -1,5 +1,43 @@
 #!/usr/bin/env python3
-# core/config_helper.py
+# core/helper.py
+
+"""
+call_appropriately() / executor.run_blocking() / executor.spawn_task() Usage Guide:
+
+General Rule:
+- If Step B depends on Step A finishing → use `await executor.spawn_task(...)`.
+- If order/result doesn't matter → call `executor.spawn_task(...)` without await.
+- Use the sync variant in sync code, async variant in async code.
+
+---
+
+Sync context → def function():
+    ✅ executor.run_blocking(coro, ...)
+        - Blocking call, waits until done.
+        - `result = ...` if you need the return value.
+        - Calling without assignment still blocks, just ignores the result.
+    🚫 await executor.spawn_task(...)
+        - Invalid outside async.
+    🚫 executor.spawn_task(coro, ...)
+        - Returns a Task you can't await; useless in sync code.
+
+Async context → async def function():
+    ✅ result = await executor.spawn_task(coro, ...)
+        - Non-blocking overall; this coroutine pauses until done.
+        - Correct when later steps depend on the result.
+    ✅ executor.spawn_task(coro, ...)   # no await
+        - Fire-and-forget: launches task and continues immediately.
+        - Only for background/optional work.
+    ⚠️ executor.run_blocking(coro, ...)
+        - Blocks the event loop; only use for truly blocking calls you must wrap.
+
+---
+
+Rule of Thumb:
+- Use `await executor.spawn_task(...)` for most calls (safe, ordered).
+- Drop `await` only for true background tasks.
+- Use `executor.run_blocking(...)` in sync functions when you need the result.
+"""
 
 # ------------------------------------------------------------
 # Gallery Title Cleaning

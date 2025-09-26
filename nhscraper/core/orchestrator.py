@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-# nhscraper/core/configurator.py
+# nhscraper/core/orchestrator.py
+import os, sys, time, random, argparse, re, subprocess, urllib.parse, json # 'Default' imports
 
-import os, sys, logging, threading
+import threading, asyncio, logging, requests, inspect # Module-specific imports
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 
-from nhscraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
+from nhscraper.core.helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
+
+"""
+Central coordinator for download workflows.
+Manages task scheduling, concurrency, retries, and
+the overall sequencing of gallery and image downloads.
+"""
 
 ##########################################################################################
 # LOGGER
@@ -32,7 +39,7 @@ class ConditionalFormatter(logging.Formatter):
             self._style._fmt = "[%(levelname)s] %(message)s"
         return super().format(record)
 
-# --- Placeholder logger so logging during module imports don’t crash before setup_logger() runs ---
+# --- Placeholder logger so logging during module imports don't crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 if not logger.handlers:  # Only add default handler if none exist (prevents duplicates on reload)
     
@@ -107,7 +114,7 @@ def setup_logger(calm=False, debug=False):
 
     return logger
 
-def log(message: str, log_type: str = "warning"):
+def _log_backend(message: str, log_type: str = "warning"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
@@ -128,6 +135,27 @@ def log(message: str, log_type: str = "warning"):
 
     log_func = log_map.get(log_type.lower(), logger.info)
     log_func(message)
+    
+async def log(message: str, log_type: str = "warning"):
+    """
+    Unified logging function for both Sync and Async functions.
+    All logs go to file (DEBUG+), console respects setup_logger flags.
+
+    log_type: "debug", "info", "warning", "error", "critical"
+    """
+    
+    try:
+        loop = asyncio.get_running_loop()
+        in_async = True
+    except RuntimeError:
+        in_async = False
+
+    if in_async:
+        # Async context → await the coroutine
+        return await _log_backend(message, log_type)
+    else:
+        # Sync context → run blocking
+        return executor.run_blocking(_log_backend(message, log_type))
 
 ##########################################################################################
 # CONFIGS
@@ -158,6 +186,7 @@ if os.path.exists(ENV_FILE):
     
 BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
+batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
@@ -201,7 +230,7 @@ DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE
 
 DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"
-# normalized into a list at import
+# normalised into a list at import
 nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 
 
@@ -231,11 +260,11 @@ galleries = DEFAULT_GALLERIES
 # Filters
 # ------------------------------------------------------------
 DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore"
-# normalized into a list at import
+# normalised into a list at import
 excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
 
 DEFAULT_LANGUAGE = "english"
-# normalized into a list at import
+# normalised into a list at import
 language = [DEFAULT_LANGUAGE.lower()]
 
 DEFAULT_TITLE_TYPE = "english"
@@ -264,7 +293,7 @@ max_sleep = DEFAULT_MAX_SLEEP
 # ------------------------------------------------------------
 # Download Options
 # ------------------------------------------------------------
-DEFAULT_USE_TOR = True
+DEFAULT_USE_TOR = False
 use_tor = DEFAULT_USE_TOR
 
 DEFAULT_SKIP_POST_RUN = False
@@ -326,11 +355,11 @@ config = {
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "MIN_SLEEP": getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP),
     "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
-    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
-    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
-    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
-    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "true",
-    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
+    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "false",
+    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "false",
+    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "false",
+    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "false",
+    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "false",
 }
 
 ##################
@@ -381,6 +410,7 @@ def normalise_config():
 # ------------------------------------------------------------
 # Update .env safely
 # ------------------------------------------------------------
+
 def normalise_value(key: str, value):
     """
     Normalise values from .env/config to consistent runtime types.
@@ -431,10 +461,29 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
+    
+def something(gallery_list):
+    """
+    Updates Config with Built Gallery List
+    Automatically sets a reasonable amount of threads to use 
+    """
+    
+    global threads_galleries, threads_images
+    
+    update_env("GALLERIES", gallery_list) # Immediately update config with built gallery list
+    
+    if threads_galleries is None or threads_images is None:
+        threads_galleries = max(DEFAULT_THREADS_GALLERIES, int(gallery_list / 500) + 1)
+        threads_images = max(DEFAULT_THREADS_IMAGES, threads_galleries * 5)
+        
+        if debug:
+            log(f"→ Optimised Threads: {threads_galleries} gallery, {threads_images} image", "debug")
+        
+        update_env()
 
 def fetch_env_vars():
     """
-    Refresh runtime globals from config with normalized values.
+    Refresh runtime globals from config with normalised values.
     """
     
     def _update_globals():
@@ -497,3 +546,259 @@ def get_valid_sort_value(sort_value):
         valid_sort_value = DEFAULT_PAGE_SORT # Fallback to default.
     
     return valid_sort_value
+
+##########################################################################################
+# EXECUTOR
+##########################################################################################
+
+# Used when no specific concurrency limit is required; essentially a single-slot semaphore for generic tasks.
+DEFAULT_SEMAPHORE = max(1, (DEFAULT_THREADS_GALLERIES or 0) + (DEFAULT_THREADS_IMAGES or 0)) # Seems good lmfao
+
+class Executor:
+    def __init__(self, max_gallery: int = None, max_image: int = None):
+        fetch_env_vars() # Refresh env vars in case config changed.  # Refresh env vars in case config changed.
+
+        # Semaphores for limiting concurrency
+        self.gallery_semaphore = asyncio.Semaphore(max_gallery or threads_galleries)
+        self.image_semaphore = asyncio.Semaphore(max_image or threads_images)
+        self.default_semaphore = asyncio.Semaphore(DEFAULT_SEMAPHORE)
+
+        self.tasks: list[asyncio.Task] = []
+
+    async def _wrap(self, coro, name: str, semaphore: asyncio.Semaphore = None):
+        """
+        Internal wrapper for a coroutine:
+        - Respects the passed semaphore if set
+        - Catches exceptions and logs them
+        - Returns the result or None on failure
+        """
+        try:
+            if semaphore:
+                async with semaphore:
+                    return await coro
+            return await coro
+        except Exception as e:
+            log(f"Executor task {name} failed: {e}", "error")
+            return None
+
+    async def gather(self):
+        if not self.tasks:
+            return []
+        results = await asyncio.gather(*self.tasks, return_exceptions=True)
+        self.tasks.clear()
+        return results
+
+    async def cancel_all(self):
+        for t in self.tasks:
+            t.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        self.tasks.clear()
+    
+    async def sleep_sync(seconds: float, referrer: str = "Undisclosed Module"):
+        time.sleep(seconds)
+
+    def run_blocking(self, coro, name: str = "Undisclosed Module"):
+        """
+        Schedule a coroutine in synchronous context.
+        """
+        
+        async def wrapper():
+            return await self._wrap(coro, name)
+
+        try:
+            loop = asyncio.get_running_loop()
+            return loop.run_until_complete(wrapper())
+        except RuntimeError:
+            return asyncio.run(wrapper())
+        
+    async def sleep_async(seconds: float, referrer: str = "Undisclosed Module"):
+        await asyncio.sleep(seconds)
+    
+    def spawn_task(self, coro, name: str = "Undisclosed Module", type: str = "default"):
+        """
+        Schedule a coroutine in async context.
+
+        type: 'gallery', 'image', or 'default' (generic task).
+        Defaults to 'default' semaphore if type is not passed.
+        """
+        sem = self.default_semaphore
+        if type == "gallery":
+            sem = self.gallery_semaphore
+        elif type == "image":
+            sem = self.image_semaphore
+
+        task = asyncio.create_task(self._wrap(coro, name, semaphore=sem))
+        self.tasks.append(task)
+        return task
+
+# Global executor instance
+executor = Executor()
+
+##########################################################################################
+# EXECUTOR HELPERS
+##########################################################################################
+
+async def call_appropriately(func, *args, referrer=None, **kwargs):
+    """
+    Run `func` in the correct context (async vs sync) and thread if needed.
+    
+    - If called from an async function:
+        - Await coroutines
+        - Run sync functions in a background thread
+    - If called from sync function:
+        - Run coroutine via executor.run_blocking()
+        - Run sync function via executor.run_blocking()
+    
+    Automatically passes `referrer` to executor methods if available.  
+    If `referrer` is not set, uses func.__name__ as default.
+    
+    Usage:
+        result = call_appropriately(some_func, arg1, arg2)
+    """
+    
+    if referrer is None:
+        referrer = getattr(func, "__name__", "unknown")
+
+    try:
+        asyncio.get_running_loop()
+        in_async = True
+    except RuntimeError:
+        in_async = False
+
+    # --- Async context ---
+    if in_async:
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        else:
+            # sync function → run in thread
+            return await asyncio.to_thread(func, *args, **kwargs)
+
+    # --- Sync context ---
+    else:
+        if inspect.iscoroutinefunction(func):
+            # coroutine in sync context → executor.run_blocking
+            return executor.run_blocking(func(*args, **kwargs), referrer=referrer)
+        else:
+            # sync function in sync context → executor.run_blocking
+            return executor.run_blocking(func, *args, **kwargs, referrer=referrer)
+        
+async def thread_sleep(wait, referrer="Undisclosed Module"):
+    """
+    Unified sleeping function for both Sync and Async functions.
+    """
+    
+    try:
+        loop = asyncio.get_running_loop()
+        in_async = True
+    except RuntimeError:
+        in_async = False
+
+    if in_async:
+        # Async context → await the coroutine
+        return await executor.sleep_async(wait, referrer=referrer)
+    else:
+        # Sync context → run blocking
+        return await executor.sleep_sync(wait, referrer=referrer)
+
+async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: bool = True, perform_sleep: bool = True):
+    """
+    Adaptive sleep timing based on load and stage.
+    Returns the sleep duration (float) and performs an asyncio.sleep for that duration.
+    """
+    
+    # Configurable parameters
+    gallery_cap = 3750
+    api_min_sleep, api_max_sleep = 0.5, 0.75
+    
+    sleep_time = 0.5 # Default to: small sleep
+
+    log_clarification("debug")
+    log("------------------------------", "debug")
+    log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
+    log_clarification("debug")
+
+    if stage == "api":
+        attempt_scale = attempt ** 2
+        base_min, base_max = api_min_sleep * attempt_scale, api_max_sleep * attempt_scale
+        sleep_time = random.uniform(base_min, base_max)
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
+        log("------------------------------", "debug")
+        log_clarification()
+
+    if stage == "gallery":
+        # Number of galleries
+        num_of_galleries = max(1, len(batch_ids) if batch_ids else 1)
+
+        if debug:
+            log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
+        
+        gallery_threads = threads_galleries
+        image_threads = threads_images
+        if debug:
+            log(f"→  threads: {gallery_threads} gallery, {image_threads} image", "debug")
+            log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
+
+        concurrency = gallery_threads * image_threads
+        current_load = (concurrency * attempt) * num_of_galleries
+        if debug:
+            log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
+
+        unit_factor = (current_load) / gallery_cap
+        if debug:
+            log_clarification("debug")
+            log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
+
+        BASE_GALLERY_THREADS = 2
+        BASE_IMAGE_THREADS = 10
+
+        gallery_thread_damper = 0.9
+        image_thread_damper = 0.9
+
+        thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
+
+        scaled_sleep = unit_factor / thread_factor
+
+        # Ensure min_sleep exists in orchestrator
+        min_s = globals().get("min_sleep", 0.1)
+        scaled_sleep = max(scaled_sleep, min_s)
+
+        if debug:
+            log(f"→ Thread factor = {thread_factor:.2f}", "debug")
+            log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
+
+        jitter_min, jitter_max = 0.9, 1.1
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), max_sleep)
+
+        if debug:
+            log(f"→ Sleep after jitter (Capped at {max_sleep}s) = {sleep_time:.2f}s", "debug")
+
+        log_clarification("debug")
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
+        log("------------------------------", "debug")
+        log_clarification()
+
+    # Fallback: small sleep
+    if perform_sleep: # Just sleeping VS the caller asking for the value
+        if is_async: # Async VS Sync sleep
+            await executor.sleep_async(sleep_time, referrer="Dynamic Sleep (Async)")
+        else:
+            await executor.sleep_sync(sleep_time, referrer="Dynamic Sleep (Sync)")
+    
+    return sleep_time # Always return
+
+async def io_to_thread(func, *args, **kwargs):
+    """
+    Run a sync I/O-bound function in a background thread inside an async context.
+    Equivalent to asyncio.to_thread(func, *args, **kwargs).
+    """
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+def read_json(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)

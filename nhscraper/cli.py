@@ -1,13 +1,26 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
+import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import os, time, sys, argparse, re, subprocess, urllib.parse
+import threading, asyncio # Module-specific imports
 
-from nhscraper.core import configurator
-from nhscraper.core.configurator import *
+from nhscraper.core import orchestrator
+from nhscraper.core.orchestrator import *
 from nhscraper.core.downloader import start_downloader
 from nhscraper.core.api import get_session, fetch_gallery_ids
 from nhscraper.extensions.extension_loader import install_selected_extension, uninstall_selected_extension
+
+"""
+Command-line interface for controlling the downloader.
+Handles argument parsing, configuration loading, and
+initiating orchestrator tasks.
+"""
+
+"""
+CLI is synchronous. All async functions must be executed through the executor:
+- executor.run_blocking(func, *args) → blocks until finished, returns result
+- Do not use 'await' or executor.spawn_task() in this module
+"""
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
@@ -205,8 +218,16 @@ def parse_args():
     
     # Make calm/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (warnings and higher) (default: {DEFAULT_CALM})")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (critical errors and lower) (default: {DEFAULT_DEBUG})")
+    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Reduces logging to warnings and higher. (default: {DEFAULT_CALM})")
+    group.add_argument(
+        "--debug",
+        action="store_true",
+        default=DEFAULT_DEBUG,
+        help=(
+            f"Increases logging to critical errors and lower (default: {DEFAULT_DEBUG}). "
+            "Turning this on WILL make your logs massive."
+        )
+    )
 
     return parser.parse_args()
 
@@ -264,7 +285,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
-                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -280,7 +301,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, qtype, qvalue, sort_val, start_page, end_page))
                     continue
 
                 elif m_search:
@@ -289,7 +310,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "search", search_query, sort_val, start_page, end_page))
                     continue
 
                 else:
@@ -317,7 +338,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+        gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page))
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -343,7 +364,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
+        gallery_ids.update(executor.run_blocking(fetch_gallery_ids, query_lower, name, sort_val, start_page, end_page))
 
     return gallery_ids
 
@@ -450,7 +471,7 @@ def update_config(args):
 # ------------------------------------------------------------
 def main():
     """
-    This is one this module's entrypoints.
+    This is one of this module's entrypoints.
     """
     
     args = parse_args()
@@ -502,7 +523,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    get_session(referrer="CLI", status="build")
+    executor.run_blocking(get_session(referrer="CLI", status="build"))
     
     # Build Gallery List (make sure not empty.)
     log_clarification()
@@ -514,7 +535,7 @@ def main():
         sys.exit(0)  # Or just return
     
     # Update Config with Built Gallery List
-    update_env("GALLERIES", gallery_list)
+    call_appropriately(something(gallery_list))
     
     log_clarification("debug")
     log(f"Final Config:\n{config}", "debug")

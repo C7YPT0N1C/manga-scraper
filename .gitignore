@@ -3,3 +3,4 @@ progress.json
 skipped.log
 *.pyc
 __pycache__/
+*.db
