@@ -5,9 +5,9 @@
 call_appropriately() / executor.run_blocking() / executor.spawn_task() Usage Guide:
 
 General Rule:
-- If Step B depends on Step A finishing → use `await executor.spawn_task(...)`.
+- If Step B depends on Step A finishing → use `await executor.spawn_task(...)` in async code.
 - If order/result doesn't matter → call `executor.spawn_task(...)` without await.
-- Use the sync variant in sync code, async variant in async code.
+- Use the sync variant (`executor.run_blocking`) in sync code, async variant (`await executor.spawn_task` or `asyncio.to_thread`) in async code.
 
 ---
 
@@ -19,24 +19,25 @@ Sync context → def function():
     🚫 await executor.spawn_task(...)
         - Invalid outside async.
     🚫 executor.spawn_task(coro, ...)
-        - Returns a Task you can't await; useless in sync code.
+        - Returns a Task you can't await; not useful in sync code.
 
 Async context → async def function():
     ✅ result = await executor.spawn_task(coro, ...)
-        - Non-blocking overall; this coroutine pauses until done.
+        - Non-blocking overall; this coroutine pauses until the task is done.
         - Correct when later steps depend on the result.
     ✅ executor.spawn_task(coro, ...)   # no await
         - Fire-and-forget: launches task and continues immediately.
         - Only for background/optional work.
     ⚠️ executor.run_blocking(coro, ...)
-        - Blocks the event loop; only use for truly blocking calls you must wrap.
+        - Blocks the event loop; only use for truly blocking calls that must run synchronously.
 
 ---
 
 Rule of Thumb:
-- Use `await executor.spawn_task(...)` for most calls (safe, ordered).
+- Use `await executor.spawn_task(...)` for most async calls where you need results.
 - Drop `await` only for true background tasks.
 - Use `executor.run_blocking(...)` in sync functions when you need the result.
+- For synchronous functions called in async context, prefer `await asyncio.to_thread(func, ...)` via `call_appropriately()`.
 """
 
 # ------------------------------------------------------------

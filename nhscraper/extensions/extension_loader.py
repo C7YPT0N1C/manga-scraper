@@ -2,7 +2,7 @@
 # nhscraper/extensions/extension_loader.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, requests, json, aiohttp, importlib, shutil # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Module-specific imports
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *

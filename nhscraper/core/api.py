@@ -2,8 +2,9 @@
 # nhscraper/core/api.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, requests, socket, cloudscraper, json # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, socket, cloudscraper, json # Module-specific imports
 
+from aiohttp_socks import ProxyConnector
 from flask import Flask, jsonify, request
 from datetime import datetime
 from urllib.parse import urljoin
@@ -43,9 +44,9 @@ session = None
 # Use an asyncio.Lock here because session creation is now async-aware.
 session_lock = asyncio.Lock()
 
-async def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
+async def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild", backend: str = "cloudscraper"):
     """
-    Ensure and return a ready cloudscraper session.
+    Ensure and return a ready session.
 
     Parameters:
         referrer: str
@@ -54,6 +55,9 @@ async def get_session(referrer: str = "Undisclosed Module", status: str = "rebui
             - "build" → create a new session if none exists.
             - "rebuild" → force rebuild the session.
             - "none" → return the current session without creating/rebuilding.
+        backend: str
+            - "cloudscraper" → use cloudscraper session (existing behavior)
+            - "aiohttp" → use aiohttp session (new backend)
 
     Notes on executor usage:
         - Blocking operations (e.g., `cloudscraper.create_scraper`) are executed
@@ -62,15 +66,15 @@ async def get_session(referrer: str = "Undisclosed Module", status: str = "rebui
           via `executor.spawn_task()`.
 
     Returns:
-        The ready cloudscraper session object.
+        The ready session object.
     """
     
     log_clarification("debug")
     log("Fetcher: Debugging Started.", "debug")
 
     global session
-    fetch_env_vars() # Refresh env vars in case config changed.  # Refresh env vars in case config changed.
-
+    fetch_env_vars()  # Refresh env vars in case config changed.
+    
     # Log intent
     if status == "none":
         log(f"{referrer}: Requesting to only retrieve session.", "debug")
@@ -103,7 +107,16 @@ async def get_session(referrer: str = "Undisclosed Module", status: str = "rebui
 
         # Create or rebuild session if needed (blocking)
         if session is None or status == "rebuild":
-            session = executor.run_blocking(cloudscraper.create_scraper, browser_profile)
+            if backend == "aiohttp": # aiohttp / aiohttp_socks session for get_tor_ip()
+                connector = None
+                if use_tor:
+                    # Use aiohttp_socks for Tor
+                    connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
+                
+                session = aiohttp.ClientSession(connector=connector)
+            
+            else:  # Default to cloudscraper session
+                session = executor.run_blocking(cloudscraper.create_scraper, browser_profile)
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -129,7 +142,10 @@ async def get_session(referrer: str = "Undisclosed Module", status: str = "rebui
 
         # Update headers (execute-and-forget)
         def _update_session_headers(s, headers):
-            s.headers.update(headers)
+            if backend == "aiohttp":
+                s._default_headers.update(headers)
+            else:
+                s.headers.update(headers)
 
         headers = {
             "User-Agent": ua,
@@ -141,13 +157,15 @@ async def get_session(referrer: str = "Undisclosed Module", status: str = "rebui
 
         # Update proxies (blocking; need result immediately)
         def _update_proxies(s, use_tor_flag):
-            if use_tor_flag:
-                proxy = "socks5h://127.0.0.1:9050"
-                s.proxies = {"http": proxy, "https": proxy}
-                return proxy
-            else:
-                s.proxies = {}
-                return None
+            if backend == "cloudscraper":
+                if use_tor_flag:
+                    proxy = "socks5h://127.0.0.1:9050"
+                    s.proxies = {"http": proxy, "https": proxy}
+                    return proxy
+                else:
+                    s.proxies = {}
+                    return None
+            return None # aiohttp proxies handled via connector
 
         proxy_used = executor.run_blocking(_update_proxies, session, use_tor)
         if proxy_used:
@@ -578,25 +596,46 @@ async def fetch_gallery_metadata(gallery_id: int):
 # API STATE HELPERS (sync - used by Flask endpoints)
 ##################################################################################################################################
 
-def get_tor_ip():
+async def get_tor_ip(backend: str = "aiohttp") -> str | None:
     """
     Fetch current IP, through Tor if enabled.
-    This is synchronous and used by the Flask endpoint.
+    backend options:
+      - "aiohttp": use aiohttp + aiohttp_socks (default)
+      - "cloudscraper": use cloudscraper (blocking in executor)
     """
-    try:
-        if use_tor:
-            r = requests.get("https://httpbin.org/ip",
-                             proxies={
-                                 "http": "socks5h://127.0.0.1:9050",
-                                 "https": "socks5h://127.0.0.1:9050"
-                             },
-                             timeout=10)
-        else:
-            r = requests.get("https://httpbin.org/ip", timeout=10)
-        r.raise_for_status()
-        return r.json().get("origin")
-    except Exception as e:
-        return f"Error: {e}"
+    url = "https://httpbin.org/ip"
+    timeout = 10  # seconds
+
+    if backend == "aiohttp":
+        try:
+            if use_tor:
+                connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                    async with session.get(url) as r:
+                        r.raise_for_status()
+                        data = await r.json()
+            else:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                    async with session.get(url) as r:
+                        r.raise_for_status()
+                        data = await r.json()
+            return data.get("origin")
+        except Exception as e:
+            return f"Error: {e}"
+
+    else: # backend == "cloudscraper"
+        def _cloudscraper_check():
+            scraper = cloudscraper.create_scraper()
+            proxies = {"http": "socks5h://127.0.0.1:9050",
+                       "https": "socks5h://127.0.0.1:9050"} if use_tor else None
+            r = scraper.get(url, timeout=timeout, proxies=proxies)
+            r.raise_for_status()
+            return r.json().get("origin")
+
+        try:
+            return await executor.run_in_executor(None, _cloudscraper_check)
+        except Exception as e:
+            return f"Error: {e}"
 
 def get_last_gallery_id():
     with state_lock:
@@ -639,7 +678,7 @@ def status_endpoint():
         "last_checked": datetime.now().isoformat(),
         "last_gallery": get_last_gallery_id(),
         "running_galleries": get_running_galleries(),
-        "tor_ip": get_tor_ip()
+        "tor_ip": call_appropriately(get_tor_ip, referrer="API")
     })
 
 @app.route("/status/galleries", methods=["GET"])

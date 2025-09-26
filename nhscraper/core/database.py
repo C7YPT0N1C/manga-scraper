@@ -2,7 +2,7 @@
 # nhscraper/core/database.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, requests, aiosqlite # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, aiosqlite # Module-specific imports
 
 from datetime import datetime, timezone
 

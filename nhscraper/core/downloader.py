@@ -2,7 +2,7 @@
 # nhscraper/core/downloader.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, requests # Module-specific imports
+import threading, asyncio # Module-specific imports
 
 from tqdm.asyncio import tqdm_asyncio
 
@@ -27,6 +27,9 @@ and handles error recovery with retry strategies.
 
 active_extension = "skeleton"
 download_location = ""
+
+# Example usage in async setup
+downloader_session = executor.run_blocking(get_session(referrer="Downloader", status="return"))
 
 skipped_galleries = []
 
@@ -319,7 +322,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     # Build coroutine wrapper that will call extension hook via call_appropriately
                     async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator):
                         # download_images_hook may be sync or async — use call_appropriately
-                        return call_appropriately(active_extension.download_images_hook, gid, pg, urls, path, None, None, creator)
+                        return call_appropriately(active_extension.download_images_hook, gid, pg, urls, path, downloader_session, None, creator)
 
                     tasks.append(_image_task())
 

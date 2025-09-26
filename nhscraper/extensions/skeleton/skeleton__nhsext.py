@@ -2,7 +2,7 @@
 # nhscraper/extensions/skeleton/skeleton__nhsext.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, requests, json # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, json # Module-specific imports
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
@@ -271,8 +271,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if not isinstance(downloader_session, requests.Session):
-        downloader_session = requests.Session()
+    if downloader_session is None:    
+        downloader_session = executor.run_blocking(get_session(referrer=f"{EXTENSION_NAME}", status="rebuild"))
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -315,7 +315,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     # If still failed, rebuild Tor session once and retry
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
-        downloader_session = executor.run_blocking(get_session(referrer=f"{EXTENSION_NAME}", status="rebuild"))
+        downloader_session = executor.run_blocking(get_session(referrer=f"{EXTENSION_NAME}", status="return"))
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
     if not success:

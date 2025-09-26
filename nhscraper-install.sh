@@ -46,7 +46,11 @@ install_python_packages() {
     echo "Installing Python requirements..."
     source "$SCRAPER_DIR/venv/bin/activate"
     "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm" "aiosqlite"
+    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" \
+        "tqdm" \
+        "aiohttp" \
+        "aiohttp-socks" \
+        "aiosqlite"
     export PATH="$SCRAPER_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }

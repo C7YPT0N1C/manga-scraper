@@ -2,7 +2,7 @@
 # nhscraper/core/orchestrator.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse, json # 'Default' imports
 
-import threading, asyncio, logging, requests, inspect # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, logging, inspect # Module-specific imports
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
