@@ -6,6 +6,7 @@ import threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Mod
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core.helper import *
 from nhscraper.extensions import *  # Ensure extensions package is recognised
 
 """
@@ -59,9 +60,9 @@ async def save_local_manifest(manifest: dict):
     
     executor.spawn_task(
         lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2),
-        referrer=_module_referrer
+        referrer=_module_referrer,
+        type="io"
     )
-
 
 async def fetch_remote_manifest():
     """

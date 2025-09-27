@@ -12,6 +12,7 @@ from pathlib import Path
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core.helper import *
 
 """
 Programmatic API for interacting with the downloader.
@@ -63,9 +64,9 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
 
     Notes on executor usage:
         - Blocking operations (e.g., `cloudscraper.create_scraper`) are executed
-          via `await executor.call_appropriately(func(*args), referrer=_module_referrer)` to avoid blocking the event loop.
+          via `await executor.call_appropriately(func, *args, referrer=_module_referrer)` to avoid blocking the event loop.
         - execute-and-forget operations (e.g., updating session headers) are executed
-          via `await executor.call_appropriately(func(*args), referrer=_module_referrer)`.
+          via `await executor.call_appropriately(func, *args, referrer=_module_referrer)`.
 
     Returns:
         The ready session object.
@@ -154,10 +155,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                         return None  # aiohttp proxies handled via connector
 
                     # Use executor.call_appropriately properly
-                    temp_proxy = executor.run_blocking(
-                        await executor.call_appropriately(_update_proxies, temp_session, use_tor),
-                        non_async_referrer=_module_referrer
-                    )
+                    temp_proxy = await executor.call_appropriately(_update_proxies, temp_session, use_tor, referrer=_module_referrer)
 
                     if temp_proxy is None:
                         raise RuntimeError(f"Failed to initialise proxy for {referrer}")
@@ -308,7 +306,7 @@ async def clean_title(meta_or_title):
 
     # Load persisted broken symbols mapping via thread
     possible_broken_symbols = await executor.call_appropriately(
-        _load_file(broken_symbols_file),
+        _load_file, broken_symbols_file,
         referrer=_module_referrer
     )
 
@@ -372,7 +370,7 @@ async def clean_title(meta_or_title):
 
     # Persist updated broken symbols mapping via thread
     await executor.call_appropriately(
-        _save_file(broken_symbols_file, possible_broken_symbols),
+        _save_file, broken_symbols_file, possible_broken_symbols,
         referrer=_module_referrer
     )
 
@@ -453,18 +451,18 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                 try:
                     # Execute async request in thread (capped by number of gallery threads)
                     resp = await executor.call_appropriately(
-                        gallery_ids_session.get(url, timeout=10),
+                        gallery_ids_session.get, url, timeout=10,
                         referrer=_module_referrer
                     )
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
+                        wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        executor.thread_sleep(wait, referrer=_module_referrer)
+                        await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
                         continue
                     if status_code == 403:
-                        await dynamic_sleep("api", attempt=(attempt))
+                        await dynamic_sleep(stage="api", attempt=(attempt))
                         continue
 
                     # Raise for status is synchronous
@@ -482,15 +480,15 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False) * 2
+                            wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            executor.thread_sleep(wait, referrer=_module_referrer)
+                            await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
                             gallery_ids_session = await get_session(referrer=_module_referrer, status="rebuild")
                             
                             # Execute async request in thread (capped by number of gallery threads)
                             try:
                                 resp = await executor.call_appropriately(
-                                    gallery_ids_session.get(url, timeout=10),
+                                    gallery_ids_session.get, url, timeout=10,
                                     referrer=_module_referrer
                                 )
                                 resp.raise_for_status()
@@ -499,9 +497,9 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                                 resp = None
                         break
 
-                    wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
+                    wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    executor.thread_sleep(wait, referrer=_module_referrer)
+                    await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
 
             if resp is None:
                 page += 1
@@ -591,18 +589,18 @@ async def fetch_gallery_metadata(gallery_id: int):
 
             # Execute async request in thread (capped by number of gallery threads)
             resp = await executor.call_appropriately(
-                metadata_session.get(url, timeout=10),
+                metadata_session.get, url, timeout=10,
                 referrer=_module_referrer
             )
             status_code = getattr(resp, "status_code", None)
 
             if status_code == 429:
-                wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
+                wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False)
                 log(f"Gallery: {gallery_id}: Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                executor.thread_sleep(wait, referrer=_module_referrer)
+                await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
                 continue
             if status_code == 403:
-                await dynamic_sleep("api", attempt=(attempt))
+                await dynamic_sleep(stage="api", attempt=(attempt))
                 continue
 
             # Raise for status (blocking) — run in thread
@@ -635,15 +633,15 @@ async def fetch_gallery_metadata(gallery_id: int):
                 log(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}", "warning")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False) * 2
+                    wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False) * 2
                     log(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                    executor.thread_sleep(wait, referrer=_module_referrer)
+                    await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
                     metadata_session = await get_session(referrer=_module_referrer, status="rebuild")
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:
                         resp = await executor.call_appropriately(
-                            metadata_session.get(url, timeout=10),
+                            metadata_session.get, url, timeout=10,
                             referrer=_module_referrer
                         )
                         
@@ -660,9 +658,9 @@ async def fetch_gallery_metadata(gallery_id: int):
                         log(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}", "warning")
                 return None
 
-            wait = await dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
+            wait = await dynamic_sleep(stage="api", attempt=(attempt), perform_sleep=False)
             log(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s", "warning")
-            executor.thread_sleep(wait, referrer=_module_referrer)
+            await dynamic_sleep(wait=wait, referrer=_module_referrer, dynamic=False)
 
 ##################################################################################################################################
 # API STATE HELPERS (sync - used by Flask endpoints)
@@ -705,7 +703,12 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
             return r.json().get("origin")
 
         try:
-            return await executor.run_blocking(_cloudscraper_check(), non_async_referrer="Flask")
+            return await executor.run_blocking(
+                _cloudscraper_check(),
+                non_async_referrer="Flask",
+                type="general"
+            )
+        
         except Exception as e:
             return f"Error: {e}"
 

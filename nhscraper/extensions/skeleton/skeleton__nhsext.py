@@ -6,6 +6,7 @@ import threading, asyncio, aiohttp, aiohttp_socks, json # Module-specific import
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core.helper import *
 from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title
 
 """
@@ -90,7 +91,7 @@ def return_gallery_metas(meta):
     
     # Use call_appropriately so this works from both async and sync contexts
     title = executor.call_appropriately(
-        clean_title(meta),
+        clean_title, meta,
         referrer=_module_referrer
     )
     id = str(meta.get("id", "Unknown ID"))
@@ -289,8 +290,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
                 try:
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
-                        # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                        executor.run_blocking(dynamic_sleep("api", attempt=attempt, perform_sleep=True))
+                        dynamic_sleep(stage="api", attempt=attempt)
                             
                         log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
@@ -309,8 +309,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
                     return True
 
                 except Exception as e:
-                    # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                    executor.run_blocking(dynamic_sleep("gallery", attempt=attempt, perform_sleep=True))
+                    dynamic_sleep(stage="gallery", attempt=attempt)
                     log_clarification()
                     log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 

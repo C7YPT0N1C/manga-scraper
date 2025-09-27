@@ -2,44 +2,76 @@
 # core/helper.py
 
 """
-executor.call_appropriately() / executor.run_blocking() / executor.spawn_task() Usage Guide:
-
-General Rule:
-- If Step B depends on Step A finishing → use `executor.spawn_task(...)` in async code.
-- If order/result doesn't matter → call `executor.spawn_task(...)` without await.
-- Use the sync variant (`executor.run_blocking`) in sync code, async variant (`await executor.spawn_task(...)` or `executor.call_appropriately(...)`) in async code.
+Executor Usage Guide: call_appropriately / run_blocking / spawn_task
 
 ---
 
-Sync context → def function():
-    ✅ executor.run_blocking(coro, ...)
-        - Blocking call, waits until done.
-        - `result = ...` if you need the return value.
-        - Calling without assignment still blocks, just ignores the result.
-    🚫 executor.spawn_task(...)
-        - Invalid outside async.
-    🚫 executor.spawn_task(coro, ...)
-        - Returns a Task you can't await; not useful in sync code.
+General Rules:
+1. If Step B depends on Step A finishing → use `await executor.spawn_task(...)` in async code.
+2. If order/result doesn't matter → use `executor.spawn_task(...)` without await.
+3. Use the sync variant (`executor.run_blocking`) in sync functions, async-aware variants (`await executor.spawn_task(...)` or `executor.executor.call_appropriately(...)`) in async functions.
 
-Async context → async def function():
-    ✅ result = await executor.spawn_task(coro, ...)
-        - Pauses until the task completes; use when later steps depend on the result.
-    ✅ executor.spawn_task(coro, ...)   # no await
-        - execute-and-forget: launches task and continues immediately.
+---
+
+Sync Context → def function():
+    ✅ executor.run_blocking(coro_or_sync_func, *args, **kwargs)
+        - Blocking call; waits until done.
+        - Assign to a variable if you need the return value.
+        - Calling without assignment still blocks, ignores result.
+    🚫 executor.spawn_task(...)
+        - Invalid outside async context; returns a Task you cannot await.
+
+Async Context → async def function():
+    ✅ result = await executor.spawn_task(coro, *args, **kwargs)
+        - Pauses until the task completes; use when later steps depend on result.
+    ✅ executor.spawn_task(coro, *args, **kwargs)   # no await
+        - Execute-and-forget: launches task and continues immediately.
         - Only for background/optional work.
-    ✅ result = await executor.call_appropriately(sync_func(*args, **kwargs), referrer="_module_referrer") (_module_referrer should be set to a string inside the module.)
-        - Runs a synchronous function in a thread safely.
+    ✅ result = await executor.executor.call_appropriately(sync_func, *args, referrer="_module_referrer", **kwargs)
+        - Safely runs a synchronous function in a thread.
         - Correct for sync I/O or CPU-bound tasks in async context.
-    ⚠️ executor.run_blocking(coro, ...)
+    ⚠️ executor.run_blocking(coro, *args, **kwargs)
         - Blocks the event loop; only use for truly blocking calls that must run synchronously.
+
+---
+
+Important Note on Passing Functions vs Pre-Called Results:
+
+- Always **pass the function itself + arguments** to the executor:
+    ```python
+    # Correct
+    executor.run_blocking(_update_proxies, temp_session, use_tor)
+
+    # Correct in async
+    await executor.executor.call_appropriately(_update_proxies, temp_session, use_tor, referrer=_module_referrer)
+    ```
+
+- **Do NOT pre-call the function** and pass its result:
+    ```python
+    # ❌ Incorrect: executes immediately before executor can handle it
+    executor.run_blocking(_update_proxies(temp_session, use_tor))
+    executor.executor.call_appropriately(_update_proxies(temp_session, use_tor), referrer=_module_referrer)
+    ```
+
+- Reason: pre-calling the function runs it **immediately** in the current thread, defeating the purpose of `run_blocking` or `call_appropriately`, which are meant to safely execute synchronous or blocking functions in the correct context (thread or async).
+
+- For `spawn_task`, you must pass a **coroutine object**, not the result:
+    ```python
+    # Correct
+    task = executor.spawn_task(_async_func(param1, param2), referrer=_module_referrer, type="general")
+
+    # Incorrect
+    task = executor.spawn_task(_async_func(param1, param2)(referrer=_module_referrer, type="general")) # already called
+    + Whatever other variations of this pattern there could be.
+    ```
 
 ---
 
 Rule of Thumb:
 - Use `await executor.spawn_task(...)` for most async calls where you need results.
 - Drop `await` only for true background tasks.
-- Use `executor.run_blocking(...)` in sync functions when you need the result.
-- Use `executor.call_appropriately()` for running synchronous functions in async code.
+- Use `executor.run_blocking(...)` in sync functions when you need the result immediately.
+- Use `executor.executor.call_appropriately(...)` for running synchronous functions in async code.
 """
 
 # ------------------------------------------------------------

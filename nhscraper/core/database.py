@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core.helper import *
 
 """
 Database management layer for the downloader.

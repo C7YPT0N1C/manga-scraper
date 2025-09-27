@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core.helper import *
 from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title
 
 """
@@ -106,7 +107,7 @@ async def load_creators_metadata() -> dict:
         if os.path.exists(creators_metadata_file):
             try:
                 # use io_to_thread to run blocking open/read/json load
-                return await executor.io_to_thread(read_json, creators_metadata_file)
+                return await executor.read_json(creators_metadata_file)
             except Exception as e:
                 # Use log as requested
                 log(f"Could not load creators_metadata.json: {e}", "warning")
@@ -123,7 +124,7 @@ async def save_creators_metadata(metadata: dict):
     """
     async with _creators_metadata_file_lock:
         try:
-            await executor.io_to_thread(write_json, creators_metadata_file, metadata)
+            await executor.write_json(creators_metadata_file, metadata)
         except Exception as e:
             log(f"Could not save creators_metadata.json: {e}", "warning")
 
@@ -131,10 +132,8 @@ async def save_creators_metadata(metadata: dict):
 async def load_deferred_creators() -> set[str]:
     """
     Async wrapper that returns a set of deferred creators.
-    
-    # NOTE: YOU MUST USE executor.spawn_task(executor.call_appropriately(..., referrer=_module_referrer, type="TYPE") HERE
-    # NOTE: type= 'gallery', 'image', or 'default' (generic task)
     """
+    
     metadata = await load_creators_metadata()
     return set(metadata.get("deferred_creators", []))
 
@@ -190,7 +189,7 @@ def return_gallery_metas(meta):
     
     # Use call_appropriately so this works from both async and sync contexts
     title = executor.call_appropriately(
-        clean_title(meta),
+        clean_title, meta,
         referrer=_module_referrer
     )
     id = str(meta.get("id", "Unknown ID"))
@@ -671,7 +670,7 @@ def populate_suwayomi(category_id: int, attempt: int):
 
             if not result:
                 log("Failed to fetch update status, retrying...", "warning")
-                executor.thread_sleep(wait_time)
+                dynamic_sleep(wait=wait_time, dynamic=False)
                 continue
 
             try:
@@ -691,12 +690,12 @@ def populate_suwayomi(category_id: int, attempt: int):
 
                 else:
                     log("Unexpected jobsInfo format, retrying...", "warning")
-                    executor.thread_sleep(wait_time)
+                    dynamic_sleep(wait=wait_time, dynamic=False)
                     continue
             
             except (KeyError, TypeError):
                 log("Unexpected status response format, retrying...", "warning")
-                executor.thread_sleep(wait_time)
+                dynamic_sleep(wait=wait_time, dynamic=False)
                 continue
 
             if not is_running:
@@ -720,11 +719,11 @@ def populate_suwayomi(category_id: int, attempt: int):
                 log(f"Suwayomi library update for Category ID {category_id} completed.", "warning")
                 wait = max(wait_time * 5, (1 + total_jobs / 50))
                 log(f"Waiting {wait}s for Suwayomi to reflect all changes...", "warning")
-                executor.thread_sleep(wait)
+                dynamic_sleep(wait=wait, dynamic=False)
                 break
 
             # Adaptive polling
-            executor.thread_sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
+            dynamic_sleep(wait=max(wait_time, (1 + total / 1000)), dynamic=False) # Adaptive polling
 
         pbar.close()
 
@@ -861,7 +860,7 @@ async def update_creator_manga(meta):
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)
             try:
-                # add_mangas_to_suwayomi is async; using executor.spawn_task() will run it fine.
+                # add_mangas_to_suwayomi is async; using executor.spawn_task() will run it fine. # NOTE
                 executor.spawn_task(
                     add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID),
                     referrer=_module_referrer,
@@ -903,7 +902,7 @@ async def update_creator_manga(meta):
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
 
-        await executor.io_to_thread(write_json, details_file, details) # Offload JSON write
+        await executor.io_to_thread(executor.write_json, details_file, details) # Offload JSON write
 
     # --- Save all metadata at once (async)---
     metadata["collected_manga_ids"] = sorted(collected_ids)
@@ -1003,14 +1002,14 @@ def process_deferred_creators():
                     new_ids.append(int(node["id"]))
                     # remove from deferred if found (async) -> use call_appropriately
                     executor.call_appropriately(
-                        remove_from_deferred(title),
+                        remove_from_deferred, title,
                         referrer=_module_referrer
                     )
 
             if new_ids:
                 log(f"GraphQL: Adding {len(new_ids)} mangas to library and category.", "info")
                 executor.call_appropriately( # add_mangas_to_suwayomi is async -> call via call_appropriately
-                    add_mangas_to_suwayomi(new_ids, CATEGORY_ID),
+                    add_mangas_to_suwayomi, new_ids, CATEGORY_ID,
                     referrer=_module_referrer
                 )
 
@@ -1076,7 +1075,7 @@ def process_deferred_creators():
             if manga_info.get("inLibrary") and CATEGORY_ID in category_ids:
                 log(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.", "info")
                 executor.call_appropriately(
-                    remove_from_deferred(creator_name),
+                    remove_from_deferred, creator_name,
                     referrer=_module_referrer
                 )
                 continue
@@ -1092,7 +1091,7 @@ def process_deferred_creators():
             )
             for creator_name in processed_creators:
                 executor.call_appropriately(
-                    remove_from_deferred(creator_name),
+                    remove_from_deferred, creator_name,
                     referrer=_module_referrer
                 )
         
@@ -1106,7 +1105,7 @@ def process_deferred_creators():
 
     # After max retries, keep creators still deferred
     executor.call_appropriately(
-        save_deferred_creators(still_deferred),
+        save_deferred_creators, still_deferred,
         referrer=_module_referrer
     )
     log("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.", "warning")
@@ -1156,8 +1155,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
                 try:
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
-                        # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                        executor.run_blocking(dynamic_sleep("api", attempt=attempt, perform_sleep=True))
+                        dynamic_sleep(stage="api", attempt=attempt)
                         log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
                     r.raise_for_status()
@@ -1175,8 +1173,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
                     return True
 
                 except Exception as e:
-                    # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                    executor.run_blocking(dynamic_sleep("gallery", attempt=attempt, perform_sleep=True))
+                    dynamic_sleep(stage="gallery", attempt=attempt)
                     log_clarification()
                     log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 
@@ -1261,7 +1258,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Update creator's popular genres - update_creator_manga is async, call via call_appropriately
     executor.call_appropriately(
-        update_creator_manga(meta),
+        update_creator_manga, meta,
         referrer=_module_referrer
     )
 
