@@ -123,7 +123,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             
             else:  # Default to cloudscraper session
                 log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
-                session = executor.call_appropriately(
+                session = await executor.call_appropriately(
                     cloudscraper.create_scraper(browser_profile)
                 )
 
