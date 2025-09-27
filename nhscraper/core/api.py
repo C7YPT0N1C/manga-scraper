@@ -94,7 +94,6 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
 
         # Log if building or rebuilding
         log_msg = "Rebuilding" if status == "rebuild" else "Building"
-        log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
 
         # Random browser profiles
         DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
@@ -114,6 +113,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
         # Create or rebuild session if needed (blocking)
         if session is None or status == "rebuild":
             if backend == "aiohttp": # aiohttp / aiohttp_socks session for get_tor_ip()
+                log(f"{log_msg} HTTP session with aiohttp for {referrer}", "debug")
                 connector = None
                 if use_tor:
                     # Use aiohttp_socks for Tor
@@ -122,6 +122,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                 session = aiohttp.ClientSession(connector=connector)
             
             else:  # Default to cloudscraper session
+                log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
                 session = executor.run_blocking(
                     cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer

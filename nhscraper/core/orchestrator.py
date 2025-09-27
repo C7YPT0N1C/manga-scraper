@@ -15,7 +15,7 @@ Manages task scheduling, concurrency, retries, and
 the overall sequencing of gallery and image downloads.
 """
 
-_module_referrer=f"Orchestratorrrrrrrrrrrrrr" # Used in executor.* calls
+module_referrer=f"Orchestrator" # Used in executor.* calls
 DEFAULT_REFERRER = "Undisclosed Module"
 
 ##########################################################################################
@@ -679,7 +679,8 @@ class Executor:
         
         if referrer is None:
             # Try module-level _module_referrer variable first
-            referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
+            #referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
+            referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
         
         try:
             loop = asyncio.get_running_loop()
