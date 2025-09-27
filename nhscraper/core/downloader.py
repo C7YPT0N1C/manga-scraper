@@ -30,8 +30,8 @@ _module_referrer=f"Downloader" # Used in executor.* calls
 active_extension = "skeleton"
 download_location = ""
 
-# Must be async, use executor.call_appropriately()
-downloader_session = executor.call_appropriately(
+# Must be async, use executor.run_blocking()
+downloader_session = executor.run_blocking(
     get_session(referrer=_module_referrer, status="return"),
     referrer=_module_referrer
 )

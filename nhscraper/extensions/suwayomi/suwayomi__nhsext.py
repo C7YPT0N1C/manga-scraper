@@ -1143,8 +1143,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if downloader_session is None: # Use executor.call_appropriately()
-        downloader_session = executor.call_appropriately(
+    if downloader_session is None: # Use executor.run_blocking()
+        downloader_session = executor.run_blocking(
             get_session(referrer=_module_referrer, status="rebuild"),
             referrer=_module_referrer
         )
@@ -1158,10 +1158,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
                         # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                        executor.call_appropriately(
-                            dynamic_sleep("api", attempt=attempt, is_async=False, perform_sleep=True),
-                            referrer=_module_referrer
-                        )
+                        dynamic_sleep("api", attempt=attempt, is_async=False, perform_sleep=True)
                         log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
                     r.raise_for_status()
@@ -1180,10 +1177,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
                 except Exception as e:
                     # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                    executor.call_appropriately(
-                        dynamic_sleep("gallery", attempt=attempt, is_async=False, perform_sleep=True),
-                        referrer=_module_referrer
-                    )
+                    dynamic_sleep("gallery", attempt=attempt, is_async=False, perform_sleep=True)
                     log_clarification()
                     log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 
@@ -1196,8 +1190,9 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     # If still failed, rebuild Tor session once and retry
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
-        # Use call_appropriately get_session rebuild
-        downloader_session = executor.call_appropriately(
+        
+        # Use executor.run_blocking()
+        downloader_session = executor.run_blocking(
             get_session(referrer=_module_referrer, status="return"),
             referrer=_module_referrer
         )
