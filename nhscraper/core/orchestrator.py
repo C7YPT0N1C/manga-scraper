@@ -587,7 +587,7 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
     
-    async def sleep_sync(seconds: float, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
+    def sleep_sync(self, seconds: float, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
         time.sleep(seconds)
 
     def run_blocking(self, coro, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
@@ -604,7 +604,7 @@ class Executor:
         except RuntimeError:
             return asyncio.run(wrapper())
         
-    async def sleep_async(seconds: float, async_referrer: str = f"{DEFAULT_REFERRER}"):
+    async def sleep_async(self, seconds: float, async_referrer: str = f"{DEFAULT_REFERRER}"):
         await asyncio.sleep(seconds)
     
     def spawn_task(self, coro, async_referrer: str = f"{DEFAULT_REFERRER}", type: str = "default"):
@@ -624,7 +624,7 @@ class Executor:
         self.tasks.append(task)
         return task
     
-    async def call_appropriately(func, *args, referrer = None, type: str = "default", **kwargs):
+    async def call_appropriately(self, func, *args, referrer = None, type: str = "default", **kwargs):
         """
         Run `func` in the correct context (async vs sync) and thread if needed.
         
@@ -656,7 +656,7 @@ class Executor:
         if in_async:
             if inspect.iscoroutinefunction(func):
                 # Run as coroutine; type is only relevant if used with spawn_task
-                return await executor.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
+                return await self.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
             else:
                 # sync function → run in thread
                 return await asyncio.to_thread(func, *args, **kwargs)
@@ -665,12 +665,12 @@ class Executor:
         else:
             if inspect.iscoroutinefunction(func):
                 # coroutine in sync context → executor.run_blocking
-                return executor.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
+                return self.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
             else:
                 # sync function in sync context → executor.run_blocking
-                return executor.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
+                return self.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
     
-    async def thread_sleep(wait, referrer = None):
+    async def thread_sleep(self, wait, referrer = None):
         """
         Unified sleeping function for both Sync and Async functions.
         """
@@ -687,23 +687,23 @@ class Executor:
 
         if in_async:
             # Async context → await the coroutine
-            return await executor.sleep_async(wait, async_referrer=referrer)
+            return await self.sleep_async(wait, async_referrer=referrer)
         else:
             # Sync context → run blocking
-            return await executor.sleep_sync(wait, non_async_referrer=referrer)
+            return await asyncio.to_thread(self.sleep_sync, wait, non_async_referrer=referrer)
     
-    async def io_to_thread(func, *args, **kwargs):
+    async def io_to_thread(self, func, *args, **kwargs):
         """
         Run a sync I/O-bound function in a background thread inside an async context.
         Equivalent to asyncio.to_thread(func, *args, **kwargs).
         """
         return await asyncio.to_thread(func, *args, **kwargs)
 
-    def read_json(path):
+    def read_json(self, path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def write_json(path, data):
+    def write_json(self, path, data):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
