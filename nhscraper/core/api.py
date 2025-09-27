@@ -125,7 +125,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             else:  # Default to cloudscraper session
                 log(f"{log_msg_pre} HTTP session with cloudscraper for {referrer}", "debug")
                 
-                # Ensure the returned value is a proper session # FAILS HERE
+                # Ensure the returned value is a proper session
                 tmp_session = await executor.call_appropriately(
                     lambda: cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer
@@ -175,10 +175,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": referer,
         }
-        executor.call_appropriately(
-            _update_session_headers(session, headers),
-            referrer=_module_referrer
-        )
+        await executor.call_appropriately(lambda: _update_session_headers(session, headers), referrer=_module_referrer)
 
         # Update proxies (blocking; need result immediately)
         def _update_proxies(s, use_tor_flag):
