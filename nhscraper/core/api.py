@@ -112,7 +112,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
 
         # Create or rebuild session if needed (blocking)
         if session is None or status == "rebuild":
-            if backend == "aiohttp": # aiohttp / aiohttp_socks session for get_tor_ip()
+            if backend == "aiohttp":  # aiohttp / aiohttp_socks session for get_tor_ip()
                 log(f"{log_msg} HTTP session with aiohttp for {referrer}", "debug")
                 connector = None
                 if use_tor:
@@ -120,13 +120,21 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                     connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
                 
                 session = aiohttp.ClientSession(connector=connector)
-            
+
             else:  # Default to cloudscraper session
                 log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
-                session = await executor.call_appropriately(
+                
+                # Ensure the returned value is a proper session
+                tmp_session = await executor.call_appropriately(
                     cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer
                 )
+                
+                if tmp_session is None:
+                    raise RuntimeError(f"{referrer}: Failed to create cloudscraper session")
+                
+                # Assign only if valid
+                session = tmp_session
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
