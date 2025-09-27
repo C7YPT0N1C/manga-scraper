@@ -804,12 +804,12 @@ async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, perform_sleep
         if in_async: # Async VS Sync sleep
             await executor.sleep_async(
                 sleep_time,
-                referrer=_module_referrer
+                referrer=module_referrer
             )
         else:
             await executor.sleep_sync(
                 sleep_time,
-                non_async_referrer=_module_referrer
+                non_async_referrer=module_referrer
             )
     
     return sleep_time # Always return
