@@ -445,18 +445,12 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = executor.call_appropriately(
-                            dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                            referrer=_module_referrer
-                        )
+                        wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        thread_sleep(wait, referrer=_module_referrer)
+                        executor.thread_sleep(wait, referrer=_module_referrer)
                         continue
                     if status_code == 403:
-                        executor.call_appropriately(
-                            dynamic_sleep("api", attempt=(attempt)),
-                            referrer=_module_referrer
-                        )
+                        dynamic_sleep("api", attempt=(attempt))
                         continue
 
                     # Raise for status is synchronous
@@ -474,12 +468,9 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = executor.call_appropriately(
-                                dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                                referrer=_module_referrer
-                            ) * 2
+                            wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            thread_sleep(wait, referrer=_module_referrer)
+                            executor.thread_sleep(wait, referrer=_module_referrer)
                             gallery_ids_session = await get_session(referrer=_module_referrer, status="rebuild")
                             
                             # Execute async request in thread (capped by number of gallery threads)
@@ -494,12 +485,9 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                                 resp = None
                         break
 
-                    wait = executor.call_appropriately(
-                        dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                        referrer=_module_referrer
-                    )
+                    wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    thread_sleep(wait, referrer=_module_referrer)
+                    executor.thread_sleep(wait, referrer=_module_referrer)
 
             if resp is None:
                 page += 1
@@ -594,18 +582,12 @@ async def fetch_gallery_metadata(gallery_id: int):
             status_code = getattr(resp, "status_code", None)
 
             if status_code == 429:
-                wait = executor.call_appropriately(
-                    dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                    referrer=_module_referrer
-                )
+                wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
                 log(f"Gallery: {gallery_id}: Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                thread_sleep(wait, referrer=_module_referrer)
+                executor.thread_sleep(wait, referrer=_module_referrer)
                 continue
             if status_code == 403:
-                executor.call_appropriately(
-                    dynamic_sleep("api", attempt=(attempt)),
-                    referrer=_module_referrer
-                )
+                dynamic_sleep("api", attempt=(attempt))
                 continue
 
             # Raise for status (blocking) — run in thread
@@ -638,12 +620,9 @@ async def fetch_gallery_metadata(gallery_id: int):
                 log(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}", "warning")
                 # Rebuild session with Tor and try again once
                 if use_tor:
-                    wait = executor.call_appropriately(
-                        dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                        referrer=_module_referrer
-                    ) * 2
+                    wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False) * 2
                     log(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                    thread_sleep(wait, referrer=_module_referrer)
+                    executor.thread_sleep(wait, referrer=_module_referrer)
                     metadata_session = await get_session(referrer=_module_referrer, status="rebuild")
                     
                     # Execute async request in thread (capped by number of gallery threads)
@@ -666,12 +645,9 @@ async def fetch_gallery_metadata(gallery_id: int):
                         log(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}", "warning")
                 return None
 
-            wait = executor.call_appropriately(
-                dynamic_sleep("api", attempt=(attempt), perform_sleep=False),
-                referrer=_module_referrer
-            )
+            wait = dynamic_sleep("api", attempt=(attempt), perform_sleep=False)
             log(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s", "warning")
-            thread_sleep(wait, referrer=_module_referrer)
+            executor.thread_sleep(wait, referrer=_module_referrer)
 
 ##################################################################################################################################
 # API STATE HELPERS (sync - used by Flask endpoints)

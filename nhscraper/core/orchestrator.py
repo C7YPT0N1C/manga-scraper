@@ -637,6 +637,90 @@ class Executor:
         task = asyncio.create_task(self._wrap(coro, async_referrer, semaphore=sem))
         self.tasks.append(task)
         return task
+    
+    async def call_appropriately(func, *args, referrer = None, type: str = "default", **kwargs):
+        """
+        Run `func` in the correct context (async vs sync) and thread if needed.
+        
+        - If called from an async function:
+            - Await coroutines
+            - Run sync functions in a background thread
+        - If called from sync function:
+            - Run coroutine via executor.run_blocking()
+            - Run sync function via executor.run_blocking()
+        
+        Automatically passes `referrer` to executor methods if available.  
+        If `referrer` is not set, uses func.__name__ as default.
+        
+        Usage:
+            result = executor.call_appropriately(some_func(arg1, arg2), referrer=_module_referrer)
+        """
+        
+        if referrer is None:
+            # Try module-level _module_referrer variable first
+            referrer = globals().get("_module_referrer", getattr(func, "__name__", DEFAULT_REFERRER))
+
+        try:
+            asyncio.get_running_loop()
+            in_async = True
+        except RuntimeError:
+            in_async = False
+
+        # --- Async context ---
+        if in_async:
+            if inspect.iscoroutinefunction(func):
+                # Run as coroutine; type is only relevant if used with spawn_task
+                return await executor.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
+            else:
+                # sync function → run in thread
+                return await asyncio.to_thread(func, *args, **kwargs)
+
+        # --- Sync context ---
+        else:
+            if inspect.iscoroutinefunction(func):
+                # coroutine in sync context → executor.run_blocking
+                return executor.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
+            else:
+                # sync function in sync context → executor.run_blocking
+                return executor.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
+    
+    async def thread_sleep(wait, referrer = None):
+        """
+        Unified sleeping function for both Sync and Async functions.
+        """
+        
+        if referrer is None:
+            # Try module-level _module_referrer variable first
+            referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
+        
+        try:
+            loop = asyncio.get_running_loop()
+            in_async = True
+        except RuntimeError:
+            in_async = False
+
+        if in_async:
+            # Async context → await the coroutine
+            return await executor.sleep_async(wait, async_referrer=referrer)
+        else:
+            # Sync context → run blocking
+            return await executor.sleep_sync(wait, non_async_referrer=referrer)
+    
+    async def io_to_thread(func, *args, **kwargs):
+        """
+        Run a sync I/O-bound function in a background thread inside an async context.
+        Equivalent to asyncio.to_thread(func, *args, **kwargs).
+        """
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    def read_json(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def write_json(path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
 # Global executor instance
 executor = Executor()
@@ -645,79 +729,17 @@ executor = Executor()
 # EXECUTOR HELPERS
 ##########################################################################################
 
-async def call_appropriately(func, *args, referrer = None, type: str = "default", **kwargs):
+async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, perform_sleep: bool = True):
     """
-    Run `func` in the correct context (async vs sync) and thread if needed.
-    
-    - If called from an async function:
-        - Await coroutines
-        - Run sync functions in a background thread
-    - If called from sync function:
-        - Run coroutine via executor.run_blocking()
-        - Run sync function via executor.run_blocking()
-    
-    Automatically passes `referrer` to executor methods if available.  
-    If `referrer` is not set, uses func.__name__ as default.
-    
-    Usage:
-        result = executor.call_appropriately(some_func(arg1, arg2), referrer=_module_referrer)
+    Adaptive sleep timing based on load and stage.
+    Returns the sleep duration (float) and performs an asyncio.sleep for that duration.
     """
     
-    if referrer is None:
-    # Try module-level _module_referrer variable first
-       referrer = globals().get("_module_referrer", getattr(func, "__name__", DEFAULT_REFERRER))
-
     try:
         asyncio.get_running_loop()
         in_async = True
     except RuntimeError:
         in_async = False
-
-    # --- Async context ---
-    if in_async:
-        if inspect.iscoroutinefunction(func):
-            # Run as coroutine; type is only relevant if used with spawn_task
-            return await executor.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
-        else:
-            # sync function → run in thread
-            return await asyncio.to_thread(func, *args, **kwargs)
-
-    # --- Sync context ---
-    else:
-        if inspect.iscoroutinefunction(func):
-            # coroutine in sync context → executor.run_blocking
-            return executor.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
-        else:
-            # sync function in sync context → executor.run_blocking
-            return executor.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
-        
-async def thread_sleep(wait, referrer = None):
-    """
-    Unified sleeping function for both Sync and Async functions.
-    """
-    
-    if referrer is None:
-    # Try module-level _module_referrer variable first
-       referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
-    
-    try:
-        loop = asyncio.get_running_loop()
-        in_async = True
-    except RuntimeError:
-        in_async = False
-
-    if in_async:
-        # Async context → await the coroutine
-        return await executor.sleep_async(wait, async_referrer=referrer)
-    else:
-        # Sync context → run blocking
-        return await executor.sleep_sync(wait, non_async_referrer=referrer)
-
-async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: bool = True, perform_sleep: bool = True):
-    """
-    Adaptive sleep timing based on load and stage.
-    Returns the sleep duration (float) and performs an asyncio.sleep for that duration.
-    """
     
     # Configurable parameters
     gallery_cap = 3750
@@ -793,7 +815,7 @@ async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: boo
 
     # Fallback: small sleep
     if perform_sleep: # Just sleeping VS the caller asking for the value
-        if is_async: # Async VS Sync sleep
+        if in_async: # Async VS Sync sleep
             await executor.sleep_async(
                 sleep_time,
                 referrer=_module_referrer
@@ -805,19 +827,3 @@ async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: boo
             )
     
     return sleep_time # Always return
-
-async def io_to_thread(func, *args, **kwargs):
-    """
-    Run a sync I/O-bound function in a background thread inside an async context.
-    Equivalent to asyncio.to_thread(func, *args, **kwargs).
-    """
-    return await asyncio.to_thread(func, *args, **kwargs)
-
-def read_json(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def write_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)

@@ -50,7 +50,7 @@ async def load_local_manifest():
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         log("Local manifest not found. Creating from remote...", "warning")
         await update_local_manifest_from_remote()
-    async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+    async with executor.executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 

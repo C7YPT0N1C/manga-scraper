@@ -179,7 +179,7 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 async def clean_directories(RemoveEmptyArtistFolder: bool = True):
     async with _clean_directories_lock:
-        await io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
+        await executor.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
 
 def _clean_directories_sync(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH

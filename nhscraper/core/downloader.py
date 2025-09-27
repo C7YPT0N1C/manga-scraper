@@ -505,7 +505,7 @@ async def start_downloader(gallery_list=None):
         await start_batch(batch_list, current_batch_number, total_batch_numbers)
 
         if batch_num + BATCH_SIZE < len(gallery_list):
-            thread_sleep(batch_sleep_time, referrer=_module_referrer)
+            executor.thread_sleep(batch_sleep_time, referrer=_module_referrer)
 
     # post_run_hook is sync; executor.run_blocking() used
     executor.call_appropriately(

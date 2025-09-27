@@ -106,7 +106,7 @@ async def load_creators_metadata() -> dict:
         if os.path.exists(creators_metadata_file):
             try:
                 # use io_to_thread to run blocking open/read/json load
-                return await io_to_thread(read_json, creators_metadata_file)
+                return await executor.io_to_thread(read_json, creators_metadata_file)
             except Exception as e:
                 # Use log as requested
                 log(f"Could not load creators_metadata.json: {e}", "warning")
@@ -123,7 +123,7 @@ async def save_creators_metadata(metadata: dict):
     """
     async with _creators_metadata_file_lock:
         try:
-            await io_to_thread(write_json, creators_metadata_file, metadata)
+            await executor.io_to_thread(write_json, creators_metadata_file, metadata)
         except Exception as e:
             log(f"Could not save creators_metadata.json: {e}", "warning")
 
@@ -326,7 +326,7 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 async def clean_directories(RemoveEmptyArtistFolder: bool = True):
     async with _clean_directories_lock:
-        await io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
+        await executor.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
 
 def _clean_directories_sync(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
@@ -671,7 +671,7 @@ def populate_suwayomi(category_id: int, attempt: int):
 
             if not result:
                 log("Failed to fetch update status, retrying...", "warning")
-                thread_sleep(wait_time)
+                executor.thread_sleep(wait_time)
                 continue
 
             try:
@@ -691,12 +691,12 @@ def populate_suwayomi(category_id: int, attempt: int):
 
                 else:
                     log("Unexpected jobsInfo format, retrying...", "warning")
-                    thread_sleep(wait_time)
+                    executor.thread_sleep(wait_time)
                     continue
             
             except (KeyError, TypeError):
                 log("Unexpected status response format, retrying...", "warning")
-                thread_sleep(wait_time)
+                executor.thread_sleep(wait_time)
                 continue
 
             if not is_running:
@@ -720,11 +720,11 @@ def populate_suwayomi(category_id: int, attempt: int):
                 log(f"Suwayomi library update for Category ID {category_id} completed.", "warning")
                 wait = max(wait_time * 5, (1 + total_jobs / 50))
                 log(f"Waiting {wait}s for Suwayomi to reflect all changes...", "warning")
-                thread_sleep(wait)
+                executor.thread_sleep(wait)
                 break
 
             # Adaptive polling
-            thread_sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
+            executor.thread_sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
         pbar.close()
 
@@ -889,7 +889,7 @@ async def update_creator_manga(meta):
 
         # --- Update details.json ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-        await io_to_thread(os.makedirs, creator_folder, exist_ok=True) # create folder using io_to_thread
+        await executor.io_to_thread(os.makedirs, creator_folder, exist_ok=True) # create folder using io_to_thread
         details_file = os.path.join(creator_folder, "details.json")
 
         most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
@@ -903,7 +903,7 @@ async def update_creator_manga(meta):
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
 
-        await io_to_thread(write_json, details_file, details) # Offload JSON write
+        await executor.io_to_thread(write_json, details_file, details) # Offload JSON write
 
     # --- Save all metadata at once (async)---
     metadata["collected_manga_ids"] = sorted(collected_ids)
@@ -932,7 +932,7 @@ async def update_creator_manga(meta):
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
-                            await io_to_thread(os.remove, os.path.join(creator_folder, f))
+                            await executor.io_to_thread(os.remove, os.path.join(creator_folder, f))
                             log(f"Removed old cover file: {os.path.join(creator_folder, f)}", "info")
                         except Exception as e:
                             log(f"Failed to remove old cover file for {creator_folder}: {e}", "info")
@@ -941,7 +941,7 @@ async def update_creator_manga(meta):
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
                 
                 # copy file in thread
-                await io_to_thread(shutil.copy2, page1_file, cover_file)
+                await executor.io_to_thread(shutil.copy2, page1_file, cover_file)
                 log(f"Updated manga cover for {creator_name}: {cover_file}", "info")
 
         except Exception as e:
