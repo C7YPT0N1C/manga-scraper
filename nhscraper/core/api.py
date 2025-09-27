@@ -79,7 +79,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
     
     if referrer is None:
     # Try module-level _module_referrer variable first
-       referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
+       referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
     
     # Log intent
     if status == "none":
@@ -123,7 +123,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             
             else:  # Default to cloudscraper session
                 log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
-                session = executor.run_blocking(
+                session = executor.call_appropriately(
                     cloudscraper.create_scraper(browser_profile)
                 )
 
@@ -206,7 +206,7 @@ def get_meta_tags(meta, tag_type, referrer = None):
     
     if referrer is None:
     # Try module-level _module_referrer variable first
-       referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
+       referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
     
     if not meta or "tags" not in meta:
         return []

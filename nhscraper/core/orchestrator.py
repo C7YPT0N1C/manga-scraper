@@ -142,7 +142,6 @@ def log(message: str, log_type: str = "warning", referrer=None):
     Works transparently whether called inside or outside async code.
     """
     if referrer is None:
-        #referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
         referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
 
     try:
@@ -680,7 +679,7 @@ class Executor:
         
         if referrer is None:
             # Try module-level _module_referrer variable first
-            referrer = globals().get("_module_referrer", __name__) or DEFAULT_REFERRER
+            referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
         
         try:
             loop = asyncio.get_running_loop()
