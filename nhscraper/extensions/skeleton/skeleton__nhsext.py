@@ -278,8 +278,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
     if downloader_session is None: # Use executor.run_blocking()
         downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="rebuild"),
-            referrer=_module_referrer
+            get_session(referrer=_module_referrer, status="rebuild")
         )
 
     def try_download(session, mirrors, retries, tor_rotate=False):
@@ -327,8 +326,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         
         # Use executor.run_blocking()
         downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="return"),
-            referrer=_module_referrer
+            get_session(referrer=_module_referrer, status="return")
         )
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 

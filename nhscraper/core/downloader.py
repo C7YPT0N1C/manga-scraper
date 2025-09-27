@@ -32,8 +32,7 @@ download_location = ""
 
 # Must be async, use executor.run_blocking()
 downloader_session = executor.run_blocking(
-    get_session(referrer=_module_referrer, status="return"),
-    referrer=_module_referrer
+    get_session(referrer=_module_referrer, status="return")
 )
 
 skipped_galleries = []
