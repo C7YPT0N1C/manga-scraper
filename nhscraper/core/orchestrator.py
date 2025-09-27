@@ -121,13 +121,9 @@ def _log_backend(message: str, log_type: str = "warning", log_referrer: str = f"
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
-
-    log_type: "debug", "info", "warning", "error", "critical"
     """
-    
     logger = logging.getLogger("nhscraper")
 
-    # Map string to logging function
     log_map = {
         "debug": logger.debug,
         "info": logger.info,
@@ -138,31 +134,23 @@ def _log_backend(message: str, log_type: str = "warning", log_referrer: str = f"
 
     log_func = log_map.get(log_type.lower(), logger.info)
     log_func(f"{log_referrer}: {message}")
-    
-async def log(message: str, log_type: str = "warning", referrer = None):
-    """
-    Unified logging function for both Sync and Async functions.
-    All logs go to file (DEBUG+), console respects setup_logger flags.
 
-    log_type: "debug", "info", "warning", "error", "critical"
+
+def log(message: str, log_type: str = "warning", referrer=None):
     """
-    
+    Unified logging function for both sync and async functions.
+    Works transparently whether called inside or outside async code.
+    """
     if referrer is None:
-    # Try module-level _module_referrer variable first
-       referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
-    
+        referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
+
     try:
         loop = asyncio.get_running_loop()
-        in_async = True
+        # We are in async → schedule in background thread
+        return asyncio.ensure_future(asyncio.to_thread(_log_backend, message, log_type, referrer))
     except RuntimeError:
-        in_async = False
-
-    if in_async:
-        # Async context → await the coroutine
-        return await _log_backend(message, log_type, log_referrer=referrer)
-    else:
-        # Sync context → run blocking
-        return executor.run_blocking(_log_backend(message, log_type, log_referrer=referrer), non_async_referrer=referrer)
+        # No running loop → normal sync call
+        return _log_backend(message, log_type, referrer)
 
 ##########################################################################################
 # CONFIGS

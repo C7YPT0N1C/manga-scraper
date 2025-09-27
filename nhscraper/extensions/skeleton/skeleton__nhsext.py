@@ -276,8 +276,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if downloader_session is None: # Use executor.run_blocking()
-        downloader_session = executor.run_blocking(
+    if downloader_session is None: # Use executor.call_appropriately()
+        downloader_session = executor.call_appropriately(
             get_session(referrer=_module_referrer, status="rebuild"),
             referrer=_module_referrer
         )
