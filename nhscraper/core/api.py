@@ -124,8 +124,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             else:  # Default to cloudscraper session
                 log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
                 session = executor.run_blocking(
-                    cloudscraper.create_scraper(browser_profile),
-                    referrer=_module_referrer
+                    cloudscraper.create_scraper(browser_profile)
                 )
 
         # Random User-Agents
