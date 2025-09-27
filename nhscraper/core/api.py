@@ -93,7 +93,8 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             return session
 
         # Log if building or rebuilding
-        log_msg = "Rebuilding" if status == "rebuild" else "Building"
+        log_msg_pre = "Rebuilding" if status == "rebuild" else "Building"
+        log_msg_post = "Rebuilt" if status == "rebuild" else "Built"
 
         # Random browser profiles
         DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
@@ -113,7 +114,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
         # Create or rebuild session if needed (blocking)
         if session is None or status == "rebuild":
             if backend == "aiohttp":  # aiohttp / aiohttp_socks session for get_tor_ip()
-                log(f"{log_msg} HTTP session with aiohttp for {referrer}", "debug")
+                log(f"{log_msg_pre} HTTP session with aiohttp for {referrer}", "debug")
                 connector = None
                 if use_tor:
                     # Use aiohttp_socks for Tor
@@ -122,7 +123,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                 session = aiohttp.ClientSession(connector=connector)
 
             else:  # Default to cloudscraper session
-                log(f"{log_msg} HTTP session with cloudscraper for {referrer}", "debug")
+                log(f"{log_msg_pre} HTTP session with cloudscraper for {referrer}", "debug")
                 
                 # Ensure the returned value is a proper session
                 tmp_session = await executor.call_appropriately(
@@ -130,11 +131,14 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                     referrer=_module_referrer
                 )
                 
+                log(f"Temp HTTP session for {referrer}: {tmp_session}", "debug")
+                
                 if tmp_session is None:
-                    raise RuntimeError(f"{referrer}: Failed to create cloudscraper session")
+                    raise RuntimeError(f"Failed to create cloudscraper session for {referrer}")
                 
                 # Assign only if valid
                 session = tmp_session
+                log(f"{log_msg_post} HTTP session for {referrer}: {session}", "debug")
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -198,7 +202,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             log("Not using Tor proxy", "info")
 
         # Log completion
-        log(f"{log_msg} HTTP session completed.", "debug")
+        log(f"{log_msg_post} HTTP session for {referrer}", "debug")
 
         return session
 
