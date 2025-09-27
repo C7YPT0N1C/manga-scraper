@@ -2,12 +2,12 @@
 # core/helper.py
 
 """
-call_appropriately() / executor.run_blocking() / executor.spawn_task() Usage Guide:
+executor.call_appropriately() / executor.run_blocking() / executor.spawn_task() Usage Guide:
 
 General Rule:
-- If Step B depends on Step A finishing → use `await executor.spawn_task(...)` in async code.
+- If Step B depends on Step A finishing → use `executor.spawn_task(...)` in async code.
 - If order/result doesn't matter → call `executor.spawn_task(...)` without await.
-- Use the sync variant (`executor.run_blocking`) in sync code, async variant (`await executor.spawn_task` or `asyncio.to_thread`) in async code.
+- Use the sync variant (`executor.run_blocking`) in sync code, async variant (`await executor.spawn_task(...)` or `executor.call_appropriately(...)`) in async code.
 
 ---
 
@@ -16,18 +16,20 @@ Sync context → def function():
         - Blocking call, waits until done.
         - `result = ...` if you need the return value.
         - Calling without assignment still blocks, just ignores the result.
-    🚫 await executor.spawn_task(...)
+    🚫 executor.spawn_task(...)
         - Invalid outside async.
     🚫 executor.spawn_task(coro, ...)
         - Returns a Task you can't await; not useful in sync code.
 
 Async context → async def function():
     ✅ result = await executor.spawn_task(coro, ...)
-        - Non-blocking overall; this coroutine pauses until the task is done.
-        - Correct when later steps depend on the result.
+        - Pauses until the task completes; use when later steps depend on the result.
     ✅ executor.spawn_task(coro, ...)   # no await
-        - Fire-and-forget: launches task and continues immediately.
+        - execute-and-forget: launches task and continues immediately.
         - Only for background/optional work.
+    ✅ result = await executor.call_appropriately(sync_func(*args, **kwargs), referrer="_module_referrer") (_module_referrer should be set to a string inside the module.)
+        - Runs a synchronous function in a thread safely.
+        - Correct for sync I/O or CPU-bound tasks in async context.
     ⚠️ executor.run_blocking(coro, ...)
         - Blocks the event loop; only use for truly blocking calls that must run synchronously.
 
@@ -37,7 +39,7 @@ Rule of Thumb:
 - Use `await executor.spawn_task(...)` for most async calls where you need results.
 - Drop `await` only for true background tasks.
 - Use `executor.run_blocking(...)` in sync functions when you need the result.
-- For synchronous functions called in async context, prefer `await asyncio.to_thread(func, ...)` via `call_appropriately()`.
+- Use `executor.call_appropriately()` for running synchronous functions in async code.
 """
 
 # ------------------------------------------------------------

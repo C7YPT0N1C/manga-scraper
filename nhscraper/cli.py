@@ -18,9 +18,11 @@ initiating orchestrator tasks.
 
 """
 CLI is synchronous. All async functions must be executed through the executor:
-- executor.run_blocking(func, *args) → blocks until finished, returns result
+- executor.run_blocking(func(*args), referrer=_module_referrer) → blocks until finished, returns result
 - Do not use 'await' or executor.spawn_task() in this module
 """
+
+_module_referrer=f"CLI" # Used in executor.* calls
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
@@ -285,7 +287,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
-                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page), referrer=_module_referrer))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -301,7 +303,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, qtype, qvalue, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page), referrer=_module_referrer))
                     continue
 
                 elif m_search:
@@ -310,7 +312,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "search", search_query, sort_val, start_page, end_page))
+                    gallery_ids.update(executor.run_blocking(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page), referrer=_module_referrer))
                     continue
 
                 else:
@@ -338,7 +340,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page))
+        gallery_ids.update(executor.run_blocking(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page), referrer=_module_referrer))
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -364,7 +366,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        gallery_ids.update(executor.run_blocking(fetch_gallery_ids, query_lower, name, sort_val, start_page, end_page))
+        gallery_ids.update(executor.run_blocking(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page), referrer=_module_referrer))
 
     return gallery_ids
 
@@ -523,7 +525,10 @@ def main():
     update_config(args)
     
     # Build initial session.
-    executor.run_blocking(get_session(referrer="CLI", status="build"))
+    executor.run_blocking(
+        get_session(referrer=_module_referrer, status="build"),
+        non_async_referrer=_module_referrer
+    )
     
     # Build Gallery List (make sure not empty.)
     log_clarification()
@@ -535,7 +540,10 @@ def main():
         sys.exit(0)  # Or just return
     
     # Update Config with Built Gallery List
-    call_appropriately(something(gallery_list))
+    executor.call_appropriately(
+        init_scraper(gallery_list),
+        referrer=_module_referrer
+    )
     
     log_clarification("debug")
     log(f"Final Config:\n{config}", "debug")

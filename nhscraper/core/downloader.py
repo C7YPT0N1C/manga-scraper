@@ -25,11 +25,16 @@ and handles error recovery with retry strategies.
 # Global Variables
 ####################################################################################################
 
+_module_referrer=f"Downloader" # Used in executor.* calls
+
 active_extension = "skeleton"
 download_location = ""
 
-# Example usage in async setup
-downloader_session = executor.run_blocking(get_session(referrer="Downloader", status="return"))
+# Must be async, use executor.call_appropriately()
+downloader_session = executor.call_appropriately(
+    get_session(referrer=_module_referrer, status="return"),
+    referrer=_module_referrer
+)
 
 skipped_galleries = []
 
@@ -43,7 +48,10 @@ async def load_extension(suppess_pre_run_hook: bool = False):
 
     ext_name = orchestrator.extension
     # use call_appropriately for cross-module call
-    active_extension = call_appropriately(get_selected_extension, ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
+    active_extension = executor.call_appropriately(
+        get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook),
+        referrer=_module_referrer
+    )
     
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
@@ -54,7 +62,10 @@ async def load_extension(suppess_pre_run_hook: bool = False):
 
     if not orchestrator.dry_run:
         # Creating directories is blocking; run in thread to be safe
-        call_appropriately(os.makedirs, download_location, exist_ok=True)
+        executor.run_blocking(
+            os.makedirs(download_location, exist_ok=True),
+            referrer=_module_referrer
+        )
     else:
         if not suppess_pre_run_hook:
             log(f"[DRY RUN] Would Download Galleries To: {download_location}", "info")
@@ -154,8 +165,15 @@ async def symlink_extra_creators(primary_folder: str, creators: list[str], meta:
             log(f"Downloader: Symlinked {extra_creator_safe} -> {primary_creator}", "info")
 
         # schedule as background thread-safe work (non-blocking to caller)
-        # `asyncio.to_thread` returns an awaitable; wrap that for executor.spawn_task
-        await executor.spawn_task(asyncio.to_thread(_make_symlink_sync), name=f"symlink-{extra_creator_safe}", type="io")
+        # `asyncio.to_thread` returns an awaitable
+        
+        # NOTE: YOU MUST USE executor.spawn_task(..., referrer=_module_referrer, type="TYPE") HERE
+        # NOTE: type= 'gallery', 'image', or 'default' (generic task)
+        executor.spawn_task(
+            _make_symlink_sync(referrer=f"Symlink-{extra_creator_safe}"),
+            referrer=_module_referrer,
+            type="io"
+        )
 
 async def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Reason Given."):
     """
@@ -175,7 +193,10 @@ async def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = 
 
         gallery_id = meta.get("id", "Unknown")
         # call_appropriately used because clean_title may be sync or async
-        gallery_title = call_appropriately(clean_title, meta)
+        gallery_title = executor.call_appropriately(
+            clean_title(meta),
+            referrer=_module_referrer
+        )
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
@@ -188,7 +209,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     
     if not meta:
         # schedule the skip update in background
-        executor.spawn_task(update_skipped_galleries(False, meta, "Not Meta."), name=f"skip-meta")
+        executor.call_appropriately(
+            update_skipped_galleries(False, meta, "Not Meta."),
+            referrer=f"SkipMeta"
+        )
         return False
 
     gallery_id = meta.get("id")
@@ -197,7 +221,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     if num_pages == 0:
         log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: No Pages.\nTitle: {gallery_title}", "warn")
         log_clarification()
-        executor.spawn_task(update_skipped_galleries(False, meta, "No Pages."), name=f"skip-{gallery_id}")
+        executor.call_appropriately(
+            update_skipped_galleries(False, meta, "No Pages."),
+            referrer=f"SkipGallery{gallery_id}"
+        )
         return False
 
     if not orchestrator.dry_run and os.path.exists(doujin_folder):
@@ -209,7 +236,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if all_exist:
             log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: Already Downloaded.\nTitle: {gallery_title}", "info")
             log_clarification()
-            executor.spawn_task(update_skipped_galleries(False, meta, "Already downloaded."), name=f"skip-{gallery_id}")
+            executor.call_appropriately(
+                update_skipped_galleries(False, meta, "Already downloaded."),
+                referrer=f"SkipGallery{gallery_id}"
+            )
             return False
 
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
@@ -233,9 +263,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     if blocked_tags or blocked_langs:
         log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: Blocked Tags.\nTitle: {gallery_title}", "info")
         log_clarification()
-        executor.spawn_task(
+        executor.call_appropriately(
             update_skipped_galleries(False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}"),
-            name=f"skip-{gallery_id}"
+            referrer=f"SkipGallery{gallery_id}"
         )
         return False
 
@@ -259,8 +289,11 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
         while gallery_attempts < orchestrator.max_retries:
             gallery_attempts += 1
             try:
-                # pre_gallery_download_hook may be sync or async; call_appropriately used
-                call_appropriately(active_extension.pre_gallery_download_hook, gallery_id)
+                # pre_gallery_download_hook is sync; executor.run_blocking() used
+                executor.run_blocking(
+                    active_extension.pre_gallery_download_hook(gallery_id),
+                    referrer=_module_referrer
+                )
 
                 meta = await fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
@@ -270,13 +303,27 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                call_appropriately(active_extension.during_gallery_download_hook, gallery_id)
-                gallery_metas = call_appropriately(active_extension.return_gallery_metas, meta)
+                
+                # during_gallery_download_hook is sync; executor.run_blocking() used
+                executor.call_appropriately(
+                    active_extension.during_gallery_download_hook(gallery_id),
+                    referrer=_module_referrer
+                )
+                
+                # return_gallery_metas is sync; executor.run_blocking() used
+                gallery_metas = executor.call_appropriately(
+                    active_extension.return_gallery_metas(meta),
+                    referrer=_module_referrer
+                )
+                
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 
                 # Sleep before starting gallery (call_appropriately will run dynamic_sleep correctly in whichever context)
-                call_appropriately(dynamic_sleep, "gallery", batch_ids, gallery_attempts)
+                executor.call_appropriately(
+                    dynamic_sleep("gallery", batch_ids, gallery_attempts),
+                    referrer=_module_referrer
+                )
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False
@@ -298,22 +345,43 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                 primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
 
                 if not orchestrator.dry_run:
-                    # create folder in thread
-                    call_appropriately(os.makedirs, primary_folder, exist_ok=True)
+                    # create folder in thread, use executor.run_blocking() just in case
+                    executor.call_appropriately(
+                        os.makedirs(primary_folder, exist_ok=True),
+                        referrer=_module_referrer
+                    )
                 
                 # --- Symlink all additional creators to the primary folder ---
                 # Schedule symlinks in the background (non-blocking)
-                executor.spawn_task(symlink_extra_creators(primary_folder, creators, meta), name=f"symlink-{gallery_id}", type="io")
+                
+                # NOTE: YOU MUST USE executor.spawn_task(..., referrer=_module_referrer, type="TYPE") HERE
+                # NOTE: type= 'gallery', 'image', or 'default' (generic task)
+                executor.spawn_task(
+                    symlink_extra_creators(primary_folder, creators, meta),
+                    referrer=f"Gallery{gallery_id}-Symlink",
+                    type="io"
+                )
 
                 # --- Schedule download tasks (only once, for primary creator) ---
                 tasks = []
                 for i in range(num_pages):
                     page = i + 1
                     # fetch_image_urls is synchronous in API module -> use call_appropriately
-                    img_urls = call_appropriately(fetch_image_urls, meta, page)
+                    img_urls = executor.call_appropriately(
+                        fetch_image_urls(meta, page),
+                        referrer=_module_referrer
+                    )
+                    
                     if not img_urls:
                         # schedule update_skipped_galleries in background
-                        executor.spawn_task(update_skipped_galleries(False, meta, "Failed to get URLs."), name=f"imgskip-{gallery_id}-{page}", type="image")
+                        
+                        # NOTE: YOU MUST USE executor.spawn_task(..., referrer=_module_referrer, type="TYPE") HERE
+                        # NOTE: type= 'gallery', 'image', or 'default' (generic task)
+                        executor.spawn_task(
+                            update_skipped_galleries(False, meta, "Failed to get URLs."),
+                            referrer=f"SkipGallery{gallery_id}-Pg{page}",
+                            type="image"
+                        )
                         continue
 
                     img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
@@ -321,22 +389,37 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 
                     # Build coroutine wrapper that will call extension hook via call_appropriately
                     async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator):
-                        # download_images_hook may be sync or async — use call_appropriately
-                        return call_appropriately(active_extension.download_images_hook, gid, pg, urls, path, downloader_session, None, creator)
+                        
+                        # download_images_hook is sync; executor.run_blocking() used
+                        return executor.run_blocking(
+                            active_extension.download_images_hook(gid, pg, urls, path, downloader_session, None, creator),
+                            referrer=_module_referrer
+                        )
 
                     tasks.append(_image_task())
 
                 # --- Download images (once, in primary creator's folder) ---
                 if tasks:
                     # spawn each image task under the image semaphore
+                    
+                    # NOTE: YOU MUST USE executor.spawn_task(..., referrer=_module_referrer, type="TYPE") HERE
+                    # NOTE: type= 'gallery', 'image', or 'default' (generic task)
                     gather_tasks = [
-                        executor.spawn_task(t, name=f"Gallery{gallery_id}-Page{i}", type="image")
+                        executor.spawn_task(
+                            t,
+                            referrer=f"Gallery{gallery_id}-Pg{i}",
+                            type="image"
+                        )
                         for i, t in enumerate(tasks, start=1)
                     ]
                     await asyncio.gather(*gather_tasks)
 
+                # after_completed_gallery_download_hook is sync; executor.run_blocking() used
                 if not orchestrator.dry_run:
-                    call_appropriately(active_extension.after_completed_gallery_download_hook, meta, gallery_id)
+                    executor.call_appropriately(
+                        active_extension.after_completed_gallery_download_hook(meta, gallery_id),
+                        referrer=_module_referrer
+                    )
                     await db.mark_gallery_completed(gallery_id)
 
                 log(f"Downloader: Completed Gallery: {gallery_id}", "info")
@@ -351,18 +434,38 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 # MAIN
 ####################################################################################################
 async def start_batch(batch_list=None, current_batch_number: int = 1, total_batch_numbers: int = 1):
-    # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-    await load_extension(suppess_pre_run_hook=True)
-    call_appropriately(active_extension.pre_batch_hook, batch_list)
+    # load_extension is async but needs to be called synchronously; executor.run_blocking() used
+    executor.run_blocking(
+        load_extension(suppess_pre_run_hook=True), # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+        referrer=_module_referrer
+    )
+    
+    # pre_batch_hook is sync; executor.run_blocking() used
+    executor.call_appropriately(
+        active_extension.pre_batch_hook(batch_list),
+        referrer=_module_referrer
+    )
 
     # Spawn Gallery Threads (Max of threads_galleries) (Use executor instead of direct gather)
     # Build tasks list and then use tqdm_asyncio.gather to monitor them
+    
+    # NOTE: YOU MUST USE executor.spawn_task(..., referrer=_module_referrer, type="TYPE") HERE
+    # NOTE: type= 'gallery', 'image', or 'default' (generic task)
     gallery_tasks = [
-        executor.spawn_task(process_galleries([gid], current_batch_number, total_batch_numbers), name=f"Gallery{gid}", type="gallery")
+        executor.spawn_task(
+            process_galleries([gid], current_batch_number, total_batch_numbers),
+            referrer=f"Gallery{gid}",
+            type="gallery"
+        )
         for gid in batch_list
     ]
+    
+    # post_batch_hook is sync; executor.run_blocking() used
     await tqdm_asyncio.gather(*gallery_tasks, desc="Processing galleries")
-    call_appropriately(active_extension.post_batch_hook)
+    executor.call_appropriately(
+        active_extension.post_batch_hook,
+        referrer=_module_referrer
+    )
 
 async def start_downloader(gallery_list=None):
     """
@@ -376,7 +479,12 @@ async def start_downloader(gallery_list=None):
     fetch_env_vars() # Refresh env vars in case config changed.
     start_time = asyncio.get_event_loop().time()
     time_estimate(f"Run", gallery_list)
-    await load_extension(suppess_pre_run_hook=False)
+    
+    # load_extension is async but needs to be called synchronously; executor.run_blocking() used
+    executor.run_blocking(
+        load_extension(suppess_pre_run_hook=False), # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
+        referrer=_module_referrer
+    )
 
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
@@ -397,9 +505,14 @@ async def start_downloader(gallery_list=None):
         await start_batch(batch_list, current_batch_number, total_batch_numbers)
 
         if batch_num + BATCH_SIZE < len(gallery_list):
-            thread_sleep(batch_sleep_time, referrer="Downloader")
+            thread_sleep(batch_sleep_time, referrer=_module_referrer)
 
-    call_appropriately(active_extension.post_run_hook)
+    # post_run_hook is sync; executor.run_blocking() used
+    executor.call_appropriately(
+        active_extension.post_run_hook,
+        referrer=_module_referrer
+    )
+    
     end_time = asyncio.get_event_loop().time()
     runtime = end_time - start_time
     

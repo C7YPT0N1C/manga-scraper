@@ -15,6 +15,9 @@ Manages task scheduling, concurrency, retries, and
 the overall sequencing of gallery and image downloads.
 """
 
+_module_referrer=f"Orchestrator" # Used in executor.* calls
+DEFAULT_REFERRER = "Undisclosed Module"
+
 ##########################################################################################
 # LOGGER
 ##########################################################################################
@@ -114,7 +117,7 @@ def setup_logger(calm=False, debug=False):
 
     return logger
 
-def _log_backend(message: str, log_type: str = "warning"):
+def _log_backend(message: str, log_type: str = "warning", log_referrer: str = f"{DEFAULT_REFERRER}"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
@@ -134,15 +137,19 @@ def _log_backend(message: str, log_type: str = "warning"):
     }
 
     log_func = log_map.get(log_type.lower(), logger.info)
-    log_func(message)
+    log_func(f"{log_referrer}: {message}")
     
-async def log(message: str, log_type: str = "warning"):
+async def log(message: str, log_type: str = "warning", referrer = None):
     """
     Unified logging function for both Sync and Async functions.
     All logs go to file (DEBUG+), console respects setup_logger flags.
 
     log_type: "debug", "info", "warning", "error", "critical"
     """
+    
+    if referrer is None:
+    # Try module-level _module_referrer variable first
+       referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
     
     try:
         loop = asyncio.get_running_loop()
@@ -152,10 +159,10 @@ async def log(message: str, log_type: str = "warning"):
 
     if in_async:
         # Async context → await the coroutine
-        return await _log_backend(message, log_type)
+        return await _log_backend(message, log_type, log_referrer=referrer)
     else:
         # Sync context → run blocking
-        return executor.run_blocking(_log_backend(message, log_type))
+        return executor.run_blocking(_log_backend(message, log_type, log_referrer=referrer), non_async_referrer=referrer)
 
 ##########################################################################################
 # CONFIGS
@@ -462,7 +469,7 @@ def update_env(key, value):
 
     with_env_lock(_update)
     
-def something(gallery_list):
+def init_scraper(gallery_list):
     """
     Updates Config with Built Gallery List
     Automatically sets a reasonable amount of threads to use 
@@ -594,16 +601,16 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
     
-    async def sleep_sync(seconds: float, referrer: str = "Undisclosed Module"):
+    async def sleep_sync(seconds: float, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
         time.sleep(seconds)
 
-    def run_blocking(self, coro, name: str = "Undisclosed Module"):
+    def run_blocking(self, coro, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
         """
         Schedule a coroutine in synchronous context.
         """
         
         async def wrapper():
-            return await self._wrap(coro, name)
+            return await self._wrap(coro, non_async_referrer)
 
         try:
             loop = asyncio.get_running_loop()
@@ -611,10 +618,10 @@ class Executor:
         except RuntimeError:
             return asyncio.run(wrapper())
         
-    async def sleep_async(seconds: float, referrer: str = "Undisclosed Module"):
+    async def sleep_async(seconds: float, async_referrer: str = f"{DEFAULT_REFERRER}"):
         await asyncio.sleep(seconds)
     
-    def spawn_task(self, coro, name: str = "Undisclosed Module", type: str = "default"):
+    def spawn_task(self, coro, async_referrer: str = f"{DEFAULT_REFERRER}", type: str = "default"):
         """
         Schedule a coroutine in async context.
 
@@ -627,7 +634,7 @@ class Executor:
         elif type == "image":
             sem = self.image_semaphore
 
-        task = asyncio.create_task(self._wrap(coro, name, semaphore=sem))
+        task = asyncio.create_task(self._wrap(coro, async_referrer, semaphore=sem))
         self.tasks.append(task)
         return task
 
@@ -638,7 +645,7 @@ executor = Executor()
 # EXECUTOR HELPERS
 ##########################################################################################
 
-async def call_appropriately(func, *args, referrer=None, **kwargs):
+async def call_appropriately(func, *args, referrer = None, type: str = "default", **kwargs):
     """
     Run `func` in the correct context (async vs sync) and thread if needed.
     
@@ -653,11 +660,12 @@ async def call_appropriately(func, *args, referrer=None, **kwargs):
     If `referrer` is not set, uses func.__name__ as default.
     
     Usage:
-        result = call_appropriately(some_func, arg1, arg2)
+        result = executor.call_appropriately(some_func(arg1, arg2), referrer=_module_referrer)
     """
     
     if referrer is None:
-        referrer = getattr(func, "__name__", "unknown")
+    # Try module-level _module_referrer variable first
+       referrer = globals().get("_module_referrer", getattr(func, "__name__", DEFAULT_REFERRER))
 
     try:
         asyncio.get_running_loop()
@@ -668,7 +676,8 @@ async def call_appropriately(func, *args, referrer=None, **kwargs):
     # --- Async context ---
     if in_async:
         if inspect.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
+            # Run as coroutine; type is only relevant if used with spawn_task
+            return await executor.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
         else:
             # sync function → run in thread
             return await asyncio.to_thread(func, *args, **kwargs)
@@ -677,15 +686,19 @@ async def call_appropriately(func, *args, referrer=None, **kwargs):
     else:
         if inspect.iscoroutinefunction(func):
             # coroutine in sync context → executor.run_blocking
-            return executor.run_blocking(func(*args, **kwargs), referrer=referrer)
+            return executor.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
         else:
             # sync function in sync context → executor.run_blocking
-            return executor.run_blocking(func, *args, **kwargs, referrer=referrer)
+            return executor.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
         
-async def thread_sleep(wait, referrer="Undisclosed Module"):
+async def thread_sleep(wait, referrer = None):
     """
     Unified sleeping function for both Sync and Async functions.
     """
+    
+    if referrer is None:
+    # Try module-level _module_referrer variable first
+       referrer = globals().get("_module_referrer", getattr("__name__", DEFAULT_REFERRER))
     
     try:
         loop = asyncio.get_running_loop()
@@ -695,10 +708,10 @@ async def thread_sleep(wait, referrer="Undisclosed Module"):
 
     if in_async:
         # Async context → await the coroutine
-        return await executor.sleep_async(wait, referrer=referrer)
+        return await executor.sleep_async(wait, async_referrer=referrer)
     else:
         # Sync context → run blocking
-        return await executor.sleep_sync(wait, referrer=referrer)
+        return await executor.sleep_sync(wait, non_async_referrer=referrer)
 
 async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: bool = True, perform_sleep: bool = True):
     """
@@ -781,9 +794,15 @@ async def dynamic_sleep(stage, batch_ids = None, attempt: int = 1, is_async: boo
     # Fallback: small sleep
     if perform_sleep: # Just sleeping VS the caller asking for the value
         if is_async: # Async VS Sync sleep
-            await executor.sleep_async(sleep_time, referrer="Dynamic Sleep (Async)")
+            await executor.sleep_async(
+                sleep_time,
+                referrer=_module_referrer
+            )
         else:
-            await executor.sleep_sync(sleep_time, referrer="Dynamic Sleep (Sync)")
+            await executor.sleep_sync(
+                sleep_time,
+                non_async_referrer=_module_referrer
+            )
     
     return sleep_time # Always return
 

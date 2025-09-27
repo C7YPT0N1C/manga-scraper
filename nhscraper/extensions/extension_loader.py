@@ -14,6 +14,8 @@ Loads, validates, and integrates external extensions
 that add or override functionality.
 """
 
+_module_referrer=f"Extension Loader" # Used in executor.* calls
+
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
@@ -48,15 +50,16 @@ async def load_local_manifest():
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         log("Local manifest not found. Creating from remote...", "warning")
         await update_local_manifest_from_remote()
-    async with executor.schedule_test_async(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+    async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
     
-    executor.run_blocking(
-        lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    executor.spawn_task(
+        lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2),
+        referrer=_module_referrer
     )
 
 
@@ -94,7 +97,10 @@ async def update_local_manifest_from_remote():
     remote_manifest = await fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
-        local_manifest = call_appropriately(load_local_manifest)
+        local_manifest = executor.run_blocking(
+            load_local_manifest,
+            referrer=_module_referrer
+        )
 
     local_names = [ext["name"] for ext in local_manifest.get("extensions", [])]
 
@@ -114,7 +120,10 @@ async def update_local_manifest_from_remote():
 async def _reload_extensions():
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    return call_appropriately(load_local_manifest)
+    return executor.run_blocking(
+        load_local_manifest,
+        referrer=_module_referrer
+    )
 
 
 # ------------------------------------------------------------
@@ -142,7 +151,10 @@ async def sparse_clone(extension_name: str, url: str):
 
         log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
-    return executor.run_blocking(_clone)
+    return executor.run_blocking(
+        _clone,
+        referrer=_module_referrer
+    )
 
 
 #######################################################################
@@ -153,7 +165,10 @@ async def load_installed_extensions(suppess_pre_run_hook: bool = False):
 
     with installed_extensions_lock:
         INSTALLED_EXTENSIONS.clear()
-        manifest = call_appropriately(load_local_manifest)
+        manifest = executor.run_blocking(
+            load_local_manifest,
+            referrer=_module_referrer
+        )
 
         for ext in manifest.get("extensions", []):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -245,7 +260,10 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
-        executor.run_blocking(module.install_extension)
+        executor.run_blocking(
+            module.install_extension,
+            referrer=_module_referrer
+        )
         log(f"Extension '{extension_name}': Installed successfully.", "warning")
 
     ext_entry["installed"] = True
@@ -253,7 +271,10 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
 
 
 async def uninstall_selected_extension(extension_name: str):
-    manifest = call_appropriately(load_local_manifest)
+    manifest = executor.run_blocking(
+        load_local_manifest,
+        referrer=_module_referrer
+    )
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
         log(f"Extension '{extension_name}': Not installed", "warning")
@@ -262,7 +283,10 @@ async def uninstall_selected_extension(extension_name: str):
     module_name = f"extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
-        executor.run_blocking(module.uninstall_extension)
+        executor.run_blocking(
+            module.uninstall_extension,
+            referrer=_module_referrer
+        )
         log(f"Extension '{extension_name}': Uninstalled successfully.", "warning")
 
     ext_entry["installed"] = False
@@ -281,7 +305,10 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
 
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    manifest = call_appropriately(load_local_manifest)
+    manifest = executor.run_blocking(
+        load_local_manifest,
+        referrer=_module_referrer
+    )
 
     skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
@@ -303,7 +330,10 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             if not suppess_pre_run_hook and hasattr(ext, "pre_run_hook"):
-                executor.run_blocking(ext.pre_run_hook)
+                executor.run_blocking(
+                    ext.pre_run_hook,
+                    referrer=_module_referrer
+                )
                 log(f"Selected extension: {final_name}", "info")
             return ext
 

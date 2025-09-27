@@ -24,6 +24,8 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
+_module_referrer=f"{EXTENSION_NAME}" # Used in executor.* calls
+
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
 
@@ -87,7 +89,10 @@ def return_gallery_metas(meta):
     creators = artists or groups or ["Unknown Creator"]
     
     # Use call_appropriately so this works from both async and sync contexts
-    title = call_appropriately(clean_title, meta)
+    title = executor.call_appropriately(
+        clean_title(meta),
+        referrer=_module_referrer
+    )
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
@@ -271,8 +276,11 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if downloader_session is None:    
-        downloader_session = executor.run_blocking(get_session(referrer=f"{EXTENSION_NAME}", status="rebuild"))
+    if downloader_session is None: # Use executor.run_blocking()
+        downloader_session = executor.run_blocking(
+            get_session(referrer=_module_referrer, status="rebuild"),
+            referrer=_module_referrer
+        )
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -282,8 +290,12 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                 try:
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
-                        # Use call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                        call_appropriately(dynamic_sleep, "api", attempt=attempt, is_async=False, perform_sleep=True)
+                        # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
+                        executor.call_appropriately(
+                            dynamic_sleep("api", attempt=attempt, is_async=False, perform_sleep=True),
+                            referrer=_module_referrer
+                        )
+                            
                         log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
                     r.raise_for_status()
@@ -301,8 +313,11 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                     return True
 
                 except Exception as e:
-                    # For retries, ask dynamic_sleep for a sleep and perform it (sync)
-                    call_appropriately(dynamic_sleep, "gallery", attempt=attempt, is_async=False, perform_sleep=True)
+                    # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
+                    executor.call_appropriately(
+                        dynamic_sleep("gallery", attempt=attempt, is_async=False, perform_sleep=True),
+                        referrer=_module_referrer
+                    )
                     log_clarification()
                     log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 
@@ -315,7 +330,10 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     # If still failed, rebuild Tor session once and retry
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
-        downloader_session = executor.run_blocking(get_session(referrer=f"{EXTENSION_NAME}", status="return"))
+        downloader_session = executor.call_appropriately(
+            get_session(referrer=_module_referrer, status="return"),
+            referrer=_module_referrer
+        )
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
