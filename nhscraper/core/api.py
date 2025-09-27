@@ -691,7 +691,7 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
             return r.json().get("origin")
 
         try:
-            return await executor.run_blocking(None, _cloudscraper_check)
+            return await executor.run_blocking(_cloudscraper_check(), non_async_referrer="Flask")
         except Exception as e:
             return f"Error: {e}"
 

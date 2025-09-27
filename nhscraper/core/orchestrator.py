@@ -571,7 +571,7 @@ class Executor:
                     return await coro
             return await coro
         except Exception as e:
-            log(f"Executor: {task} in {name} failed: {e}", "error")
+            log(f"Executor: executor.{task} in {name} failed: {e}", "error")
             return None
 
     async def gather(self):
