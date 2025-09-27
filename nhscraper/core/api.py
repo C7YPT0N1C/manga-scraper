@@ -41,7 +41,7 @@ state_lock = threading.Lock()
 # HTTP SESSION (cloudscraper wrapped for async)
 ################################################################################################################
 
-# Global cloudscraper session (synchronous object). We will call its methods via asyncio.to_thread.
+# Global cloudscraper session (synchronous object). We will call its methods via executor.run_blocking() (Is this even right bruh)
 session = None
 # Use an asyncio.Lock here because session creation is now async-aware.
 session_lock = asyncio.Lock()

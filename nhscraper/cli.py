@@ -539,7 +539,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    executor.run_blocking(
+    session = executor.run_blocking(
         get_session(referrer=_module_referrer, status="build")
     )
     

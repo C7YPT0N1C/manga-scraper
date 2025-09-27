@@ -1116,7 +1116,7 @@ def process_deferred_creators():
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None):
+def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=None, creator=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
@@ -1143,8 +1143,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if downloader_session is None: # Use executor.run_blocking()
-        downloader_session = executor.run_blocking(
+    if _downloader_session is None: # Use executor.run_blocking()
+        _downloader_session = executor.run_blocking(
             get_session(referrer=_module_referrer, status="rebuild")
         )
 
@@ -1184,17 +1184,17 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         return False
 
     # First attempt: normal retries
-    success = try_download(downloader_session, urls, orchestrator.max_retries)
+    success = try_download(_downloader_session, urls, orchestrator.max_retries)
 
     # If still failed, rebuild Tor session once and retry
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
         # Use executor.run_blocking()
-        downloader_session = executor.run_blocking(
+        _downloader_session = executor.run_blocking(
             get_session(referrer=_module_referrer, status="return")
         )
-        success = try_download(downloader_session, urls, 1, tor_rotate=True)
+        success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
         log_clarification()
