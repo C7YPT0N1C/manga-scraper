@@ -117,7 +117,7 @@ def setup_logger(calm=False, debug=False):
 
     return logger
 
-def _log_backend(message: str, log_type: str = "warning", log_referrer: str = f"{DEFAULT_REFERRER}"):
+def _log_backend(message: str, log_type: str = "warning"):
     """
     Unified logging function.
     All logs go to file (DEBUG+), console respects setup_logger flags.
@@ -133,24 +133,22 @@ def _log_backend(message: str, log_type: str = "warning", log_referrer: str = f"
     }
 
     log_func = log_map.get(log_type.lower(), logger.info)
-    log_func(f"{log_referrer}: {message}")
+    log_func(message)
 
 
-def log(message: str, log_type: str = "warning", referrer=None):
+def log(message: str, log_type: str = "warning"):
     """
     Unified logging function for both sync and async functions.
     Works transparently whether called inside or outside async code.
     """
-    if referrer is None:
-        referrer = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
 
     try:
         loop = asyncio.get_running_loop()
         # We are in async → schedule in background thread
-        return asyncio.ensure_future(asyncio.to_thread(_log_backend, message, log_type, referrer))
+        return asyncio.ensure_future(asyncio.to_thread(_log_backend, message, log_type))
     except RuntimeError:
         # No running loop → normal sync call
-        return _log_backend(message, log_type, referrer)
+        return _log_backend(message, log_type)
 
 ##########################################################################################
 # CONFIGS
@@ -560,7 +558,7 @@ class Executor:
 
         self.tasks: list[asyncio.Task] = []
 
-    async def _wrap(self, coro, name: str, semaphore: asyncio.Semaphore = None):
+    async def _wrap(self, coro, task: str, name: str, semaphore: asyncio.Semaphore = None):
         """
         Internal wrapper for a coroutine:
         - Respects the passed semaphore if set
@@ -573,7 +571,7 @@ class Executor:
                     return await coro
             return await coro
         except Exception as e:
-            log(f"Executor task {name} failed: {e}", "error")
+            log(f"Executor: {task} in {name} failed: {e}", "error")
             return None
 
     async def gather(self):
@@ -598,7 +596,7 @@ class Executor:
         """
         
         async def wrapper():
-            return await self._wrap(coro, non_async_referrer)
+            return await self._wrap(coro, "run_blocking", non_async_referrer)
 
         try:
             loop = asyncio.get_running_loop()
@@ -622,7 +620,7 @@ class Executor:
         elif type == "image":
             sem = self.image_semaphore
 
-        task = asyncio.create_task(self._wrap(coro, async_referrer, semaphore=sem))
+        task = asyncio.create_task(self._wrap(coro, "spawn_task", async_referrer, semaphore=sem))
         self.tasks.append(task)
         return task
     
