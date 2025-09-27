@@ -63,9 +63,9 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
 
     Notes on executor usage:
         - Blocking operations (e.g., `cloudscraper.create_scraper`) are executed
-          via `executor.call_appropriately(func(*args), referrer=_module_referrer)` to avoid blocking the event loop.
+          via `await executor.call_appropriately(func(*args), referrer=_module_referrer)` to avoid blocking the event loop.
         - execute-and-forget operations (e.g., updating session headers) are executed
-          via `executor.call_appropriately(func(*args), referrer=_module_referrer)`.
+          via `await executor.call_appropriately(func(*args), referrer=_module_referrer)`.
 
     Returns:
         The ready session object.
@@ -155,7 +155,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
 
                     # Use executor.call_appropriately properly
                     temp_proxy = executor.run_blocking(
-                        executor.call_appropriately(_update_proxies, temp_session, use_tor),
+                        await executor.call_appropriately(_update_proxies, temp_session, use_tor),
                         non_async_referrer=_module_referrer
                     )
 
@@ -307,7 +307,7 @@ async def clean_title(meta_or_title):
         )
 
     # Load persisted broken symbols mapping via thread
-    possible_broken_symbols = executor.call_appropriately(
+    possible_broken_symbols = await executor.call_appropriately(
         _load_file(broken_symbols_file),
         referrer=_module_referrer
     )
@@ -371,7 +371,7 @@ async def clean_title(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     # Persist updated broken symbols mapping via thread
-    executor.call_appropriately(
+    await executor.call_appropriately(
         _save_file(broken_symbols_file, possible_broken_symbols),
         referrer=_module_referrer
     )
@@ -452,7 +452,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     # Execute async request in thread (capped by number of gallery threads)
-                    resp = executor.call_appropriately(
+                    resp = await executor.call_appropriately(
                         gallery_ids_session.get(url, timeout=10),
                         referrer=_module_referrer
                     )
@@ -489,7 +489,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                             
                             # Execute async request in thread (capped by number of gallery threads)
                             try:
-                                resp = executor.call_appropriately(
+                                resp = await executor.call_appropriately(
                                     gallery_ids_session.get(url, timeout=10),
                                     referrer=_module_referrer
                                 )
@@ -508,7 +508,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                 continue  # skip this page if no success
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = executor.call_appropriately(
+            data = await executor.call_appropriately(
                 lambda: resp.json(),
                 referrer=_module_referrer
             )
@@ -590,7 +590,7 @@ async def fetch_gallery_metadata(gallery_id: int):
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
             # Execute async request in thread (capped by number of gallery threads)
-            resp = executor.call_appropriately(
+            resp = await executor.call_appropriately(
                 metadata_session.get(url, timeout=10),
                 referrer=_module_referrer
             )
@@ -607,7 +607,7 @@ async def fetch_gallery_metadata(gallery_id: int):
 
             # Raise for status (blocking) — run in thread
             try:
-                executor.call_appropriately(
+                await executor.call_appropriately(
                     resp.raise_for_status,
                     referrer=_module_referrer
                 )
@@ -616,7 +616,7 @@ async def fetch_gallery_metadata(gallery_id: int):
                 raise
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = executor.call_appropriately(
+            data = await executor.call_appropriately(
                 lambda: resp.json(),
                 referrer=_module_referrer
             )
@@ -642,16 +642,16 @@ async def fetch_gallery_metadata(gallery_id: int):
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:
-                        resp = executor.call_appropriately(
+                        resp = await executor.call_appropriately(
                             metadata_session.get(url, timeout=10),
                             referrer=_module_referrer
                         )
                         
-                        executor.call_appropriately(
+                        await executor.call_appropriately(
                             resp.raise_for_status,
                             referrer=_module_referrer
                         )
-                        return executor.call_appropriately(
+                        return await executor.call_appropriately(
                             lambda: resp.json(),
                             referrer=_module_referrer
                         )
@@ -750,7 +750,7 @@ def status_endpoint():
         "last_checked": datetime.now().isoformat(),
         "last_gallery": get_last_gallery_id(),
         "running_galleries": get_running_galleries(),
-        "tor_ip": executor.call_appropriately(
+        "tor_ip": executor.run_blocking(
             get_tor_ip,
             referrer=_module_referrer
         )
