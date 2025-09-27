@@ -539,9 +539,8 @@ def main():
     update_config(args)
     
     # Build initial session.
-    executor.call_appropriately(
-        get_session(referrer=_module_referrer, status="build"),
-        non_async_referrer=_module_referrer
+    executor.run_blocking(
+        get_session(referrer=_module_referrer, status="build")
     )
     
     # Build Gallery List (make sure not empty.)
