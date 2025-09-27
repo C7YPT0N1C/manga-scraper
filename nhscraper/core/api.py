@@ -93,8 +93,8 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             return session
 
         # Log if building or rebuilding
-        log_msg_pre = "Rebuilding" if status == "rebuild" else "Building"
-        log_msg_post = "Rebuilt" if status == "rebuild" else "Built"
+        log_msg_pre = "Reinitialising" if status == "rebuild" else "Initialising"
+        log_msg_post = "Reinitialised" if status == "rebuild" else "Initialised"
 
         # Random browser profiles
         DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
@@ -115,30 +115,55 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
         if session is None or status == "rebuild":
             if backend == "aiohttp":  # aiohttp / aiohttp_socks session for get_tor_ip()
                 log(f"{log_msg_pre} HTTP session with aiohttp for {referrer}", "debug")
+                
                 connector = None
-                if use_tor:
+                if use_tor: # Update proxies
                     # Use aiohttp_socks for Tor
                     connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
                 
-                session = aiohttp.ClientSession(connector=connector)
+                    session = aiohttp.ClientSession(connector=connector)
+                    log(f"{log_msg_post} Proxied Cloudscraper HTTP session for {referrer}: {session}", "debug")
+                    
+                else:
+                    session = aiohttp.ClientSession(connector=connector)
+                    log(f"{log_msg_post} Proxied Cloudscraper HTTP session for {referrer}: {session}", "debug")
 
             else:  # Default to cloudscraper session
-                log(f"{log_msg_pre} HTTP session with cloudscraper for {referrer}", "debug")
+                log(f"{log_msg_pre} session with Cloudscraper for {referrer}", "debug")
                 
                 # Ensure the returned value is a proper session
-                tmp_session = await executor.call_appropriately(
+                temp_session = await executor.call_appropriately(
                     lambda: cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer
                 )
                 
-                log(f"Temp HTTP session for {referrer}: {tmp_session}", "debug")
+                if temp_session is None:
+                    raise RuntimeError(f"Failed to create Cloudscraper HTTP session for {referrer}")
                 
-                if tmp_session is None:
-                    raise RuntimeError(f"Failed to create cloudscraper session for {referrer}")
+                if use_tor: # Update proxies
+                    # (blocking; need result immediately)
+                    def _update_proxies(s, use_tor_flag):
+                        if backend == "cloudscraper":
+                            if use_tor_flag:
+                                proxy = "socks5h://127.0.0.1:9050"
+                                s.proxies = {"http": proxy, "https": proxy}
+                                return proxy
+                            else:
+                                s.proxies = {}
+                                return None
+                        return None  # aiohttp proxies handled via connector
+
+                    # Use executor.call_appropriately properly
+                    temp_proxy = executor.run_blocking(
+                        executor.call_appropriately(_update_proxies, temp_session, use_tor),
+                        non_async_referrer=_module_referrer
+                    )
+
+                    if temp_proxy is None:
+                        raise RuntimeError(f"Failed to initialise proxy for {referrer}")
                 
-                # Assign only if valid
-                session = tmp_session
-                log(f"{log_msg_post} HTTP session for {referrer}: {session}", "debug")
+                session = temp_session
+                log(f"{log_msg_post} {'Proxied ' if use_tor else ''}Cloudscraper HTTP session for {referrer}: {session}", "debug")
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -176,27 +201,6 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             "Referer": referer,
         }
         await executor.call_appropriately(lambda: _update_session_headers(session, headers), referrer=_module_referrer)
-
-        # Update proxies (blocking; need result immediately)
-        def _update_proxies(s, use_tor_flag):
-            if backend == "cloudscraper":
-                if use_tor_flag:
-                    proxy = "socks5h://127.0.0.1:9050"
-                    s.proxies = {"http": proxy, "https": proxy}
-                    return proxy
-                else:
-                    s.proxies = {}
-                    return None
-            return None # aiohttp proxies handled via connector
-
-        proxy_used = executor.call_appropriately(
-            _update_proxies(session, use_tor),
-            referrer=_module_referrer
-        )
-        if proxy_used:
-            log(f"Using Tor proxy: {proxy_used}", "info")
-        else:
-            log("Not using Tor proxy", "info")
 
         # Log completion
         log(f"{log_msg_post} HTTP session for {referrer}", "debug")
