@@ -122,7 +122,7 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
                 session = aiohttp.ClientSession(connector=connector)
             
             else:  # Default to cloudscraper session
-                session = executor.call_appropriately(
+                session = executor.spawn_task(
                     cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer
                 )
