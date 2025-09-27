@@ -125,9 +125,9 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
             else:  # Default to cloudscraper session
                 log(f"{log_msg_pre} HTTP session with cloudscraper for {referrer}", "debug")
                 
-                # Ensure the returned value is a proper session
+                # Ensure the returned value is a proper session # FAILS HERE
                 tmp_session = await executor.call_appropriately(
-                    cloudscraper.create_scraper(browser_profile),
+                    lambda: cloudscraper.create_scraper(browser_profile),
                     referrer=_module_referrer
                 )
                 
