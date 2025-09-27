@@ -499,6 +499,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                 lambda: resp.json(),
                 referrer=_module_referrer
             )
+            log(f"Fetcher: HTTP Response JSON: {data}", "debug")
             batch = [g["id"] for g in data.get("result", [])]
             log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
 
