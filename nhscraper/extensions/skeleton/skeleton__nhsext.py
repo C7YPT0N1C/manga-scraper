@@ -290,7 +290,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
                     r = session.get(url, timeout=10, stream=True)
                     if r.status_code == 429:
                         # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                        dynamic_sleep("api", attempt=attempt, is_async=False, perform_sleep=True)
+                        executor.run_blocking(dynamic_sleep("api", attempt=attempt, perform_sleep=True))
                             
                         log(f"429 rate limit hit for {url}, backing off (attempt {attempt})", "warning")
                         continue
@@ -310,7 +310,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
 
                 except Exception as e:
                     # Use executor.call_appropriately so callers (sync or async) can run it; let it perform the sleep
-                    dynamic_sleep("gallery", attempt=attempt, is_async=False, perform_sleep=True)
+                    executor.run_blocking(dynamic_sleep("gallery", attempt=attempt, perform_sleep=True))
                     log_clarification()
                     log(f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying", "warning")
 
