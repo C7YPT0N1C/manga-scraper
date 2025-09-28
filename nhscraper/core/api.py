@@ -402,12 +402,13 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     """
     Fetch gallery IDs from NHentai asynchronously, but using the synchronous cloudscraper session executed in threads.
     """
+    
     fetch_env_vars() # Refresh env vars in case config changed.
 
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session()
+    gallery_ids_session = await get_session(status="return")
 
     try:
         log_clarification("debug")

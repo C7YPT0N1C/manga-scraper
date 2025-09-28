@@ -862,6 +862,9 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     
     dynamic_sleep_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
+    if stage == None:
+        stage = dynamic_sleep_requester
+    
     try:
         asyncio.get_running_loop()
         in_async = True
