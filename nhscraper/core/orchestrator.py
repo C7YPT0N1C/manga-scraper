@@ -332,7 +332,7 @@ def parse_list_of_ints(value):
             if isinstance(parsed, list):
                 return [int(v) for v in parsed]
         except Exception:
-            return [int(v.strip()) for v in value.split(",") if v.strip()]
+            return [int(v.strip()) for v in value.strip("[]").split(",") if v.strip()]
     elif isinstance(value, list):
         return [int(v) for v in value]
     return []
@@ -344,10 +344,15 @@ def parse_list_of_str(value):
             if isinstance(parsed, list):
                 return [str(v).lower() for v in parsed]
         except Exception:
-            return [v.strip().lower() for v in value.split(",") if v.strip()]
+            return [v.strip().lower() for v in value.strip("[]").split(",") if v.strip()]
     elif isinstance(value, list):
         return [str(v).lower() for v in value]
     return []
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("true")
 
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
@@ -369,16 +374,16 @@ config = {
     "EXCLUDED_TAGS": parse_list_of_str(os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)),
     "LANGUAGE": parse_list_of_str(os.getenv("LANGUAGE", DEFAULT_LANGUAGE)),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
-    "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
-    "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
-    "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
-    "MIN_SLEEP": getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP),
-    "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
-    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() in ("true"),
-    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() in ("true"),
-    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() in ("true"),
-    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() in ("true"),
-    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() in ("true"),
+    "THREADS_GALLERIES": int(getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
+    "THREADS_IMAGES": int(getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
+    "MAX_RETRIES": int(getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
+    "MIN_SLEEP": float(getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP)),
+    "MAX_SLEEP": float(getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP)),
+    "USE_TOR": parse_bool(os.getenv("USE_TOR", DEFAULT_USE_TOR)),
+    "SKIP_POST_RUN": parse_bool(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)),
+    "DRY_RUN": parse_bool(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)),
+    "CALM": parse_bool(os.getenv("CALM", DEFAULT_CALM)),
+    "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
 }
 
 ##################
@@ -446,51 +451,23 @@ def normalise_value(key: str, value):
     Normalise values from .env/config to consistent runtime types.
     Handles JSON, booleans, ints, floats, lists, and strings.
     """
-    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return [str(v).lower() for v in parsed]
-            except Exception:
-                # Fallback: comma-separated
-                return [v.strip().lower() for v in value.split(",") if v.strip()]
-        elif isinstance(value, list):
-            return [str(v).lower() for v in value]
-        return []
-
     if key == "NHENTAI_MIRRORS":
-        mirrors = []
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    mirrors = parsed
-                else:
-                    mirrors = [str(parsed)]
-            except Exception:
-                mirrors = [m.strip() for m in value.split(",") if m.strip()]
-        elif isinstance(value, list):
-            mirrors = value
+        return config["NHENTAI_MIRRORS"]
+    
+    if key == "GALLERIES":
+        return parse_list_of_ints(value)
 
-        # Always ensure default mirror is first, without dupes
-        if DEFAULT_NHENTAI_MIRRORS not in mirrors:
-            mirrors.insert(0, DEFAULT_NHENTAI_MIRRORS)
-        else:
-            mirrors = [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
-
-        return mirrors
-
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in ("true")
+    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
+        return parse_list_of_str(value)
 
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
         return int(value)
 
     if key in ("MIN_SLEEP", "MAX_SLEEP"):
         return float(value)
+
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
+        return parse_bool(value)
 
     # Default: return as string
     return str(value)
@@ -518,8 +495,6 @@ def update_env(key, value):
 def fetch_env_vars():
     """
     Refresh runtime globals from current config values.
-    No defaults are injected here — defaults are only applied once
-    during normalise_config() at startup.
     """
     def _update_globals():
         global download_path, doujin_txt_path, extension, extension_download_path
@@ -556,9 +531,9 @@ def fetch_env_vars():
             "DEBUG",
         ]:
             if key not in config:
-                continue  # skip missing keys instead of forcing defaults
+                continue # skip missing keys instead of forcing defaults
             globals()[key.lower()] = normalise_value(key, config[key])
-
+    
     # Execute the update under the lock
     with_env_lock(_update_globals)
     
