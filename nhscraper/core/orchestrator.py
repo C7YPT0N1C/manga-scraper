@@ -641,7 +641,7 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
 
-    def run_blocking(self, coro, referrer_blocking: str = None):
+    def run_blocking(self, coro):
         """
         Run a synchronous function or coroutine in a **synchronous context**.
 
@@ -653,7 +653,7 @@ class Executor:
             result = executor.run_blocking(sync_func, arg1, arg2)
 
             # Async coroutine from sync code
-            result = executor.run_blocking(async_func(...), referrer_blocking="ModuleName")
+            result = executor.run_blocking(async_func(...))
 
         Notes:
         - Only use in sync functions (def ...) or when you want to block the event loop in async code.
@@ -661,8 +661,7 @@ class Executor:
               ❌ executor.run_blocking(async_func(...)) # Wrong: executes immediately in current thread
         """
         
-        if referrer_blocking == None:
-            referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         async def wrapper():
             return await self._wrap(coro, "run_blocking", module_name=referrer_blocking)
@@ -673,7 +672,7 @@ class Executor:
         except RuntimeError:
             return asyncio.run(wrapper())
     
-    def spawn_task(self, coro, type: str = "default", referrer_async: str = None):
+    def spawn_task(self, coro, type: str = "default"):
         """
         Schedule an **asynchronous function** (coroutine) for execution in an async context.
 
@@ -688,15 +687,13 @@ class Executor:
         Arguments:
             coro: a coroutine object (async function called with parentheses)
             type: 'default', 'gallery', or 'image' (controls semaphore)
-            referrer_async: optional module/task name for logging
 
         Notes:
         - Must pass a **coroutine object**, not a sync function or pre-called result.
         - For synchronous functions in async context, use `call_appropriately`.
         """
         
-        if referrer_async == None:
-            referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -713,7 +710,7 @@ class Executor:
         self.tasks.append(task)
         return task
     
-    async def call_appropriately(self, func, *args, referrer = None, type: str = "default", **kwargs):
+    async def call_appropriately(self, func, *args, type: str = "default", referrer: str = None, **kwargs):
         """
         Safely run a function in the correct context (async vs sync) without blocking improperly.
 
@@ -753,7 +750,7 @@ class Executor:
         if in_async:
             if inspect.iscoroutinefunction(func):
                 # Run as coroutine; type is only relevant if used with executor.spawn_task()
-                return await self.spawn_task(func(*args, **kwargs), referrer_async=referrer, type=type)
+                return await self.spawn_task(func(*args, **kwargs), type=type)
             else:
                 # sync function → run in thread
                 return await asyncio.to_thread(func, *args, **kwargs)
@@ -762,19 +759,23 @@ class Executor:
         else:
             if inspect.iscoroutinefunction(func):
                 # coroutine in sync context → executor.run_blocking()
-                return self.run_blocking(func(*args, **kwargs), referrer_blocking=referrer)
+                return self.run_blocking(func(*args, **kwargs))
             else:
                 # sync function in sync context → executor.run_blocking()
-                return self.run_blocking(func, *args, **kwargs, referrer_blocking=referrer)
+                return self.run_blocking(func, *args, **kwargs)
     
-    def sleep_sync(self, seconds: float, referrer_blocking: str = None):
+    def sleep_sync(self, seconds: float):
         """Block the current thread for `seconds` (sync sleep)."""
+        
+        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         log(f"{referrer_blocking}: Sleeping for {seconds}s")
         time.sleep(seconds)
     
-    async def sleep_async(self, seconds: float, referrer_async: str = None):
+    async def sleep_async(self, seconds: float):
         """Async sleep for `seconds`, yielding to event loop."""
+        
+        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         log(f"{referrer_async}: Sleeping for {seconds}s")
         await asyncio.sleep(seconds)
@@ -1004,8 +1005,8 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     # --- Perform the sleep ---
     if perform_sleep:
         if in_async:
-            await executor.sleep_async(sleep_time, referrer_async=dynamic_sleep_requester)
+            await executor.sleep_async(sleep_time)
         else:
-            await asyncio.to_thread(executor.sleep_sync, sleep_time, referrer_blocking=dynamic_sleep_requester)
+            await asyncio.to_thread(executor.sleep_sync, sleep_time)
 
     return sleep_time
