@@ -434,7 +434,6 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
             resp = None
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
-                    log(f"gallery_ids_session.get = {gallery_ids_session.get} ({type(gallery_ids_session.get)})", "debug") # NOTE: DEBUGGING
                     # Execute async request in thread (capped by number of gallery threads)
                     resp = await safe_session_get(gallery_ids_session, url, timeout=10)
                     
@@ -567,7 +566,6 @@ async def fetch_gallery_metadata(gallery_id: int):
             log_clarification("debug")
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
-            log(f"gallery_ids_session.get = {metadata_session.get} ({type(metadata_session.get)})", "debug") # NOTE: DEBUGGING
             # Execute async request in thread (capped by number of gallery threads)
             resp = await safe_session_get(metadata_session, url, timeout=10)
             status_code = getattr(resp, "status_code", None)
