@@ -705,7 +705,7 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
         try:
             return await executor.run_blocking(
                 _cloudscraper_check(),
-                non_async_referrer="Flask",
+                referrer_blocking="Flask",
                 type="general"
             )
         

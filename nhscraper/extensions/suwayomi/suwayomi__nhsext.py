@@ -452,7 +452,7 @@ def graphql_request(request: str, variables: dict = None, auth_user: str = None,
     # Run async request in a blocking manner so the GraphQL requests remain synchronous
     return executor.run_blocking(
         _aiohttp_request(),
-        non_async_referrer="GraphQL"
+        referrer_blocking="GraphQL"
     )
 
 def get_local_source_id():

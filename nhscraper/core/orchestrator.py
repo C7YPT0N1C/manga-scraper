@@ -585,13 +585,13 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
     
-    def sleep_sync(self, seconds: float, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
+    def sleep_sync(self, seconds: float, referrer_blocking: str = f"{DEFAULT_REFERRER}"):
         time.sleep(seconds)
     
-    async def sleep_async(self, seconds: float, async_referrer: str = f"{DEFAULT_REFERRER}"):
+    async def sleep_async(self, seconds: float, referrer_async: str = f"{DEFAULT_REFERRER}"):
         await asyncio.sleep(seconds)
 
-    def run_blocking(self, coro, non_async_referrer: str = f"{DEFAULT_REFERRER}"):
+    def run_blocking(self, coro, referrer_blocking: str = f"{DEFAULT_REFERRER}"):
         """
         Run a coroutine or sync function in a synchronous context.
 
@@ -600,7 +600,7 @@ class Executor:
         """
         
         async def wrapper():
-            return await self._wrap(coro, "run_blocking", non_async_referrer)
+            return await self._wrap(coro, "run_blocking", referrer_blocking)
 
         try:
             loop = asyncio.get_running_loop()
@@ -608,7 +608,7 @@ class Executor:
         except RuntimeError:
             return asyncio.run(wrapper())
     
-    def spawn_task(self, coro, async_referrer: str = f"{DEFAULT_REFERRER}", type: str = "default"):
+    def spawn_task(self, coro, referrer_async: str = f"{DEFAULT_REFERRER}", type: str = "default"):
         """
         Schedule a coroutine in async context.
 
@@ -621,16 +621,16 @@ class Executor:
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
-            async_referrer = async_referrer or "Gallery Download"
+            referrer_async = referrer_async or "Gallery Download"
             sem = self.gallery_semaphore
         elif type == "image":
-            async_referrer = async_referrer or "Image Download"
+            referrer_async = referrer_async or "Image Download"
             sem = self.image_semaphore
         else:
-            async_referrer = async_referrer or "General I/O"
+            referrer_async = referrer_async or "General I/O"
             sem = self.default_semaphore
 
-        task = asyncio.create_task(self._wrap(coro, "spawn_task", async_referrer, semaphore=sem))
+        task = asyncio.create_task(self._wrap(coro, "spawn_task", referrer_async, semaphore=sem))
         self.tasks.append(task)
         return task
     
@@ -664,7 +664,7 @@ class Executor:
         if in_async:
             if inspect.iscoroutinefunction(func):
                 # Run as coroutine; type is only relevant if used with spawn_task
-                return await self.spawn_task(func(*args, **kwargs), async_referrer=referrer, type=type)
+                return await self.spawn_task(func(*args, **kwargs), referrer_async=referrer, type=type)
             else:
                 # sync function → run in thread
                 return await asyncio.to_thread(func, *args, **kwargs)
@@ -673,10 +673,10 @@ class Executor:
         else:
             if inspect.iscoroutinefunction(func):
                 # coroutine in sync context → executor.run_blocking
-                return self.run_blocking(func(*args, **kwargs), non_async_referrer=referrer)
+                return self.run_blocking(func(*args, **kwargs), referrer_blocking=referrer)
             else:
                 # sync function in sync context → executor.run_blocking
-                return self.run_blocking(func, *args, **kwargs, non_async_referrer=referrer)
+                return self.run_blocking(func, *args, **kwargs, referrer_blocking=referrer)
     
     async def io_to_thread(self, func, *args, **kwargs):
         """
