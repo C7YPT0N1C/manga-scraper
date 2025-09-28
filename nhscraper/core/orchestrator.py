@@ -224,7 +224,7 @@ extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE
 
-DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"
+DEFAULT_NHENTAI_MIRRORS = ["https://i.nhentai.net"]
 # normalised into a list at import
 nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 
