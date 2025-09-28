@@ -641,30 +641,22 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
 
-    def run_blocking(self, coro):
+    def run_blocking(self, func, *args, **kwargs):
         """
         Run a synchronous function or coroutine in a **synchronous context**.
-
-        ✅ Blocks immediately until the function completes.
-        ✅ Returns the result.
-
-        Usage:
-            # Sync function
-            result = executor.run_blocking(sync_func, arg1, arg2)
-
-            # Async coroutine from sync code
-            result = executor.run_blocking(async_func(...))
-
-        Notes:
-        - Only use in sync functions (def ...) or when you want to block the event loop in async code.
-        - Always pass the function/coroutine, do not pre-call for async coroutines:
-              ❌ executor.run_blocking(async_func(...)) # Wrong: executes immediately in current thread
+        Accepts the function + arguments directly; wraps in lambda internally.
         """
         
         referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
+        # Wrap everything in a zero-arg callable
+        if inspect.iscoroutinefunction(func):
+            coro = lambda: func(*args, **kwargs)
+        else:
+            coro = lambda: func(*args, **kwargs)
+
         async def wrapper():
-            return await self._wrap(coro, "run_blocking", module_name=referrer_blocking)
+            return await self._wrap(coro(), "run_blocking", module_name=referrer_blocking)
 
         try:
             loop = asyncio.get_running_loop()
@@ -713,28 +705,7 @@ class Executor:
     async def call_appropriately(self, func, *args, type: str = "default", referrer: str = None, **kwargs):
         """
         Safely run a function in the correct context (async vs sync) without blocking improperly.
-
-        Behavior:
-        - **Async function**:
-            - Runs the coroutine via `spawn_task` and awaits it.
-        - **Sync function**:
-            - Runs in a background thread via `asyncio.to_thread`.
-        - **Sync context**:
-            - Calls `run_blocking` automatically.
-
-        Usage in async context:
-            # Run async function and await
-            result = await executor.call_appropriately(async_func, arg1)
-
-            # Run sync function in thread
-            result = await executor.call_appropriately(sync_func, arg1, arg2)
-
-        Usage in sync context:
-            result = executor.call_appropriately(sync_func, arg1)  # blocks until done
-
-        Notes:
-        - Automatically detects sync vs async context.
-        - Always pass the function and arguments separately; do not pre-call functions.
+        Accepts function + args directly; internally wraps with lambda where needed.
         """
         
         if referrer is None:
@@ -745,23 +716,26 @@ class Executor:
             in_async = True
         except RuntimeError:
             in_async = False
+            
+        # Internal wrapper
+        wrapped = lambda: func(*args, **kwargs)
 
         # --- Async context ---
         if in_async:
             if inspect.iscoroutinefunction(func):
-                # Run as coroutine; type is only relevant if used with executor.spawn_task()
+                # async → spawn_task and await
                 return await self.spawn_task(func(*args, **kwargs), type=type)
             else:
-                # sync function → run in thread
-                return await asyncio.to_thread(func, *args, **kwargs)
-
+                # sync → run in thread
+                return await asyncio.to_thread(wrapped)
+        
         # --- Sync context ---
         else:
             if inspect.iscoroutinefunction(func):
-                # coroutine in sync context → executor.run_blocking()
-                return self.run_blocking(func(*args, **kwargs))
+                # async in sync → run_blocking
+                return self.run_blocking(func, *args, **kwargs)
             else:
-                # sync function in sync context → executor.run_blocking()
+                # sync in sync → run_blocking
                 return self.run_blocking(func, *args, **kwargs)
     
     def sleep_sync(self, seconds: float):
