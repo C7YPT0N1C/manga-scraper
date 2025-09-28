@@ -198,7 +198,7 @@ def get_meta_tags(meta, tag_type, meta_tag_requester: str = None):
     - Returns [] if none found.
     """
     
-    meta_tag_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+    meta_tag_requester = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
     
     if not meta or "tags" not in meta:
         return []
