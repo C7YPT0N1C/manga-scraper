@@ -829,14 +829,14 @@ async def safe_session_get(session, url, **kwargs):
     Unified GET request that works for both sync and async sessions.
     Handles both requests/Cloudscraper (sync) and aiohttp (async).
     """
+    
+    assert not callable(session), f"safe_session_get got a function instead of a session: {session}"
+    
     method = session.get
-
-    # Always wrap so call_appropriately actually calls it
-    return await executor.call_appropriately(
-        lambda: method(url, **kwargs),
-        type="http",
-        referrer="safe_session_get"
-    )
+    if inspect.iscoroutinefunction(method):
+        return await method(url, **kwargs)
+    else:
+        return await executor.call_appropriately(method, url, **kwargs)
 
 async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True, dynamic_sleep_requester: str = None):
     """
