@@ -376,19 +376,41 @@ def normalise_value(key, value):
 def update_env(key, value):
     """
     Update a single variable in the .env file safely under lock.
-    Uses proper serialization + normalization.
+    Uses proper serialisation + normalisation.
     """
+    
+    def _set_key_raw(env_file, key, value):
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+        key_line = f"{key}={value}\n"
+        found = False
+
+        for i, line in enumerate(lines):
+            if line.strip().startswith(f"{key}="):
+                lines[i] = key_line
+                found = True
+                break
+
+        if not found:
+            lines.append(key_line)
+
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+    
     def _update():
         if not os.path.exists(ENV_FILE):
             with open(ENV_FILE, "w") as f:
                 f.write("")
 
-        serialized = serialise_value(key, value)
+        serialised = serialise_value(key, value)
 
         # Safely update .env
-        set_key(ENV_FILE, key, serialized)
+        _set_key_raw(ENV_FILE, key, serialised)
 
-        # Update runtime config with normalized value
+        # Update runtime config with normalised value
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
