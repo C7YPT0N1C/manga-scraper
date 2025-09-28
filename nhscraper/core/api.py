@@ -504,6 +504,7 @@ def fetch_image_urls(meta: dict, page: int):
     """
     Returns the full image URL list for a gallery page. No network I/O — kept synchronous.
     """
+    
     fetch_env_vars() # Refresh env vars in case config changed.
 
     try:

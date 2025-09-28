@@ -1160,7 +1160,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
         # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session, status="return")
+        _downloader_session = executor.run_blocking(get_session, status="rebuild")
         success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:

@@ -542,20 +542,27 @@ def get_valid_sort_value(sort_value):
     
     return valid_sort_value
 
-def get_caller_module_name(default=DEFAULT_REFERRER):
+def get_caller_module_name(frame_num: int = 2, default=DEFAULT_REFERRER):
     """
     When called by a function (FunctionA), retrieve's the calling function's (FunctionB) module's '_module_referrer' variable
     """
+    
     frame = inspect.currentframe()
     try:
-        # Go up two frames: current function -> caller function
-        caller_frame = frame.f_back.f_back
+        # Go up each frame (up to frame_num times) till we get to the caller function (usually 2)
+        caller_frame = frame
+        for _ in range(frame_num):
+            if caller_frame.f_back is None:
+                break
+            
+            caller_frame = caller_frame.f_back
+        
         module = inspect.getmodule(caller_frame)
         if module:
             return getattr(module, "_module_referrer", module.__name__)
         return default
     finally:
-        del frame  # avoid reference cycles
+        del frame # avoid reference cycles
 
 ##########################################################################################
 # EXECUTOR
@@ -860,10 +867,8 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
         float: The sleep duration actually used.
     """
     
-    dynamic_sleep_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
-    
     if stage == None:
-        stage = dynamic_sleep_requester
+        stage = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     try:
         asyncio.get_running_loop()
