@@ -436,7 +436,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                 try:
                     log(f"gallery_ids_session.get = {gallery_ids_session.get} ({type(gallery_ids_session.get)})", "debug") # NOTE: DEBUGGING
                     # Execute async request in thread (capped by number of gallery threads)
-                    resp = await safe_session_get(gallery_ids_session.get, url, timeout=10)
+                    resp = await safe_session_get(gallery_ids_session, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
@@ -470,7 +470,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                             
                             # Execute async request in thread (capped by number of gallery threads)
                             try:
-                                resp = await safe_session_get(gallery_ids_session.get, url, timeout=10)
+                                resp = await safe_session_get(gallery_ids_session, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
@@ -569,7 +569,7 @@ async def fetch_gallery_metadata(gallery_id: int):
 
             log(f"gallery_ids_session.get = {metadata_session.get} ({type(metadata_session.get)})", "debug") # NOTE: DEBUGGING
             # Execute async request in thread (capped by number of gallery threads)
-            resp = await safe_session_get(metadata_session.get, url, timeout=10)
+            resp = await safe_session_get(metadata_session, url, timeout=10)
             status_code = getattr(resp, "status_code", None)
 
             if status_code == 429:
@@ -612,7 +612,7 @@ async def fetch_gallery_metadata(gallery_id: int):
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:
-                        resp = await safe_session_get(metadata_session.get, url, timeout=10)
+                        resp = await safe_session_get(metadata_session, url, timeout=10)
                         
                         await executor.call_appropriately(resp.raise_for_status)
                         return await executor.call_appropriately(resp.json)
