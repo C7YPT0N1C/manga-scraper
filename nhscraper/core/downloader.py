@@ -31,7 +31,7 @@ active_extension = "skeleton"
 download_location = ""
 
 # Must not be async, use executor.run_blocking()
-downloader_session = executor.run_blocking(get_session, status="return")
+downloader_session = executor.run_blocking(lambda: get_session, status="return")
 
 skipped_galleries = []
 
