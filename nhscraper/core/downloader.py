@@ -30,9 +30,6 @@ _module_referrer=f"Downloader" # Used in executor.* calls
 active_extension = "skeleton"
 download_location = ""
 
-# Must not be async, use executor.run_blocking()
-downloader_session = executor.run_blocking(get_session, status="return")
-
 skipped_galleries = []
 
 ####################################################################################################
@@ -326,10 +323,12 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 
                     img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                     img_path = os.path.join(primary_folder, img_filename)
+                    
+                    # Must not be async, use executor.run_blocking()
+                    downloader_session = executor.run_blocking(get_session, status="return")
 
                     # Build coroutine wrapper that will call extension hook via call_appropriately
-                    async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator):
-                        
+                    async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator): 
                         # download_images_hook is sync; executor.run_blocking() used
                         return executor.run_blocking(active_extension.download_images_hook, gid, pg, urls, path, downloader_session, None, creator)
 

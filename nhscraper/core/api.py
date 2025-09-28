@@ -46,7 +46,7 @@ session = None
 # Use an asyncio.Lock here because session creation is now async-aware.
 session_lock = asyncio.Lock()
 
-async def get_session(status: str = "rebuild", backend: str = "cloudscraper", session_requester: str = None):
+async def get_session(status: str = "return", backend: str = "cloudscraper", session_requester: str = None):
     """
     Ensure and return a ready session.
 
@@ -411,7 +411,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session(status="return")
+    gallery_ids_session = await get_session()
 
     try:
         log_clarification("debug")
@@ -461,7 +461,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                             wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                             await dynamic_sleep(wait=wait, dynamic=False)
-                            gallery_ids_session = await get_session()
+                            gallery_ids_session = await get_session(status="rebuild")
                             
                             # Execute async request in thread (capped by number of gallery threads)
                             try:
@@ -552,7 +552,7 @@ async def fetch_gallery_metadata(gallery_id: int):
     """
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    metadata_session = await get_session(status="return")
+    metadata_session = await get_session()
 
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
@@ -600,7 +600,7 @@ async def fetch_gallery_metadata(gallery_id: int):
                     wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
                     log(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                     await dynamic_sleep(wait=wait, dynamic=False)
-                    metadata_session = await get_session()
+                    metadata_session = await get_session(status="rebuild")
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:

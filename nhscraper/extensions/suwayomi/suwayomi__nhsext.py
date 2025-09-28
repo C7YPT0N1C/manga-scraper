@@ -1117,7 +1117,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         return True
 
     if _downloader_session is None: # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session)
+        _downloader_session = executor.run_blocking(get_session, status="rebuild")
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
