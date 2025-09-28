@@ -394,7 +394,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 end_page = int(entry[2])
 
         result = executor.run_blocking(
-            fetch_gallery_ids, query_lower, name, sort_val, start_page, end_page,
+            fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page),
             referrer_blocking=_module_referrer
         )
         if result:
