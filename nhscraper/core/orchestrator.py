@@ -355,15 +355,16 @@ def parse_list_of_str(value):
     return []
 
 def serialise_value(key, value):
-    """Serialise Python value to .env-compatible string."""
+    """Serialize Python value to .env-compatible string."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, (list, dict)):
-        return json.dumps(value) # Save lists/dicts as JSON
+        # Store lists/dicts as JSON, unquoted
+        return json.dumps(value, separators=(',', ':'))
+    # Plain string, no quotes
     return str(value)
-
 
 def normalise_value(key, value):
     """Convert .env string back to proper Python type."""
@@ -377,6 +378,11 @@ def normalise_value(key, value):
         return parse_list_of_ints(value)
     if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS"):
         return parse_list_of_str(value)
+    
+    for key, default_val in defaults.items():
+        current_val = config.get(key)
+        if current_val in (None, "", []):
+            update_env(key, default_val)
     
     # Default: return as string
     return str(value)

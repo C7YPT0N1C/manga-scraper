@@ -145,8 +145,8 @@ create_env_file() {
 
 # Custom (Username and Password must be manually set for now)
 # TEST
-AUTH_USERNAME = "Username"
-AUTH_PASSWORD = "Password"
+AUTH_USERNAME = 'Username'
+AUTH_PASSWORD = 'Password'
 
 # Directories
 SCRAPER_DIR=/opt/nhentai-scraper
