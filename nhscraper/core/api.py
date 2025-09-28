@@ -484,7 +484,11 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
             data = await executor.call_appropriately(resp.json)
-            log(f"Fetcher: HTTP Response JSON: {data}", "debug")
+            
+            # NOTE: Leave this commented out, you seriously don't need it unless something is
+            # seriously fucked
+            #log(f"Fetcher: HTTP Response JSON: {data}", "debug")
+            
             batch = [g["id"] for g in data.get("result", [])]
             log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
 

@@ -88,8 +88,9 @@ def time_estimate(context: str, id_list: list):
     log_clarification()
     log(
         f"{context} ({current_run_num_of_galleries} Galleries):"
-        f"Best Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes", "warn"
-        f"Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes", "warn"
+        f"Best Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes"
+        f"Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes",
+        "warn"
     )
 
 def build_gallery_path(meta, iteration: dict = None):
