@@ -745,11 +745,8 @@ if __name__ == "__main__":
     """
     This is one of this module's entrypoints.
     """
-    #app.run(
-    #    host="0.0.0.0",
-    #    port=5000,
-    #    debug=debug
-    #)
-    
-log_clarification("debug")
-log("API: Debugging Started.", "debug")
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=debug
+    )
