@@ -182,19 +182,16 @@ def pre_run_hook():
 def return_gallery_metas(meta):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    artists = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    artists = get_meta_tags(meta, "artist")
+    groups = get_meta_tags(meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
     # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(
-        clean_title, meta,
-        referrer=_module_referrer
-    )
+    title = executor.call_appropriately(clean_title, meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
-    gallery_language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
     
     return {
         "creator": creators,
@@ -425,7 +422,7 @@ def graphql_request(request: str, variables: dict = None, auth_user: str = None,
         try:
             if debugging == True:
                 log_clarification("debug")
-                log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+                log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
 
             async with aiohttp.ClientSession() as graphql_session:
                 async with graphql_session.post(GRAPHQL_URL, headers=headers, json=payload, timeout=10) as resp:
@@ -433,7 +430,7 @@ def graphql_request(request: str, variables: dict = None, auth_user: str = None,
                     result = await resp.json()
 
             if debugging == True:
-                log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
+                log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # NOTE: DEBUGGING
             return result
 
         except aiohttp.ClientResponseError as e:
@@ -449,10 +446,7 @@ def graphql_request(request: str, variables: dict = None, auth_user: str = None,
             return None
 
     # Run async request in a blocking manner so the GraphQL requests remain synchronous
-    return executor.run_blocking(
-        _aiohttp_request(),
-        referrer_blocking="GraphQL"
-    )
+    return executor.run_blocking(_aiohttp_request())
 
 def get_local_source_id():
     global LOCAL_SOURCE_ID
@@ -743,10 +737,7 @@ async def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     """
     
     # Call graphql_request (sync) ( use executor.run_blocking() ) from async context using call_appropriately
-    result = executor.run_blocking(
-        graphql_request(mutation, {"ids": ids}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False),
-        referrer=_module_referrer
-    )
+    result = executor.run_blocking(graphql_request(mutation, {"ids": ids}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False))
     #log(f"GraphQL: updateMangas result: {result}", "debug")
     log(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.", "info")
     
@@ -760,10 +751,7 @@ async def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = executor.run_blocking(
-        graphql_request(mutation, {"ids": ids, "categoryId": category_id}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False),
-        referrer=_module_referrer
-    )
+    result = executor.run_blocking(graphql_request(mutation, {"ids": ids, "categoryId": category_id}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False))
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
     log(f"GraphQL: Added {len(ids)} mangas to category {category_id}.", "info")
     
@@ -819,7 +807,7 @@ async def update_creator_manga(meta):
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
 
     This function is async; file operations are offloaded with io_to_thread. When called from
-    sync contexts, callers should use executor.call_appropriately(update_creator_manga(meta), referrer=_module_referrer, type="TYPE").
+    sync contexts, callers should use executor.call_appropriately(update_creator_manga(meta), type="TYPE").
     # NOTE: type= 'gallery', 'image', or 'default' (generic task)
     """
     
@@ -862,7 +850,6 @@ async def update_creator_manga(meta):
                 # add_mangas_to_suwayomi is async; using executor.spawn_task() will run it fine. # NOTE
                 executor.spawn_task(
                     add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID),
-                    referrer=_module_referrer,
                     type="gallery"
                 )
                 collected_ids.discard(suwayomi_id)
@@ -954,7 +941,7 @@ def process_deferred_creators():
     Adds all existing local mangas to library + category if they exist on disk.
     Cleans up creators_metadata.json so successful creators are removed from deferred creators.
 
-    This function remains synchronous. It calls async helpers via executor.call_appropriately(..., referrer=_module_referrer, type="TYPE") where necessary.
+    This function remains synchronous. It calls async helpers via executor.call_appropriately(..., type="TYPE") where necessary.
     # NOTE: type= 'gallery', 'image', or 'default' (generic task)
     """
     
@@ -1000,17 +987,13 @@ def process_deferred_creators():
                 if os.path.exists(expected_path):
                     new_ids.append(int(node["id"]))
                     # remove from deferred if found (async) -> use call_appropriately
-                    executor.call_appropriately(
-                        remove_from_deferred, title,
-                        referrer=_module_referrer
-                    )
+                    executor.call_appropriately(remove_from_deferred, title)
 
             if new_ids:
                 log(f"GraphQL: Adding {len(new_ids)} mangas to library and category.", "info")
-                executor.call_appropriately( # add_mangas_to_suwayomi is async -> call via call_appropriately
-                    add_mangas_to_suwayomi, new_ids, CATEGORY_ID,
-                    referrer=_module_referrer
-                )
+                
+                # add_mangas_to_suwayomi is async -> call via call_appropriately
+                executor.call_appropriately(add_mangas_to_suwayomi, new_ids, CATEGORY_ID)
 
         # ----------------------------
         # Process deferred creators
@@ -1018,11 +1001,9 @@ def process_deferred_creators():
         log_clarification()
 
         # Here _deferred_creators_lock is a threading.Lock and used in sync context
-        with _deferred_creators_lock: # load_deferred_creators is async: call via call_appropriately
-            deferred_creators = executor.call_appropriately(
-                load_deferred_creators,
-                referrer=_module_referrer
-            )
+        # load_deferred_creators is async: call via call_appropriately
+        with _deferred_creators_lock:
+            deferred_creators = executor.call_appropriately(load_deferred_creators)
 
         if not deferred_creators:
             log("GraphQL: No deferred creators to process.", "info")
@@ -1073,10 +1054,7 @@ def process_deferred_creators():
             category_ids = [int(c["id"]) for c in categories_nodes] if categories_nodes else []
             if manga_info.get("inLibrary") and CATEGORY_ID in category_ids:
                 log(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.", "info")
-                executor.call_appropriately(
-                    remove_from_deferred, creator_name,
-                    referrer=_module_referrer
-                )
+                executor.call_appropriately(remove_from_deferred, creator_name)
                 continue
 
             new_ids.add(int(manga_info["id"]))
@@ -1084,15 +1062,11 @@ def process_deferred_creators():
             log(f"Queued manga ID {manga_info['id']} for '{creator_name}'.", "info")
 
         if new_ids:
-            executor.call_appropriately( # add_mangas_to_suwayomi is async -> call via call_appropriately
-                add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID),
-                referrer=_module_referrer
-            )
+            # add_mangas_to_suwayomi is async -> call via call_appropriately
+            executor.call_appropriately(add_mangas_to_suwayomi(list(new_ids), CATEGORY_ID))
+            
             for creator_name in processed_creators:
-                executor.call_appropriately(
-                    remove_from_deferred, creator_name,
-                    referrer=_module_referrer
-                )
+                executor.call_appropriately(remove_from_deferred, creator_name)
         
         # If no creators remain, we're done early
         if not still_deferred:
@@ -1103,10 +1077,7 @@ def process_deferred_creators():
         process_creators_attempt += 1
 
     # After max retries, keep creators still deferred
-    executor.call_appropriately(
-        save_deferred_creators, still_deferred,
-        referrer=_module_referrer
-    )
+    executor.call_appropriately(save_deferred_creators, still_deferred)
     log("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.", "warning")
 
 ####################################################################################################################
@@ -1142,9 +1113,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         return True
 
     if _downloader_session is None: # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="rebuild")
-        )
+        _downloader_session = executor.run_blocking(get_session())
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -1187,9 +1156,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
         # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="return")
-        )
+        _downloader_session = executor.run_blocking(get_session(status="return"))
         success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
@@ -1256,10 +1223,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         _collected_gallery_metas.append(meta)
     
     # Update creator's popular genres - update_creator_manga is async, call via call_appropriately
-    executor.call_appropriately(
-        update_creator_manga, meta,
-        referrer=_module_referrer
-    )
+    executor.call_appropriately(update_creator_manga, meta)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():

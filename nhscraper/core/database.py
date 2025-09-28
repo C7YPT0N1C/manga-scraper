@@ -15,6 +15,8 @@ Handles initialization, migrations, inserts, updates,
 and queries related to galleries, images, and metadata.
 """
 
+_module_referrer=f"Database" # Used in executor.* calls
+
 DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")
 lock = asyncio.Lock()
 

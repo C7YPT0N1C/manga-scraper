@@ -288,10 +288,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
                     
-                    result = executor.run_blocking(
-                        fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page,
-                        referrer_blocking=_module_referrer
-                    )
+                    result = executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page)
                     if result:
                         gallery_ids.update(result)
                     
@@ -311,10 +308,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
                     
-                    result = executor.run_blocking(
-                        fetch_gallery_ids, qtype, qvalue, sort_val, start_page, end_page,
-                        referrer_blocking=_module_referrer
-                    )
+                    result = executor.run_blocking(fetch_gallery_ids, qtype, qvalue, sort_val, start_page, end_page)
                     if result:
                         gallery_ids.update(result)
                         
@@ -327,10 +321,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
                     
-                    result = executor.run_blocking(
-                        fetch_gallery_ids, "search", search_query, sort_val, start_page, end_page,
-                        referrer_blocking=_module_referrer
-                    )
+                    result = executor.run_blocking(fetch_gallery_ids, "search", search_query, sort_val, start_page, end_page)
                     if result:
                         gallery_ids.update(result)
                         
@@ -361,10 +352,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        result = executor.run_blocking(
-            fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page,
-            referrer_blocking=_module_referrer
-        )
+        result = executor.run_blocking(fetch_gallery_ids, "homepage", None, sort_val, start_page, end_page)
         if result:
             gallery_ids.update(result)
         
@@ -393,10 +381,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        result = executor.run_blocking(
-            fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page),
-            referrer_blocking=_module_referrer
-        )
+        result = executor.run_blocking(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
         if result:
             gallery_ids.update(result)
 
@@ -557,9 +542,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    session = executor.run_blocking(
-        get_session(referrer=_module_referrer, status="build")
-    )
+    session = executor.run_blocking(get_session(status="build"))
     
     # Build Gallery List (make sure not empty.)
     log_clarification()

@@ -84,19 +84,16 @@ def pre_run_hook():
 def return_gallery_metas(meta):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    artists = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    artists = get_meta_tags(meta, "artist")
+    groups = get_meta_tags(meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
     # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(
-        clean_title, meta,
-        referrer=_module_referrer
-    )
+    title = executor.call_appropriately(clean_title, meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
-    gallery_language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
     
     return {
         "creator": creators,
@@ -277,9 +274,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         return True
 
     if _downloader_session is None: # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="rebuild")
-        )
+        _downloader_session = executor.run_blocking(get_session())
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -323,9 +318,7 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
         # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(
-            get_session(referrer=_module_referrer, status="return")
-        )
+        _downloader_session = executor.run_blocking(get_session(status="return"))
         success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:

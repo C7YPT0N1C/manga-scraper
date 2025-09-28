@@ -41,7 +41,7 @@ Async Context → async def function():
     ✅ executor.spawn_task(coro, *args, **kwargs)   # no await
         - Execute-and-forget: launches task and continues immediately.
         - Only for background/optional work.
-    ✅ result = await executor.executor.call_appropriately(sync_func, *args, referrer="_module_referrer", **kwargs)
+    ✅ result = await executor.executor.call_appropriately(sync_func, *args, **kwargs)
         - Safely runs a synchronous function in a thread.
         - Correct for sync I/O or CPU-bound tasks in async context.
     ⚠️ executor.run_blocking(coro, *args, **kwargs)
@@ -57,14 +57,14 @@ Important Note on Passing Functions vs Pre-Called Results:
     executor.run_blocking(_update_proxies, temp_session, use_tor)
 
     # Correct in async
-    await executor.executor.call_appropriately(_update_proxies, temp_session, use_tor, referrer=_module_referrer)
+    await executor.executor.call_appropriately(_update_proxies, temp_session, use_tor)
     ```
 
 - **Do NOT pre-call the function** and pass its result:
     ```python
     # ❌ Incorrect: executes immediately before executor can handle it
     executor.run_blocking(_update_proxies(temp_session, use_tor))
-    executor.executor.call_appropriately(_update_proxies(temp_session, use_tor), referrer=_module_referrer)
+    executor.executor.call_appropriately(_update_proxies(temp_session, use_tor))
     ```
 
 - Reason: pre-calling the function runs it **immediately** in the current thread, defeating the purpose of `run_blocking` or `call_appropriately`, which are meant to safely execute synchronous or blocking functions in the correct context (thread or async).
@@ -72,10 +72,10 @@ Important Note on Passing Functions vs Pre-Called Results:
 - For `spawn_task`, you must pass a **coroutine object**, not the result:
     ```python
     # Correct
-    task = executor.spawn_task(_async_func(param1, param2), referrer=_module_referrer, type="general")
+    task = executor.spawn_task(_async_func(param1, param2), type="general")
 
     # Incorrect
-    task = executor.spawn_task(_async_func(param1, param2)(referrer=_module_referrer, type="general")) # already called
+    task = executor.spawn_task(_async_func(param1, param2), type="general") # already called
     + Whatever other variations of this pattern there could be.
     ```
 
@@ -631,20 +631,21 @@ class Executor:
 
         self.tasks: list[asyncio.Task] = []
 
-    async def _wrap(self, coro, task: str, name: str, semaphore: asyncio.Semaphore = None):
+    async def _wrap(self, coro, task: str, module_name: str, semaphore: asyncio.Semaphore = None):
         """
         Internal wrapper for a coroutine:
         - Respects the passed semaphore if set
         - Catches exceptions and logs them
         - Returns the result or None on failure
         """
+        
         try:
             if semaphore:
                 async with semaphore:
                     return await coro
             return await coro
         except Exception as e:
-            log(f"Executor: executor.{task} in {name} failed: {e}", "error")
+            log(f"Executor: executor.{task} in {module_name} failed: {e}", "error")
             return None
 
     async def gather(self):
@@ -659,14 +660,8 @@ class Executor:
             t.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
-    
-    def sleep_sync(self, seconds: float, referrer_blocking: str = f"{DEFAULT_REFERRER}"):
-        time.sleep(seconds)
-    
-    async def sleep_async(self, seconds: float, referrer_async: str = f"{DEFAULT_REFERRER}"):
-        await asyncio.sleep(seconds)
 
-    def run_blocking(self, coro, referrer_blocking: str = f"{DEFAULT_REFERRER}"):
+    def run_blocking(self, coro, referrer_blocking: str = None):
         """
         Run a coroutine or sync function in a synchronous context.
 
@@ -674,8 +669,11 @@ class Executor:
         Use this in sync functions to get immediate results.
         """
         
+        if referrer_blocking == None:
+            referrer_blocking = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+        
         async def wrapper():
-            return await self._wrap(coro, "run_blocking", referrer_blocking)
+            return await self._wrap(coro, "run_blocking", module_name=referrer_blocking)
 
         try:
             loop = asyncio.get_running_loop()
@@ -683,7 +681,7 @@ class Executor:
         except RuntimeError:
             return asyncio.run(wrapper())
     
-    def spawn_task(self, coro, referrer_async: str = f"{DEFAULT_REFERRER}", type: str = "default"):
+    def spawn_task(self, coro, type: str = "default", referrer_async: str = None):
         """
         Schedule a coroutine in async context.
 
@@ -693,6 +691,9 @@ class Executor:
         type: 'gallery', 'image', or 'default' (affects semaphore usage).
         Returns the asyncio Task object.
         """
+        
+        if referrer_async == None:
+            referrer_async = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -705,7 +706,7 @@ class Executor:
             referrer_async = referrer_async or "General I/O"
             sem = self.default_semaphore
 
-        task = asyncio.create_task(self._wrap(coro, "spawn_task", referrer_async, semaphore=sem))
+        task = asyncio.create_task(self._wrap(coro, "spawn_task", module_name=referrer_async, semaphore=sem))
         self.tasks.append(task)
         return task
     
@@ -722,7 +723,7 @@ class Executor:
         Automatically uses `func.__name__` or `_module_referrer` if `referrer` is not set.
 
         Usage:
-            result = await executor.call_appropriately(some_func, arg1, arg2, referrer=_module_referrer)
+            result = await executor.call_appropriately(some_func, arg1, arg2)
         """
         
         if referrer is None:
@@ -738,7 +739,7 @@ class Executor:
         # --- Async context ---
         if in_async:
             if inspect.iscoroutinefunction(func):
-                # Run as coroutine; type is only relevant if used with spawn_task
+                # Run as coroutine; type is only relevant if used with executor.spawn_task()
                 return await self.spawn_task(func(*args, **kwargs), referrer_async=referrer, type=type)
             else:
                 # sync function → run in thread
@@ -747,11 +748,19 @@ class Executor:
         # --- Sync context ---
         else:
             if inspect.iscoroutinefunction(func):
-                # coroutine in sync context → executor.run_blocking
+                # coroutine in sync context → executor.run_blocking()
                 return self.run_blocking(func(*args, **kwargs), referrer_blocking=referrer)
             else:
-                # sync function in sync context → executor.run_blocking
+                # sync function in sync context → executor.run_blocking()
                 return self.run_blocking(func, *args, **kwargs, referrer_blocking=referrer)
+    
+    def sleep_sync(self, seconds: float, referrer_blocking: str = None):
+        log(f"{referrer_blocking}: Sleeping for {seconds}s")
+        time.sleep(seconds)
+    
+    async def sleep_async(self, seconds: float, referrer_async: str = None):
+        log(f"{referrer_async}: Sleeping for {seconds}s")
+        await asyncio.sleep(seconds)
     
     async def io_to_thread(self, func, *args, **kwargs):
         """
@@ -792,7 +801,7 @@ executor = Executor()
 # EXECUTOR HELPERS
 ##########################################################################################
 
-async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True):
+async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True, dynamic_sleep_requester: str = None):
     """
     Unified Adaptive sleep  function based on load and stage for both sync and async contexts.
     Returns the sleep duration (float) and performs an asyncio.sleep for that duration.
@@ -815,6 +824,9 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     Returns:
         float: The sleep duration actually used.
     """
+    
+    dynamic_sleep_requester = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+    
     try:
         asyncio.get_running_loop()
         in_async = True
@@ -822,46 +834,118 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
         in_async = False
 
     sleep_time = wait
+    
+    debug = False # NOTE: DEBUGGING
+    
+    # ------------------------------------------------------------
+    # Configurable parameters
+    # ------------------------------------------------------------
+    gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
+    # min_sleep = Minimum Gallery sleep time
+    # max_sleep = Maximum Gallery sleep time
+    api_min_sleep, api_max_sleep = 0.5, 0.75 # API sleep range
+
+    log_clarification("debug")
+    log("------------------------------", "debug")
+    log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
+    log_clarification("debug")
 
     if dynamic:
-        # --- Dynamic calculation ---
-        gallery_cap = 3750
-        api_min_sleep, api_max_sleep = 0.5, 0.75
-        max_s = globals().get("max_sleep", 5)
-
+        # ------------------------------------------------------------
+        # API STAGE
+        # ------------------------------------------------------------
         if stage == "api":
             attempt_scale = attempt ** 2
             base_min, base_max = api_min_sleep * attempt_scale, api_max_sleep * attempt_scale
             sleep_time = random.uniform(base_min, base_max)
+            log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
+            log("------------------------------", "debug")
+            log_clarification()
 
-        elif stage == "gallery":
-            num_of_galleries = max(1, len(batch_ids) if batch_ids else 1)
-            gallery_threads = threads_galleries
-            image_threads = threads_images
+        # ------------------------------------------------------------
+        # GALLERY STAGE
+        # ------------------------------------------------------------
+        if stage == "gallery":
+            # --------------------------------------------------------
+            # 1. Calculate Galleries / Threads
+            # --------------------------------------------------------
+            num_of_galleries = max(1, len(batch_ids))
+            
+            if debug:
+                log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
 
+            if threads_galleries is None or threads_images is None:
+                # Base gallery threads = 2, scale with number of galleries
+                gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
+                image_threads = gallery_threads * 5  # Keep ratio 1:5
+                if debug:
+                    log(f"→ Optimised Threads: {gallery_threads} gallery, {image_threads} image", "debug")
+            else:
+                gallery_threads = threads_galleries
+                image_threads = threads_images
+                if debug:
+                    log(f"→  threads: {gallery_threads} gallery, {image_threads} image", "debug")
+                    log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
+
+            # --------------------------------------------------------
+            # 2. Calculate total load (Units Of Work)
+            # --------------------------------------------------------        
             concurrency = gallery_threads * image_threads
             current_load = (concurrency * attempt) * num_of_galleries
+            if debug:
+                log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
+                log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
-            unit_factor = current_load / gallery_cap
+            # --------------------------------------------------------
+            # 3. Unit-based scaling
+            # --------------------------------------------------------
+            unit_factor = (current_load) / gallery_cap
+            if debug:
+                log_clarification("debug")
+                log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
 
+            # --------------------------------------------------------
+            # 4. Thread factor, attempt scaling, and load factor
+            # --------------------------------------------------------
             BASE_GALLERY_THREADS = 2
             BASE_IMAGE_THREADS = 10
+            
             gallery_thread_damper = 0.9
             image_thread_damper = 0.9
 
-            thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * \
-                            ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
+            thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
 
-            scaled_sleep = max(unit_factor / thread_factor, globals().get("min_sleep", 0.1))
+            scaled_sleep = unit_factor / thread_factor
+            
+            # Enforce the minimum sleep time
+            scaled_sleep = max(scaled_sleep, min_sleep)
+            
+            if debug:
+                log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
+                log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
 
+            # --------------------------------------------------------
+            # 5. Add jitter to avoid predictable timing
+            # --------------------------------------------------------
             jitter_min, jitter_max = 0.9, 1.1
-            sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), max_s)
+            sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), max_sleep)
+            
+            if debug:
+                log(f"→ Sleep after jitter (Capped at {max_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+
+            # --------------------------------------------------------
+            # 6. Final result
+            # --------------------------------------------------------
+            log_clarification("debug")
+            log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
+            log("------------------------------", "debug")
+            log_clarification()
 
     # --- Perform the sleep ---
     if perform_sleep:
         if in_async:
-            await executor.sleep_async(sleep_time)
+            await executor.sleep_async(sleep_time, referrer_async=dynamic_sleep_requester)
         else:
-            await asyncio.to_thread(executor.sleep_sync, sleep_time)
+            await asyncio.to_thread(executor.sleep_sync, sleep_time, referrer_blocking=dynamic_sleep_requester)
 
     return sleep_time
