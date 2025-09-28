@@ -13,79 +13,8 @@ from nhscraper.core.cleaning_helper import *
 Central coordinator for download workflows.
 Manages task scheduling, concurrency, retries, and
 the overall sequencing of gallery and image downloads.
-"""
 
-"""
-Executor Usage Guide: call_appropriately / run_blocking / spawn_task
-
----
-
-General Rules:
-1. If Step B depends on Step A finishing → use `await executor.spawn_task(...)` in async code.
-2. If order/result doesn't matter → use `executor.spawn_task(...)` without await.
-3. Use the sync variant (`executor.run_blocking`) in sync functions, async-aware variants (`await executor.spawn_task(...)` or `executor.executor.call_appropriately(...)`) in async functions.
-
----
-
-Sync Context → def function():
-    ✅ executor.run_blocking(coro_or_sync_func, *args, **kwargs)
-        - Blocking call; waits until done.
-        - Assign to a variable if you need the return value.
-        - Calling without assignment still blocks, ignores result.
-    🚫 executor.spawn_task(...)
-        - Invalid outside async context; returns a Task you cannot await.
-
-Async Context → async def function():
-    ✅ result = await executor.spawn_task(coro, *args, **kwargs)
-        - Pauses until the task completes; use when later steps depend on result.
-    ✅ executor.spawn_task(coro, *args, **kwargs)   # no await
-        - Execute-and-forget: launches task and continues immediately.
-        - Only for background/optional work.
-    ✅ result = await executor.executor.call_appropriately(sync_func, *args, **kwargs)
-        - Safely runs a synchronous function in a thread.
-        - Correct for sync I/O or CPU-bound tasks in async context.
-    ⚠️ executor.run_blocking(coro, *args, **kwargs)
-        - Blocks the event loop; only use for truly blocking calls that must run synchronously.
-
----
-
-Important Note on Passing Functions vs Pre-Called Results:
-
-- Always **pass the function itself + arguments** to the executor:
-    ```python
-    # Correct
-    executor.run_blocking(_update_proxies, temp_session, use_tor)
-
-    # Correct in async
-    await executor.executor.call_appropriately(_update_proxies, temp_session, use_tor)
-    ```
-
-- **Do NOT pre-call the function** and pass its result:
-    ```python
-    # ❌ Incorrect: executes immediately before executor can handle it
-    executor.run_blocking(_update_proxies(temp_session, use_tor))
-    executor.executor.call_appropriately(_update_proxies(temp_session, use_tor))
-    ```
-
-- Reason: pre-calling the function runs it **immediately** in the current thread, defeating the purpose of `run_blocking` or `call_appropriately`, which are meant to safely execute synchronous or blocking functions in the correct context (thread or async).
-
-- For `spawn_task`, you must pass a **coroutine object**, not the result:
-    ```python
-    # Correct
-    task = executor.spawn_task(_async_func(param1, param2), type="general")
-
-    # Incorrect
-    task = executor.spawn_task(_async_func(param1, param2), type="general") # already called
-    + Whatever other variations of this pattern there could be.
-    ```
-
----
-
-Rule of Thumb:
-- Use `await executor.spawn_task(...)` for most async calls where you need results.
-- Drop `await` only for true background tasks.
-- Use `executor.run_blocking(...)` in sync functions when you need the result immediately.
-- Use `executor.executor.call_appropriately(...)` for running synchronous functions in async code.
+Refer to 'Docs.txt' for a guide to using the executor functions.
 """
 
 module_referrer=f"Orchestrator" # Used in executor.* calls
@@ -613,6 +542,21 @@ def get_valid_sort_value(sort_value):
     
     return valid_sort_value
 
+def get_caller_module_name(default=DEFAULT_REFERRER):
+    """
+    When called by a function (FunctionA), retrieve's the calling function's (FunctionB) module's '_module_referrer' variable
+    """
+    frame = inspect.currentframe()
+    try:
+        # Go up two frames: current function -> caller function
+        caller_frame = frame.f_back.f_back
+        module = inspect.getmodule(caller_frame)
+        if module:
+            return getattr(module, "_module_referrer", module.__name__)
+        return default
+    finally:
+        del frame  # avoid reference cycles
+
 ##########################################################################################
 # EXECUTOR
 ##########################################################################################
@@ -621,6 +565,34 @@ def get_valid_sort_value(sort_value):
 DEFAULT_SEMAPHORE = max(1, (DEFAULT_THREADS_GALLERIES or 0) + (DEFAULT_THREADS_IMAGES or 0)) # Seems good lmfao
 
 class Executor:
+    """
+    Executor Utility: executor.call_appropriately() / executor.run_blocking() / executor.spawn_task() / executor.safe_get()
+
+    Provides a unified interface for running synchronous and asynchronous functions
+    in both sync and async contexts, with optional concurrency control.
+
+    ---
+    General Rules:
+    1. If Step B depends on Step A finishing → **await** the executor call.
+    2. If order/result doesn't matter → call without `await` (fire-and-forget).
+    3. Sync functions: only `executor.run_blocking()` (always blocks).
+    ⚠️ Can run async coroutines here; it will block until completion.
+    4. Async functions: use `executor.spawn_task()`, `executor.call_appropriately()`, or `executor.run_blocking()` depending on need.
+
+    For a decision tree for choosing the right executor function, refer to `Docs.txt`
+
+    Lambda Usage Notes:
+    - Fire-and-forget **sync functions in async context** must be wrapped in `lambda` for `executor.spawn_task()`.
+    - Async coroutines must always be passed as coroutine objects, **never pre-called**.
+    
+    ---
+    Important Notes:
+    - Always pass the function itself + arguments, not pre-called results.
+    - `executor.spawn_task()` requires a coroutine object.
+    - `executor.call_appropriately()` auto-detects async vs sync context.
+    - `executor.run_blocking()` blocks immediately; only use in sync or rare async scenarios.
+    """
+    
     def __init__(self, max_gallery: int = None, max_image: int = None):
         fetch_env_vars() # Refresh env vars in case config changed.  # Refresh env vars in case config changed.
 
@@ -633,10 +605,10 @@ class Executor:
 
     async def _wrap(self, coro, task: str, module_name: str, semaphore: asyncio.Semaphore = None):
         """
-        Internal wrapper for a coroutine:
-        - Respects the passed semaphore if set
-        - Catches exceptions and logs them
-        - Returns the result or None on failure
+        Internal wrapper for coroutine execution.
+        - Respects semaphore limits
+        - Logs errors
+        - Returns result or None on failure
         """
         
         try:
@@ -649,6 +621,10 @@ class Executor:
             return None
 
     async def gather(self):
+        """
+        Wait for all tracked tasks to complete, return results, and clear the task list.
+        """
+        
         if not self.tasks:
             return []
         results = await asyncio.gather(*self.tasks, return_exceptions=True)
@@ -656,6 +632,10 @@ class Executor:
         return results
 
     async def cancel_all(self):
+        """
+        Cancel all tracked tasks and clear the task list.
+        """
+        
         for t in self.tasks:
             t.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
@@ -663,14 +643,26 @@ class Executor:
 
     def run_blocking(self, coro, referrer_blocking: str = None):
         """
-        Run a coroutine or sync function in a synchronous context.
+        Run a synchronous function or coroutine in a **synchronous context**.
 
-        Blocks until the task completes and returns the result.
-        Use this in sync functions to get immediate results.
+        ✅ Blocks immediately until the function completes.
+        ✅ Returns the result.
+
+        Usage:
+            # Sync function
+            result = executor.run_blocking(sync_func, arg1, arg2)
+
+            # Async coroutine from sync code
+            result = executor.run_blocking(async_func(...), referrer_blocking="ModuleName")
+
+        Notes:
+        - Only use in sync functions (def ...) or when you want to block the event loop in async code.
+        - Always pass the function/coroutine, do not pre-call for async coroutines:
+              ❌ executor.run_blocking(async_func(...)) # Wrong: executes immediately in current thread
         """
         
         if referrer_blocking == None:
-            referrer_blocking = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+            referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         async def wrapper():
             return await self._wrap(coro, "run_blocking", module_name=referrer_blocking)
@@ -683,17 +675,28 @@ class Executor:
     
     def spawn_task(self, coro, type: str = "default", referrer_async: str = None):
         """
-        Schedule a coroutine in async context.
+        Schedule an **asynchronous function** (coroutine) for execution in an async context.
 
-        If awaited: pauses until the task completes.
-        If not awaited: executes in the background.
+        Two usage patterns:
 
-        type: 'gallery', 'image', or 'default' (affects semaphore usage).
-        Returns the asyncio Task object.
+        1. **Awaited** → pauses until task completes (use when result is needed):
+               result = await executor.spawn_task(coro(...))
+
+        2. **Fire-and-forget** → background execution (use when result is not needed):
+               executor.spawn_task(coro(...))
+
+        Arguments:
+            coro: a coroutine object (async function called with parentheses)
+            type: 'default', 'gallery', or 'image' (controls semaphore)
+            referrer_async: optional module/task name for logging
+
+        Notes:
+        - Must pass a **coroutine object**, not a sync function or pre-called result.
+        - For synchronous functions in async context, use `call_appropriately`.
         """
         
         if referrer_async == None:
-            referrer_async = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+            referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -712,23 +715,33 @@ class Executor:
     
     async def call_appropriately(self, func, *args, referrer = None, type: str = "default", **kwargs):
         """
-        Run a function in the correct context (sync vs async) safely.
+        Safely run a function in the correct context (async vs sync) without blocking improperly.
 
-        - Async context:
-            - Awaits coroutines
-            - Runs sync functions in a background thread
-        - Sync context:
-            - Runs coroutines or sync functions via run_blocking()
+        Behavior:
+        - **Async function**:
+            - Runs the coroutine via `spawn_task` and awaits it.
+        - **Sync function**:
+            - Runs in a background thread via `asyncio.to_thread`.
+        - **Sync context**:
+            - Calls `run_blocking` automatically.
 
-        Automatically uses `func.__name__` or `_module_referrer` if `referrer` is not set.
+        Usage in async context:
+            # Run async function and await
+            result = await executor.call_appropriately(async_func, arg1)
 
-        Usage:
-            result = await executor.call_appropriately(some_func, arg1, arg2)
+            # Run sync function in thread
+            result = await executor.call_appropriately(sync_func, arg1, arg2)
+
+        Usage in sync context:
+            result = executor.call_appropriately(sync_func, arg1)  # blocks until done
+
+        Notes:
+        - Automatically detects sync vs async context.
+        - Always pass the function and arguments separately; do not pre-call functions.
         """
         
         if referrer is None:
-            # Try module-level _module_referrer variable first
-            referrer = globals().get("_module_referrer", getattr(func, "__name__", DEFAULT_REFERRER))
+            referrer = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
 
         try:
             asyncio.get_running_loop()
@@ -755,24 +768,40 @@ class Executor:
                 return self.run_blocking(func, *args, **kwargs, referrer_blocking=referrer)
     
     def sleep_sync(self, seconds: float, referrer_blocking: str = None):
+        """Block the current thread for `seconds` (sync sleep)."""
+        
         log(f"{referrer_blocking}: Sleeping for {seconds}s")
         time.sleep(seconds)
     
     async def sleep_async(self, seconds: float, referrer_async: str = None):
+        """Async sleep for `seconds`, yielding to event loop."""
+        
         log(f"{referrer_async}: Sleeping for {seconds}s")
         await asyncio.sleep(seconds)
     
     async def io_to_thread(self, func, *args, **kwargs):
         """
-        Run a sync I/O-bound function in a background thread inside an async context.
-        Equivalent to asyncio.to_thread(func, *args, **kwargs).
+        Run a synchronous I/O-bound function in a background thread inside an async context.
+
+        Usage:
+            result = await executor.io_to_thread(sync_io_func, arg1, arg2)
+
+        Notes:
+        - Equivalent to `asyncio.to_thread`.
+        - Useful for blocking I/O (file, network) inside async code.
         """
+        
         return await asyncio.to_thread(func, *args, **kwargs)
 
     async def read_json(self, path):
         """
-        Read JSON from `path` in a non-blocking way.
-        Works correctly in async context by running in a thread.
+        Read JSON from disk in a non-blocking async-safe way.
+
+        Usage:
+            data = await executor.read_json("file.json")
+
+        Notes:
+        - Runs file I/O in a background thread to avoid blocking the event loop.
         """
         
         def _read():
@@ -783,8 +812,14 @@ class Executor:
 
     async def write_json(self, path, data):
         """
-        Write JSON to `path` in a non-blocking way.
-        Works correctly in async context by running in a thread.
+        Write JSON to disk in a non-blocking async-safe way.
+
+        Usage:
+            await executor.write_json("file.json", data)
+
+        Notes:
+        - Runs file I/O in a background thread to avoid blocking the event loop.
+        - Creates parent directories automatically.
         """
         
         def _write():
@@ -800,6 +835,31 @@ executor = Executor()
 ##########################################################################################
 # EXECUTOR HELPERS
 ##########################################################################################
+
+async def safe_session_get(session, url, **kwargs):
+    """
+    Unified GET request that works for both sync and async sessions.
+
+    Usage:
+        # In async context:
+        resp = await safe_session_get(session, url)
+
+        # In sync context:
+        resp = executor.run_blocking(safe_session_get(session, url))
+    
+    Automatically detects:
+    - If the session method is async → awaits it.
+    - If the session method is sync → runs in a thread (via executor.call_appropriately()).
+    """
+    
+    method = session.get
+
+    # Check if the session.get is a coroutine function (async)
+    if inspect.iscoroutinefunction(method):
+        return await method(url, **kwargs)
+    else:
+        # Sync function → run in executor thread
+        return await executor.call_appropriately(method, url, **kwargs)
 
 async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True, dynamic_sleep_requester: str = None):
     """
@@ -825,7 +885,7 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
         float: The sleep duration actually used.
     """
     
-    dynamic_sleep_requester = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+    dynamic_sleep_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     try:
         asyncio.get_running_loop()

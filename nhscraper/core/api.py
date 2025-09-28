@@ -60,22 +60,12 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
         backend: str
             - "cloudscraper" → use cloudscraper session (existing behavior)
             - "aiohttp" → use aiohttp session (new backend)
-
-    Notes on executor usage:
-        - Blocking operations (e.g., `cloudscraper.create_scraper`) are executed
-          via `await executor.call_appropriately(func, *args)` to avoid blocking the event loop.
-        - execute-and-forget operations (e.g., updating session headers) are executed
-          via `await executor.call_appropriately(func, *args)`.
-
-    Returns:
-        The ready session object.
     """
 
     global session
     fetch_env_vars()  # Refresh env vars in case config changed.
     
-    # Try module-level _module_referrer variable first
-    session_requester = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+    session_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     # Log intent
     if status == "none":
@@ -110,7 +100,7 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
         # Create or rebuild session if needed (blocking)
         if session is None or status == "rebuild":
             if backend == "aiohttp":  # aiohttp / aiohttp_socks session for get_tor_ip()
-                log(f"{log_msg_pre} HTTP session with aiohttp for {session_requester}", "debug")
+                log(f"{log_msg_pre} session with aiohttp for {session_requester}", "debug")
                 
                 connector = None
                 if use_tor: # Update proxies
@@ -118,20 +108,20 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
                     connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
                 
                     session = aiohttp.ClientSession(connector=connector)
-                    log(f"{log_msg_post} Proxied Cloudscraper HTTP session for {session_requester}: {session}", "debug")
+                    log(f"{log_msg_post} Proxied AIOHTTP session for {session_requester}: {session}", "debug")
                     
                 else:
                     session = aiohttp.ClientSession(connector=connector)
-                    log(f"{log_msg_post} Proxied Cloudscraper HTTP session for {session_requester}: {session}", "debug")
+                    log(f"{log_msg_post} AIOHTTP session for {session_requester}: {session}", "debug")
 
             else:  # Default to cloudscraper session
                 log(f"{log_msg_pre} session with Cloudscraper for {session_requester}", "debug")
                 
                 # Ensure the returned value is a proper session
-                temp_session = await executor.call_appropriately(lambda: cloudscraper.create_scraper(browser_profile))
+                temp_session = await executor.call_appropriately(cloudscraper.create_scraper, browser_profile)
                 
                 if temp_session is None:
-                    raise RuntimeError(f"Failed to create Cloudscraper HTTP session for {session_requester}")
+                    raise RuntimeError(f"Failed to create Cloudscraper session for {session_requester}")
                 
                 if use_tor: # Update proxies
                     # (blocking; need result immediately)
@@ -146,14 +136,14 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
                                 return None
                         return None  # aiohttp proxies handled via connector
 
-                    # Use executor.call_appropriately() properly
+                    # Ensure the returned value is a proper proxied session
                     temp_proxy = await executor.call_appropriately(_update_proxies, temp_session, use_tor)
 
                     if temp_proxy is None:
                         raise RuntimeError(f"Failed to initialise proxy for {session_requester}")
                 
                 session = temp_session
-                log(f"{log_msg_post} {'Proxied ' if use_tor else ''}Cloudscraper HTTP session for {session_requester}: {session}", "debug")
+                log(f"{log_msg_post} {'Proxied ' if use_tor else ''}Cloudscraper session for {session_requester}: {session}", "debug")
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -177,7 +167,7 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
         ]
         referer = random.choice(referers) if RandomiseReferer else DefaultReferer
 
-        # Update headers (execute-and-forget)
+        # Update headers (fire-and-forget)
         def _update_session_headers(s, headers):
             if backend == "aiohttp":
                 s._default_headers.update(headers)
@@ -190,7 +180,7 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": referer,
         }
-        await executor.call_appropriately(lambda: _update_session_headers(session, headers))
+        await executor.call_appropriately(_update_session_headers, session, headers)
 
         # Log completion
         log(f"{log_msg_post} HTTP session for {session_requester}", "debug")
@@ -208,8 +198,7 @@ def get_meta_tags(meta, tag_type, meta_tag_requester: str = None):
     - Returns [] if none found.
     """
     
-    # Try module-level _module_referrer variable first
-    meta_tag_requester = globals().get("_module_referrer") or globals().get(__name__) or DEFAULT_REFERRER
+    meta_tag_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     if not meta or "tags" not in meta:
         return []
@@ -220,7 +209,7 @@ def get_meta_tags(meta, tag_type, meta_tag_requester: str = None):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
             
-    log_clarification("deug")
+    log_clarification("debug")
     log(f"{meta_tag_requester}: Requested Metadata Tags: {names}")
 
     return names
@@ -438,7 +427,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     # Execute async request in thread (capped by number of gallery threads)
-                    resp = await executor.call_appropriately(gallery_ids_session.get, url, timeout=10)
+                    resp = await safe_session_get(gallery_ids_session.get, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
@@ -472,7 +461,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                             
                             # Execute async request in thread (capped by number of gallery threads)
                             try:
-                                resp = await executor.call_appropriately(gallery_ids_session.get, url, timeout=10)
+                                resp = await safe_session_get(gallery_ids_session.get, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
@@ -488,7 +477,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                 continue  # skip this page if no success
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = await executor.call_appropriately(lambda: resp.json())
+            data = await executor.call_appropriately(resp.json)
             log(f"Fetcher: HTTP Response JSON: {data}", "debug")
             batch = [g["id"] for g in data.get("result", [])]
             log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
@@ -567,7 +556,7 @@ async def fetch_gallery_metadata(gallery_id: int):
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
             # Execute async request in thread (capped by number of gallery threads)
-            resp = await executor.call_appropriately(metadata_session.get, url, timeout=10)
+            resp = await safe_session_get(metadata_session.get, url, timeout=10)
             status_code = getattr(resp, "status_code", None)
 
             if status_code == 429:
@@ -587,7 +576,7 @@ async def fetch_gallery_metadata(gallery_id: int):
                 raise
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = await executor.call_appropriately(lambda: resp.json())
+            data = await executor.call_appropriately(resp.json)
 
             if not isinstance(data, dict):
                 log(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}", "error")
@@ -610,10 +599,10 @@ async def fetch_gallery_metadata(gallery_id: int):
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:
-                        resp = await executor.call_appropriately(metadata_session.get, url, timeout=10)
+                        resp = await safe_session_get(metadata_session.get, url, timeout=10)
                         
                         await executor.call_appropriately(resp.raise_for_status)
-                        return await executor.call_appropriately(lambda: resp.json())
+                        return await executor.call_appropriately(resp.json)
                     
                     except Exception as e2:
                         log(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}", "warning")
@@ -664,7 +653,7 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
             return r.json().get("origin")
 
         try:
-            return await executor.run_blocking(_cloudscraper_check())
+            return await executor.run_blocking(_cloudscraper_check)
         
         except Exception as e:
             return f"Error: {e}"

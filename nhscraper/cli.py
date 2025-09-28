@@ -381,7 +381,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        result = executor.run_blocking(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
+        result = executor.run_blocking(fetch_gallery_ids, query_lower, name, sort_val, start_page, end_page)
         if result:
             gallery_ids.update(result)
 
@@ -542,7 +542,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    session = executor.run_blocking(get_session(status="build"))
+    session = executor.run_blocking(get_session, status="build")
     
     # Build Gallery List (make sure not empty.)
     log_clarification()

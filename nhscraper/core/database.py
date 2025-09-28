@@ -11,7 +11,7 @@ from nhscraper.core.orchestrator import *
 
 """
 Database management layer for the downloader.
-Handles initialization, migrations, inserts, updates,
+Handles initialisation, migrations, inserts, updates,
 and queries related to galleries, images, and metadata.
 """
 

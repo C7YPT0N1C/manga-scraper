@@ -50,7 +50,8 @@ async def load_local_manifest():
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         log("Local manifest not found. Creating from remote...", "warning")
         await update_local_manifest_from_remote()
-    async with executor.executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+    
+    async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -58,8 +59,7 @@ async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
     
     executor.spawn_task(
-        lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2),
-        type="io"
+        lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     )
 
 async def fetch_remote_manifest():
@@ -96,7 +96,7 @@ async def update_local_manifest_from_remote():
     remote_manifest = await fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
-        local_manifest = executor.run_blocking(load_local_manifest)
+        local_manifest = await load_local_manifest
 
     local_names = [ext["name"] for ext in local_manifest.get("extensions", [])]
 
@@ -116,7 +116,7 @@ async def update_local_manifest_from_remote():
 async def _reload_extensions():
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    return executor.run_blocking(load_local_manifest)
+    return await load_local_manifest
 
 # ------------------------------------------------------------
 # Sparse clone repo (blocking, offloaded)
@@ -154,7 +154,7 @@ async def load_installed_extensions(suppess_pre_run_hook: bool = False):
 
     with installed_extensions_lock:
         INSTALLED_EXTENSIONS.clear()
-        manifest = executor.run_blocking(load_local_manifest)
+        manifest = await load_local_manifest
 
         for ext in manifest.get("extensions", []):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -254,7 +254,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
 
 
 async def uninstall_selected_extension(extension_name: str):
-    manifest = executor.run_blocking(load_local_manifest)
+    manifest = await load_local_manifest
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
         log(f"Extension '{extension_name}': Not installed", "warning")
@@ -282,7 +282,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
 
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    manifest = executor.run_blocking(load_local_manifest)
+    manifest = await load_local_manifest
 
     skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
