@@ -76,7 +76,10 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
     async with session_lock:
         # Return current session if no build/rebuild requested
         if status not in ["build", "rebuild"]:
-            return session
+            if session is None:
+                status = "build"
+            else:
+                return session
 
         # Log if building or rebuilding
         log_msg_pre = "Reinitialising" if status == "rebuild" else "Initialising"
@@ -408,7 +411,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session(status="rebuild")
+    gallery_ids_session = await get_session(status="return")
 
     try:
         log_clarification("debug")
@@ -549,7 +552,7 @@ async def fetch_gallery_metadata(gallery_id: int):
     """
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    metadata_session = await get_session(status="rebuild")
+    metadata_session = await get_session(status="return")
 
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
