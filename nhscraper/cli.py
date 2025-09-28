@@ -484,8 +484,6 @@ def update_config(args):
     update_env("DEBUG", args.debug)
     
     fetch_env_vars() # Refresh env vars in case config changed.
-    
-    log(f"Updated Config:\n{config}", "debug")
 
 # ------------------------------------------------------------
 # Main
