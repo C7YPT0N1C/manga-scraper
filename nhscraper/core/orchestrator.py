@@ -722,7 +722,7 @@ class Executor:
         Accepts the function + arguments directly; wraps in lambda internally.
         """
         
-        referrer_blocking = get_caller_module_name(frame_num=3) # Retrieve calling module's '_module_referrer' variable
+        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         # Wrap everything in a zero-arg callable
         if inspect.iscoroutinefunction(func):
