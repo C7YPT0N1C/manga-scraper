@@ -247,18 +247,18 @@ range_start = DEFAULT_RANGE_START
 DEFAULT_RANGE_END = 600000
 range_end = DEFAULT_RANGE_END
 
-DEFAULT_GALLERIES = ""
+DEFAULT_GALLERIES = []
 galleries = DEFAULT_GALLERIES
 
 
 # ------------------------------------------------------------
 # Filters
 # ------------------------------------------------------------
-DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore"
+DEFAULT_EXCLUDED_TAGS = ["snuff", "cuntboy", "guro", "cuntbusting", "scat", "coprophagia", "ai generated", "vore"]
 # normalised into a list at import
 excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
 
-DEFAULT_LANGUAGE = "english"
+DEFAULT_LANGUAGE = ["english"]
 # normalised into a list at import
 language = [DEFAULT_LANGUAGE.lower()]
 
