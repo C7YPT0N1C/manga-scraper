@@ -17,7 +17,7 @@ the overall sequencing of gallery and image downloads.
 Refer to 'Docs.txt' for a guide to using the executor functions.
 """
 
-module_referrer=f"Orchestrator" # Used in executor.* calls
+_module_referrer=f"Orchestrator" # Used in executor.* calls
 DEFAULT_REFERRER = "Undisclosed Module"
 
 ##########################################################################################
@@ -542,27 +542,33 @@ def get_valid_sort_value(sort_value):
     
     return valid_sort_value
 
-def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER): # NOTE: Figure this shit out
+def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
     """
-    When called by a function (FunctionA), retrieve's the calling function's (FunctionB) module's '_module_referrer' variable
+    When called by a function (FunctionA), retrieves the calling function's (FunctionB)
+    module's '_module_referrer' variable, or the clean module name.
+
+    Strips any 'nhscraper.*.' prefix, leaving only the final part of the module path.
     """
-    
     frame = inspect.currentframe()
     try:
-        # Go up each frame (up to frame_num times) till we get to the caller function (usually 2)
+        # Step back through frames
         caller_frame = frame
         for _ in range(frame_num):
             if caller_frame.f_back is None:
                 break
-            
             caller_frame = caller_frame.f_back
-        
+
         module = inspect.getmodule(caller_frame)
         if module:
-            return getattr(module, "_module_referrer", module.__name__)
+            # Prefer explicit _module_referrer if defined
+            ref = getattr(module, "_module_referrer", module.__name__)
+            # Strip nhscraper.*. → keep last part only
+            if ref.startswith("nhscraper."):
+                ref = ref.split(".")[-1]
+            return ref
         return default
     finally:
-        del frame # avoid reference cycles
+        del frame  # avoid reference cycles
 
 ##########################################################################################
 # EXECUTOR
