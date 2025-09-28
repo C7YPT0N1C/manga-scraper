@@ -65,7 +65,7 @@ async def get_session(status: str = "rebuild", backend: str = "cloudscraper", se
     global session
     fetch_env_vars()  # Refresh env vars in case config changed.
     
-    session_requester = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
+    session_requester = get_caller_module_name(frame_num=3) # Retrieve calling module's '_module_referrer' variable
     
     # Log intent
     if status == "none":
