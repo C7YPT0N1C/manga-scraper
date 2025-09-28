@@ -313,7 +313,7 @@ def getenv_numeric_value(key, default):
     return float(val)
 
 # ------------------------------------------------------------
-# Config Dictionary
+# Config Dictionary / Serialisation / Normalisation Helpers
 # ------------------------------------------------------------
 
 # Also change corresponding parser.add_argument in CLI
@@ -325,34 +325,81 @@ if isinstance(MIRRORS_ENV, str):
 else:
     MIRRORS_LIST = list(MIRRORS_ENV)
 
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("true")
+
 def parse_list_of_ints(value):
-    if isinstance(value, str):
+    if isinstance(value, list):
+        return [int(v) for v in value]
+    if isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
                 return [int(v) for v in parsed]
         except Exception:
             return [int(v.strip()) for v in value.strip("[]").split(",") if v.strip()]
-    elif isinstance(value, list):
-        return [int(v) for v in value]
     return []
 
 def parse_list_of_str(value):
-    if isinstance(value, str):
+    if isinstance(value, list):
+        return [str(v).lower() for v in value]
+    if isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
                 return [str(v).lower() for v in parsed]
         except Exception:
             return [v.strip().lower() for v in value.strip("[]").split(",") if v.strip()]
-    elif isinstance(value, list):
-        return [str(v).lower() for v in value]
     return []
 
-def parse_bool(value):
+def serialise_value(key, value):
+    """Serialise Python value to .env-compatible string."""
     if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in ("true")
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, dict)):
+        return json.dumps(value) # Save lists/dicts as JSON
+    return str(value)
+
+
+def normalise_value(key, value):
+    """Convert .env string back to proper Python type."""
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
+        return parse_bool(value)
+    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
+        return int(value)
+    if key in ("MIN_SLEEP", "MAX_SLEEP"):
+        return float(value)
+    if key in ("GALLERIES",):
+        return parse_list_of_ints(value)
+    if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS"):
+        return parse_list_of_str(value)
+    
+    # Default: return as string
+    return str(value)
+
+def update_env(key, value):
+    """
+    Update a single variable in the .env file safely under lock.
+    Uses proper serialization + normalization.
+    """
+    def _update():
+        if not os.path.exists(ENV_FILE):
+            with open(ENV_FILE, "w") as f:
+                f.write("")
+
+        serialized = serialise_value(key, value)
+
+        # Safely update .env
+        set_key(ENV_FILE, key, serialized)
+
+        # Update runtime config with normalized value
+        config[key] = normalise_value(key, value)
+
+    with_env_lock(_update)
 
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
@@ -386,31 +433,33 @@ config = {
     "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
 }
 
-##################
-
 # ------------------------------------------------------------
 # Normalise config with defaults
 # ------------------------------------------------------------
 def normalise_config():
+    """
+    Apply defaults and populate config + .env.
+    Does not overwrite non-empty existing values.
+    """
     log_clarification("debug")
     log("Populating Config...", "debug")
-    
+
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
         "EXTENSION": DEFAULT_EXTENSION,
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
-        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+        "NHENTAI_MIRRORS": [DEFAULT_NHENTAI_MIRRORS],
         "PAGE_SORT": DEFAULT_PAGE_SORT,
         "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
         "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
         "RANGE_START": DEFAULT_RANGE_START,
         "RANGE_END": DEFAULT_RANGE_END,
         "GALLERIES": DEFAULT_GALLERIES,
-        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
-        "LANGUAGE": DEFAULT_LANGUAGE,
-        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+        "EXCLUDED_TAGS": [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",")],
+        "LANGUAGE": [DEFAULT_LANGUAGE.lower()],
+        "TITLE_TYPE": DEFAULT_TITLE_TYPE.lower(),
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
@@ -424,78 +473,14 @@ def normalise_config():
     }
 
     for key, default_val in defaults.items():
-        val = config.get(key)
-        if val is None or (isinstance(val, str) and val.strip() == ""):
-            config[key] = default_val
+        current_val = config.get(key)
+        if current_val in (None, "", []):
             update_env(key, default_val)
 
 # normalise_config() is called by CLI to normalise and populate .env
-
-# ------------------------------------------------------------
-# Update .env safely
-# ------------------------------------------------------------
-
-def serialise_value(key: str, value):
-    """
-    Convert Python values into .env-compatible strings.
-    Ensures clean round-tripping between save/load.
-    """
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (list, dict)):
-        return json.dumps(value)  # Save lists/dicts as JSON
-    return str(value)
-
-def normalise_value(key: str, value):
-    """
-    Normalise values from .env/config to consistent runtime types.
-    Handles JSON, booleans, ints, floats, lists, and strings.
-    """
-    if key == "NHENTAI_MIRRORS":
-        return config["NHENTAI_MIRRORS"]
-    
-    if key == "GALLERIES":
-        return parse_list_of_ints(value)
-
-    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
-        return parse_list_of_str(value)
-
-    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
-        return int(value)
-
-    if key in ("MIN_SLEEP", "MAX_SLEEP"):
-        return float(value)
-
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
-        return parse_bool(value)
-
-    # Default: return as string
-    return str(value)
-
-def update_env(key, value):
-    """
-    Update a single variable in the .env file safely under lock.
-    Uses proper serialization + normalization.
-    """
-    def _update():
-        if not os.path.exists(ENV_FILE):
-            with open(ENV_FILE, "w") as f:
-                f.write("")
-
-        serialized = serialise_value(key, value)
-
-        # Safely update .env
-        set_key(ENV_FILE, key, serialized)
-
-        # Update runtime config with normalized value
-        config[key] = normalise_value(key, value)
-
-    with_env_lock(_update)
     
 def fetch_env_vars():
-    """
-    Refresh runtime globals from current config values.
-    """
+    """Populate global variables from config, normalising types."""
     def _update_globals():
         global download_path, doujin_txt_path, extension, extension_download_path
         global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
@@ -503,37 +488,9 @@ def fetch_env_vars():
         global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
         global use_tor, skip_post_run, dry_run, calm, debug
 
-        for key in [
-            "DOWNLOAD_PATH",
-            "DOUJIN_TXT_PATH",
-            "EXTENSION",
-            "EXTENSION_DOWNLOAD_PATH",
-            "NHENTAI_API_BASE",
-            "NHENTAI_MIRRORS",
-            "PAGE_SORT",
-            "PAGE_RANGE_START",
-            "PAGE_RANGE_END",
-            "RANGE_START",
-            "RANGE_END",
-            "GALLERIES",
-            "EXCLUDED_TAGS",
-            "LANGUAGE",
-            "TITLE_TYPE",
-            "THREADS_GALLERIES",
-            "THREADS_IMAGES",
-            "MAX_RETRIES",
-            "MIN_SLEEP",
-            "MAX_SLEEP",
-            "USE_TOR",
-            "SKIP_POST_RUN",
-            "DRY_RUN",
-            "CALM",
-            "DEBUG",
-        ]:
-            if key not in config:
-                continue # skip missing keys instead of forcing defaults
+        for key in config.keys():
             globals()[key.lower()] = normalise_value(key, config[key])
-    
+
     # Execute the update under the lock
     with_env_lock(_update_globals)
     
