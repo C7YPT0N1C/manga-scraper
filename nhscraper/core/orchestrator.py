@@ -316,15 +316,6 @@ def getenv_numeric_value(key, default):
 # Config Dictionary / Serialisation / Normalisation Helpers
 # ------------------------------------------------------------
 
-# Also change corresponding parser.add_argument in CLI
-
-# NHENTAI_MIRRORS: always a list
-MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
-if isinstance(MIRRORS_ENV, str):
-    MIRRORS_LIST = [m.strip() for m in MIRRORS_ENV.split(",") if m.strip()]
-else:
-    MIRRORS_LIST = list(MIRRORS_ENV)
-
 def parse_bool(value):
     if isinstance(value, bool):
         return value
@@ -355,7 +346,7 @@ def parse_list_of_str(value):
     return []
 
 def serialise_value(key, value):
-    """Serialize Python value to .env-compatible string."""
+    """Serialise Python value to .env-compatible string."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
@@ -379,12 +370,7 @@ def normalise_value(key, value):
     if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS"):
         return parse_list_of_str(value)
     
-    for key, default_val in defaults.items():
-        current_val = config.get(key)
-        if current_val in (None, "", []):
-            update_env(key, default_val)
-    
-    # Default: return as string
+    # Default: just return as string
     return str(value)
 
 def update_env(key, value):
@@ -406,6 +392,15 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
+
+# Also change corresponding parser.add_argument in CLI
+
+# NHENTAI_MIRRORS: always a list
+MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+if isinstance(MIRRORS_ENV, str):
+    MIRRORS_LIST = parse_list_of_str(os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS))
+else:
+    MIRRORS_LIST = MIRRORS_ENV
 
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
@@ -511,14 +506,14 @@ def init_scraper(gallery_list):
     update_env("GALLERIES", gallery_list) # Immediately update config with built gallery list
     
     if threads_galleries is None or threads_images is None:
-        threads_galleries = max(DEFAULT_THREADS_GALLERIES, int(gallery_list / 500) + 1)
+        threads_galleries = max(DEFAULT_THREADS_GALLERIES, int(len(gallery_list) / 500) + 1)
         threads_images = max(DEFAULT_THREADS_IMAGES, threads_galleries * 5)
         
         if debug:
             log(f"→ Optimised Threads: {threads_galleries} gallery, {threads_images} image", "debug")
         
-        update_env("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
-        update_env("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+    update_env("THREADS_GALLERIES", threads_galleries)
+    update_env("THREADS_IMAGES", threads_images)
 
 def get_valid_sort_value(sort_value):
     fetch_env_vars() # Refresh env vars in case config changed.
