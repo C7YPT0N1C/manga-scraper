@@ -359,16 +359,17 @@ def serialise_value(key, value):
 
 def normalise_value(key, value):
     """Convert .env string back to proper Python type."""
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
-        return parse_bool(value)
+    
+    if key in ("NHENTAI_MIRRORS", "EXCLUDED_TAGS", "LANGUAGE"):
+        return parse_list_of_str(value)
+    if key in ("GALLERIES",):
+        return parse_list_of_ints(value)
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
         return int(value)
     if key in ("MIN_SLEEP", "MAX_SLEEP"):
         return float(value)
-    if key in ("GALLERIES",):
-        return parse_list_of_ints(value)
-    if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS"):
-        return parse_list_of_str(value)
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
+        return parse_bool(value)
     
     # Default: just return as string
     return str(value)
