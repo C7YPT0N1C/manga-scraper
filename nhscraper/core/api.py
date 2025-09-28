@@ -65,6 +65,8 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
     global session
     fetch_env_vars()  # Refresh env vars in case config changed.
     
+    log(f"USE TOR: {use_tor}", "debug")
+    
     session_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     # Log intent
@@ -413,7 +415,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
 
     gallery_ids_session = await get_session() # Get current session
     
-    log(f"gallery_ids_session = {gallery_ids_session} ({type(gallery_ids_session)})", "debug")
+    log(f"gallery_ids_session = {gallery_ids_session} ({type(gallery_ids_session)})", "debug") # NOTE: DEBUGGING
 
     try:
         log_clarification("debug")
@@ -556,7 +558,7 @@ async def fetch_gallery_metadata(gallery_id: int):
 
     metadata_session = await get_session() # Get current session
     
-    log(f"metadata_session = {metadata_session} ({type(metadata_session)})", "debug")
+    log(f"metadata_session = {metadata_session} ({type(metadata_session)})", "debug") # NOTE: DEBUGGING
 
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
