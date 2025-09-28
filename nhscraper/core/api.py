@@ -74,12 +74,12 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
         log(f"{session_requester}: Requesting to {status} session.", "debug")
 
     async with session_lock:
-        # Return current session if no build/rebuild requested
+        # Default to returning the current session if it exists (if no build/rebuild requested)
         if status not in ["build", "rebuild"]:
             if session is None:
-                status = "build"
+                status = "build" # If the current session doesn't exist, build it.
             else:
-                return session
+                return session # Returning the current session.
 
         # Log if building or rebuilding
         log_msg_pre = "Reinitialising" if status == "rebuild" else "Initialising"
@@ -411,7 +411,9 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session()
+    gallery_ids_session = await get_session() # Get current session
+    
+    log(f"gallery_ids_session = {gallery_ids_session} ({type(gallery_ids_session)})", "debug")
 
     try:
         log_clarification("debug")
@@ -552,7 +554,9 @@ async def fetch_gallery_metadata(gallery_id: int):
     """
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    metadata_session = await get_session()
+    metadata_session = await get_session() # Get current session
+    
+    log(f"metadata_session = {metadata_session} ({type(metadata_session)})", "debug")
 
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
