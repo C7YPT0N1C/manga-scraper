@@ -70,9 +70,6 @@ async def get_session(referrer = None, status: str = "rebuild", backend: str = "
     Returns:
         The ready session object.
     """
-    
-    log_clarification("debug")
-    log("Fetcher: Debugging Started.", "debug")
 
     global session
     fetch_env_vars()  # Refresh env vars in case config changed.
