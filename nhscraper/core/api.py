@@ -68,6 +68,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
     session_requester = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     # Log intent
+    log_clarification()
     if status == "none":
         log(f"{session_requester}: Requesting to only retrieve session.", "debug")
     else:
