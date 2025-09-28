@@ -256,11 +256,11 @@ galleries = DEFAULT_GALLERIES
 # ------------------------------------------------------------
 DEFAULT_EXCLUDED_TAGS = ["snuff", "cuntboy", "guro", "cuntbusting", "scat", "coprophagia", "ai generated", "vore"]
 # normalised into a list at import
-excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
+excluded_tags = DEFAULT_EXCLUDED_TAGS
 
 DEFAULT_LANGUAGE = ["english"]
 # normalised into a list at import
-language = [DEFAULT_LANGUAGE.lower()]
+language = DEFAULT_LANGUAGE
 
 DEFAULT_TITLE_TYPE = "english"
 title_type = DEFAULT_TITLE_TYPE.lower()
