@@ -542,7 +542,7 @@ def get_valid_sort_value(sort_value):
     
     return valid_sort_value
 
-def get_caller_module_name(frame_num: int = 3, default=DEFAULT_REFERRER):
+def get_caller_module_name(frame_num: int = 4, default=DEFAULT_REFERRER):
     """
     When called by a function (FunctionA), retrieve's the calling function's (FunctionB) module's '_module_referrer' variable
     """
@@ -692,7 +692,7 @@ class Executor:
         - For synchronous functions in async context, use `call_appropriately`.
         """
         
-        referrer_async = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -716,7 +716,7 @@ class Executor:
         """
         
         if referrer is None:
-            referrer = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+            referrer = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
 
         try:
             asyncio.get_running_loop()
@@ -748,7 +748,7 @@ class Executor:
     def sleep_sync(self, seconds: float):
         """Block the current thread for `seconds` (sync sleep)."""
         
-        referrer_blocking = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         log(f"{referrer_blocking}: Sleeping for {seconds}s")
         time.sleep(seconds)
@@ -756,7 +756,7 @@ class Executor:
     async def sleep_async(self, seconds: float):
         """Async sleep for `seconds`, yielding to event loop."""
         
-        referrer_async = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         log(f"{referrer_async}: Sleeping for {seconds}s")
         await asyncio.sleep(seconds)
@@ -868,7 +868,7 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     """
     
     if stage == None:
-        stage = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+        stage = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     try:
         asyncio.get_running_loop()
