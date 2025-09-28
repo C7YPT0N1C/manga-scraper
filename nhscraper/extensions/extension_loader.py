@@ -6,7 +6,6 @@ import threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Mod
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
-from nhscraper.core.helper import *
 from nhscraper.extensions import *  # Ensure extensions package is recognised
 
 """

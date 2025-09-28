@@ -12,7 +12,6 @@ from pathlib import Path
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
-from nhscraper.core.helper import *
 
 """
 Programmatic API for interacting with the downloader.

@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
-from nhscraper.core.helper import *
 from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title
 
 """
