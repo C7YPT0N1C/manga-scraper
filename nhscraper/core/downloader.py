@@ -324,8 +324,8 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
                     img_path = os.path.join(primary_folder, img_filename)
                     
-                    # Must not be async, use executor.run_blocking()
-                    downloader_session = executor.run_blocking(get_session, status="rebuild") # Use fresh session
+                    # Must not be async, use executor.call_appropriately()
+                    downloader_session = executor.call_appropriately(get_session, status="rebuild") # Use fresh session
 
                     # Build coroutine wrapper that will call extension hook via call_appropriately
                     async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator): 

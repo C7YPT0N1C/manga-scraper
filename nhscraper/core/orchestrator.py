@@ -821,27 +821,16 @@ executor = Executor()
 async def safe_session_get(session, url, **kwargs):
     """
     Unified GET request that works for both sync and async sessions.
-
-    Usage:
-        # In async context:
-        resp = await safe_session_get(session, url)
-
-        # In sync context:
-        resp = executor.run_blocking(safe_session_get(session, url))
-    
-    Automatically detects:
-    - If the session method is async → awaits it.
-    - If the session method is sync → runs in a thread (via executor.call_appropriately()).
+    Handles both requests/Cloudscraper (sync) and aiohttp (async).
     """
-    
     method = session.get
 
-    # Check if the session.get is a coroutine function (async)
-    if inspect.iscoroutinefunction(method):
-        return await method(url, **kwargs)
-    else:
-        # Sync function → run in executor thread
-        return await executor.call_appropriately(method, url, **kwargs)
+    # Always wrap so call_appropriately actually calls it
+    return await executor.call_appropriately(
+        lambda: method(url, **kwargs),
+        type="http",
+        referrer="safe_session_get"
+    )
 
 async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True, dynamic_sleep_requester: str = None):
     """
