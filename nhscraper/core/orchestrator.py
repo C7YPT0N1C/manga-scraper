@@ -474,7 +474,8 @@ def init_scraper(gallery_list):
         if debug:
             log(f"→ Optimised Threads: {threads_galleries} gallery, {threads_images} image", "debug")
         
-        update_env()
+        update_env("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+        update_env("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
 
 def fetch_env_vars():
     """
