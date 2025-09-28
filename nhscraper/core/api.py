@@ -408,7 +408,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session(status="return")
+    gallery_ids_session = await get_session(status="rebuild")
 
     try:
         log_clarification("debug")
@@ -549,7 +549,7 @@ async def fetch_gallery_metadata(gallery_id: int):
     """
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    metadata_session = await get_session(status="return")
+    metadata_session = await get_session(status="rebuild")
 
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
