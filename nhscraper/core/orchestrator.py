@@ -325,6 +325,30 @@ if isinstance(MIRRORS_ENV, str):
 else:
     MIRRORS_LIST = list(MIRRORS_ENV)
 
+def parse_list_of_ints(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [int(v) for v in parsed]
+        except Exception:
+            return [int(v.strip()) for v in value.split(",") if v.strip()]
+    elif isinstance(value, list):
+        return [int(v) for v in value]
+    return []
+
+def parse_list_of_str(value):
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(v).lower() for v in parsed]
+        except Exception:
+            return [v.strip().lower() for v in value.split(",") if v.strip()]
+    elif isinstance(value, list):
+        return [str(v).lower() for v in value]
+    return []
+
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
@@ -332,29 +356,29 @@ config = {
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "PAGE_SORT": os.getenv("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "PAGE_SORT": os.getenv("PAGE_SORT", DEFAULT_PAGE_SORT),
     "PAGE_RANGE_START": getenv_numeric_value("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
     "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
     "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
     "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
-    "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
+    "GALLERIES": parse_list_of_ints(os.getenv("GALLERIES", DEFAULT_GALLERIES)),
     "ARTIST": os.getenv("ARTIST", ""),
     "GROUP": os.getenv("GROUP", ""),
     "TAG": os.getenv("TAG", ""),
     "PARODY": os.getenv("PARODY", ""),
-    "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
-    "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
+    "EXCLUDED_TAGS": parse_list_of_str(os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)),
+    "LANGUAGE": parse_list_of_str(os.getenv("LANGUAGE", DEFAULT_LANGUAGE)),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
     "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "MIN_SLEEP": getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP),
     "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
-    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "false",
-    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "false",
-    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "false",
-    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "false",
-    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "false",
+    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() in ("true"),
+    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() in ("true"),
+    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() in ("true"),
+    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() in ("true"),
+    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() in ("true"),
 }
 
 ##################
@@ -460,7 +484,7 @@ def normalise_value(key: str, value):
     if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
         if isinstance(value, bool):
             return value
-        return str(value).strip().lower() in ("1", "true", "yes")
+        return str(value).strip().lower() in ("true")
 
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
         return int(value)
