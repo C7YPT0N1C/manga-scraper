@@ -564,7 +564,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    start_downloader(gallery_list) # Start download
+    executor.run_blocking(start_downloader, gallery_list) # Start download
 
 if __name__ == "__main__":
     main()
