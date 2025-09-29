@@ -55,12 +55,11 @@ async def load_local_manifest():
 
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
-
     def write_manifest():
         with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    executor.spawn_task(write_manifest, type="io")
+    await executor.io_to_thread(write_manifest, type="io")
 
 async def fetch_remote_manifest():
     """
@@ -291,9 +290,9 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
                 # sync install: run in thread (use call_appropriately from executor)
                 log(f"Extension '{extension_name}': Running sync install_extension() in thread", "debug")
                 await executor.call_appropriately(install_obj)
-            log(f"Extension '{extension_name}': install_extension ran successfully.", "info")
+            log(f"Extension '{extension_name}': Installed successfully.", "info")
         except Exception as e:
-            log(f"Extension '{extension_name}': install_extension failed: {e}", "error")
+            log(f"Extension '{extension_name}': Install failed: {e}", "error")
             return
 
     # Mark installed and persist manifest
