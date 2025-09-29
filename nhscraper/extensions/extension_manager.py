@@ -337,7 +337,7 @@ async def uninstall_selected_extension(extension_name: str):
     module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
-        executor.run_blocking(module.uninstall_extension)
+        await executor.run_blocking(module.uninstall_extension)
         log(f"Uninstalled extension '{extension_name}' successfully.", "warning")
 
     ext_entry["installed"] = False
@@ -378,7 +378,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             if not suppess_pre_run_hook and hasattr(ext, "pre_run_hook"):
-                executor.run_blocking(ext.pre_run_hook)
+                await executor.run_blocking(ext.pre_run_hook)
                 log(f"Selected extension: {final_name}", "info")
             return ext
 
