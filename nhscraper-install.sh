@@ -391,7 +391,7 @@ start_install() {
             # Run nhentai-scraper commands after installation to initialise config, files, etc
             nhentai-scraper --help
             nhentai-scraper --install-extension skeleton
-            #nhentai-scraper --install-extension suwayomi
+            nhentai-scraper --install-extension suwayomi
 
             exit 0
             ;;

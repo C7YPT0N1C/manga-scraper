@@ -24,17 +24,17 @@ LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
 # Primary + backup manifest locations
 REMOTE_MANIFEST_URL = (
-    "https://code.zenithnetwork.online/C7YPT0N1C/"
-    "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
-)
-REMOTE_MANIFEST_BACKUP_URL = (
     "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
     "raw/main/master_manifest.json"
 )
+REMOTE_MANIFEST_BACKUP_URL = (
+    "https://code.zenithnetwork.online/C7YPT0N1C/"
+    "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+)
 
 # If the base repo URLs can also fail
-BASE_REPO_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
-BASE_REPO_BACKUP_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+BASE_REPO_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+BASE_REPO_BACKUP_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
 
 INSTALLED_EXTENSIONS = []
 installed_extensions_lock = threading.Lock()
@@ -71,7 +71,8 @@ async def fetch_remote_manifest():
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status == 200:
-                    return await resp.json()
+                    text = await resp.text()
+                    return json.loads(text)  # force JSON parse regardless of mimetype
                 raise Exception(f"HTTP {resp.status}")
 
     try:
@@ -96,7 +97,7 @@ async def update_local_manifest_from_remote():
     remote_manifest = await fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
-        local_manifest = await load_local_manifest
+        local_manifest = await load_local_manifest()
 
     local_names = [ext["name"] for ext in local_manifest.get("extensions", [])]
 
@@ -154,7 +155,7 @@ async def load_installed_extensions(suppess_pre_run_hook: bool = False):
 
     with installed_extensions_lock:
         INSTALLED_EXTENSIONS.clear()
-        manifest = await load_local_manifest
+        manifest = await load_local_manifest()
 
         for ext in manifest.get("extensions", []):
             ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
