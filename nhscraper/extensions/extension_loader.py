@@ -26,7 +26,7 @@ LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 PRIMARY_URL_BASE_REPO = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
 PRIMARY_URL_REMOTE_MANIFEST = (
     "https://raw.githubusercontent.com/C7YPT0N1C/nhentai-scraper-extensions/"
-    "refs/heads/main/master_manifest.json"
+    "main/master_manifest.json"
 )
 
 BACKUP_URL_BASE_REPO = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
@@ -51,7 +51,9 @@ async def load_local_manifest():
         await update_local_manifest_from_remote()
     
     async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return await executor.read_json(json.load, open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8"))
+    #with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+    #    return json.load(f)
 
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
@@ -91,7 +93,7 @@ async def fetch_remote_manifest():
             log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info")
             return data
         except Exception as e2:
-            log(f"Failed to fetch remote manifest from Backup Server: {e}", "warning")
+            log(f"Failed to fetch remote manifest from Backup Server: {e2}", "warning")
             return {"extensions": []}
 
 async def update_local_manifest_from_remote():
