@@ -50,8 +50,6 @@ async def load_local_manifest():
         log("Local manifest not found. Creating from remote...", "warning")
         await update_local_manifest_from_remote()
     
-    #async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
-    #    return await executor.read_json(json.load, open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8"))
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -88,6 +86,7 @@ async def fetch_remote_manifest():
     except Exception as e:
         log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
         try:
+            log_clarification()
             log(f"Attempting to fetch remote manifest from Backup Server...", "info")
             data = await _fetch(BACKUP_URL_REMOTE_MANIFEST)
             log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info")
