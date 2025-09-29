@@ -369,5 +369,3 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
 
     log("Failed to load the requested extension or skeleton!", "error")
     return None
-
-#executor.run_blocking(_reload_extensions)
