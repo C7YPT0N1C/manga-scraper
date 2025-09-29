@@ -8,7 +8,7 @@ from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.core.downloader import start_downloader
 from nhscraper.core.api import get_session, fetch_gallery_ids
-from nhscraper.extensions.extension_loader import get_selected_extension, uninstall_selected_extension
+from nhscraper.extensions.extension_manager import get_selected_extension, uninstall_selected_extension
 
 """
 Command-line interface for controlling the downloader.

@@ -13,7 +13,7 @@ from nhscraper.core.api import (
     get_session, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title
 )
-from nhscraper.extensions.extension_loader import get_selected_extension
+from nhscraper.extensions.extension_manager import get_selected_extension
 
 """
 Core download logic for galleries and images.

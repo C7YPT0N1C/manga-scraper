@@ -219,10 +219,10 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     
     ext_entry = next((ext for ext in manifest.get("extensions", []) if ext["name"] == extension_name), None)
     if not ext_entry:
-        log(f"Extension '{extension_name}': Not found in remote manifest", "error")
+        log(f"Extension '{extension_name}' not found in remote manifest", "error")
         return
     else:
-        log(f"Extension '{extension_name}': Found in remote manifest", "info")
+        log(f"Extension '{extension_name}' found in remote manifest", "info")
 
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
     
@@ -245,7 +245,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
 
     if ext_entry.get("installed", False):
         if remote_version and is_remote_version_newer(local_version, remote_version):
-            log(f"Extension '{extension_name}': Updating to {remote_version} from {local_version}", "warning")
+            log(f"Updating extension '{extension_name}' to {remote_version} from {local_version}", "warning")
             update_needed = True
         elif reinstall:
             update_needed = True
@@ -253,12 +253,12 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
         update_needed = True
 
     if not update_needed:
-        log(f"Extension '{extension_name}': Already installed and up-to-date", "warning")
+        log(f"Extension '{extension_name}' already installed and up-to-date", "warning")
         return
 
     repo_url = ext_entry.get("repo_url", "")
     if not repo_url:
-        log(f"Extension '{extension_name}': repo_url missing in manifest entry: {ext_entry!r}", "error")
+        log(f"Extension '{extension_name}' repo_url missing in manifest entry: {ext_entry!r}", "error")
         return
 
     # Ensure ext folder exists before cloning
@@ -291,7 +291,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
             cloned = False
 
     if not cloned:
-        log(f"Extension '{extension_name}': Clone failed, aborting installation.", "error")
+        log(f"Cloning extension '{extension_name}' failed, aborting installation.", "error")
         return
 
     # Import module
@@ -299,7 +299,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     try:
         module = importlib.import_module(module_name)
     except Exception as e:
-        log(f"Extension '{extension_name}': Import failed: {e}", "error")
+        log(f"Importing extension '{extension_name}' failed: {e}", "error")
         return
 
     # Call install_extension if present
@@ -308,37 +308,37 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
             install_obj = module.install_extension
             if inspect.iscoroutinefunction(install_obj):
                 # async install
-                log(f"Extension '{extension_name}': Running async install_extension()", "debug")
+                log(f"Running install for extension '{extension_name}'", "debug")
                 await install_obj()
             else:
                 # sync install: run in thread (use call_appropriately from executor)
-                log(f"Extension '{extension_name}': Running sync install_extension() in thread", "debug")
+                log(f"Running install for extension '{extension_name}'", "debug")
                 await executor.call_appropriately(install_obj)
-            log(f"Extension '{extension_name}': Installed successfully.", "info")
+            log(f"Installed extension '{extension_name}' successfully.", "info")
         except Exception as e:
-            log(f"Extension '{extension_name}': Install failed: {e}", "error")
+            log(f"Installing extension '{extension_name}' failed: {e}", "error")
             return
 
     # Mark installed and persist manifest
     try:
         ext_entry["installed"] = True
         await save_local_manifest(manifest)
-        log(f"Extension '{extension_name}': Installed and manifest updated.", "info")
+        log(f"Installed extension '{extension_name}' and updated manifest.", "info")
     except Exception as e:
-        log(f"Extension '{extension_name}': Failed to save local manifest after install: {e}", "error")
+        log(f"Failed to save local manifest after extension '{extension_name}' install: {e}", "error")
 
 async def uninstall_selected_extension(extension_name: str):
     manifest = await load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
-        log(f"Extension '{extension_name}': Not installed", "warning")
+        log(f"Extension '{extension_name}' not installed", "warning")
         return
 
     module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
         executor.run_blocking(module.uninstall_extension)
-        log(f"Extension '{extension_name}': Uninstalled successfully.", "warning")
+        log(f"Uninstalled extension '{extension_name}' successfully.", "warning")
 
     ext_entry["installed"] = False
     await save_local_manifest(manifest)
