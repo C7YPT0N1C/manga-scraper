@@ -27,7 +27,8 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
-EXTENSION_REFERRER = f"{EXTENSION_NAME.capitalize} Extension" # Used for printing the extension's name.
+EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize
+EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
@@ -193,7 +194,7 @@ def install_extension():
                         f.write(chunk)
 
             # Properly run async coroutine in sync function
-            executor.run_blocking(_download)
+            executor.call_appropriately(_download)
 
         with tarfile.open(tarball_path, "r:gz") as tar:
             members = tar.getmembers()
