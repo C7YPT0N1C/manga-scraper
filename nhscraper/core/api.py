@@ -434,7 +434,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     # Execute synchronous request
-                    resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
+                    resp = executor.call_appropriately(safe_session_get, gallery_ids_session, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
@@ -468,7 +468,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                             
                             # Execute synchronous request
                             try:
-                                resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
+                                resp = executor.call_appropriately(safe_session_get, gallery_ids_session, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
