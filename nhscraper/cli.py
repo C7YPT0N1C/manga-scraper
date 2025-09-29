@@ -521,11 +521,11 @@ def main():
     # Handle extension installation / uninstallation
     # ------------------------------------------------------------
     if args.install_extension:
-        install_selected_extension(args.install_extension)
+        executor.run_blocking(install_selected_extension, args.install_extension)
         return
     
     if args.uninstall_extension:
-        uninstall_selected_extension(args.uninstall_extension)
+        executor.run_blocking(uninstall_selected_extension, args.uninstall_extension)
         return
     
     logger.debug("CLI: Ready.")

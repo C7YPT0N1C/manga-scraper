@@ -224,7 +224,7 @@ extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE
 
-DEFAULT_NHENTAI_MIRRORS = ["https://i.nhentai.net"]
+DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"
 # normalised into a list at import
 nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 
@@ -563,7 +563,7 @@ def get_valid_sort_value(sort_value):
 def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
     """
     When called by a function (FunctionA), retrieves the calling function's (FunctionB)
-    module's '_module_referrer' variable, or the clean module name.
+    module's '_module_referrer' variable, or the clean module name by going back frame_num frames.
 
     Strips any 'nhscraper.*.' prefix, leaving only the final part of the module path.
     """
