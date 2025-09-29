@@ -128,7 +128,7 @@ async def _reload_extensions():
 # Sparse clone repo (blocking, offloaded)
 # ------------------------------------------------------------
 async def sparse_clone(extension_name: str, url: str):
-    async def _clone():
+    def _clone():
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
         try:
             subprocess.run(["git", "init", ext_folder], check=True, capture_output=True, text=True)
