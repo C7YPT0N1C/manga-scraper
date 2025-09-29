@@ -54,7 +54,6 @@ async def load_local_manifest():
     async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
     
@@ -88,7 +87,6 @@ async def fetch_remote_manifest():
             log(f"Failed to fetch backup manifest: {e2}", "error")
             return {"extensions": []}
 
-
 async def update_local_manifest_from_remote():
     """
     Merge remote manifest into local manifest, keeping installed flags intact.
@@ -110,14 +108,13 @@ async def update_local_manifest_from_remote():
     await save_local_manifest(local_manifest)
     return local_manifest
 
-
 # ------------------------------------------------------------
 # Refresh manifest and installed extensions
 # ------------------------------------------------------------
 async def _reload_extensions():
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    return await load_local_manifest
+    return await load_local_manifest()
 
 # ------------------------------------------------------------
 # Sparse clone repo (blocking, offloaded)
@@ -145,7 +142,6 @@ async def sparse_clone(extension_name: str, url: str):
         log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
     return executor.run_blocking(_clone)
-
 
 #######################################################################
 # Extension Loader
@@ -178,7 +174,6 @@ async def load_installed_extensions(suppess_pre_run_hook: bool = False):
             else:
                 log(f"Extension: {ext['name']}: Entry point not found.", "warning")
 
-
 #######################################################################
 # Install / Uninstall Extension
 #######################################################################
@@ -190,7 +185,6 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     lv += [0] * (length - len(lv))
     rv += [0] * (length - len(rv))
     return rv > lv
-
 
 async def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = await update_local_manifest_from_remote()
@@ -253,9 +247,8 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     ext_entry["installed"] = True
     await save_local_manifest(manifest)
 
-
 async def uninstall_selected_extension(extension_name: str):
-    manifest = await load_local_manifest
+    manifest = await load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
         log(f"Extension '{extension_name}': Not installed", "warning")
@@ -270,7 +263,6 @@ async def uninstall_selected_extension(extension_name: str):
     ext_entry["installed"] = False
     await save_local_manifest(manifest)
 
-
 #######################################################################
 # Get selected extension
 #######################################################################
@@ -283,7 +275,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
 
     await update_local_manifest_from_remote()
     await load_installed_extensions()
-    manifest = await load_local_manifest
+    manifest = await load_local_manifest()
 
     skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
