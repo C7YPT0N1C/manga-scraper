@@ -62,8 +62,9 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
             - "aiohttp" → use aiohttp session (new backend)
     """
 
-    global session
+    global session, use_tor
     fetch_env_vars()  # Refresh env vars in case config changed.
+    use_tor = config.get("USE_TOR", False)  # Ensure global is in sync with config
     
     session_requester = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
     
