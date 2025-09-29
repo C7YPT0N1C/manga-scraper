@@ -593,6 +593,10 @@ def get_valid_sort_value(sort_value):
     
     return valid_sort_value
 
+##########################################################################################
+# EXECUTOR
+##########################################################################################
+
 def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
     """
     When called by a function (FunctionA), retrieves the calling function's (FunctionB)
@@ -620,10 +624,6 @@ def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
         return default
     finally:
         del frame  # avoid reference cycles
-
-##########################################################################################
-# EXECUTOR
-##########################################################################################
 
 # Used when no specific concurrency limit is required; essentially a single-slot semaphore for generic tasks.
 DEFAULT_SEMAPHORE = max(1, (DEFAULT_THREADS_GALLERIES or 0) + (DEFAULT_THREADS_IMAGES or 0)) # Seems good lmfao
@@ -712,7 +712,7 @@ class AsyncRunner:
         Even if you pass a coroutine, it will block the loop until it's finished.
         """
         
-        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+        referrer_blocking = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
         
         # Wrap everything in a zero-arg callable
         if inspect.iscoroutinefunction(func):
@@ -750,7 +750,7 @@ class AsyncRunner:
         - For synchronous functions in async context, use `invoke`.
         """
         
-        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+        referrer_async = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -774,7 +774,7 @@ class AsyncRunner:
         """
         
         if referrer is None:
-            referrer = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+            referrer = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
 
         try:
             asyncio.get_running_loop()
@@ -805,18 +805,10 @@ class AsyncRunner:
     
     def sleep_sync(self, seconds: float):
         """Block the current thread for `seconds` (sync sleep)."""
-        
-        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
-        
-        log(f"{referrer_blocking}: Sleeping for {seconds}s")
         time.sleep(seconds)
     
     async def sleep_async(self, seconds: float):
         """Async sleep for `seconds`, yielding to event loop."""
-        
-        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
-        
-        log(f"{referrer_async}: Sleeping for {seconds}s")
         await asyncio.sleep(seconds)
     
     async def io_to_thread(self, func, *args, **kwargs):
@@ -915,7 +907,7 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     """
     
     if stage == None:
-        stage = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
+        stage = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
     
     try:
         asyncio.get_running_loop()
