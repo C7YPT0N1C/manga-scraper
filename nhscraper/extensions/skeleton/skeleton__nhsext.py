@@ -24,7 +24,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
-EXTENSION_REFERRER = f"{EXTENSION_NAME} Extension" # Used for printing the extension's name.
+EXTENSION_REFERRER = f"{EXTENSION_NAME.capitalize} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
@@ -60,49 +60,6 @@ _clean_directories_lock = asyncio.Lock()
 ####################################################################################################################
 # CORE
 ####################################################################################################################
-
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook():
-    """
-    This is one of this module's entrypoints.
-    """
-    
-    log(f"{EXTENSION_NAME}: Ready.", "debug")
-    log(f"{EXTENSION_REFERRER}:  Debugging started.", "debug")
-    
-    fetch_env_vars() # Refresh env vars in case config changed.
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
-    
-    if orchestrator.dry_run:
-        log(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}", "info")
-        return
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        log(f"{EXTENSION_REFERRER}:  Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
-    except Exception as e:
-        log(f"{EXTENSION_REFERRER}:  Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
-
-def return_gallery_metas(meta):
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
-    artists = get_meta_tags(meta, "artist")
-    groups = get_meta_tags(meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(clean_title, meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-    
-    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
-    
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
 
 def install_extension():
     """
@@ -157,6 +114,49 @@ def uninstall_extension():
     
     except Exception as e:
         log(f"{EXTENSION_REFERRER}:  Failed to uninstall: {e}", "error")
+
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook():
+    """
+    This is one of this module's entrypoints.
+    """
+    
+    log(f"{EXTENSION_NAME}: Ready.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Debugging started.", "debug")
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
+    
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}", "info")
+        return
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        log(f"{EXTENSION_REFERRER}:  Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
+    except Exception as e:
+        log(f"{EXTENSION_REFERRER}:  Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
+
+def return_gallery_metas(meta):
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    artists = get_meta_tags(meta, "artist")
+    groups = get_meta_tags(meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    # Use call_appropriately so this works from both async and sync contexts
+    title = executor.call_appropriately(clean_title, meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+    
+    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
+    
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language,
+    }
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)

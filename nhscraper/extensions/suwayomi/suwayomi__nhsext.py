@@ -27,7 +27,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
-EXTENSION_REFERRER = f"{EXTENSION_NAME} Extension" # Used for printing the extension's name.
+EXTENSION_REFERRER = f"{EXTENSION_NAME.capitalize} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
@@ -94,10 +94,6 @@ graphql_session = None
 
 creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
 
-####################################################################################################################
-# Creators metadata I/O (async wrappers that use io_to_thread)
-####################################################################################################################
-
 async def load_creators_metadata() -> dict:
     """
     Async load creators_metadata.json (thread-safe via _creators_metadata_file_lock).
@@ -106,7 +102,7 @@ async def load_creators_metadata() -> dict:
     async with _creators_metadata_file_lock:
         if os.path.exists(creators_metadata_file):
             try:
-                # use io_to_thread to run blocking open/read/json load
+                # use executor.read_json() to run blocking open/read/json load
                 return await executor.read_json(creators_metadata_file)
             except Exception as e:
                 # Use log as requested
@@ -159,49 +155,6 @@ async def save_collected_manga_ids(ids: set[int]):
 # CORE
 ####################################################################################################################
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
-def pre_run_hook():
-    """
-    This is one of this module's entrypoints.
-    """
-    
-    log(f"{EXTENSION_NAME}: Ready.", "debug")
-    log(f"{EXTENSION_REFERRER}:  Debugging started.", "debug")
-    
-    fetch_env_vars() # Refresh env vars in case config changed.
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
-    
-    if orchestrator.dry_run:
-        log(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}", "info")
-        return
-    try:
-        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        log(f"{EXTENSION_REFERRER}:  Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
-    except Exception as e:
-        log(f"{EXTENSION_REFERRER}:  Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
-
-def return_gallery_metas(meta):
-    fetch_env_vars() # Refresh env vars in case config changed.
-    
-    artists = get_meta_tags(meta, "artist")
-    groups = get_meta_tags(meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(clean_title, meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-    
-    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
-    
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
-
 def install_extension():
     """
     Install the extension and ensure the dedicated image download path exists.
@@ -227,20 +180,16 @@ def install_extension():
         tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
 
         if not os.path.exists(tarball_path):
-            log(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...", "info")
+            log(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL} to {tarball_path}...", "info")
 
             # Get session from API
             session = executor.run_blocking(get_session, status="rebuild")
 
             async def _download():
-                # Get wrap session.get with safe_session_get()
                 resp = await safe_session_get(session, SUWAYOMI_TARBALL_URL, timeout=60)
                 resp.raise_for_status()
                 with open(tarball_path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
+                    async for chunk in resp.content.iter_chunked(8192):
                         f.write(chunk)
 
             # Properly run async coroutine in sync function
@@ -315,6 +264,49 @@ def uninstall_extension():
     
     except Exception as e:
         log(f"{EXTENSION_REFERRER}:  Failed to uninstall: {e}", "error")
+
+# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
+def pre_run_hook():
+    """
+    This is one of this module's entrypoints.
+    """
+    
+    log(f"{EXTENSION_NAME}: Ready.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Debugging started.", "debug")
+    
+    fetch_env_vars() # Refresh env vars in case config changed.
+    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
+    
+    if orchestrator.dry_run:
+        log(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}", "info")
+        return
+    try:
+        os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
+        log(f"{EXTENSION_REFERRER}:  Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
+    except Exception as e:
+        log(f"{EXTENSION_REFERRER}:  Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
+
+def return_gallery_metas(meta):
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
+    artists = get_meta_tags(meta, "artist")
+    groups = get_meta_tags(meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    
+    # Use call_appropriately so this works from both async and sync contexts
+    title = executor.call_appropriately(clean_title, meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+    
+    gallery_language = get_meta_tags(meta, "language") or ["Unknown Language"]
+    
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language,
+    }
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
