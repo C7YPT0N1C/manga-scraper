@@ -404,9 +404,9 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
 # ===============================
 # FETCH GALLERY IDS (async)
 # ===============================
-async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAULT_PAGE_SORT, start_page: int = 1, end_page: int | None = None) -> set[int]:
+def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAULT_PAGE_SORT, start_page: int = 1, end_page: int | None = None) -> set[int]:
     """
-    Fetch gallery IDs from NHentai asynchronously, but using the synchronous cloudscraper session executed in threads.
+    Fetch gallery IDs from NHentai synchronously using the synchronous cloudscraper session.
     """
     
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -414,7 +414,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = await get_session() # Get current session
+    gallery_ids_session = get_session() # Get current session
 
     try:
         #log_clarification("debug") # NOTE
@@ -433,17 +433,17 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
             resp = None
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
-                    # Execute async request in thread (capped by number of gallery threads)
-                    resp = await safe_session_get(gallery_ids_session, url, timeout=10)
+                    # Execute synchronous request
+                    resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
+                        wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        await dynamic_sleep(wait=wait, dynamic=False)
+                        dynamic_sleep(wait=wait, dynamic=False)
                         continue
                     if status_code == 403:
-                        await dynamic_sleep(stage="api", attempt=attempt)
+                        dynamic_sleep(stage="api", attempt=attempt)
                         continue
 
                     # Raise for status is synchronous
@@ -461,30 +461,30 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
+                            wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            await dynamic_sleep(wait=wait, dynamic=False)
-                            gallery_ids_session = await get_session(status="rebuild")
+                            dynamic_sleep(wait=wait, dynamic=False)
+                            gallery_ids_session = get_session(status="rebuild")
                             
-                            # Execute async request in thread (capped by number of gallery threads)
+                            # Execute synchronous request
                             try:
-                                resp = await safe_session_get(gallery_ids_session, url, timeout=10)
+                                resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
                                 resp = None
                         break
 
-                    wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
+                    wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    await dynamic_sleep(wait=wait, dynamic=False)
+                    dynamic_sleep(wait=wait, dynamic=False)
 
             if resp is None:
                 page += 1
                 continue  # skip this page if no success
 
-            # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = await executor.call_appropriately(resp.json)
+            # resp.json() is synchronous
+            data = resp.json()
             
             # NOTE: Leave this commented out, you seriously don't need it unless something is
             # seriously fucked
