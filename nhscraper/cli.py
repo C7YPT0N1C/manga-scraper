@@ -19,12 +19,12 @@ initiating orchestrator tasks.
 """
 
 """
-CLI is synchronous. All async functions must be executed through the executor:
-- executor.run_blocking(func, *args) → blocks until finished, returns result
-- Do not use 'await' or executor.spawn_task() in this module
+CLI is synchronous. All async functions must be executed through async_runner:
+- async_runner.await_async(func, *args) → blocks until finished, returns result
+- Do not use 'await' or async_runner.spawn_task() in this module
 """
 
-_module_referrer=f"CLI" # Used in executor.* / cross-module calls
+_module_referrer=f"CLI" # Used in async_runner.* / cross-module calls
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
@@ -523,11 +523,11 @@ def main():
     # Handle extension installation / uninstallation
     # ------------------------------------------------------------
     if args.install_extension:
-        executor.run_blocking(get_selected_extension, args.install_extension)
+        async_runner.await_async(get_selected_extension, args.install_extension)
         return
     
     if args.uninstall_extension:
-        executor.run_blocking(uninstall_selected_extension, args.uninstall_extension)
+        async_runner.await_async(uninstall_selected_extension, args.uninstall_extension)
         return
     
     logger.debug("CLI: Ready.")
@@ -544,7 +544,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    session = executor.run_blocking(get_session, status="build")
+    session = async_runner.await_async(get_session, status="build")
     
     # Build Gallery List (make sure not empty.)
     log_clarification()
@@ -563,7 +563,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    executor.run_blocking(start_downloader, gallery_list) # Start download
+    async_runner.await_async(start_downloader, gallery_list) # Start download
 
 if __name__ == "__main__":
     main()

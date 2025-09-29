@@ -16,7 +16,7 @@ Loads, validates, and integrates external extensions
 that add or override functionality.
 """
 
-_module_referrer=f"Extension Loader" # Used in executor.* / cross-module calls
+_module_referrer=f"Extension Loader" # Used in async_runner.* / cross-module calls
 
 # ------------------------------------------------------------
 # Constants / Paths
@@ -169,7 +169,7 @@ async def sparse_clone(extension_name: str, url: str):
 
         log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
-    return await executor.io_to_thread(_clone)
+    return await async_runner.io_to_thread(_clone)
 
 #######################################################################
 # Extension Loader
@@ -312,7 +312,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
             if inspect.iscoroutinefunction(install_obj):
                 await install_obj() # async install
             else:
-                await executor.call_appropriately(install_obj) # sync install
+                await async_runner.invoke(install_obj) # sync install
             
             log(f"Installed extension '{extension_name}' successfully.", "info")
         
@@ -342,7 +342,7 @@ async def uninstall_selected_extension(extension_name: str):
         if inspect.iscoroutinefunction(uninstall_obj):
             await uninstall_obj()
         else:
-            await executor.call_appropriately(uninstall_obj)
+            await async_runner.invoke(uninstall_obj)
         
         log(f"Uninstalled extension '{extension_name}' successfully.", "warning")
 
@@ -388,7 +388,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
                 if inspect.iscoroutinefunction(pre_run_hook_obj):
                     await pre_run_hook_obj()
                 else:
-                    await executor.call_appropriately(pre_run_hook_obj)
+                    await async_runner.invoke(pre_run_hook_obj)
                 
                 log(f"Selected extension: {final_name}", "info")
             return ext

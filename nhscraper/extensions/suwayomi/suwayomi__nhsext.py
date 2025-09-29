@@ -31,7 +31,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
-_module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
+_module_referrer=f"{EXTENSION_NAME}" # Used in async_runner.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
@@ -105,8 +105,8 @@ async def load_creators_metadata() -> dict:
     async with _creators_metadata_file_lock:
         if os.path.exists(creators_metadata_file):
             try:
-                # use executor.read_json() to run blocking open/read/json load
-                return await executor.read_json(creators_metadata_file)
+                # use async_runner.read_json() to run blocking open/read/json load
+                return await async_runner.read_json(creators_metadata_file)
             except Exception as e:
                 # Use log as requested
                 log(f"Could not load creators_metadata.json: {e}", "warning")
@@ -123,7 +123,7 @@ async def save_creators_metadata(metadata: dict):
     """
     async with _creators_metadata_file_lock:
         try:
-            await executor.write_json(creators_metadata_file, metadata)
+            await async_runner.write_json(creators_metadata_file, metadata)
         except Exception as e:
             log(f"Could not save creators_metadata.json: {e}", "warning")
 
@@ -194,7 +194,7 @@ def install_extension():
                                 f.write(chunk)
 
             # Run async download from sync code
-            executor.run_blocking(_download)
+            async_runner.await_async(_download)
 
         with tarfile.open(tarball_path, "r:gz") as tar:
             members = tar.getmembers()
@@ -294,8 +294,8 @@ def return_gallery_metas(meta):
     groups = get_meta_tags(meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
-    # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(clean_title, meta)
+    # Use async_runner.invoke() so this works from both async and sync contexts
+    title = async_runner.invoke(clean_title, meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
@@ -328,7 +328,7 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 async def clean_directories(RemoveEmptyArtistFolder: bool = True):
     async with _clean_directories_lock:
-        await executor.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
+        await async_runner.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
 
 def _clean_directories_sync(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
@@ -453,7 +453,7 @@ def graphql_request(request: str, variables: dict = None, auth_user: str = None,
             return None
 
     # Run async request in a blocking manner so the GraphQL requests remain synchronous
-    return executor.run_blocking(_aiohttp_request)
+    return async_runner.await_async(_aiohttp_request)
 
 def get_local_source_id():
     global LOCAL_SOURCE_ID
@@ -743,8 +743,8 @@ async def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     }
     """
     
-    # Call graphql_request (sync) ( use executor.run_blocking() ) from async context using call_appropriately
-    result = executor.run_blocking(
+    # Call graphql_request (sync) ( use async_runner.await_async() ) from async context using async_runner.invoke()
+    result = async_runner.await_async(
         graphql_request, mutation, {"ids": ids}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False
     )
     #log(f"GraphQL: updateMangas result: {result}", "debug")
@@ -760,7 +760,7 @@ async def add_mangas_to_suwayomi(ids: list[int], category_id: int):
       }
     }
     """
-    result = executor.run_blocking(
+    result = async_runner.await_async(
         graphql_request, mutation, {"ids": ids, "categoryId": category_id}, auth_user=AUTH_USERNAME, auth_passwd=AUTH_PASSWORD, auth=False
     )
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
@@ -818,7 +818,7 @@ async def update_creator_manga(meta):
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
 
     This function is async; file operations are offloaded with io_to_thread. When called from
-    sync contexts, callers should use executor.call_appropriately(update_creator_manga, meta, type="TYPE").
+    sync contexts, callers should use async_runner.invoke(update_creator_manga, meta, type="TYPE").
     # NOTE: type= 'gallery', 'image', or 'default' (generic task, if default, you don't need to specify type)
     """
     
@@ -858,8 +858,8 @@ async def update_creator_manga(meta):
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)
             try:
-                # add_mangas_to_suwayomi is async; using executor.spawn_task() will run it fine. # NOTE: TEST
-                executor.spawn_task(
+                # add_mangas_to_suwayomi is async; using async_runner.spawn_task() will run it fine. # NOTE: TEST
+                async_runner.spawn_task(
                     add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID),
                     type="gallery"
                 )
@@ -885,7 +885,7 @@ async def update_creator_manga(meta):
 
         # --- Update details.json ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-        await executor.io_to_thread(os.makedirs, creator_folder, exist_ok=True) # create folder using io_to_thread
+        await async_runner.io_to_thread(os.makedirs, creator_folder, exist_ok=True) # create folder using io_to_thread
         details_file = os.path.join(creator_folder, "details.json")
 
         most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
@@ -899,7 +899,7 @@ async def update_creator_manga(meta):
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
 
-        await executor.io_to_thread(executor.write_json, details_file, details) # Offload JSON write
+        await async_runner.io_to_thread(async_runner.write_json, details_file, details) # Offload JSON write
 
     # --- Save all metadata at once (async)---
     metadata["collected_manga_ids"] = sorted(collected_ids)
@@ -928,7 +928,7 @@ async def update_creator_manga(meta):
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
-                            await executor.io_to_thread(os.remove, os.path.join(creator_folder, f))
+                            await async_runner.io_to_thread(os.remove, os.path.join(creator_folder, f))
                             log(f"Removed old cover file: {os.path.join(creator_folder, f)}", "info")
                         except Exception as e:
                             log(f"Failed to remove old cover file for {creator_folder}: {e}", "info")
@@ -937,7 +937,7 @@ async def update_creator_manga(meta):
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
                 
                 # copy file in thread
-                await executor.io_to_thread(shutil.copy2, page1_file, cover_file)
+                await async_runner.io_to_thread(shutil.copy2, page1_file, cover_file)
                 log(f"Updated manga cover for {creator_name}: {cover_file}", "info")
 
         except Exception as e:
@@ -952,7 +952,7 @@ def process_deferred_creators():
     Adds all existing local mangas to library + category if they exist on disk.
     Cleans up creators_metadata.json so successful creators are removed from deferred creators.
 
-    This function remains synchronous. It calls async helpers via executor.call_appropriately(..., type="TYPE") where necessary.
+    This function remains synchronous. It calls async helpers via async_runner.invoke(..., type="TYPE") where necessary.
     # NOTE: type= 'gallery', 'image', or 'default' (generic task, if default, you don't need to specify type)
     """
     
@@ -997,14 +997,14 @@ def process_deferred_creators():
                 expected_path = os.path.join(DEDICATED_DOWNLOAD_PATH, title)
                 if os.path.exists(expected_path):
                     new_ids.append(int(node["id"]))
-                    # remove from deferred if found (async) -> use executor.run_blocking()
-                    executor.run_blocking(remove_from_deferred, title)
+                    # remove from deferred if found (async) -> use async_runner.await_async()
+                    async_runner.await_async(remove_from_deferred, title)
 
             if new_ids:
                 log(f"GraphQL: Adding {len(new_ids)} mangas to library and category.", "info")
                 
-                # add_mangas_to_suwayomi is async -> call via executor.run_blocking()
-                executor.run_blocking(add_mangas_to_suwayomi, new_ids, CATEGORY_ID)
+                # add_mangas_to_suwayomi is async -> call via async_runner.await_async()
+                async_runner.await_async(add_mangas_to_suwayomi, new_ids, CATEGORY_ID)
 
         # ----------------------------
         # Process deferred creators
@@ -1012,9 +1012,9 @@ def process_deferred_creators():
         log_clarification()
 
         # Here _deferred_creators_lock is a threading.Lock and used in sync context
-        # load_deferred_creators is async: call via executor.run_blocking()
+        # load_deferred_creators is async: call via async_runner.await_async()
         with _deferred_creators_lock:
-            deferred_creators = executor.run_blocking(load_deferred_creators)
+            deferred_creators = async_runner.await_async(load_deferred_creators)
 
         if not deferred_creators:
             log("GraphQL: No deferred creators to process.", "info")
@@ -1065,7 +1065,7 @@ def process_deferred_creators():
             category_ids = [int(c["id"]) for c in categories_nodes] if categories_nodes else []
             if manga_info.get("inLibrary") and CATEGORY_ID in category_ids:
                 log(f"Creator manga '{creator_name}' already in library and category. Removing from deferred list.", "info")
-                executor.call_appropriately(remove_from_deferred, creator_name)
+                async_runner.invoke(remove_from_deferred, creator_name)
                 continue
 
             new_ids.add(int(manga_info["id"]))
@@ -1073,11 +1073,11 @@ def process_deferred_creators():
             log(f"Queued manga ID {manga_info['id']} for '{creator_name}'.", "info")
 
         if new_ids:
-            # add_mangas_to_suwayomi is async -> call via executor.call_appropriately()
-            executor.call_appropriately(add_mangas_to_suwayomi, list(new_ids), CATEGORY_ID)
+            # add_mangas_to_suwayomi is async -> call via async_runner.invoke()
+            async_runner.invoke(add_mangas_to_suwayomi, list(new_ids), CATEGORY_ID)
             
             for creator_name in processed_creators:
-                executor.call_appropriately(remove_from_deferred, creator_name)
+                async_runner.invoke(remove_from_deferred, creator_name)
         
         # If no creators remain, we're done early
         if not still_deferred:
@@ -1088,7 +1088,7 @@ def process_deferred_creators():
         process_creators_attempt += 1
 
     # After max retries, keep creators still deferred
-    executor.call_appropriately(save_deferred_creators, still_deferred)
+    async_runner.invoke(save_deferred_creators, still_deferred)
     log("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.", "warning")
 
 ####################################################################################################################
@@ -1123,8 +1123,8 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if _downloader_session is None: # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session, status="rebuild")
+    if _downloader_session is None: # Use async_runner.await_async()
+        _downloader_session = async_runner.await_async(get_session, status="rebuild")
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -1166,8 +1166,8 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
-        # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session, status="rebuild")
+        # Use async_runner.await_async()
+        _downloader_session = async_runner.await_async(get_session, status="rebuild")
         success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
@@ -1233,8 +1233,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
     
-    # Update creator's popular genres - update_creator_manga is async, call via executor.call_appropriately()
-    executor.call_appropriately(update_creator_manga, meta)
+    # Update creator's popular genres - update_creator_manga is async, call via async_runner.invoke()
+    async_runner.invoke(update_creator_manga, meta)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook():

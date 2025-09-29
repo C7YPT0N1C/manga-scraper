@@ -14,10 +14,10 @@ Central coordinator for download workflows.
 Manages task scheduling, concurrency, retries, and
 the overall sequencing of gallery and image downloads.
 
-Refer to 'Docs.txt' for a guide to using the executor functions.
+Refer to 'Docs.txt' for a guide to using the async_runner methods.
 """
 
-_module_referrer=f"Orchestrator" # Used in executor.* / cross-module calls
+_module_referrer=f"Orchestrator" # Used in async_runner.* / cross-module calls
 DEFAULT_REFERRER = "Undisclosed Module"
 
 ##########################################################################################
@@ -628,33 +628,33 @@ def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
 # Used when no specific concurrency limit is required; essentially a single-slot semaphore for generic tasks.
 DEFAULT_SEMAPHORE = max(1, (DEFAULT_THREADS_GALLERIES or 0) + (DEFAULT_THREADS_IMAGES or 0)) # Seems good lmfao
 
-class Executor:
+class AsyncRunner:
     """
-    Executor Utility: executor.call_appropriately() / executor.run_blocking() / executor.spawn_task() / executor.safe_get()
+    Executor Utility: async_runner.invoke() / async_runner.await_async() / async_runner.spawn_task() / async_runner.safe_get()
 
     Provides a unified interface for running synchronous and asynchronous functions
     in both sync and async contexts, with optional concurrency control.
 
     ---
     General Rules:
-    1. If Step B depends on Step A finishing → **await** the executor call.
+    1. If Step B depends on Step A finishing → **await** the async_runner call.
     2. If order/result doesn't matter → call without `await` (fire-and-forget).
-    3. Sync functions: only `executor.run_blocking()` (always blocks).
+    3. Sync functions: only `async_runner.await_async()` (always blocks).
     ⚠️ Can run async coroutines here; it will block until completion.
-    4. Async functions: use `executor.spawn_task()`, `executor.call_appropriately()`, or `executor.run_blocking()` depending on need.
+    4. Async functions: use `async_runner.spawn_task()`, `async_runner.invoke()`, or `async_runner.await_async()` depending on need.
 
-    For a decision tree for choosing the right executor function, refer to `Docs.txt`
+    For a decision tree for choosing the right async_runner method, refer to `Docs.txt`
 
     Lambda Usage Notes:
-    - Fire-and-forget **sync functions in async context** must be wrapped in `lambda` for `executor.spawn_task()`.
+    - Fire-and-forget **sync functions in async context** must be wrapped in `lambda` for `async_runner.spawn_task()`.
     - Async coroutines must always be passed as coroutine objects, **never pre-called**.
     
     ---
     Important Notes:
     - Always pass the function itself + arguments, not pre-called results.
-    - `executor.spawn_task()` requires a coroutine object.
-    - `executor.call_appropriately()` auto-detects async vs sync context.
-    - `executor.run_blocking()` blocks immediately; only use in sync or rare async scenarios.
+    - `async_runner.spawn_task()` requires a coroutine object.
+    - `async_runner.invoke()` auto-detects async vs sync context.
+    - `async_runner.await_async()` blocks immediately; only use in sync or rare async scenarios.
     """
     
     def __init__(self, max_gallery: int = None, max_image: int = None):
@@ -681,7 +681,7 @@ class Executor:
                     return await coro
             return await coro
         except Exception as e:
-            log(f"Executor: executor.{task} in {module_name} failed: {e}", "error")
+            log(f"Executor: async_runner.{task} in {module_name} failed: {e}", "error")
             return None
 
     async def gather(self):
@@ -705,10 +705,11 @@ class Executor:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
 
-    def run_blocking(self, func, *args, **kwargs):
+    def await_async(self, func, *args, **kwargs):
         """
-        Run a synchronous function or coroutine in a **synchronous context**.
+        Run a synchronous function or an asynchronous function (coroutine) in a **synchronous context**.
         Accepts the function + arguments directly; wraps in lambda internally.
+        Even if you pass a coroutine, it will block the loop until it's finished.
         """
         
         referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
@@ -720,7 +721,7 @@ class Executor:
             coro = lambda: func(*args, **kwargs)
 
         async def wrapper():
-            return await self._wrap(coro(), "run_blocking", module_name=referrer_blocking)
+            return await self._wrap(coro(), "await_async", module_name=referrer_blocking)
 
         try:
             loop = asyncio.get_running_loop()
@@ -730,15 +731,15 @@ class Executor:
     
     def spawn_task(self, coro, type: str = "default"):
         """
-        Schedule an **asynchronous function** (coroutine) for execution in an async context.
+        Schedule an asynchronous function (coroutine) for execution in an **asynchronous context**.
 
         Two usage patterns:
 
         1. **Awaited** → pauses until task completes (use when result is needed):
-               result = await executor.spawn_task(coro(...))
+               result = await async_runner.spawn_task(coro(...))
 
         2. **Fire-and-forget** → background execution (use when result is not needed):
-               executor.spawn_task(coro(...))
+               async_runner.spawn_task(coro(...))
 
         Arguments:
             coro: a coroutine object (async function called with parentheses)
@@ -746,7 +747,7 @@ class Executor:
 
         Notes:
         - Must pass a **coroutine object**, not a sync function or pre-called result.
-        - For synchronous functions in async context, use `call_appropriately`.
+        - For synchronous functions in async context, use `invoke`.
         """
         
         referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
@@ -766,7 +767,7 @@ class Executor:
         self.tasks.append(task)
         return task
     
-    async def call_appropriately(self, func, *args, type: str = "default", referrer: str = None, **kwargs):
+    async def invoke(self, func, *args, type: str = "default", referrer: str = None, **kwargs):
         """
         Safely run a function in the correct context (async vs sync) without blocking improperly.
         Accepts function + args directly; internally wraps with lambda where needed.
@@ -796,11 +797,11 @@ class Executor:
         # --- Sync context ---
         else:
             if inspect.iscoroutinefunction(func):
-                # async in sync → run_blocking
-                return self.run_blocking(func, *args, **kwargs)
+                # async in sync → await_async
+                return self.await_async(func, *args, **kwargs)
             else:
-                # sync in sync → run_blocking
-                return self.run_blocking(func, *args, **kwargs)
+                # sync in sync → await_async
+                return self.await_async(func, *args, **kwargs)
     
     def sleep_sync(self, seconds: float):
         """Block the current thread for `seconds` (sync sleep)."""
@@ -823,7 +824,7 @@ class Executor:
         Run a synchronous I/O-bound function in a background thread inside an async context.
 
         Usage:
-            result = await executor.io_to_thread(sync_io_func, arg1, arg2)
+            result = await async_runner.io_to_thread(sync_io_func, arg1, arg2)
 
         Notes:
         - Equivalent to `asyncio.to_thread`.
@@ -837,7 +838,7 @@ class Executor:
         Read JSON from disk in a non-blocking async-safe way.
 
         Usage:
-            data = await executor.read_json("file.json")
+            data = await async_runner.read_json("file.json")
 
         Notes:
         - Runs file I/O in a background thread to avoid blocking the event loop.
@@ -854,7 +855,7 @@ class Executor:
         Write JSON to disk in a non-blocking async-safe way.
 
         Usage:
-            await executor.write_json("file.json", data)
+            await async_runner.write_json("file.json", data)
 
         Notes:
         - Runs file I/O in a background thread to avoid blocking the event loop.
@@ -868,8 +869,8 @@ class Executor:
         
         return await self.io_to_thread(_write)
 
-# Global executor instance
-executor = Executor()
+# Global async_runner instance
+async_runner = AsyncRunner()
 
 ##########################################################################################
 # EXECUTOR HELPERS
@@ -887,7 +888,7 @@ async def safe_session_get(session, url, **kwargs):
     if inspect.iscoroutinefunction(method):
         return await method(url, **kwargs)
     else:
-        return await executor.call_appropriately(method, url, **kwargs)
+        return await async_runner.invoke(method, url, **kwargs)
 
 async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: float = 0.5, perform_sleep: bool = True, dynamic: bool = True, dynamic_sleep_requester: str = None):
     """
@@ -1033,8 +1034,8 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     # --- Perform the sleep ---
     if perform_sleep:
         if in_async:
-            await executor.sleep_async(sleep_time)
+            await async_runner.sleep_async(sleep_time)
         else:
-            await asyncio.to_thread(executor.sleep_sync, sleep_time)
+            await asyncio.to_thread(async_runner.sleep_sync, sleep_time)
 
     return sleep_time

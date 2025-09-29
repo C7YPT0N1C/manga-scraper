@@ -28,7 +28,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
-_module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
+_module_referrer=f"{EXTENSION_NAME}" # Used in async_runner.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
@@ -146,8 +146,8 @@ def return_gallery_metas(meta):
     groups = get_meta_tags(meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
-    # Use call_appropriately so this works from both async and sync contexts
-    title = executor.call_appropriately(clean_title, meta)
+    # Use async_runner.invoke() so this works from both async and sync contexts
+    title = async_runner.invoke(clean_title, meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
@@ -180,7 +180,7 @@ def test_hook():
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 async def clean_directories(RemoveEmptyArtistFolder: bool = True):
     async with _clean_directories_lock:
-        await executor.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
+        await async_runner.io_to_thread(_clean_directories_sync, RemoveEmptyArtistFolder)
 
 def _clean_directories_sync(RemoveEmptyArtistFolder: bool = True):
     global DEDICATED_DOWNLOAD_PATH
@@ -277,8 +277,8 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if _downloader_session is None: # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session, status="rebuild")
+    if _downloader_session is None: # Use async_runner.await_async()
+        _downloader_session = async_runner.await_async(get_session, status="rebuild")
 
     def try_download(session, mirrors, retries, tor_rotate=False):
         """Try downloading with a given session and retry count."""
@@ -321,8 +321,8 @@ def download_images_hook(gallery, page, urls, path, _downloader_session, pbar=No
     if not success and orchestrator.use_tor:
         log(f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more...", "warning")
         
-        # Use executor.run_blocking()
-        _downloader_session = executor.run_blocking(get_session, status="rebuild")
+        # Use async_runner.await_async()
+        _downloader_session = async_runner.await_async(get_session, status="rebuild")
         success = try_download(_downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
