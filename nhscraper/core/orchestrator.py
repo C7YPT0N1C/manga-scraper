@@ -390,7 +390,7 @@ def fetch_env_vars():
     ## Execute the update under the lock
     #with_env_lock(_update_globals)
     
-    _update_globals
+    _update_globals()
 
 def update_env(key, value):
     """
