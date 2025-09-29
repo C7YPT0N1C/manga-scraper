@@ -50,10 +50,10 @@ async def load_local_manifest():
         log("Local manifest not found. Creating from remote...", "warning")
         await update_local_manifest_from_remote()
     
-    async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
-        return await executor.read_json(json.load, open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8"))
-    #with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
-    #    return json.load(f)
+    #async with executor.read_json(open, LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+    #    return await executor.read_json(json.load, open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8"))
+    with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
