@@ -54,12 +54,8 @@ async def load_local_manifest():
         return json.load(f)
 
 async def save_local_manifest(manifest: dict):
-    """Save the local manifest to disk."""
-    def write_manifest():
-        with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-    await executor.io_to_thread(write_manifest, type="io")
+    with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 async def fetch_remote_manifest():
     """
