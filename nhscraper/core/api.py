@@ -414,7 +414,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = get_session() # Get current session
+    gallery_ids_session = executor.call_appropriately(get_session) # Get current session
 
     try:
         #log_clarification("debug") # NOTE
