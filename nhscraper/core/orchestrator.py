@@ -17,7 +17,7 @@ the overall sequencing of gallery and image downloads.
 Refer to 'Docs.txt' for a guide to using the executor functions.
 """
 
-_module_referrer=f"Orchestrator" # Used in executor.* calls
+_module_referrer=f"Orchestrator" # Used in executor.* / cross-module calls
 DEFAULT_REFERRER = "Undisclosed Module"
 
 ##########################################################################################

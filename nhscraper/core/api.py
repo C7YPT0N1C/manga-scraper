@@ -23,7 +23,7 @@ and integration with other modules.
 # GLOBAL VARIABLES
 ################################################################################################################
 
-_module_referrer=f"API" # Used in executor.* calls
+_module_referrer=f"API" # Used in executor.* / cross-module calls
 
 # This lock guards access to the broken symbols file on disk.
 possible_broken_symbols_lock = threading.Lock()

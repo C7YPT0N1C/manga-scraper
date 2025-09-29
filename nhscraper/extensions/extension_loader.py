@@ -14,7 +14,7 @@ Loads, validates, and integrates external extensions
 that add or override functionality.
 """
 
-_module_referrer=f"Extension Loader" # Used in executor.* calls
+_module_referrer=f"Extension Loader" # Used in executor.* / cross-module calls
 
 # ------------------------------------------------------------
 # Constants / Paths
@@ -42,6 +42,7 @@ extension_lock = threading.Lock()
 #######################################################################
 # Helpers
 #######################################################################
+
 async def load_local_manifest():
     """
     Load the local manifest, create it from remote if it doesn't exist.
@@ -49,7 +50,7 @@ async def load_local_manifest():
     
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         log("Local manifest not found. Creating from remote...", "warning")
-        await update_local_manifest_from_remote()
+        await update_local_manifest_from_remote(force=True)
     
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -58,11 +59,19 @@ async def save_local_manifest(manifest: dict):
     with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-async def fetch_remote_manifest():
+async def fetch_remote_manifest(force: bool = False):
     """
-    Fetch remote manifest.json with backup fallback.
+    Fetch remote manifest.json with backup fallback, using global cache.
+    Set force=True to ignore cache and re-fetch from remote.
     """
     
+    global current_manifest
+
+    # If already cached, return it immediately
+    with extension_lock:
+        if current_manifest is not None and not force:
+            return current_manifest
+
     async def _fetch(url):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -76,33 +85,34 @@ async def fetch_remote_manifest():
 
     try:
         log_clarification()
-        log(f"Fetching remote manifest from Primary Server...", "info")
+        log("Fetching remote manifest from Primary Server...", "info")
         data = await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
         log(f"Sucessfully fetched remote manifest from Primary Server", "info")
         #log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info") # NOTE: DEBUGGING
-        return data
     except Exception as e:
         log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
-        
         try:
-            log_clarification()
-            log(f"Attempting to fetch remote manifest from Backup Server...", "info")
+            log("Attempting to fetch remote manifest from Backup Server...", "info")
             data = await _fetch(BACKUP_URL_REMOTE_MANIFEST)
             log(f"Sucessfully fetched remote manifest from Backup Server", "info")
             #log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info") # NOTE: DEBUGGING
-            return data
-        
         except Exception as e2:
             log(f"Failed to fetch remote manifest from Backup Server: {e2}", "warning")
-            return {"extensions": []}
+            data = {"extensions": []}
 
-async def update_local_manifest_from_remote():
+    # Save result into cache
+    with extension_lock:
+        current_manifest = data
+
+    return data
+
+async def update_local_manifest_from_remote(force: bool = False):
     """
     Merge remote manifest into local manifest, keeping installed flags intact.
     """
-    
-    remote_manifest = await fetch_remote_manifest()
+    remote_manifest = await fetch_remote_manifest(force=force) # now cached
     local_manifest = {"extensions": []}
+
     if os.path.exists(LOCAL_MANIFEST_PATH):
         local_manifest = await load_local_manifest()
 
@@ -117,18 +127,16 @@ async def update_local_manifest_from_remote():
     await save_local_manifest(local_manifest)
     return local_manifest
 
-# ------------------------------------------------------------
-# Refresh manifest and installed extensions
-# ------------------------------------------------------------
 async def _reload_extensions():
-    await update_local_manifest_from_remote()
+    """Refresh manifest and installed extensions"""
+    
+    await update_local_manifest_from_remote(force=False)
     await load_installed_extensions()
     return await load_local_manifest()
 
-# ------------------------------------------------------------
-# Sparse clone repo (blocking, offloaded)
-# ------------------------------------------------------------
 async def sparse_clone(extension_name: str, url: str):
+    """Sparse clone repo (blocking, offloaded)"""
+    
     def _clone():
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
         
@@ -164,6 +172,7 @@ async def sparse_clone(extension_name: str, url: str):
 #######################################################################
 # Extension Loader
 #######################################################################
+
 async def load_installed_extensions(suppess_pre_run_hook: bool = False):
     fetch_env_vars() # Refresh env vars in case config changed.
 
@@ -195,6 +204,7 @@ async def load_installed_extensions(suppess_pre_run_hook: bool = False):
 #######################################################################
 # Install / Uninstall Extension
 #######################################################################
+
 def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     def parse(v):
         return [int(x) for x in v.split(".") if x.isdigit()]
@@ -205,7 +215,8 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     return rv > lv
 
 async def install_selected_extension(extension_name: str, reinstall: bool = False):
-    manifest = await update_local_manifest_from_remote()
+    manifest = await update_local_manifest_from_remote(force=False) # Always use cache
+    
     ext_entry = next((ext for ext in manifest.get("extensions", []) if ext["name"] == extension_name), None)
     if not ext_entry:
         log(f"Extension '{extension_name}': Not found in remote manifest", "error")
@@ -226,7 +237,9 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
 
     update_needed = False
     local_version = ext_entry.get("version")
-    remote_manifest = await fetch_remote_manifest()
+    
+    # Use cached manifest instead of refetching
+    remote_manifest = await fetch_remote_manifest(force=False)
     remote_entry = next((e for e in remote_manifest.get("extensions", []) if e["name"] == extension_name), {})
     remote_version = remote_entry.get("version")
 
@@ -321,7 +334,7 @@ async def uninstall_selected_extension(extension_name: str):
         log(f"Extension '{extension_name}': Not installed", "warning")
         return
 
-    module_name = f"extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
+    module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
         executor.run_blocking(module.uninstall_extension)
@@ -333,6 +346,7 @@ async def uninstall_selected_extension(extension_name: str):
 #######################################################################
 # Get selected extension
 #######################################################################
+
 async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     fetch_env_vars() # Refresh env vars in case config changed.
     original_name = name
@@ -340,7 +354,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
     if not suppess_pre_run_hook:
         log("Extension Loader: Ready.", "debug")
 
-    await update_local_manifest_from_remote()
+    await update_local_manifest_from_remote(force=False)
     await load_installed_extensions()
     manifest = await load_local_manifest()
 

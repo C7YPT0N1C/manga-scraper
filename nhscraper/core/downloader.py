@@ -25,7 +25,7 @@ and handles error recovery with retry strategies.
 # Global Variables
 ####################################################################################################
 
-_module_referrer=f"Downloader" # Used in executor.* calls
+_module_referrer=f"Downloader" # Used in executor.* / cross-module calls
 
 active_extension = "skeleton"
 download_location = ""

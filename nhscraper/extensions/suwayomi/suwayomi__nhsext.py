@@ -27,7 +27,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
-_module_referrer=f"{EXTENSION_NAME}" # Used in executor.* calls
+_module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"

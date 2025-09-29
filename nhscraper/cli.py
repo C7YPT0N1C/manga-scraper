@@ -22,7 +22,7 @@ CLI is synchronous. All async functions must be executed through the executor:
 - Do not use 'await' or executor.spawn_task() in this module
 """
 
-_module_referrer=f"CLI" # Used in executor.* calls
+_module_referrer=f"CLI" # Used in executor.* / cross-module calls
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
