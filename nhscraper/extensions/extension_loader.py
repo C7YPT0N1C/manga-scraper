@@ -240,7 +240,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
         await sparse_clone(extension_name, repo_url)
     except Exception as e:
         log(f"Failed to sparse-clone from primary repo: {e}", "warning")
-        if BASE_REPO_BACKUP_URL:
+        if BACKUP_URL_BASE_REPO:
             backup_url = repo_url.replace(PRIMARY_URL_BASE_REPO, BACKUP_URL_BASE_REPO)
             try:
                 log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
