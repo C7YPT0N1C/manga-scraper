@@ -36,7 +36,8 @@ BACKUP_URL_REMOTE_MANIFEST = (
 )
 
 INSTALLED_EXTENSIONS = []
-installed_extensions_lock = threading.Lock()
+current_manifest = None
+extension_lock = threading.Lock()
 
 #######################################################################
 # Helpers
@@ -166,7 +167,7 @@ async def sparse_clone(extension_name: str, url: str):
 async def load_installed_extensions(suppess_pre_run_hook: bool = False):
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    with installed_extensions_lock:
+    with extension_lock:
         INSTALLED_EXTENSIONS.clear()
         manifest = await load_local_manifest()
 
