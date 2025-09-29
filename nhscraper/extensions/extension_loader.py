@@ -22,19 +22,18 @@ _module_referrer=f"Extension Loader" # Used in executor.* calls
 EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
-# Primary + backup manifest locations
-REMOTE_MANIFEST_URL = (
-    "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
-    "raw/main/master_manifest.json"
-)
-REMOTE_MANIFEST_BACKUP_URL = (
-    "https://code.zenithnetwork.online/C7YPT0N1C/"
-    "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+# Primary + backup repo / manifest URLs
+PRIMARY_URL_BASE_REPO = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+PRIMARY_URL_REMOTE_MANIFEST = (
+    "https://raw.githubusercontent.com/C7YPT0N1C/nhentai-scraper-extensions/"
+    "refs/heads/main/master_manifest.json"
 )
 
-# If the base repo URLs can also fail
-BASE_REPO_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
-BASE_REPO_BACKUP_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+BACKUP_URL_BASE_REPO = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+BACKUP_URL_REMOTE_MANIFEST = (
+    "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+    "raw/branch/dev/master_manifest.json"
+)
 
 INSTALLED_EXTENSIONS = []
 installed_extensions_lock = threading.Lock()
@@ -71,20 +70,23 @@ async def fetch_remote_manifest():
             async with session.get(url) as resp:
                 if resp.status == 200:
                     text = await resp.text()
-                    return json.loads(text)  # force JSON parse regardless of mimetype
-                raise Exception(f"HTTP {resp.status}")
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError as e:
+                        raise Exception(f"Invalid JSON at {url}: {e}")
+                raise Exception(f"HTTP {resp.status} {url}")
 
     try:
-        return await _fetch(REMOTE_MANIFEST_URL)
-    except Exception as e:
         log_clarification()
-        log(f"Failed to fetch primary remote manifest: {e}", "warning")
+        log(f"Fetching remote manifest from Primary Server", "info")
+        return await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
+    except Exception as e:
+        log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
         try:
-            log("Using backup remote manifest URL", "warning")
-            return await _fetch(REMOTE_MANIFEST_BACKUP_URL)
+            log(f"Attempting to fetch remote manifest from Backup Server", "info")
+            return await _fetch(BACKUP_URL_REMOTE_MANIFEST)
         except Exception as e2:
-            log_clarification()
-            log(f"Failed to fetch backup manifest: {e2}", "error")
+            log(f"Failed to fetch remote manifest from Backup Server: {e}", "warning")
             return {"extensions": []}
 
 async def update_local_manifest_from_remote():
@@ -228,7 +230,7 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     except Exception as e:
         log(f"Failed to sparse-clone from primary repo: {e}", "warning")
         if BASE_REPO_BACKUP_URL:
-            backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+            backup_url = repo_url.replace(PRIMARY_URL_BASE_REPO, BACKUP_URL_BASE_REPO)
             try:
                 log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
                 shutil.rmtree(ext_folder, ignore_errors=True)
