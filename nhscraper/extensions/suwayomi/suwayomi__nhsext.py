@@ -192,7 +192,7 @@ def install_extension():
                                 f.write(chunk)
 
             # Run async download from sync code
-            executor.call_appropriately(_download)
+            executor.run_blocking(_download)
 
         with tarfile.open(tarball_path, "r:gz") as tar:
             members = tar.getmembers()
