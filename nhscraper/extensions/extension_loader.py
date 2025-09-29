@@ -79,12 +79,16 @@ async def fetch_remote_manifest():
     try:
         log_clarification()
         log(f"Fetching remote manifest from Primary Server", "info")
-        return await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
+        data = await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
+        log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info")
+        return data
     except Exception as e:
         log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
         try:
             log(f"Attempting to fetch remote manifest from Backup Server", "info")
-            return await _fetch(BACKUP_URL_REMOTE_MANIFEST)
+            data = await _fetch(BACKUP_URL_REMOTE_MANIFEST)
+            log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info")
+            return data
         except Exception as e2:
             log(f"Failed to fetch remote manifest from Backup Server: {e}", "warning")
             return {"extensions": []}
