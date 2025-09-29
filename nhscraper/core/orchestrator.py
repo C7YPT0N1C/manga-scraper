@@ -303,6 +303,50 @@ calm = DEFAULT_CALM
 DEFAULT_DEBUG = False
 debug = DEFAULT_DEBUG
 
+def fetch_env_vars():
+    """Populate global variables from config explicitly."""
+    global download_path, doujin_txt_path, extension, extension_download_path
+    global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
+    global range_start, range_end, galleries, excluded_tags, language, title_type
+    global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
+    global use_tor, skip_post_run, dry_run, calm, debug
+
+    with_env_lock(lambda: None)  # if you need threading lock, otherwise skip
+
+    download_path = config.get("DOWNLOAD_PATH", download_path)
+    doujin_txt_path = config.get("DOUJIN_TXT_PATH", doujin_txt_path)
+    extension = config.get("EXTENSION", extension)
+    extension_download_path = config.get("EXTENSION_DOWNLOAD_PATH", extension_download_path)
+
+    nhentai_api_base = config.get("NHENTAI_API_BASE", nhentai_api_base)
+    nhentai_mirrors = config.get("NHENTAI_MIRRORS", nhentai_mirrors)
+    page_sort = config.get("PAGE_SORT", page_sort)
+    homepage_range_start = config.get("PAGE_RANGE_START", homepage_range_start)
+    homepage_range_end = config.get("PAGE_RANGE_END", homepage_range_end)
+
+    range_start = config.get("RANGE_START", range_start)
+    range_end = config.get("RANGE_END", range_end)
+    galleries = config.get("GALLERIES", galleries)
+    excluded_tags = config.get("EXCLUDED_TAGS", excluded_tags)
+    language = config.get("LANGUAGE", language)
+    title_type = config.get("TITLE_TYPE", title_type)
+
+    threads_galleries = config.get("THREADS_GALLERIES", threads_galleries)
+    threads_images = config.get("THREADS_IMAGES", threads_images)
+    max_retries = config.get("MAX_RETRIES", max_retries)
+    min_sleep = config.get("MIN_SLEEP", min_sleep)
+    max_sleep = config.get("MAX_SLEEP", max_sleep)
+
+    use_tor = config.get("USE_TOR", use_tor)
+    skip_post_run = config.get("SKIP_POST_RUN", skip_post_run)
+    dry_run = config.get("DRY_RUN", dry_run)
+    calm = config.get("CALM", calm)
+    debug = config.get("DEBUG", debug)
+
+    # Optional debug logging
+    if debug:
+        log(f"Globals updated from config: use_tor={use_tor}, download_path={download_path}", "debug")
+
 # ------------------------------------------------------------
 # Helper: safe int from env
 # ------------------------------------------------------------
@@ -373,24 +417,6 @@ def normalise_value(key, value):
     
     # Default: just return as string
     return str(value)
-
-def fetch_env_vars():
-    """Populate global variables from config, normalising types."""
-    def _update_globals():
-        global download_path, doujin_txt_path, extension, extension_download_path
-        global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
-        global range_start, range_end, galleries, excluded_tags, language, title_type
-        global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-        global use_tor, skip_post_run, dry_run, calm, debug
-
-        for key in config.keys():
-            globals()[key.lower()] = normalise_value(key, config[key])
-            #log(f"{key.lower()} = {normalise_value(key, config[key])}", "debug") # NOTE: DEBUGGING
-
-    ## Execute the update under the lock
-    #with_env_lock(_update_globals)
-    
-    _update_globals()
 
 def update_env(key, value):
     """
