@@ -374,6 +374,21 @@ def normalise_value(key, value):
     # Default: just return as string
     return str(value)
 
+def fetch_env_vars():
+    """Populate global variables from config, normalising types."""
+    def _update_globals():
+        global download_path, doujin_txt_path, extension, extension_download_path
+        global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
+        global range_start, range_end, galleries, excluded_tags, language, title_type
+        global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
+        global use_tor, skip_post_run, dry_run, calm, debug
+
+        for key in config.keys():
+            globals()[key.lower()] = normalise_value(key, config[key])
+
+    # Execute the update under the lock
+    with_env_lock(_update_globals)
+
 def update_env(key, value):
     """
     Update a single variable in the .env file safely under lock.
@@ -415,6 +430,7 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
+    fetch_env_vars() # Refresh env vars in case config changed.
 
 # Also change corresponding parser.add_argument in CLI
 
@@ -502,21 +518,6 @@ def normalise_config():
             update_env(key, default_val)
 
 # normalise_config() is called by CLI to normalise and populate .env
-    
-def fetch_env_vars():
-    """Populate global variables from config, normalising types."""
-    def _update_globals():
-        global download_path, doujin_txt_path, extension, extension_download_path
-        global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
-        global range_start, range_end, galleries, excluded_tags, language, title_type
-        global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
-        global use_tor, skip_post_run, dry_run, calm, debug
-
-        for key in config.keys():
-            globals()[key.lower()] = normalise_value(key, config[key])
-
-    # Execute the update under the lock
-    with_env_lock(_update_globals)
     
 def init_scraper(gallery_list):
     """

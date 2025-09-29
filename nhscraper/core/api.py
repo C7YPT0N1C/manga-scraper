@@ -414,7 +414,7 @@ async def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str =
     gallery_ids_session = await get_session() # Get current session
 
     try:
-        log_clarification("debug")
+        #log_clarification("debug") # NOTE
         if query_value is None:
             log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}", "debug")
         else:
