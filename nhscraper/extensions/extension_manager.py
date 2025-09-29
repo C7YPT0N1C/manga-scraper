@@ -340,7 +340,7 @@ async def uninstall_selected_extension(extension_name: str):
         if inspect.iscoroutinefunction(module.uninstall_extension):
             await module.uninstall_extension()
         else:
-            await executor.run_blocking(module.uninstall_extension)
+            executor.run_blocking(module.uninstall_extension)
         
         log(f"Uninstalled extension '{extension_name}' successfully.", "warning")
 
@@ -385,7 +385,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
                 if inspect.iscoroutinefunction(ext.pre_run_hook):
                     await ext.pre_run_hook()
                 else:
-                    await executor.run_blocking(ext.pre_run_hook)
+                    executor.run_blocking(ext.pre_run_hook)
                 
                 log(f"Selected extension: {final_name}", "info")
             return ext
