@@ -319,7 +319,7 @@ def getenv_numeric_value(key, default):
 def parse_bool(value):
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in ("true")
+    return str(value).strip().lower() in ("True")
 
 def parse_list_of_ints(value):
     if isinstance(value, list):
@@ -348,7 +348,7 @@ def parse_list_of_str(value):
 def serialise_value(key, value):
     """Serialise Python value to .env-compatible string."""
     if isinstance(value, bool):
-        return "true" if value else "false"
+        return "True" if value else "False"
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, (list, dict)):
