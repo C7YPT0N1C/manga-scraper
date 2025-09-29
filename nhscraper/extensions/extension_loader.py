@@ -192,6 +192,8 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     if not ext_entry:
         log(f"Extension '{extension_name}': Not found in remote manifest", "error")
         return
+    else:
+        log(f"Extension '{extension_name}': Found in remote manifest", "info")
 
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
     if reinstall and os.path.exists(ext_folder):
