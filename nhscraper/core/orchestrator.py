@@ -597,7 +597,7 @@ def get_valid_sort_value(sort_value):
 # EXECUTOR
 ##########################################################################################
 
-def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
+def get_caller_module_name(frame_num: int = 2, default=DEFAULT_REFERRER):
     """
     When called by a function (FunctionA), retrieves the calling function's (FunctionB)
     module's '_module_referrer' variable, or the clean module name by going back frame_num frames.
