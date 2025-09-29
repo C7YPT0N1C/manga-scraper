@@ -306,15 +306,14 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     if hasattr(module, "install_extension"):
         try:
             install_obj = module.install_extension
+            log(f"Running install for extension '{extension_name}'", "debug")
             if inspect.iscoroutinefunction(install_obj):
-                # async install
-                log(f"Running install for extension '{extension_name}'", "debug")
-                await install_obj()
+                await install_obj() # async install
             else:
-                # sync install: run in thread (use call_appropriately from executor)
-                log(f"Running install for extension '{extension_name}'", "debug")
-                await executor.call_appropriately(install_obj)
+                await executor.call_appropriately(install_obj) # sync install
+            
             log(f"Installed extension '{extension_name}' successfully.", "info")
+        
         except Exception as e:
             log(f"Installing extension '{extension_name}' failed: {e}", "error")
             return
@@ -337,10 +336,11 @@ async def uninstall_selected_extension(extension_name: str):
     module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "uninstall_extension"):
-        if inspect.iscoroutinefunction(module.uninstall_extension):
-            await module.uninstall_extension()
+        uninstall_obj = module.uninstall_extension
+        if inspect.iscoroutinefunction(uninstall_obj):
+            await uninstall_obj()
         else:
-            executor.run_blocking(module.uninstall_extension)
+            await executor.call_appropriately(uninstall_obj)
         
         log(f"Uninstalled extension '{extension_name}' successfully.", "warning")
 
@@ -382,10 +382,11 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
     for ext in INSTALLED_EXTENSIONS:
         if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
             if not suppess_pre_run_hook and hasattr(ext, "pre_run_hook"):
-                if inspect.iscoroutinefunction(ext.pre_run_hook):
-                    await ext.pre_run_hook()
+                pre_run_hook_obj = ext.pre_run_hook
+                if inspect.iscoroutinefunction(pre_run_hook_obj):
+                    await pre_run_hook_obj()
                 else:
-                    executor.run_blocking(ext.pre_run_hook)
+                    await executor.call_appropriately(pre_run_hook_obj)
                 
                 log(f"Selected extension: {final_name}", "info")
             return ext
