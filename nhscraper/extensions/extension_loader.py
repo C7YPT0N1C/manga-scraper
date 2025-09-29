@@ -60,7 +60,7 @@ async def save_local_manifest(manifest: dict):
         with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-    await executor.spawn_task(write_manifest, type="io")
+    executor.spawn_task(write_manifest, type="io")
 
 async def fetch_remote_manifest():
     """
