@@ -130,6 +130,13 @@ async def _reload_extensions():
 async def sparse_clone(extension_name: str, url: str):
     def _clone():
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+        
+        # Safety: if ext_folder already has a .git, wipe it first
+        git_dir = os.path.join(ext_folder, ".git")
+        if os.path.exists(git_dir):
+            shutil.rmtree(ext_folder)
+            os.makedirs(ext_folder, exist_ok=True)
+        
         try:
             subprocess.run(["git", "init", ext_folder], check=True, capture_output=True, text=True)
             subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True, capture_output=True, text=True)
@@ -206,6 +213,13 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
         log(f"Extension '{extension_name}': Found in remote manifest", "info")
 
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+    
+    # Safety: if ext_folder already has a .git, wipe it first
+    #git_dir = os.path.join(ext_folder, ".git")
+    #if os.path.exists(git_dir):
+    #    shutil.rmtree(ext_folder)
+    #    os.makedirs(ext_folder, exist_ok=True)
+    
     if reinstall and os.path.exists(ext_folder):
         shutil.rmtree(ext_folder)
 
