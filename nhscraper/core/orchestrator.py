@@ -518,7 +518,7 @@ def fetch_env_vars():
         """Helper to pull from config with fallback to current global value."""
         return config.get(name.upper(), globals().get(name, default))
 
-    with env_lock:
+    with _env_lock:
         download_path = get_var("download_path")
         doujin_txt_path = get_var("doujin_txt_path")
         extension = get_var("extension")
