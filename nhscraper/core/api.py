@@ -402,7 +402,7 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
 # ===============================
-# FETCH GALLERY IDS (async)
+# FETCH GALLERY IDS
 # ===============================
 def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAULT_PAGE_SORT, start_page: int = 1, end_page: int | None = None) -> set[int]:
     """
@@ -438,12 +438,12 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
+                        wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        dynamic_sleep(wait=wait, dynamic=False)
+                        executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
                         continue
                     if status_code == 403:
-                        dynamic_sleep(stage="api", attempt=attempt)
+                        executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt)
                         continue
 
                     # Raise for status is synchronous
@@ -461,9 +461,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
+                            wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            dynamic_sleep(wait=wait, dynamic=False)
+                            executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
                             gallery_ids_session = get_session(status="rebuild")
                             
                             # Execute synchronous request
@@ -475,9 +475,9 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                                 resp = None
                         break
 
-                    wait = dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False)
+                    wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    dynamic_sleep(wait=wait, dynamic=False)
+                    executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
 
             if resp is None:
                 page += 1
