@@ -4,6 +4,8 @@ import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default'
 
 import threading, asyncio # Module-specific imports
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.core.downloader import start_downloader
@@ -70,7 +72,7 @@ def parse_args():
     # Extension selection / management
     parser.add_argument("--install-extension", type=str, help="Install an extension by name")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
-    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
+    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION_NAME, help=f"Extension to use (default: {DEFAULT_EXTENSION_NAME})")
 
     # Gallery selection
     parser.add_argument(
@@ -467,8 +469,8 @@ def update_config(args):
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
     else:
         # Use whatever excluded tags were already in config (env or default)
-        if isinstance(excluded_tags, str):
-            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in excluded_tags.split(",")])
+        if isinstance(orchestrator.excluded_tags_list, str):
+            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in orchestrator.excluded_tags_list.split(",")])
     
     update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)

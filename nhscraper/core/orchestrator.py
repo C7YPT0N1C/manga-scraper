@@ -211,8 +211,8 @@ doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 # ------------------------------------------------------------
 # Extensions
 # ------------------------------------------------------------
-DEFAULT_EXTENSION = "skeleton"
-extension = DEFAULT_EXTENSION
+DEFAULT_EXTENSION_NAME = "skeleton"
+extension_name = DEFAULT_EXTENSION_NAME
 
 DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads"
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
@@ -236,10 +236,10 @@ DEFAULT_PAGE_SORT = "date"
 page_sort = DEFAULT_PAGE_SORT
 
 DEFAULT_PAGE_RANGE_START = 1
-homepage_range_start = DEFAULT_PAGE_RANGE_START
+page_range_start = DEFAULT_PAGE_RANGE_START
 
 DEFAULT_PAGE_RANGE_END = 2
-homepage_range_end = DEFAULT_PAGE_RANGE_END
+page_range_end = DEFAULT_PAGE_RANGE_END
 
 DEFAULT_RANGE_START = 500000
 range_start = DEFAULT_RANGE_START
@@ -247,8 +247,8 @@ range_start = DEFAULT_RANGE_START
 DEFAULT_RANGE_END = 600000
 range_end = DEFAULT_RANGE_END
 
-DEFAULT_GALLERIES = []
-galleries = DEFAULT_GALLERIES
+DEFAULT_GALLERIES_LIST = []
+galleries_list = DEFAULT_GALLERIES_LIST
 
 
 # ------------------------------------------------------------
@@ -256,14 +256,14 @@ galleries = DEFAULT_GALLERIES
 # ------------------------------------------------------------
 DEFAULT_EXCLUDED_TAGS = ["snuff", "cuntboy", "guro", "cuntbusting", "scat", "coprophagia", "ai generated", "vore"]
 # normalised into a list at import
-excluded_tags = DEFAULT_EXCLUDED_TAGS
+excluded_tags_list = DEFAULT_EXCLUDED_TAGS
 
 DEFAULT_LANGUAGE = ["english"]
 # normalised into a list at import
-language = DEFAULT_LANGUAGE
+language_list = DEFAULT_LANGUAGE
 
 DEFAULT_TITLE_TYPE = "english"
-title_type = DEFAULT_TITLE_TYPE.lower()
+title_type = DEFAULT_TITLE_TYPE
 
 
 # ------------------------------------------------------------
@@ -356,7 +356,7 @@ def serialise_value(key, value):
 def normalise_value(key, value):
     """Convert .env string back to proper Python type."""
     
-    if key in ("NHENTAI_MIRRORS", "EXCLUDED_TAGS", "LANGUAGE"):
+    if key in ("NHENTAI_MIRRORS", "EXCLUDED_TAGS_LIST", "LANGUAGE_LIST"):
         return parse_list_of_str(value)
     if key in ("GALLERIES",):
         return parse_list_of_ints(value)
@@ -413,6 +413,51 @@ def update_env(key, value):
     with_env_lock(_update)
     fetch_env_vars() # Refresh env vars in case config changed.
 
+# ------------------------------------------------------------
+# Config Dictionary
+# ------------------------------------------------------------
+
+# Also change corresponding parser.add_argument in CLI
+
+# NHENTAI_MIRRORS: always a list
+MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+if isinstance(MIRRORS_ENV, str):
+    MIRRORS_LIST = parse_list_of_str(os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS))
+else:
+    MIRRORS_LIST = MIRRORS_ENV
+
+config = {
+    "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
+    "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
+    "EXTENSION_NAME": os.getenv("EXTENSION", DEFAULT_EXTENSION_NAME),
+    "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
+    "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
+    "NHENTAI_MIRRORS": MIRRORS_LIST,
+    "PAGE_SORT": os.getenv("PAGE_SORT", DEFAULT_PAGE_SORT),
+    "PAGE_RANGE_START": getenv_numeric_value("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
+    "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
+    "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
+    "GALLERIES_LIST": parse_list_of_ints(os.getenv("GALLERIES", DEFAULT_GALLERIES_LIST)),
+    "ARTIST": os.getenv("ARTIST", ""),
+    "GROUP": os.getenv("GROUP", ""),
+    "TAG": os.getenv("TAG", ""),
+    "PARODY": os.getenv("PARODY", ""),
+    "EXCLUDED_TAGS_LIST": parse_list_of_str(os.getenv("EXCLUDED_TAGS_LIST", DEFAULT_EXCLUDED_TAGS)),
+    "LANGUAGE_LIST": parse_list_of_str(os.getenv("LANGUAGE_LIST", DEFAULT_LANGUAGE)),
+    "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
+    "THREADS_GALLERIES": int(getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
+    "THREADS_IMAGES": int(getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
+    "MAX_RETRIES": int(getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
+    "MIN_SLEEP": float(getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP)),
+    "MAX_SLEEP": float(getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP)),
+    "USE_TOR": parse_bool(os.getenv("USE_TOR", DEFAULT_USE_TOR)),
+    "SKIP_POST_RUN": parse_bool(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)),
+    "DRY_RUN": parse_bool(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)),
+    "CALM": parse_bool(os.getenv("CALM", DEFAULT_CALM)),
+    "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
+}
+
 def normalise_config():
     """
     Apply defaults and populate config + .env.
@@ -422,9 +467,9 @@ def normalise_config():
     log("Populating Config...", "debug")
 
     defaults = {
-        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
-        "EXTENSION": DEFAULT_EXTENSION,
+        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
+        "EXTENSION_NAME": DEFAULT_EXTENSION_NAME,
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": [DEFAULT_NHENTAI_MIRRORS],
@@ -433,9 +478,9 @@ def normalise_config():
         "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
         "RANGE_START": DEFAULT_RANGE_START,
         "RANGE_END": DEFAULT_RANGE_END,
-        "GALLERIES": DEFAULT_GALLERIES,
-        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
-        "LANGUAGE": DEFAULT_LANGUAGE,
+        "GALLERIES_LIST": DEFAULT_GALLERIES_LIST,
+        "EXCLUDED_TAGS_LIST": DEFAULT_EXCLUDED_TAGS,
+        "LANGUAGE_LIST": DEFAULT_LANGUAGE,
         "TITLE_TYPE": DEFAULT_TITLE_TYPE.lower(),
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
@@ -456,59 +501,14 @@ def normalise_config():
 
 # normalise_config() is called by CLI to normalise and populate .env
 
-# ------------------------------------------------------------
-# Config Dictionary
-# ------------------------------------------------------------
-
-# Also change corresponding parser.add_argument in CLI
-
-# NHENTAI_MIRRORS: always a list
-MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
-if isinstance(MIRRORS_ENV, str):
-    MIRRORS_LIST = parse_list_of_str(os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS))
-else:
-    MIRRORS_LIST = MIRRORS_ENV
-
-config = {
-    "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
-    "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
-    "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
-    "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
-    "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
-    "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "PAGE_SORT": os.getenv("PAGE_SORT", DEFAULT_PAGE_SORT),
-    "PAGE_RANGE_START": getenv_numeric_value("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
-    "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
-    "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
-    "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
-    "GALLERIES": parse_list_of_ints(os.getenv("GALLERIES", DEFAULT_GALLERIES)),
-    "ARTIST": os.getenv("ARTIST", ""),
-    "GROUP": os.getenv("GROUP", ""),
-    "TAG": os.getenv("TAG", ""),
-    "PARODY": os.getenv("PARODY", ""),
-    "EXCLUDED_TAGS": parse_list_of_str(os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS)),
-    "LANGUAGE": parse_list_of_str(os.getenv("LANGUAGE", DEFAULT_LANGUAGE)),
-    "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
-    "THREADS_GALLERIES": int(getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)),
-    "THREADS_IMAGES": int(getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)),
-    "MAX_RETRIES": int(getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES)),
-    "MIN_SLEEP": float(getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP)),
-    "MAX_SLEEP": float(getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP)),
-    "USE_TOR": parse_bool(os.getenv("USE_TOR", DEFAULT_USE_TOR)),
-    "SKIP_POST_RUN": parse_bool(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)),
-    "DRY_RUN": parse_bool(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)),
-    "CALM": parse_bool(os.getenv("CALM", DEFAULT_CALM)),
-    "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
-}
-
 def fetch_env_vars():
     """
     Populate global variables from config explicitly
     because I honestly don't know why the FUCK it isn't just *working*
     """
-    global download_path, doujin_txt_path, extension, extension_download_path
-    global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
-    global range_start, range_end, galleries, excluded_tags, language, title_type
+    global download_path, doujin_txt_path, extension_name, extension_download_path
+    global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
+    global range_start, range_end, galleries_list, excluded_tags_list, language, title_type
     global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
     global use_tor, skip_post_run, dry_run, calm, debug
 
@@ -516,42 +516,40 @@ def fetch_env_vars():
 
     def get_var(name, default=None):
         """Helper to pull from config with fallback to current global value."""
-        return config.get(name.upper(), globals().get(name, default))
+        return config.get(name, globals().get(name, default))
 
     with _env_lock:
-        download_path = get_var("download_path")
-        doujin_txt_path = get_var("doujin_txt_path")
-        extension = get_var("extension")
-        extension_download_path = get_var("extension_download_path")
+        download_path = get_var("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH)
+        doujin_txt_path = get_var("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH)
+        
+        extension_name = get_var("EXTENSION_NAME", DEFAULT_EXTENSION_NAME)
+        extension_download_path = get_var("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH)
 
-        nhentai_api_base = get_var("nhentai_api_base")
-        nhentai_mirrors = get_var("nhentai_mirrors")
-        page_sort = get_var("page_sort")
-        homepage_range_start = get_var("homepage_range_start")
-        homepage_range_end = get_var("homepage_range_end")
+        nhentai_api_base = get_var("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE)
+        nhentai_mirrors = get_var("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
+        
+        page_sort = get_var("PAGE_SORT", DEFAULT_PAGE_SORT)
+        page_range_start = get_var("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START)
+        page_range_end = get_var("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END)
+        range_start = get_var("RANGE_START", DEFAULT_RANGE_START)
+        range_end = get_var("RANGE_END", DEFAULT_RANGE_END)
+        galleries_list = get_var("GALLERIES_LIST", DEFAULT_GALLERIES_LIST)
+        
+        excluded_tags_list = get_var("EXCLUDED_TAGS_LIST", DEFAULT_EXCLUDED_TAGS)
+        language = get_var("LANGUAGE_LIST", DEFAULT_LANGUAGE)
+        title_type = get_var("TITLE_TYPE", DEFAULT_TITLE_TYPE)
 
-        range_start = get_var("range_start")
-        range_end = get_var("range_end")
-        galleries = get_var("galleries")
-        excluded_tags = get_var("excluded_tags")
-        language = get_var("language")
-        title_type = get_var("title_type")
+        threads_galleries = get_var("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES)
+        threads_images = get_var("THREADS_IMAGES", DEFAULT_THREADS_IMAGES)
+        max_retries = get_var("MAX_RETRIES", DEFAULT_MAX_RETRIES)
+        min_sleep = get_var("MIN_SLEEP", DEFAULT_MIN_SLEEP)
+        max_sleep = get_var("MAX_SLEEP", DEFAULT_MAX_SLEEP)
 
-        threads_galleries = get_var("threads_galleries")
-        threads_images = get_var("threads_images")
-        max_retries = get_var("max_retries")
-        min_sleep = get_var("min_sleep")
-        max_sleep = get_var("max_sleep")
-
-        #use_tor = get_var("use_tor", False)
-        use_tor = config.get("USE_TOR", False)
-        skip_post_run = get_var("skip_post_run")
-        dry_run = get_var("dry_run")
-        calm = get_var("calm")
-        debug = get_var("debug")
-
-    if debug:
-        log(f"Globals updated from config: use_tor={use_tor}, download_path={download_path}", "debug")
+        use_tor = get_var("USE_TOR", DEFAULT_USE_TOR)
+        skip_post_run = get_var("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)
+        dry_run = get_var("DRY_RUN", DEFAULT_DRY_RUN)
+        calm = get_var("CALM", DEFAULT_CALM)
+        debug = get_var("DEBUG", DEFAULT_DEBUG)
 
 def init_scraper(gallery_list):
     """

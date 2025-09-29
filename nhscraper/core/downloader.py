@@ -6,6 +6,8 @@ import threading, asyncio # Module-specific imports
 
 from tqdm.asyncio import tqdm_asyncio
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.core import database as db
@@ -45,7 +47,7 @@ async def load_extension(suppess_pre_run_hook: bool = False):
     active_extension = await executor.call_appropriately(get_selected_extension, ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
     
     # Prefer extension-specific download path, fallback to config/global default
-    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
+    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or orchestrator.download_path
     
     if not suppess_pre_run_hook:
         log(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})", "debug")
@@ -67,8 +69,8 @@ def time_estimate(context: str, id_list: list):
     
     # Best Case
     best_time_secs = (
-        ((current_run_num_of_galleries / threads_galleries) * orchestrator.min_sleep ) +
-        ((current_run_num_of_galleries / BATCH_SIZE) * batch_sleep_time)
+        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.min_sleep ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
     )
     
     best_time_mins = best_time_secs / 60
@@ -77,8 +79,8 @@ def time_estimate(context: str, id_list: list):
     
     # Worst Case
     worst_time_secs = (
-        ((current_run_num_of_galleries / threads_galleries) * orchestrator.max_sleep ) +
-        ((current_run_num_of_galleries / BATCH_SIZE) * batch_sleep_time)
+        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.max_sleep ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
     )
     
     worst_time_mins = worst_time_secs / 60
@@ -212,11 +214,11 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             executor.spawn_task(update_skipped_galleries, False, meta, "Already downloaded.")
             return False
 
-    excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
+    excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags_list]
     gallery_tags = [t.lower() for t in get_meta_tags(meta, "tag")]
     blocked_tags = []
 
-    allowed_gallery_language = [lang.lower() for lang in language]
+    allowed_gallery_language = [lang.lower() for lang in orchestrator.language_list]
     gallery_langs = [l.lower() for l in get_meta_tags(meta, "language")]
     blocked_langs = []
     
@@ -422,7 +424,7 @@ async def start_downloader(gallery_list=None):
         await start_batch(batch_list, current_batch_number, total_batch_numbers)
 
         if batch_num + BATCH_SIZE < len(gallery_list):
-            await dynamic_sleep(wait=batch_sleep_time, dynamic=False)
+            await dynamic_sleep(wait=orchestrator.batch_sleep_time, dynamic=False)
 
     # post_run_hook is sync; executor.run_blocking() used
     executor.run_blocking(active_extension.post_run_hook)

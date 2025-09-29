@@ -6,6 +6,8 @@ import threading, asyncio, aiohttp, aiohttp_socks, aiosqlite # Module-specific i
 
 from datetime import datetime, timezone
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 

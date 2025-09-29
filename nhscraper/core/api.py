@@ -10,6 +10,8 @@ from datetime import datetime
 from urllib.parse import urljoin
 from pathlib import Path
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 
@@ -62,11 +64,9 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
             - "aiohttp" → use aiohttp session (new backend)
     """
 
-    global session, use_tor
+    global session
+    
     fetch_env_vars()  # Refresh env vars in case config changed.
-    print(f"CONFIG USE TOR = {config.get("USE_TOR", False)}")
-    print(f"VARIABLE USE TOR = {orchestrator.use_tor}")
-    #use_tor = config.get("USE_TOR", False)  # Ensure global is in sync with config
     
     session_requester = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
     
@@ -109,7 +109,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
                 log(f"{log_msg_pre} session with aiohttp for {session_requester}", "debug")
                 
                 connector = None
-                if use_tor: # Update proxies
+                if orchestrator.use_tor: # Update proxies
                     # Use aiohttp_socks for Tor
                     connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
                 
@@ -129,7 +129,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
                 if temp_session is None:
                     raise RuntimeError(f"Failed to create Cloudscraper session for {session_requester}")
                 
-                if use_tor: # Update proxies
+                if orchestrator.use_tor: # Update proxies
                     # (blocking; need result immediately)
                     def _update_proxies(s, use_tor_flag):
                         if backend == "cloudscraper":
@@ -143,13 +143,13 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
                         return None  # aiohttp proxies handled via connector
 
                     # Ensure the returned value is a proper proxied session
-                    temp_proxy = await executor.call_appropriately(_update_proxies, temp_session, use_tor)
+                    temp_proxy = await executor.call_appropriately(_update_proxies, temp_session, orchestrator.use_tor)
 
                     if temp_proxy is None:
                         raise RuntimeError(f"Failed to initialise proxy for {session_requester}")
                 
                 session = temp_session
-                log(f"{log_msg_post} {'Proxied ' if use_tor else ''}Cloudscraper session for {session_requester}: {session}", "debug")
+                log(f"{log_msg_post} {'Proxied ' if orchestrator.use_tor else ''}Cloudscraper session for {session_requester}: {session}", "debug")
 
         # Random User-Agents
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -300,7 +300,7 @@ async def clean_title(meta_or_title):
     if isinstance(meta_or_title, dict):
         meta = meta_or_title
         title_obj = meta.get("title", {}) or {}
-        desired_title_type = title_type.lower()
+        desired_title_type = orchestrator.title_type.lower()
         title = (
             title_obj.get(desired_title_type)
             or title_obj.get("english")
@@ -372,9 +372,9 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
 
     if query_lower == "homepage":
         if sort_value == "date":
-            built_url = f"{nhentai_api_base}/galleries/all?page={page}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/all?page={page}"
         else:
-            built_url = f"{nhentai_api_base}/galleries/all?page={page}&sort={sort_value}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/all?page={page}&sort={sort_value}"
         return built_url
 
     if query_lower in ("artist", "group", "tag", "character", "parody"):
@@ -383,9 +383,9 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
         if sort_value == "date":
-            built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/search?query={encoded}&page={page}"
         else:
-            built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
         return built_url
 
     if query_lower == "search":
@@ -394,9 +394,9 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
             search_value = f'"{search_value}"'
         encoded = urllib.parse.quote(search_value, safe='"')
         if sort_value == "date":
-            built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/search?query={encoded}&page={page}"
         else:
-            built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
+            built_url = f"{orchestrator.nhentai_api_base}/galleries/search?query={encoded}&page={page}&sort={sort_value}"
         return built_url
 
     raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
@@ -460,7 +460,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         log(f"Page {page}: Skipped after {attempt} retries: {e}", "warning")
                         resp = None
                         # Rebuild session with Tor and try again once
-                        if use_tor:
+                        if orchestrator.use_tor:
                             wait = executor.run_blocking(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                             executor.run_blocking(dynamic_sleep, wait=wait, dynamic=False)
@@ -539,7 +539,7 @@ def fetch_image_urls(meta: dict, page: int):
 
         urls = [
             f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
-            for mirror in orchestrator.nhentai_mirrors
+            for mirror in orchestrator.orchestrator.nhentai_mirrors
         ]
 
         log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
@@ -561,7 +561,7 @@ async def fetch_gallery_metadata(gallery_id: int):
 
     metadata_session = await get_session() # Get current session
 
-    url = f"{nhentai_api_base}/gallery/{gallery_id}"
+    url = f"{orchestrator.nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
         try:
             log_clarification("debug")
@@ -603,7 +603,7 @@ async def fetch_gallery_metadata(gallery_id: int):
             if attempt >= orchestrator.max_retries:
                 log(f"Failed to fetch metadata for Gallery: {gallery_id} after max retries: {e}", "warning")
                 # Rebuild session with Tor and try again once
-                if use_tor:
+                if orchestrator.use_tor:
                     wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
                     log(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                     await dynamic_sleep(wait=wait, dynamic=False)
@@ -640,7 +640,7 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
 
     if backend == "aiohttp":
         try:
-            if use_tor:
+            if orchestrator.use_tor:
                 connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
                 async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=timeout)) as session:
                     async with session.get(url) as r:
@@ -659,7 +659,7 @@ async def get_tor_ip(backend: str = "aiohttp") -> str | None:
         def _cloudscraper_check():
             scraper = cloudscraper.create_scraper()
             proxies = {"http": "socks5h://127.0.0.1:9050",
-                       "https": "socks5h://127.0.0.1:9050"} if use_tor else None
+                       "https": "socks5h://127.0.0.1:9050"} if orchestrator.use_tor else None
             r = scraper.get(url, timeout=timeout, proxies=proxies)
             r.raise_for_status()
             return r.json().get("origin")
@@ -751,5 +751,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=5000,
-        debug=debug
+        debug=orchestrator.debug
     )

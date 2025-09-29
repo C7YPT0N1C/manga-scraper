@@ -7,6 +7,8 @@ import threading, asyncio, aiohttp, aiohttp_socks, json, shutil, tarfile # Modul
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title

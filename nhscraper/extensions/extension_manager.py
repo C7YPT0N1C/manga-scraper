@@ -4,6 +4,8 @@ import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default'
 
 import inspect, threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Module-specific imports
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.extensions import *  # Ensure extensions package is recognised
