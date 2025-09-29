@@ -55,10 +55,12 @@ async def load_local_manifest():
 
 async def save_local_manifest(manifest: dict):
     """Save the local manifest to disk."""
-    
-    executor.spawn_task(
-        lambda: json.dump(manifest, open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    )
+
+    def write_manifest():
+        with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    await executor.io_to_thread(write_manifest, type="io")
 
 async def fetch_remote_manifest():
     """
@@ -80,17 +82,20 @@ async def fetch_remote_manifest():
         log_clarification()
         log(f"Fetching remote manifest from Primary Server...", "info")
         data = await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
-        log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info")
+        log(f"Sucessfully fetched remote manifest from Primary Server", "info")
+        #log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info") # NOTE: DEBUGGING
         return data
-    
     except Exception as e:
         log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
+        
         try:
             log_clarification()
             log(f"Attempting to fetch remote manifest from Backup Server...", "info")
             data = await _fetch(BACKUP_URL_REMOTE_MANIFEST)
-            log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info")
+            log(f"Sucessfully fetched remote manifest from Backup Server", "info")
+            #log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info") # NOTE: DEBUGGING
             return data
+        
         except Exception as e2:
             log(f"Failed to fetch remote manifest from Backup Server: {e2}", "warning")
             return {"extensions": []}
