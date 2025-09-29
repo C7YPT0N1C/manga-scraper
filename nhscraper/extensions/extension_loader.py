@@ -2,7 +2,7 @@
 # nhscraper/extensions/extension_loader.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Module-specific imports
+import inspect, threading, asyncio, aiohttp, aiohttp_socks, json, importlib, shutil # Module-specific imports
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
@@ -135,17 +135,19 @@ async def _reload_extensions():
 async def sparse_clone(extension_name: str, url: str):
     async def _clone():
         ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+        try:
+            subprocess.run(["git", "init", ext_folder], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True, capture_output=True, text=True)
+            sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
+            with open(sparse_file, "w", encoding="utf-8") as f:
+                f.write(f"{extension_name}/*\n")
+            subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            log(f"sparse_clone git command failed: cmd={e.cmd} rc={e.returncode} stdout={e.stdout} stderr={e.stderr}", "error")
+            raise
 
-        subprocess.run(["git", "init", ext_folder], check=True)
-        subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
-        subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
-
-        sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
-        with open(sparse_file, "w", encoding="utf-8") as f:
-            f.write(f"{extension_name}/*\n")
-
-        subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
-
+        # move content if pull created a subfolder
         repo_folder = os.path.join(ext_folder, extension_name)
         if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
             for item in os.listdir(repo_folder):
@@ -154,7 +156,7 @@ async def sparse_clone(extension_name: str, url: str):
 
         log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
-    return executor.run_blocking(_clone)
+    return await executor.io_to_thread(_clone)
 
 #######################################################################
 # Extension Loader
@@ -201,7 +203,7 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
 
 async def install_selected_extension(extension_name: str, reinstall: bool = False):
     manifest = await update_local_manifest_from_remote()
-    ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
+    ext_entry = next((ext for ext in manifest.get("extensions", []) if ext["name"] == extension_name), None)
     if not ext_entry:
         log(f"Extension '{extension_name}': Not found in remote manifest", "error")
         return
@@ -232,35 +234,75 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
         return
 
     repo_url = ext_entry.get("repo_url", "")
+    if not repo_url:
+        log(f"Extension '{extension_name}': repo_url missing in manifest entry: {ext_entry!r}", "error")
+        return
+
+    # Ensure ext folder exists before cloning
     if not os.path.exists(ext_folder):
         os.makedirs(ext_folder, exist_ok=True)
 
+    # Try primary clone, then backup replacement if needed
+    cloned = False
     try:
         log(f"Sparse cloning {extension_name} from {repo_url}...", "debug")
         await sparse_clone(extension_name, repo_url)
+        cloned = True
     except Exception as e:
         log(f"Failed to sparse-clone from primary repo: {e}", "warning")
-        if BACKUP_URL_BASE_REPO:
-            backup_url = repo_url.replace(PRIMARY_URL_BASE_REPO, BACKUP_URL_BASE_REPO)
-            try:
-                log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
-                shutil.rmtree(ext_folder, ignore_errors=True)
-                os.makedirs(ext_folder, exist_ok=True)
-                await sparse_clone(extension_name, backup_url)
-            except Exception as e2:
-                log(f"Failed to sparse-clone from backup repo: {e2}", "error")
-                return
-        else:
+        # Try to form a backup URL if possible
+        try:
+            if PRIMARY_URL_BASE_REPO and BACKUP_URL_BASE_REPO and PRIMARY_URL_BASE_REPO in repo_url:
+                backup_url = repo_url.replace(PRIMARY_URL_BASE_REPO, BACKUP_URL_BASE_REPO)
+            else:
+                # If repo_url already points to primary raw, try swapping known bases
+                backup_url = repo_url
+            log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
+            # remove any partial content and retry
+            shutil.rmtree(ext_folder, ignore_errors=True)
+            os.makedirs(ext_folder, exist_ok=True)
+            await sparse_clone(extension_name, backup_url)
+            cloned = True
+        except Exception as e2:
+            log(f"Failed to sparse-clone from backup repo: {e2}", "error")
+            cloned = False
+
+    if not cloned:
+        log(f"Extension '{extension_name}': Clone failed, aborting installation.", "error")
+        return
+
+    # Import module
+    module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as e:
+        log(f"Extension '{extension_name}': Import failed: {e}", "error")
+        return
+
+    # Call install_extension if present
+    if hasattr(module, "install_extension"):
+        try:
+            install_obj = module.install_extension
+            if inspect.iscoroutinefunction(install_obj):
+                # async install
+                log(f"Extension '{extension_name}': Running async install_extension()", "debug")
+                await install_obj()
+            else:
+                # sync install: run in thread (use call_appropriately from executor)
+                log(f"Extension '{extension_name}': Running sync install_extension() in thread", "debug")
+                await executor.call_appropriately(install_obj)
+            log(f"Extension '{extension_name}': install_extension ran successfully.", "info")
+        except Exception as e:
+            log(f"Extension '{extension_name}': install_extension failed: {e}", "error")
             return
 
-    module_name = f"nhscraper.extensions.{extension_name}.{ext_entry['entry_point'].replace('.py', '')}"
-    module = importlib.import_module(module_name)
-    if hasattr(module, "install_extension"):
-        executor.run_blocking(module.install_extension)
-        log(f"Extension '{extension_name}': Installed successfully.", "warning")
-
-    ext_entry["installed"] = True
-    await save_local_manifest(manifest)
+    # Mark installed and persist manifest
+    try:
+        ext_entry["installed"] = True
+        await save_local_manifest(manifest)
+        log(f"Extension '{extension_name}': Installed and manifest updated.", "info")
+    except Exception as e:
+        log(f"Extension '{extension_name}': Failed to save local manifest after install: {e}", "error")
 
 async def uninstall_selected_extension(extension_name: str):
     manifest = await load_local_manifest()
