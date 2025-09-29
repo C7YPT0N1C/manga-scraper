@@ -414,7 +414,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = executor.call_appropriately(get_session) # Get current session
+    gallery_ids_session = executor.run_blocking(get_session) # Get current session
 
     try:
         #log_clarification("debug") # NOTE
@@ -434,16 +434,16 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     # Execute synchronous request
-                    resp = executor.call_appropriately(safe_session_get, gallery_ids_session, url, timeout=10)
+                    resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
+                        wait = executor.run_blocking(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
+                        executor.run_blocking(dynamic_sleep, wait=wait, dynamic=False)
                         continue
                     if status_code == 403:
-                        executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt)
+                        executor.run_blocking(dynamic_sleep, stage="api", attempt=attempt)
                         continue
 
                     # Raise for status is synchronous
@@ -461,23 +461,23 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         resp = None
                         # Rebuild session with Tor and try again once
                         if use_tor:
-                            wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
+                            wait = executor.run_blocking(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
+                            executor.run_blocking(dynamic_sleep, wait=wait, dynamic=False)
                             gallery_ids_session = get_session(status="rebuild")
                             
                             # Execute synchronous request
                             try:
-                                resp = executor.call_appropriately(safe_session_get, gallery_ids_session, url, timeout=10)
+                                resp = executor.run_blocking(safe_session_get, gallery_ids_session, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
                                 resp = None
                         break
 
-                    wait = executor.call_appropriately(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
+                    wait = executor.run_blocking(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    executor.call_appropriately(dynamic_sleep, wait=wait, dynamic=False)
+                    executor.run_blocking(dynamic_sleep, wait=wait, dynamic=False)
 
             if resp is None:
                 page += 1
