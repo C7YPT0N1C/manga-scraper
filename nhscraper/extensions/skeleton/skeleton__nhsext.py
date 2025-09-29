@@ -24,7 +24,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
-EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize
+EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 

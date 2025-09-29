@@ -27,7 +27,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
-EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize
+EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
@@ -183,17 +183,15 @@ def install_extension():
         if not os.path.exists(tarball_path):
             log(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL} to {tarball_path}...", "info")
 
-            # Get session from API
-            session = executor.run_blocking(get_session, status="rebuild")
-
             async def _download():
-                resp = await safe_session_get(session, SUWAYOMI_TARBALL_URL, timeout=60)
-                resp.raise_for_status()
-                with open(tarball_path, "wb") as f:
-                    async for chunk in resp.content.iter_chunked(8192):
-                        f.write(chunk)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(SUWAYOMI_TARBALL_URL) as resp:
+                        resp.raise_for_status()
+                        with open(tarball_path, "wb") as f:
+                            async for chunk in resp.content.iter_chunked(8192):
+                                f.write(chunk)
 
-            # Properly run async coroutine in sync function
+            # Run async download from sync code
             executor.call_appropriately(_download)
 
         with tarfile.open(tarball_path, "r:gz") as tar:
