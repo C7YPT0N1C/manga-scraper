@@ -32,7 +32,7 @@ PRIMARY_URL_REMOTE_MANIFEST = (
 BACKUP_URL_BASE_REPO = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
 BACKUP_URL_REMOTE_MANIFEST = (
     "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
-    "raw/branch/dev/master_manifest.json"
+    "raw/branch/main/master_manifest.json"
 )
 
 INSTALLED_EXTENSIONS = []
