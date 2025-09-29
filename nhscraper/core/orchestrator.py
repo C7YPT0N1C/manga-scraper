@@ -501,6 +501,8 @@ config = {
     "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
 }
 
+use_tor = config.get("USE_TOR", False)
+
 def fetch_env_vars():
     """
     Populate global variables from config explicitly
@@ -543,8 +545,7 @@ def fetch_env_vars():
         min_sleep = get_var("min_sleep")
         max_sleep = get_var("max_sleep")
 
-        #use_tor = get_var("use_tor", False)
-        use_tor = config.get("USE_TOR", False)
+        use_tor = get_var("use_tor", False)
         skip_post_run = get_var("skip_post_run")
         dry_run = get_var("dry_run")
         calm = get_var("calm")
