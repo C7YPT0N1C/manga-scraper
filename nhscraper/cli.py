@@ -547,7 +547,7 @@ def main():
     # Build Gallery List (make sure not empty.)
     log_clarification()
     log(f"Parsing galleries from NHentai. This may take a while...")
-    gallery_list = executor.run_blocking(build_gallery_list, args)
+    gallery_list = executor.call_appropriately(build_gallery_list, args)
     if not gallery_list:
         logger.warning("No galleries provided. Exiting.")
         sys.exit(0)  # Or just return
