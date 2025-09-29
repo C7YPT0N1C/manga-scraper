@@ -27,6 +27,7 @@ ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, 
 ####################################################################################################################
 
 EXTENSION_NAME = "suwayomi" # Must be fully lowercase
+EXTENSION_REFERRER = f"{EXTENSION_NAME} Extension" # Used for printing the extension's name.
 _module_referrer=f"{EXTENSION_NAME}" # Used in executor.* / cross-module calls
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
@@ -165,7 +166,7 @@ def pre_run_hook():
     """
     
     log(f"{EXTENSION_NAME}: Ready.", "debug")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
@@ -175,9 +176,9 @@ def pre_run_hook():
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        log(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
+        log(f"{EXTENSION_REFERRER}:  Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.", "debug")
     except Exception as e:
-        log(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
+        log(f"{EXTENSION_REFERRER}:  Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}", "error")
 
 def return_gallery_metas(meta):
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -265,10 +266,10 @@ WantedBy=multi-user.target
         log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
         
         pre_run_hook()
-        log(f"Extension: {EXTENSION_NAME}: Installed.", "info")
+        log(f"{EXTENSION_REFERRER}:  Installed.", "info")
     
     except Exception as e:
-        log(f"Extension: {EXTENSION_NAME}: Failed to install: {e}", "error")
+        log(f"{EXTENSION_REFERRER}:  Failed to install: {e}", "error")
 
 def uninstall_extension():
     """
@@ -297,10 +298,10 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
-        log(f"Extension: {EXTENSION_NAME}: Uninstalled", "info")
+        log(f"{EXTENSION_REFERRER}:  Uninstalled", "info")
     
     except Exception as e:
-        log(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}", "error")
+        log(f"{EXTENSION_REFERRER}:  Failed to uninstall: {e}", "error")
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
@@ -316,7 +317,7 @@ def test_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 async def clean_directories(RemoveEmptyArtistFolder: bool = True):
@@ -1176,11 +1177,11 @@ def pre_batch_hook(gallery_list):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  Pre-batch Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Pre-batch Hook Called.", "debug")
     
     global LOCAL_SOURCE_ID, CATEGORY_ID
     
@@ -1195,32 +1196,32 @@ def pre_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  Pre-download Hook Inactive.", "info")
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"{EXTENSION_REFERRER}:  Pre-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  During-download Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"{EXTENSION_REFERRER}:  During-download Hook Called: Gallery: {gallery_id}", "debug")
 
 # Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  Post-download Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     # Thread-safe append
     with _gallery_meta_lock:
@@ -1234,31 +1235,31 @@ def post_batch_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  Post-batch Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Post-batch Hook Called.", "debug")
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        log(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.", "info")
+        log(f"[DRY RUN] {EXTENSION_REFERRER}:  Post-run Hook Inactive.", "info")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}:  Post-run Hook Called.", "debug")
     
     clean_directories(True)
     
     if orchestrator.skip_post_run == True:
         log_clarification("debug")
-        log(f"Extension: {EXTENSION_NAME}: Post-run Hook Skipped.", "debug")
+        log(f"{EXTENSION_REFERRER}:  Post-run Hook Skipped.", "debug")
     else:
         log_clarification("debug")
-        log(f"Extension: {EXTENSION_NAME}: Post-run Hook Active.", "debug")
+        log(f"{EXTENSION_REFERRER}:  Post-run Hook Active.", "debug")
         
         # Add all creators to Suwayomi
         process_deferred_creators()
