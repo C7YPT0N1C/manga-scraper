@@ -605,10 +605,13 @@ def get_caller_module_name(frame_num: int = 1, default=DEFAULT_REFERRER):
     Strips any 'nhscraper.*.' prefix, leaving only the final part of the module path.
     """
     frame = inspect.currentframe()
+    
+    frames_to_go_back = frame_num
+    
     try:
         # Step back through frames
         caller_frame = frame
-        for _ in range(frame_num):
+        for _ in range(frames_to_go_back):
             if caller_frame.f_back is None:
                 break
             caller_frame = caller_frame.f_back
