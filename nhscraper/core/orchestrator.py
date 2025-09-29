@@ -501,47 +501,51 @@ config = {
     "DEBUG": parse_bool(os.getenv("DEBUG", DEFAULT_DEBUG)),
 }
 
+# because I honestly don't know why the FUCK it isn't just *working*
+
 def fetch_env_vars():
-    """Populate global variables from config explicitly."""
+    """
+    Populate global variables from config explicitly
+    because I honestly don't know why the FUCK it isn't just *working*
+    """
     global download_path, doujin_txt_path, extension, extension_download_path
     global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
     global range_start, range_end, galleries, excluded_tags, language, title_type
     global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
     global use_tor, skip_post_run, dry_run, calm, debug
 
-    with_env_lock(lambda: None)  # if you need threading lock, otherwise skip
+    with_env_lock(lambda: None) # if you need threading lock, otherwise skip
 
-    download_path = config.get("DOWNLOAD_PATH", download_path)
-    doujin_txt_path = config.get("DOUJIN_TXT_PATH", doujin_txt_path)
-    extension = config.get("EXTENSION", extension)
-    extension_download_path = config.get("EXTENSION_DOWNLOAD_PATH", extension_download_path)
+    download_path = config.get("DOWNLOAD_PATH", globals().get("download_path"))
+    doujin_txt_path = config.get("DOUJIN_TXT_PATH", globals().get("doujin_txt_path"))
+    extension = config.get("EXTENSION", globals().get("extension"))
+    extension_download_path = config.get("EXTENSION_DOWNLOAD_PATH", globals().get("extension_download_path"))
 
-    nhentai_api_base = config.get("NHENTAI_API_BASE", nhentai_api_base)
-    nhentai_mirrors = config.get("NHENTAI_MIRRORS", nhentai_mirrors)
-    page_sort = config.get("PAGE_SORT", page_sort)
-    homepage_range_start = config.get("PAGE_RANGE_START", homepage_range_start)
-    homepage_range_end = config.get("PAGE_RANGE_END", homepage_range_end)
+    nhentai_api_base = config.get("NHENTAI_API_BASE", globals().get("nhentai_api_base"))
+    nhentai_mirrors = config.get("NHENTAI_MIRRORS", globals().get("nhentai_mirrors"))
+    page_sort = config.get("PAGE_SORT", globals().get("page_sort"))
+    homepage_range_start = config.get("PAGE_RANGE_START", globals().get("homepage_range_start"))
+    homepage_range_end = config.get("PAGE_RANGE_END", globals().get("homepage_range_end"))
 
-    range_start = config.get("RANGE_START", range_start)
-    range_end = config.get("RANGE_END", range_end)
-    galleries = config.get("GALLERIES", galleries)
-    excluded_tags = config.get("EXCLUDED_TAGS", excluded_tags)
-    language = config.get("LANGUAGE", language)
-    title_type = config.get("TITLE_TYPE", title_type)
+    range_start = config.get("RANGE_START", globals().get("range_start"))
+    range_end = config.get("RANGE_END", globals().get("range_end"))
+    galleries = config.get("GALLERIES", globals().get("galleries"))
+    excluded_tags = config.get("EXCLUDED_TAGS", globals().get("excluded_tags"))
+    language = config.get("LANGUAGE", globals().get("language"))
+    title_type = config.get("TITLE_TYPE", globals().get("title_type"))
 
-    threads_galleries = config.get("THREADS_GALLERIES", threads_galleries)
-    threads_images = config.get("THREADS_IMAGES", threads_images)
-    max_retries = config.get("MAX_RETRIES", max_retries)
-    min_sleep = config.get("MIN_SLEEP", min_sleep)
-    max_sleep = config.get("MAX_SLEEP", max_sleep)
+    threads_galleries = config.get("THREADS_GALLERIES", globals().get("threads_galleries"))
+    threads_images = config.get("THREADS_IMAGES", globals().get("threads_images"))
+    max_retries = config.get("MAX_RETRIES", globals().get("max_retries"))
+    min_sleep = config.get("MIN_SLEEP", globals().get("min_sleep"))
+    max_sleep = config.get("MAX_SLEEP", globals().get("max_sleep"))
 
-    use_tor = config.get("USE_TOR", use_tor)
-    skip_post_run = config.get("SKIP_POST_RUN", skip_post_run)
-    dry_run = config.get("DRY_RUN", dry_run)
-    calm = config.get("CALM", calm)
-    debug = config.get("DEBUG", debug)
+    use_tor = config.get("USE_TOR", globals().get("use_tor", False))
+    skip_post_run = config.get("SKIP_POST_RUN", globals().get("skip_post_run"))
+    dry_run = config.get("DRY_RUN", globals().get("dry_run"))
+    calm = config.get("CALM", globals().get("calm"))
+    debug = config.get("DEBUG", globals().get("debug"))
 
-    # Optional debug logging
     if debug:
         log(f"Globals updated from config: use_tor={use_tor}, download_path={download_path}", "debug")
 
