@@ -215,10 +215,10 @@ async def install_selected_extension(extension_name: str, reinstall: bool = Fals
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
     
     # Safety: if ext_folder already has a .git, wipe it first
-    #git_dir = os.path.join(ext_folder, ".git")
-    #if os.path.exists(git_dir):
-    #    shutil.rmtree(ext_folder)
-    #    os.makedirs(ext_folder, exist_ok=True)
+    git_dir = os.path.join(ext_folder, ".git")
+    if os.path.exists(git_dir):
+        shutil.rmtree(ext_folder)
+        os.makedirs(ext_folder, exist_ok=True)
     
     if reinstall and os.path.exists(ext_folder):
         shutil.rmtree(ext_folder)
