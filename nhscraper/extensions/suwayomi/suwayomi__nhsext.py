@@ -229,10 +229,11 @@ def install_extension():
         if not os.path.exists(tarball_path):
             log(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...", "info")
 
-            # Get session from executor
+            # Get session from API
             session = executor.run_blocking(get_session, status="rebuild")
 
             async def _download():
+                # Get wrap session.get with safe_session_get()
                 resp = await safe_session_get(session, SUWAYOMI_TARBALL_URL, timeout=60)
                 resp.raise_for_status()
                 with open(tarball_path, "wb") as f:
@@ -242,8 +243,8 @@ def install_extension():
                             break
                         f.write(chunk)
 
-            # Correctly run async coroutine from sync function
-            executor.call_appropriately(_download)
+            # Properly run async coroutine in sync function
+            executor.run_blocking(_download)
 
         with tarfile.open(tarball_path, "r:gz") as tar:
             members = tar.getmembers()
