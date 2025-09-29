@@ -23,16 +23,16 @@ EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
 # Primary + backup repo / manifest URLs
-PRIMARY_URL_BASE_REPO = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+PRIMARY_URL_BASE_REPO = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
 PRIMARY_URL_REMOTE_MANIFEST = (
-    "https://raw.githubusercontent.com/C7YPT0N1C/nhentai-scraper-extensions/"
-    "main/master_manifest.json"
-)
-
-BACKUP_URL_BASE_REPO = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
-BACKUP_URL_REMOTE_MANIFEST = (
     "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
     "raw/branch/main/master_manifest.json"
+)
+
+BACKUP_URL_BASE_REPO = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+BACKUP_URL_REMOTE_MANIFEST = (
+    "https://raw.githubusercontent.com/C7YPT0N1C/nhentai-scraper-extensions/"
+    "main/master_manifest.json"
 )
 
 INSTALLED_EXTENSIONS = []
