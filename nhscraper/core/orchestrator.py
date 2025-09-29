@@ -387,8 +387,10 @@ def fetch_env_vars():
             globals()[key.lower()] = normalise_value(key, config[key])
             #log(f"{key.lower()} = {normalise_value(key, config[key])}", "debug") # NOTE: DEBUGGING
 
-    # Execute the update under the lock
-    with_env_lock(_update_globals)
+    ## Execute the update under the lock
+    #with_env_lock(_update_globals)
+    
+    _update_globals
 
 def update_env(key, value):
     """
