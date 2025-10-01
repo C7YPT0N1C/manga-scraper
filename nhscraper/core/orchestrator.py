@@ -626,7 +626,7 @@ def get_caller_module_name(frame_num: int = 2, default=DEFAULT_REFERRER):
             return ref
         return default
     finally:
-        del frame  # avoid reference cycles
+        del frame # avoid reference cycles
 
 # Used when no specific concurrency limit is required; essentially a single-slot semaphore for generic tasks.
 DEFAULT_SEMAPHORE = max(1, (DEFAULT_THREADS_GALLERIES or 0) + (DEFAULT_THREADS_IMAGES or 0)) # Seems good lmfao

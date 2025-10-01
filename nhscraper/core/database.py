@@ -14,7 +14,7 @@ from nhscraper.core.orchestrator import *
 """
 Database management layer for the downloader.
 Handles initialisation, migrations, inserts, updates,
-and queries related to galleries, images, and metadata.
+and queries related to creators, galleries, images, and metadata.
 """
 
 _module_referrer=f"Database" # Used in async_runner.* / cross-module calls
@@ -30,7 +30,7 @@ async def init_db():
     os.makedirs(SCRAPER_DIR, exist_ok=True)
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
-        CREATE TABLE IF NOT EXISTS galleries (
+        CREATE TABLE IF NOT EXISTS Creators (
             id INTEGER PRIMARY KEY,
             status TEXT,
             started_at TEXT,
@@ -49,7 +49,7 @@ async def mark_gallery_started(gallery_id, download_location=None, extension_use
     now = datetime.utcnow().isoformat()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
-        INSERT INTO galleries (id, status, started_at, download_location, extension_used)
+        INSERT INTO Creators (id, status, started_at, download_location, extension_used)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             status=excluded.status,
@@ -64,7 +64,7 @@ async def mark_gallery_skipped(gallery_id):
     now = datetime.now(timezone.utc).isoformat()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
-        UPDATE galleries
+        UPDATE Creators
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("skipped", now, gallery_id))
@@ -75,7 +75,7 @@ async def mark_gallery_failed(gallery_id):
     now = datetime.now(timezone.utc).isoformat()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
-        UPDATE galleries
+        UPDATE Creators
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("failed", now, gallery_id))
@@ -86,7 +86,7 @@ async def mark_gallery_completed(gallery_id):
     now = datetime.now(timezone.utc).isoformat()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
-        UPDATE galleries
+        UPDATE Creators
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("completed", now, gallery_id))
@@ -95,7 +95,7 @@ async def mark_gallery_completed(gallery_id):
 async def get_gallery_status(gallery_id):
     await init_db()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
-        async with conn.execute("SELECT status FROM galleries WHERE id=?", (gallery_id,)) as cursor:
+        async with conn.execute("SELECT status FROM Creators WHERE id=?", (gallery_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
 
@@ -103,10 +103,10 @@ async def list_galleries(status=None):
     await init_db()
     async with lock, aiosqlite.connect(DB_PATH) as conn:
         if status:
-            async with conn.execute("SELECT id, status, started_at, completed_at FROM galleries WHERE status=?", (status,)) as cursor:
+            async with conn.execute("SELECT id, status, started_at, completed_at FROM Creators WHERE status=?", (status,)) as cursor:
                 return await cursor.fetchall()
         else:
-            async with conn.execute("SELECT id, status, started_at, completed_at FROM galleries") as cursor:
+            async with conn.execute("SELECT id, status, started_at, completed_at FROM Creators") as cursor:
                 return await cursor.fetchall()
 
 log_clarification("debug")
