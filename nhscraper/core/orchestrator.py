@@ -745,7 +745,7 @@ class AsyncRunner:
         Even if you pass a coroutine, it will block the loop until it's finished.
         """
         
-        referrer_blocking = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
+        referrer_blocking = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         # Wrap everything in a zero-arg callable
         if inspect.iscoroutinefunction(func):
@@ -783,7 +783,7 @@ class AsyncRunner:
         - For synchronous functions in async context, use `invoke`.
         """
         
-        referrer_async = get_caller_module_name(frame_num=1) # Retrieve calling module's '_module_referrer' variable
+        referrer_async = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
         
         sem = self.default_semaphore # Set default.
         if type == "gallery":
@@ -807,7 +807,7 @@ class AsyncRunner:
         """
         
         if referrer is None:
-            referrer = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+            referrer = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
 
         try:
             asyncio.get_running_loop()
@@ -940,7 +940,7 @@ async def dynamic_sleep(stage=None, batch_ids=None, attempt: int = 1, wait: floa
     """
     
     if stage == None:
-        stage = get_caller_module_name(frame_num=2) # Retrieve calling module's '_module_referrer' variable
+        stage = get_caller_module_name() # Retrieve calling module's '_module_referrer' variable
     
     try:
         asyncio.get_running_loop()
