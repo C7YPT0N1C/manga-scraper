@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# core/config_helper.py
+# core/cleaning_helper.py
 
 # ------------------------------------------------------------
 # Gallery Title Cleaning

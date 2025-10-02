@@ -1,13 +1,30 @@
 #!/usr/bin/env python3
 # nhscraper/cli.py
+import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import os, time, sys, argparse, re, subprocess, urllib.parse
+import threading, asyncio # Module-specific imports
 
+# When referencing globals from orchestrator
+# explicitly reference them (e.g. orchestrator.VARIABLE_NAME)
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
 from nhscraper.core.downloader import start_downloader
 from nhscraper.core.api import get_session, fetch_gallery_ids
-from nhscraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
+from nhscraper.extensions.extension_manager import get_selected_extension, uninstall_selected_extension
+
+"""
+Command-line interface for controlling the downloader.
+Handles argument parsing, configuration loading, and
+initiating orchestrator tasks.
+"""
+
+"""
+CLI is synchronous. All async functions must be executed through executor:
+- executor.await_async(func, *args) → blocks until finished, returns result
+- Do not use 'await' or executor.spawn_task() in this module
+"""
+
+_module_referrer=f"CLI" # Used in executor.* / cross-module calls
 
 INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
 
@@ -55,7 +72,7 @@ def parse_args():
     # Extension selection / management
     parser.add_argument("--install-extension", type=str, help="Install an extension by name")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
-    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
+    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION_NAME, help=f"Extension to use (default: {DEFAULT_EXTENSION_NAME})")
 
     # Gallery selection
     parser.add_argument(
@@ -205,8 +222,16 @@ def parse_args():
     
     # Make calm/debug mutually exclusive
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (warnings and higher) (default: {DEFAULT_CALM})")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (critical errors and lower) (default: {DEFAULT_DEBUG})")
+    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Reduces logging to warnings and higher. (default: {DEFAULT_CALM})")
+    group.add_argument(
+        "--debug",
+        action="store_true",
+        default=DEFAULT_DEBUG,
+        help=(
+            f"Increases logging to critical errors and lower (default: {DEFAULT_DEBUG}). "
+            "Turning this on WILL make your logs massive."
+        )
+    )
 
     return parser.parse_args()
 
@@ -264,7 +289,11 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
-                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+                    
+                    result = fetch_gallery_ids("homepage", None, sort_val, start_page, end_page)
+                    if result:
+                        gallery_ids.update(result)
+                    
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -280,7 +309,11 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page))
+                    
+                    result = fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page)
+                    if result:
+                        gallery_ids.update(result)
+                        
                     continue
 
                 elif m_search:
@@ -289,7 +322,11 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page))
+                    
+                    result = fetch_gallery_ids("search", search_query, sort_val, start_page, end_page)
+                    if result:
+                        gallery_ids.update(result)
+                        
                     continue
 
                 else:
@@ -317,7 +354,10 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+        result = fetch_gallery_ids("homepage", None, sort_val, start_page, end_page)
+        if result:
+            gallery_ids.update(result)
+        
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -343,7 +383,9 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
+        result = fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page)
+        if result:
+            gallery_ids.update(result)
 
     return gallery_ids
 
@@ -408,8 +450,8 @@ def build_gallery_list(args):
             )
         )
     
-    #log_clarification("debug")
-    #log(f"Gallery List: {gallery_list}", "debug")
+    log_clarification("debug")
+    log(f"Gallery List: {gallery_list}", "debug")
     
     return gallery_list
 
@@ -418,7 +460,7 @@ def update_config(args):
     log("Updating Config...", "debug")
     
     if args.extension is not None:
-        update_env("EXTENSION", args.extension)
+        update_env("EXTENSION_NAME", args.extension)
         
     if getattr(args, "mirrors", None):
         update_env("NHENTAI_MIRRORS", args.mirrors)
@@ -427,10 +469,10 @@ def update_config(args):
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
     else:
         # Use whatever excluded tags were already in config (env or default)
-        if isinstance(excluded_tags, str):
-            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in excluded_tags.split(",")])
+        if isinstance(orchestrator.excluded_tags_list, str):
+            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in orchestrator.excluded_tags_list.split(",")])
     
-    update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
+    update_env("LANGUAGE_LIST", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)
     update_env("THREADS_GALLERIES", args.threads_galleries)
     update_env("THREADS_IMAGES", args.threads_images)
@@ -450,7 +492,7 @@ def update_config(args):
 # ------------------------------------------------------------
 def main():
     """
-    This is one this module's entrypoints.
+    This is one of this module's entrypoints.
     """
     
     args = parse_args()
@@ -481,11 +523,11 @@ def main():
     # Handle extension installation / uninstallation
     # ------------------------------------------------------------
     if args.install_extension:
-        install_selected_extension(args.install_extension)
+        executor.await_async(get_selected_extension, args.install_extension)
         return
     
     if args.uninstall_extension:
-        uninstall_selected_extension(args.uninstall_extension)
+        executor.await_async(uninstall_selected_extension, args.uninstall_extension)
         return
     
     logger.debug("CLI: Ready.")
@@ -502,19 +544,18 @@ def main():
     update_config(args)
     
     # Build initial session.
-    get_session(referrer="CLI", status="build")
+    session = executor.await_async(get_session, status="build", session_requester="CLI")
     
     # Build Gallery List (make sure not empty.)
     log_clarification()
     log(f"Parsing galleries from NHentai. This may take a while...")
-    log_clarification()
     gallery_list = build_gallery_list(args)
     if not gallery_list:
         logger.warning("No galleries provided. Exiting.")
         sys.exit(0)  # Or just return
     
     # Update Config with Built Gallery List
-    update_env("GALLERIES", gallery_list)
+    init_scraper(gallery_list)
     
     log_clarification("debug")
     log(f"Final Config:\n{config}", "debug")
@@ -522,7 +563,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    start_downloader(gallery_list) # Start download
+    executor.await_async(start_downloader, gallery_list) # Start download
 
 if __name__ == "__main__":
     main()

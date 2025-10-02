@@ -46,7 +46,12 @@ install_python_packages() {
     echo "Installing Python requirements..."
     source "$SCRAPER_DIR/venv/bin/activate"
     "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm"
+    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" \
+        "tqdm" \
+        "requests[socks]" \
+        "aiohttp" \
+        "aiohttp-socks" \
+        "aiosqlite"
     export PATH="$SCRAPER_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
@@ -72,7 +77,7 @@ install_filebrowser() {
 
 
     # Prompt for password
-    echo -n "[?] Enter FileBrowser admin password: "
+    echo -n "[?] Create a FileBrowser admin password: "
     read -s FILEBROWSER_PASS
     echo
 
@@ -103,7 +108,7 @@ install_scraper() {
 
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning nhentai-scraper repo (branch: $branch)..."
-        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
+        git clone --depth 1 --branch "$branch" https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
         git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || {
             echo "Failed to clone nhentai-scraper repo."
             exit 1
@@ -141,8 +146,8 @@ create_env_file() {
 
 # Custom (Username and Password must be manually set for now)
 # TEST
-AUTH_USERNAME = "Username"
-AUTH_PASSWORD = "Password"
+AUTH_USERNAME=Username
+AUTH_PASSWORD=Password
 
 # Directories
 SCRAPER_DIR=/opt/nhentai-scraper
@@ -152,12 +157,12 @@ DOWNLOAD_PATH=
 DOUJIN_TXT_PATH=
 
 # Extensions
-EXTENSION=
+EXTENSION_NAME=
 EXTENSION_DOWNLOAD_PATH=
 
 # APIs and Mirrors
 NHENTAI_API_BASE=
-NHENTAI_MIRRORS=
+NHENTAI_MIRRORS=[]
 
 # Gallery ID selection
 PAGE_SORT=
@@ -165,11 +170,11 @@ PAGE_RANGE_START=
 PAGE_RANGE_END=
 RANGE_START=
 RANGE_END=
-GALLERIES=
+GALLERIES_LIST=[]
 
 # Filters
-EXCLUDED_TAGS=
-LANGUAGE=
+EXCLUDED_TAGS_LIST=[]
+LANGUAGE_LIST=[]
 TITLE_TYPE=
 
 # Threads
@@ -180,7 +185,7 @@ MIN_SLEEP=
 MAX_SLEEP=
 
 # Download Options
-USE_TOR=True
+USE_TOR=False
 SKIP_POST_RUN=False
 DRY_RUN=False
 CALM=False
