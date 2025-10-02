@@ -365,7 +365,7 @@ async def start_batch(batch_list=None, current_batch_number: int = 1, total_batc
     await load_extension(suppess_pre_run_hook=True)
     
     # pre_batch_hook is sync; async_runner.await_async() used
-    async_runner.await_async(active_extension.pre_batch_hook, batch_list)
+    async_runner.invoke(active_extension.pre_batch_hook, batch_list)
 
     # Spawn Gallery Threads (Max of threads_galleries) (Use async_runner instead of direct gather)
     # Build tasks list and then use tqdm_asyncio.gather to monitor them
