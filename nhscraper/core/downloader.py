@@ -112,6 +112,8 @@ def build_gallery_path(meta, iteration: dict = None):
         if not isinstance(value, str):
             value = str(value)
         path_parts.append(make_filesystem_safe(value))
+        
+    log("DONE BULDING GALLERY PATH") # NOTE: DEBUGGING
 
     return os.path.join(*path_parts)
 
