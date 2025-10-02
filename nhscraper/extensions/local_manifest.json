@@ -5,7 +5,7 @@
       "version": "3.0.0",
       "description": "Skeleton extension",
       "repo_url": "https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
-      "installed": false,
+      "installed": true,
       "entry_point": "skeleton__nhsext.py",
       "image_download_path": "/opt/nhentai-scraper/downloads/"
     },
