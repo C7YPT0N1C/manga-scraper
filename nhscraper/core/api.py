@@ -415,7 +415,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = async_runner.invoke(get_session, session_requester="API") # Get current session
+    gallery_ids_session = async_runner.await_async(get_session, session_requester="API") # Get current session
     print(f"gallery_ids_session = {gallery_ids_session}")
 
     try:
