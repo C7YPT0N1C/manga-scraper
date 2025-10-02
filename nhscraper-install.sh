@@ -108,7 +108,7 @@ install_scraper() {
 
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning nhentai-scraper repo (branch: $branch)..."
-        git clone --depth 1 --branch "$branch" https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
+        git clone --depth 1 --branch "$branch" https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
         git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || {
             echo "Failed to clone nhentai-scraper repo."
             exit 1
