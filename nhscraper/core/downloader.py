@@ -263,6 +263,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
+                log(f"num_pages = {num_pages}")
                 
                 # during_gallery_download_hook is sync; async_runner.invoke() used
                 await async_runner.invoke(active_extension.during_gallery_download_hook, gallery_id)
