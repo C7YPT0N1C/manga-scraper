@@ -15,19 +15,18 @@ from nhscraper.extensions import * # Ensure extensions package is recognised
 EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
-# Primary + backup manifest locations
-REMOTE_MANIFEST_URL = (
-    "https://code.zenithnetwork.online/C7YPT0N1C/"
+# Primary + backup repo / manifest locations
+PRIMARY_BASE_REPO_URL = "https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+PRIMARY_REMOTE_MANIFEST_URL = (
+    "https://git.zenithnetwork.online/C7YPT0N1C/"
     "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
 )
-REMOTE_MANIFEST_BACKUP_URL = (
+
+BACKUP_BASE_REPO_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+BACKUP_REMOTE_MANIFEST_URL = (
     "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
     "raw/main/master_manifest.json"
 )
-
-# If the base repo URLs can also fail
-BASE_REPO_URL = "https://code.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
-BASE_REPO_BACKUP_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
 
 INSTALLED_EXTENSIONS = []
 
@@ -61,13 +60,13 @@ def fetch_remote_manifest():
     """
     
     try:
-        with urlopen(REMOTE_MANIFEST_URL) as response:
+        with urlopen(PRIMARY_REMOTE_MANIFEST_URL) as response:
             return json.load(response)
     except Exception as e:
         log_clarification()
         logger.warning(f"Failed to fetch primary remote manifest: {e}")
         try:
-            with urlopen(REMOTE_MANIFEST_BACKUP_URL) as response:
+            with urlopen(BACKUP_REMOTE_MANIFEST_URL) as response:
                 logger.warning("Using backup remote manifest URL")
                 return json.load(response)
         except Exception as e2:
@@ -269,8 +268,8 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
         sparse_clone(extension_name, repo_url)
     except Exception as e:
         logger.warning(f"Failed to sparse-clone from primary repo: {e}")
-        if BASE_REPO_BACKUP_URL:
-            backup_url = repo_url.replace(BASE_REPO_URL, BASE_REPO_BACKUP_URL)
+        if BACKUP_BASE_REPO_URL:
+            backup_url = repo_url.replace(PRIMARY_BASE_REPO_URL, BACKUP_BASE_REPO_URL)
             try:
                 log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
                 # clean up half-baked folder before retry
