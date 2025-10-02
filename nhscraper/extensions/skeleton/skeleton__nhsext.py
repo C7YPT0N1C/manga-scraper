@@ -147,7 +147,7 @@ def return_gallery_metas(meta):
     creators = artists or groups or ["Unknown Creator"]
     
     # Use async_runner.invoke() so this works from both async and sync contexts
-    title = async_runner.invoke(clean_title, meta)
+    title = clean_title(meta)
     log(f"title = {title}", "debug") # NOTE: DEBUGGING
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
