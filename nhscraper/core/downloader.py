@@ -365,7 +365,7 @@ async def start_batch(batch_list=None, current_batch_number: int = 1, total_batc
     await load_extension(suppess_pre_run_hook=True)
     
     # pre_batch_hook is sync; async_runner.await_async() used
-    async_runner.invoke(active_extension.pre_batch_hook, batch_list)
+    await async_runner.invoke(active_extension.pre_batch_hook, batch_list)
 
     # Spawn Gallery Threads (Max of threads_galleries) (Use async_runner instead of direct gather)
     # Build tasks list and then use tqdm_asyncio.gather to monitor them
@@ -382,7 +382,7 @@ async def start_batch(batch_list=None, current_batch_number: int = 1, total_batc
     await tqdm_asyncio.gather(*gallery_tasks, desc="Processing galleries")
     
     # post_batch_hook is sync; async_runner.await_async() used
-    async_runner.await_async(active_extension.post_batch_hook)
+    await async_runner.invoke(active_extension.post_batch_hook)
 
 async def start_downloader(gallery_list=None):
     """
@@ -422,7 +422,7 @@ async def start_downloader(gallery_list=None):
             await dynamic_sleep(wait=orchestrator.batch_sleep_time, dynamic=False)
 
     # post_run_hook is sync; async_runner.await_async() used
-    async_runner.await_async(active_extension.post_run_hook)
+    await async_runner.invoke(active_extension.post_run_hook)
     
     end_time = asyncio.get_event_loop().time()
     runtime = end_time - start_time
