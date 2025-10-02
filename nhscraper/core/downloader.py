@@ -185,7 +185,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     
     if not meta:
         # schedule the skip update in background
-        async_runner.spawn_task(update_skipped_galleries, False, meta, "Not Meta.")
+        async_runner.spawn_task(update_skipped_galleries(False, meta, "Not Meta."))
         return False
 
     gallery_id = meta.get("id")
@@ -194,7 +194,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     if num_pages == 0:
         log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: No Pages.\nTitle: {gallery_title}", "warn")
         log_clarification()
-        async_runner.spawn_task(update_skipped_galleries, False, meta, "No Pages.")
+        async_runner.spawn_task(update_skipped_galleries(False, meta, "No Pages."))
         return False
 
     if not orchestrator.dry_run and os.path.exists(doujin_folder):
@@ -206,7 +206,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if all_exist:
             log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: Already Downloaded.\nTitle: {gallery_title}", "info")
             log_clarification()
-            async_runner.spawn_task(update_skipped_galleries, False, meta, "Already downloaded.")
+            async_runner.spawn_task(update_skipped_galleries(False, meta, "Already downloaded."))
             return False
 
     excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags_list]
@@ -230,7 +230,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     if blocked_tags or blocked_langs:
         log(f"Downloader: Skipping Gallery: {gallery_id}\nReason: Blocked Tags.\nTitle: {gallery_title}", "info")
         log_clarification()
-        async_runner.spawn_task(update_skipped_galleries, False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}")
+        async_runner.spawn_task(update_skipped_galleries(False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}"))
         return False
 
     return True

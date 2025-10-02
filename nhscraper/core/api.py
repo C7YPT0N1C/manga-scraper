@@ -217,7 +217,7 @@ def get_meta_tags(meta, tag_type, meta_tag_requester: str = None):
             names.extend(parts)
             
     log_clarification("debug")
-    log(f"{meta_tag_requester}: Requested Metadata Tags: {names}")
+    log(f"{meta_tag_requester}: Requested Metadata Tags for {tag_type}: {names}")
 
     return names
 
