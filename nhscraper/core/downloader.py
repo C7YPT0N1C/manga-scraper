@@ -49,16 +49,11 @@ async def load_extension(suppess_pre_run_hook: bool = False):
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or orchestrator.download_path
     
-    if not suppess_pre_run_hook:
-        log(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})", "debug")
+    log(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})", "debug")
+    if not suppess_pre_run_hook or orchestrator.dry_run:
         log(f"Downloading Galleries To: {download_location}", "info")
-
-    if not orchestrator.dry_run:
-        # Creating directories is blocking; run in thread to be safe
-        async_runner.await_async(os.makedirs, download_location, exist_ok=True)
     else:
-        if not suppess_pre_run_hook:
-            log(f"[DRY RUN] Would Download Galleries To: {download_location}", "info")
+        log(f"[DRY RUN] Would Download Galleries To: {download_location}", "info")
 
 ####################################################################################################
 # UTILITIES

@@ -598,8 +598,8 @@ def get_valid_sort_value(sort_value):
 
 DEFAULT_REFERRER = "Undisclosed Module"
 
-IGNORED_PREFIXES = ("nhscraper.helpers")
-IGNORED_EXACT = set("nhscraper.core.orchestrator")
+IGNORED_PREFIXES = ("nhscraper.helpers",)
+IGNORED_EXACT = {"nhscraper.core.orchestrator"}
 
 def is_stdlib_module(module):
     """Return True if the module looks like stdlib or builtin."""
@@ -611,8 +611,8 @@ def is_stdlib_module(module):
 
 def get_caller_module_name(default=DEFAULT_REFERRER):
     """
-    Walks back through the stack to find the *first local* module
-    that is not the immediate caller, skipping stdlib and ignored modules.
+    Walk back through the stack to find the first *local* module
+    that is not ignored, skipping stdlib and builtins.
 
     Example chain:
         ModuleA -> ModuleB -> ModuleC -> stdlib -> ModuleD -> ModuleE -> get_caller_module_name()
@@ -621,15 +621,15 @@ def get_caller_module_name(default=DEFAULT_REFERRER):
     """
     frame = inspect.currentframe()
     try:
-        caller_frame = frame.f_back  # immediate caller (skip this one)
-        seen_caller = False
+        caller_frame = frame.f_back  # skip this function
+        skip_first_local = True      # ignore the *immediate* caller
 
         while caller_frame:
             module = inspect.getmodule(caller_frame)
             if module:
                 modname = module.__name__
 
-                # Skip stdlib/builtins entirely
+                # Skip stdlib/builtins
                 if is_stdlib_module(module):
                     caller_frame = caller_frame.f_back
                     continue
@@ -642,11 +642,11 @@ def get_caller_module_name(default=DEFAULT_REFERRER):
                     caller_frame = caller_frame.f_back
                     continue
 
-                if not seen_caller:
-                    # First valid project module = the immediate caller
-                    seen_caller = True
+                if skip_first_local:
+                    # This is the immediate caller → skip once
+                    skip_first_local = False
                 else:
-                    # First *other* project module above caller
+                    # First non-ignored, non-immediate local caller
                     ref = getattr(module, "_module_referrer", modname)
                     if ref.startswith("nhscraper."):
                         ref = ref.split(".")[-1]
