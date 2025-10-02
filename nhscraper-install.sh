@@ -48,6 +48,7 @@ install_python_packages() {
     "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
     "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" \
         "tqdm" \
+        "requests[socks]" \
         "aiohttp" \
         "aiohttp-socks" \
         "aiosqlite"

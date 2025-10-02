@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # nhscraper/core/orchestrator.py
-import os, sys, time, random, argparse, re, subprocess, urllib.parse, json # 'Default' imports
+import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, aiohttp, aiohttp_socks, logging, inspect # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, logging, inspect, sysconfig, json # Module-specific imports
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
@@ -18,7 +18,6 @@ Refer to 'Docs.txt' for a guide to using the async_runner methods.
 """
 
 _module_referrer=f"Orchestrator" # Used in async_runner.* / cross-module calls
-DEFAULT_REFERRER = "Undisclosed Module"
 
 ##########################################################################################
 # LOGGER
@@ -597,33 +596,64 @@ def get_valid_sort_value(sort_value):
 # EXECUTOR
 ##########################################################################################
 
-def get_caller_module_name(frame_num: int = 2, default=DEFAULT_REFERRER):
-    """
-    When called by a function (FunctionA), retrieves the calling function's (FunctionB)
-    module's '_module_referrer' variable, or the clean module name by going back frame_num frames.
+DEFAULT_REFERRER = "Undisclosed Module"
 
-    Strips any 'nhscraper.*.' prefix, leaving only the final part of the module path.
+IGNORED_PREFIXES = ("nhscraper.helpers")
+IGNORED_EXACT = set("nhscraper.core.orchestrator")
+
+def is_stdlib_module(module):
+    """Return True if the module looks like stdlib or builtin."""
+    if not module or not getattr(module, "__file__", None):
+        return True  # builtins or C extensions
+    stdlib_path = sysconfig.get_paths()["stdlib"]
+    modpath = os.path.realpath(module.__file__)
+    return modpath.startswith(stdlib_path)
+
+def get_caller_module_name(default=DEFAULT_REFERRER):
+    """
+    Walks back through the stack to find the *first local* module
+    that is not the immediate caller, skipping stdlib and ignored modules.
+
+    Example chain:
+        ModuleA -> ModuleB -> ModuleC -> stdlib -> ModuleD -> ModuleE -> get_caller_module_name()
+
+    Returns: "ModuleD"
     """
     frame = inspect.currentframe()
-    
-    frames_to_go_back = frame_num
-    
     try:
-        # Step back through frames
-        caller_frame = frame
-        for _ in range(frames_to_go_back):
-            if caller_frame.f_back is None:
-                break
+        caller_frame = frame.f_back  # immediate caller (skip this one)
+        seen_caller = False
+
+        while caller_frame:
+            module = inspect.getmodule(caller_frame)
+            if module:
+                modname = module.__name__
+
+                # Skip stdlib/builtins entirely
+                if is_stdlib_module(module):
+                    caller_frame = caller_frame.f_back
+                    continue
+
+                # Skip ignored modules
+                if (
+                    modname in IGNORED_EXACT
+                    or any(modname.startswith(pref) for pref in IGNORED_PREFIXES)
+                ):
+                    caller_frame = caller_frame.f_back
+                    continue
+
+                if not seen_caller:
+                    # First valid project module = the immediate caller
+                    seen_caller = True
+                else:
+                    # First *other* project module above caller
+                    ref = getattr(module, "_module_referrer", modname)
+                    if ref.startswith("nhscraper."):
+                        ref = ref.split(".")[-1]
+                    return ref
+
             caller_frame = caller_frame.f_back
 
-        module = inspect.getmodule(caller_frame)
-        if module:
-            # Prefer explicit _module_referrer if defined
-            ref = getattr(module, "_module_referrer", module.__name__)
-            # Strip nhscraper.*. → keep last part only
-            if ref.startswith("nhscraper."):
-                ref = ref.split(".")[-1]
-            return ref
         return default
     finally:
         del frame # avoid reference cycles

@@ -2,7 +2,7 @@
 # nhscraper/core/api.py
 import os, sys, time, random, argparse, re, subprocess, urllib.parse # 'Default' imports
 
-import threading, asyncio, aiohttp, aiohttp_socks, socket, cloudscraper, json # Module-specific imports
+import threading, asyncio, aiohttp, aiohttp_socks, requests, socket, cloudscraper, json # Module-specific imports
 
 from aiohttp_socks import ProxyConnector
 from flask import Flask, jsonify, request
@@ -629,47 +629,22 @@ async def fetch_gallery_metadata(gallery_id: int):
 # API STATE HELPERS (sync - used by Flask endpoints)
 ##################################################################################################################################
 
-async def get_tor_ip(backend: str = "aiohttp") -> str | None:
-    """
-    Fetch current IP, through Tor if enabled.
-    backend options:
-      - "aiohttp": use aiohttp + aiohttp_socks (default)
-      - "cloudscraper": use cloudscraper (blocking in async_runner)
-    """
-    url = "https://httpbin.org/ip"
-    timeout = 10  # seconds
-
-    if backend == "aiohttp":
-        try:
-            if orchestrator.use_tor:
-                connector = ProxyConnector.from_url("socks5h://127.0.0.1:9050")
-                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-                    async with session.get(url) as r:
-                        r.raise_for_status()
-                        data = await r.json()
-            else:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-                    async with session.get(url) as r:
-                        r.raise_for_status()
-                        data = await r.json()
-            return data.get("origin")
-        except Exception as e:
-            return f"Error: {e}"
-
-    else: # backend == "cloudscraper"
-        def _cloudscraper_check():
-            scraper = cloudscraper.create_scraper()
-            proxies = {"http": "socks5h://127.0.0.1:9050",
-                       "https": "socks5h://127.0.0.1:9050"} if orchestrator.use_tor else None
-            r = scraper.get(url, timeout=timeout, proxies=proxies)
-            r.raise_for_status()
-            return r.json().get("origin")
-
-        try:
-            return await async_runner.await_async(_cloudscraper_check)
-        
-        except Exception as e:
-            return f"Error: {e}"
+def get_tor_ip():
+    """Fetch current IP, through Tor if enabled."""
+    try:
+        if config.get("USE_TOR", DEFAULT_USE_TOR):
+            r = requests.get("https://httpbin.org/ip",
+                                proxies={
+                                    "http": "socks5h://127.0.0.1:9050",
+                                    "https": "socks5h://127.0.0.1:9050"
+                                },
+                                timeout=10)
+        else:
+            r = requests.get("https://httpbin.org/ip", timeout=10)
+        r.raise_for_status()
+        return r.json().get("origin")
+    except Exception as e:
+        return f"Error: {e}"
 
 def get_last_gallery_id():
     with state_lock:
