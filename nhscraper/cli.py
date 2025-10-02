@@ -247,6 +247,8 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
       - Artist / group / tag / character / parody / search URLs
     """
     
+    log("HANDLING GALLERY ARGS")
+    
     if not arg_list:
         return set()
 
