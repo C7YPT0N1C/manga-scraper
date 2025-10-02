@@ -357,7 +357,7 @@ def normalise_value(key, value):
     
     if key in ("NHENTAI_MIRRORS", "EXCLUDED_TAGS_LIST", "LANGUAGE_LIST"):
         return parse_list_of_str(value)
-    if key in ("GALLERIES",):
+    if key in ("GALLERIES_LIST",):
         return parse_list_of_ints(value)
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
         return int(value)
@@ -428,7 +428,7 @@ else:
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
-    "EXTENSION_NAME": os.getenv("EXTENSION", DEFAULT_EXTENSION_NAME),
+    "EXTENSION_NAME": os.getenv("EXTENSION_NAME", DEFAULT_EXTENSION_NAME),
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
@@ -437,7 +437,7 @@ config = {
     "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
     "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
     "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
-    "GALLERIES_LIST": parse_list_of_ints(os.getenv("GALLERIES", DEFAULT_GALLERIES_LIST)),
+    "GALLERIES_LIST": parse_list_of_ints(os.getenv("GALLERIES_LIST", DEFAULT_GALLERIES_LIST)),
     "ARTIST": os.getenv("ARTIST", ""),
     "GROUP": os.getenv("GROUP", ""),
     "TAG": os.getenv("TAG", ""),
@@ -558,7 +558,7 @@ def init_scraper(gallery_list):
     
     global threads_galleries, threads_images
     
-    update_env("GALLERIES", gallery_list) # Immediately update config with built gallery list
+    update_env("GALLERIES_LIST", gallery_list) # Immediately update config with built gallery list
     
     if threads_galleries is None or threads_images is None:
         threads_galleries = max(DEFAULT_THREADS_GALLERIES, int(len(gallery_list) / 500) + 1)

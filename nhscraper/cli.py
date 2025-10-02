@@ -460,7 +460,7 @@ def update_config(args):
     log("Updating Config...", "debug")
     
     if args.extension is not None:
-        update_env("EXTENSION", args.extension)
+        update_env("EXTENSION_NAME", args.extension)
         
     if getattr(args, "mirrors", None):
         update_env("NHENTAI_MIRRORS", args.mirrors)
@@ -472,7 +472,7 @@ def update_config(args):
         if isinstance(orchestrator.excluded_tags_list, str):
             update_env("EXCLUDED_TAGS", [t.strip().lower() for t in orchestrator.excluded_tags_list.split(",")])
     
-    update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
+    update_env("LANGUAGE_LIST", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)
     update_env("THREADS_GALLERIES", args.threads_galleries)
     update_env("THREADS_IMAGES", args.threads_images)
