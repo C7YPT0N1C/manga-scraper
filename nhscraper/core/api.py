@@ -216,8 +216,7 @@ def get_meta_tags(meta, tag_type, meta_tag_requester: str = None):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
             
-    log_clarification("debug")
-    log(f"{meta_tag_requester}: Requested Metadata Tags for {tag_type}: {names}")
+    log(f"{meta_tag_requester}: Requested Metadata Tags for '{tag_type}': {names}")
 
     return names
 

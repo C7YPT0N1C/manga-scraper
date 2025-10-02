@@ -50,10 +50,10 @@ async def load_extension(suppess_pre_run_hook: bool = False):
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or orchestrator.download_path
     
     log(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})", "debug")
-    if not suppess_pre_run_hook or orchestrator.dry_run:
-        log(f"Downloading Galleries To: {download_location}", "info")
-    else:
+    if orchestrator.dry_run:
         log(f"[DRY RUN] Would Download Galleries To: {download_location}", "info")
+    else:
+        log(f"Downloading Galleries To: {download_location}", "info")
 
 ####################################################################################################
 # UTILITIES
@@ -172,7 +172,7 @@ async def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = 
 
         gallery_id = meta.get("id", "Unknown")
         # async_runner.invoke() used because clean_title may be sync or async
-        gallery_title = await async_runner.invoke(clean_title, meta)
+        gallery_title = await clean_title(meta)
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")

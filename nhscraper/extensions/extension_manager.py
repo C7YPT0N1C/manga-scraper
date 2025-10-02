@@ -358,6 +358,7 @@ async def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: b
     original_name = name
 
     if not suppess_pre_run_hook:
+        log_clarification("debug")
         log("Extension Loader: Ready.", "debug")
 
     await update_local_manifest_from_remote(force=False)
