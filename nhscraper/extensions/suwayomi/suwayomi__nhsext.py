@@ -463,6 +463,12 @@ def get_local_source_id():
     LOCAL_SOURCE_ID = None
 
 def ensure_category(category_name=None):
+    
+    wait = 10
+    log_clarification("debug")
+    log(f"Waiting {wait} seconds for Suwayomi to populate data...")
+    time.sleep(wait) # Wait 10
+    
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
 
