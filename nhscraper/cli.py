@@ -247,8 +247,6 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
       - Artist / group / tag / character / parody / search URLs
     """
     
-    log("HANDLING GALLERY ARGS")
-    
     if not arg_list:
         return set()
 
@@ -392,8 +390,6 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     return gallery_ids
 
 def build_gallery_list(args):
-    
-    log("BUILDING GALLERY LIST", "debug")
     
     gallery_ids = set()
 
@@ -567,6 +563,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
+    log(f"STARTING DOWNLOADER WITH {gallery_list}", "debug")
     async_runner.await_async(start_downloader, gallery_list) # Start download
 
 if __name__ == "__main__":
