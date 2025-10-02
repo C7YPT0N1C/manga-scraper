@@ -253,8 +253,8 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
         while gallery_attempts < orchestrator.max_retries:
             gallery_attempts += 1
             try:
-                # pre_gallery_download_hook is sync; async_runner.await_async() used
-                async_runner.await_async(active_extension.pre_gallery_download_hook, gallery_id)
+                # pre_gallery_download_hook is sync; async_runner.invoke() used
+                await async_runner.invoke(active_extension.pre_gallery_download_hook, gallery_id)
 
                 meta = await fetch_gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
@@ -265,11 +265,11 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 
-                # during_gallery_download_hook is sync; async_runner.await_async() used
-                async_runner.await_async(active_extension.during_gallery_download_hook, gallery_id)
+                # during_gallery_download_hook is sync; async_runner.invoke() used
+                await async_runner.invoke(active_extension.during_gallery_download_hook, gallery_id)
                 
-                # return_gallery_metas is sync; async_runner.await_async() used
-                gallery_metas = async_runner.await_async(active_extension.return_gallery_metas, meta)
+                # return_gallery_metas is sync; async_runner.invoke() used
+                gallery_metas = await async_runner.invoke(active_extension.return_gallery_metas, meta)
                 
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
@@ -327,8 +327,8 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 
                     # Build coroutine wrapper that will call extension hook via async_runner.invoke()
                     async def _image_task(gid=gallery_id, pg=page, urls=img_urls, path=img_path, creator=primary_creator): 
-                        # download_images_hook is sync; async_runner.await_async() used
-                        return async_runner.await_async(active_extension.download_images_hook, gid, pg, urls, path, downloader_session, None, creator)
+                        # download_images_hook is sync; async_runner.invoke() used
+                        return async_runner.invoke(active_extension.download_images_hook, gid, pg, urls, path, downloader_session, None, creator)
 
                     tasks.append(_image_task())
 
@@ -344,9 +344,9 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     ]
                     await asyncio.gather(*gather_tasks)
 
-                # after_completed_gallery_download_hook is sync; async_runner.await_async() used
                 if not orchestrator.dry_run:
-                    async_runner.await_async(active_extension.after_completed_gallery_download_hook, meta, gallery_id)
+                    # after_completed_gallery_download_hook is sync; async_runner.invoke() used
+                    await async_runner.invoke(active_extension.after_completed_gallery_download_hook, meta, gallery_id)
                     await db.mark_gallery_completed(gallery_id)
 
                 log(f"Downloader: Completed Gallery: {gallery_id}", "info")
@@ -364,7 +364,7 @@ async def start_batch(batch_list=None, current_batch_number: int = 1, total_batc
     # active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     await load_extension(suppess_pre_run_hook=True)
     
-    # pre_batch_hook is sync; async_runner.await_async() used
+    # pre_batch_hook is sync; async_runner.invoke() used
     await async_runner.invoke(active_extension.pre_batch_hook, batch_list)
 
     # Spawn Gallery Threads (Max of threads_galleries) (Use async_runner instead of direct gather)
@@ -381,7 +381,7 @@ async def start_batch(batch_list=None, current_batch_number: int = 1, total_batc
     ]
     await tqdm_asyncio.gather(*gallery_tasks, desc="Processing galleries")
     
-    # post_batch_hook is sync; async_runner.await_async() used
+    # post_batch_hook is sync; async_runner.invoke() used
     await async_runner.invoke(active_extension.post_batch_hook)
 
 async def start_downloader(gallery_list=None):
@@ -421,7 +421,7 @@ async def start_downloader(gallery_list=None):
         if batch_num + BATCH_SIZE < len(gallery_list):
             await dynamic_sleep(wait=orchestrator.batch_sleep_time, dynamic=False)
 
-    # post_run_hook is sync; async_runner.await_async() used
+    # post_run_hook is sync; async_runner.invoke() used
     await async_runner.invoke(active_extension.post_run_hook)
     
     end_time = asyncio.get_event_loop().time()
