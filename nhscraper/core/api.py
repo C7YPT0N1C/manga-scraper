@@ -414,7 +414,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = async_runner.invoke(get_session()) # Get current session
+    gallery_ids_session = async_runner.invoke(get_session(session_requester="API")) # Get current session
     print(f"gallery_ids_session = {gallery_ids_session}")
 
     try:
@@ -465,7 +465,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                             wait = async_runner.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                             async_runner.await_async(dynamic_sleep, wait=wait, dynamic=False)
-                            gallery_ids_session = get_session(status="rebuild")
+                            gallery_ids_session = get_session(status="rebuild", session_requester="API")
                             
                             # Execute synchronous request
                             try:
@@ -560,7 +560,7 @@ async def fetch_gallery_metadata(gallery_id: int):
     """
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    metadata_session = await get_session() # Get current session
+    metadata_session = await get_session(session_requester="API") # Get current session
 
     url = f"{orchestrator.nhentai_api_base}/gallery/{gallery_id}"
     for attempt in range(1, orchestrator.max_retries + 1):
@@ -608,7 +608,7 @@ async def fetch_gallery_metadata(gallery_id: int):
                     wait = await dynamic_sleep(stage="api", attempt=attempt, perform_sleep=False) * 2
                     log(f"Gallery: {gallery_id}: Attempt {attempt}: Metadata fetch failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
                     await dynamic_sleep(wait=wait, dynamic=False)
-                    metadata_session = await get_session(status="rebuild")
+                    metadata_session = await get_session(status="rebuild", session_requester="API")
                     
                     # Execute async request in thread (capped by number of gallery threads)
                     try:

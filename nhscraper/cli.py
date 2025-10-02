@@ -544,7 +544,7 @@ def main():
     update_config(args)
     
     # Build initial session.
-    session = async_runner.await_async(get_session, status="build")
+    session = async_runner.await_async(get_session, status="build", session_requester="CLI")
     
     # Build Gallery List (make sure not empty.)
     log_clarification()
