@@ -279,7 +279,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 
-                await dynamic_sleep(stage="gallery", batch_ids=batch_ids, attempt=gallery_attempts) # Sleep before starting gallery
+                dynamic_sleep(stage="gallery", batch_ids=batch_ids, attempt=gallery_attempts) # Sleep before starting gallery
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False
