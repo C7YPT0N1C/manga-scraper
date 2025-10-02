@@ -158,6 +158,7 @@ if os.path.exists(ENV_FILE):
     
 BATCH_SIZE = 500 # Splits large scrapes into smaller ones
 BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
+batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
