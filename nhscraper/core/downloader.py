@@ -171,7 +171,6 @@ async def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = 
             return
 
         gallery_id = meta.get("id", "Unknown")
-        # async_runner.invoke() used because clean_title may be sync or async
         gallery_title = await clean_title(meta)
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
@@ -362,7 +361,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
 ####################################################################################################
 async def start_batch(batch_list=None, current_batch_number: int = 1, total_batch_numbers: int = 1):
     # active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-    await load_extension(suppess_pre_run_hook=True)
+    #await load_extension(suppess_pre_run_hook=True) # NOTE
     
     # pre_batch_hook is sync; async_runner.invoke() used
     await async_runner.invoke(active_extension.pre_batch_hook, batch_list)

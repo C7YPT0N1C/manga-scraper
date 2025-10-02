@@ -148,6 +148,7 @@ def return_gallery_metas(meta):
     
     # Use async_runner.invoke() so this works from both async and sync contexts
     title = async_runner.invoke(clean_title, meta)
+    log(f"title = {title}", "debug") # NOTE: DEBUGGING
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
@@ -415,7 +416,7 @@ def post_run_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
     
-    clean_directories(True)
+    async_runner.await_async(clean_directories, True)
     
     if orchestrator.skip_post_run == True:
         log_clarification("debug")
