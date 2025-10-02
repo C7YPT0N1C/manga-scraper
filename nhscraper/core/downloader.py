@@ -42,7 +42,7 @@ async def load_extension(suppess_pre_run_hook: bool = False):
     
     fetch_env_vars() # Refresh env vars in case config changed.
 
-    ext_name = orchestrator.extension
+    ext_name = orchestrator.extension_name
     # use async_runner.invoke() for cross-module call
     active_extension = await async_runner.invoke(get_selected_extension, ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
     
