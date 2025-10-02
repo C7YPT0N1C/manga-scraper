@@ -593,7 +593,7 @@ def get_valid_sort_value(sort_value):
     return valid_sort_value
 
 ##########################################################################################
-# EXECUTOR
+# ASYNC RUNNER
 ##########################################################################################
 
 DEFAULT_REFERRER = "Undisclosed Module"
@@ -898,7 +898,7 @@ class AsyncRunner:
 async_runner = AsyncRunner()
 
 ##########################################################################################
-# EXECUTOR HELPERS
+# ASYNC RUNNER HELPERS
 ##########################################################################################
 
 async def safe_session_get(session, url, **kwargs):

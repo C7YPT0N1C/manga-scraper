@@ -124,7 +124,7 @@ def pre_run_hook():
     This is one of this module's entrypoints.
     """
     
-    log(f"{EXTENSION_NAME}: Ready.", "debug")
+    log(f"{EXTENSION_NAME_CAPITALISED}: Ready.", "debug")
     log(f"{EXTENSION_REFERRER}: Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -146,9 +146,8 @@ def return_gallery_metas(meta):
     groups = get_meta_tags(meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
-    # Use async_runner.await_async() so this works from both async and sync contexts
+    # Use async_runner.await_async()
     title = async_runner.await_async(clean_title, meta)
-    log(f"title = {title}", "debug") # NOTE: DEBUGGING
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     

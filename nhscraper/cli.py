@@ -563,7 +563,6 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    log(f"STARTING DOWNLOADER WITH {gallery_list}", "debug")
     async_runner.await_async(start_downloader, gallery_list) # Start download
 
 if __name__ == "__main__":

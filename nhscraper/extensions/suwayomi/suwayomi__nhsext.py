@@ -272,7 +272,7 @@ def pre_run_hook():
     This is one of this module's entrypoints.
     """
     
-    log(f"{EXTENSION_NAME}: Ready.", "debug")
+    log(f"{EXTENSION_NAME_CAPITALISED}: Ready.", "debug")
     log(f"{EXTENSION_REFERRER}: Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
