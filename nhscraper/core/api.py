@@ -25,7 +25,7 @@ and integration with other modules.
 # GLOBAL VARIABLES
 ################################################################################################################
 
-_module_referrer=f"API" # Used in async_runner.* / cross-module calls
+_module_referrer=f"API" # Used in executor.* / cross-module calls
 
 # This lock guards access to the broken symbols file on disk.
 possible_broken_symbols_lock = threading.Lock()
@@ -43,7 +43,7 @@ state_lock = threading.Lock()
 # HTTP SESSION (cloudscraper wrapped for async)
 ################################################################################################################
 
-# Global cloudscraper session (synchronous object). We will call its methods via async_runner.await_async() # NOTE: Is this even right bruh
+# Global cloudscraper session (synchronous object). We will call its methods via executor.await_async() # NOTE: Is this even right bruh
 session = None
 # Use an asyncio.Lock here because session creation is now async-aware.
 session_lock = asyncio.Lock()
@@ -125,7 +125,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
                 log(f"{log_msg_pre} session with Cloudscraper for {session_requester}", "debug")
                 
                 # Ensure the returned value is a proper session
-                temp_session = await async_runner.invoke(cloudscraper.create_scraper, browser_profile)
+                temp_session = await executor.invoke(cloudscraper.create_scraper, browser_profile)
                 
                 if temp_session is None:
                     raise RuntimeError(f"Failed to create Cloudscraper session for {session_requester}")
@@ -144,7 +144,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
                         return None  # aiohttp proxies handled via connector
 
                     # Ensure the returned value is a proper proxied session
-                    temp_proxy = await async_runner.invoke(_update_proxies, temp_session, orchestrator.use_tor)
+                    temp_proxy = await executor.invoke(_update_proxies, temp_session, orchestrator.use_tor)
 
                     if temp_proxy is None:
                         raise RuntimeError(f"Failed to initialise proxy for {session_requester}")
@@ -187,7 +187,7 @@ async def get_session(status: str = "return", backend: str = "cloudscraper", ses
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": referer,
         }
-        await async_runner.invoke(_update_session_headers, session, headers)
+        await executor.invoke(_update_session_headers, session, headers)
 
         # Log completion
         log(f"{log_msg_post} HTTP session for {session_requester}", "debug")
@@ -294,7 +294,7 @@ async def clean_title(meta_or_title):
         )
 
     # Load persisted broken symbols mapping via thread
-    possible_broken_symbols = await async_runner.invoke(_load_file, broken_symbols_file)
+    possible_broken_symbols = await executor.invoke(_load_file, broken_symbols_file)
 
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
@@ -355,7 +355,7 @@ async def clean_title(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     # Persist updated broken symbols mapping via thread
-    await async_runner.invoke(_save_file, broken_symbols_file, possible_broken_symbols)
+    await executor.invoke(_save_file, broken_symbols_file, possible_broken_symbols)
 
     return make_filesystem_safe(title)
 
@@ -414,7 +414,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
     ids: set[int] = set()
     page = start_page
 
-    gallery_ids_session = async_runner.await_async(get_session, session_requester="API") # Get current session
+    gallery_ids_session = executor.await_async(get_session, session_requester="API") # Get current session
     print(f"gallery_ids_session = {gallery_ids_session}") # NOTE: DEBUGGING
 
     try:
@@ -435,16 +435,16 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     # Execute synchronous request
-                    resp = async_runner.await_async(safe_session_get, gallery_ids_session, url, timeout=10)
+                    resp = executor.await_async(safe_session_get, gallery_ids_session, url, timeout=10)
                     
                     status_code = getattr(resp, "status_code", None)
                     if status_code == 429:
-                        wait = async_runner.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
+                        wait = executor.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                         log(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s", "warning")
-                        async_runner.await_async(dynamic_sleep, wait=wait, dynamic=False)
+                        executor.await_async(dynamic_sleep, wait=wait, dynamic=False)
                         continue
                     if status_code == 403:
-                        async_runner.await_async(dynamic_sleep, stage="api", attempt=attempt)
+                        executor.await_async(dynamic_sleep, stage="api", attempt=attempt)
                         continue
 
                     # Raise for status is synchronous
@@ -462,23 +462,23 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
                         resp = None
                         # Rebuild session with Tor and try again once
                         if orchestrator.use_tor:
-                            wait = async_runner.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
+                            wait = executor.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False) * 2
                             log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s", "warning")
-                            async_runner.await_async(dynamic_sleep, wait=wait, dynamic=False)
+                            executor.await_async(dynamic_sleep, wait=wait, dynamic=False)
                             gallery_ids_session = get_session(status="rebuild", session_requester="API")
                             
                             # Execute synchronous request
                             try:
-                                resp = async_runner.await_async(safe_session_get, gallery_ids_session, url, timeout=10)
+                                resp = executor.await_async(safe_session_get, gallery_ids_session, url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 log(f"Page {page}: Still failed after Tor rotate: {e2}", "warning")
                                 resp = None
                         break
 
-                    wait = async_runner.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
+                    wait = executor.await_async(dynamic_sleep, stage="api", attempt=attempt, perform_sleep=False)
                     log(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s", "warning")
-                    async_runner.await_async(dynamic_sleep, wait=wait, dynamic=False)
+                    executor.await_async(dynamic_sleep, wait=wait, dynamic=False)
 
             if resp is None:
                 page += 1
@@ -583,13 +583,13 @@ async def fetch_gallery_metadata(gallery_id: int):
 
             # Raise for status (blocking) — run in thread
             try:
-                await async_runner.invoke(resp.raise_for_status)
+                await executor.invoke(resp.raise_for_status)
             
             except Exception as e:
                 raise
 
             # resp.json() is synchronous and potentially blocking; run / parse in thread
-            data = await async_runner.invoke(resp.json)
+            data = await executor.invoke(resp.json)
 
             if not isinstance(data, dict):
                 log(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}", "error")
@@ -614,8 +614,8 @@ async def fetch_gallery_metadata(gallery_id: int):
                     try:
                         resp = await safe_session_get(metadata_session, url, timeout=10)
                         
-                        await async_runner.invoke(resp.raise_for_status)
-                        return await async_runner.invoke(resp.json)
+                        await executor.invoke(resp.raise_for_status)
+                        return await executor.invoke(resp.json)
                     
                     except Exception as e2:
                         log(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}", "warning")
@@ -687,7 +687,7 @@ def status_endpoint():
         "last_checked": datetime.now().isoformat(),
         "last_gallery": get_last_gallery_id(),
         "running_galleries": get_running_galleries(),
-        "tor_ip": async_runner.await_async(get_tor_ip)
+        "tor_ip": executor.await_async(get_tor_ip)
     })
 
 @app.route("/status/galleries", methods=["GET"])
