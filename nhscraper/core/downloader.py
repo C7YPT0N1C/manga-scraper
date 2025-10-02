@@ -51,26 +51,36 @@ def load_extension(suppess_pre_run_hook: bool = False):
 # UTILITIES
 ####################################################################################################
 
-def worst_case_time_estimate(context: str, id_list: list):
+def time_estimate(context: str, id_list: list):
     current_run_num_of_galleries = len(id_list)
-    current_batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
     
-    worst_time_secs = (
-        ((current_run_num_of_galleries / threads_galleries) * orchestrator.max_sleep ) +
-        ((current_run_num_of_galleries / BATCH_SIZE) * current_batch_sleep_time)
+    # Best Case
+    best_time_secs = (
+        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.min_sleep ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
     )
     
-    worst_time_mins = worst_time_secs / 60 # Convert To Minutes
-    worst_time_days = worst_time_secs / 60 / 60 # Convert To Hours
-    worst_time_hours = worst_time_secs / 60 / 60 / 24 # Convert To Days
+    best_time_mins = best_time_secs / 60
+    best_time_days = best_time_secs / 60 / 60
+    best_time_hours = best_time_secs / 60 / 60 / 24
     
-    #log_clarification()
-    #logger.info(f"Number of Galleries Processed: {len(id_list)}") # DEBUGGING
-    #logger.info(f"Number of Threads: Gallery: {threads_galleries}, Image: {threads_images}") # DEBUGGING
-    #logger.info(f"Batch Sleep Time: {current_batch_sleep_time:.2f}s per {BATCH_SIZE} galleries") # DEBUGGING
-    #logger.info(f"Max Sleep Time: {configurator.max_sleep}") # DEBUGGING
-    log_clarification()
-    logger.warning(f"{context} ({current_run_num_of_galleries} Galleries): Worst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes")
+    # Worst Case
+    worst_time_secs = (
+        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.max_sleep ) +
+        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
+    )
+    
+    worst_time_mins = worst_time_secs / 60
+    worst_time_days = worst_time_secs / 60 / 60
+    worst_time_hours = worst_time_secs / 60 / 60 / 24
+    
+    log_clarification("info")
+    log(
+        f"{context} ({current_run_num_of_galleries} Galleries):"
+        f"\nBest Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes"
+        f"\nWorst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes",
+        "info"
+    )
 
 def build_gallery_path(meta, iteration: dict = None):
     """
@@ -378,7 +388,7 @@ def start_downloader(gallery_list=None):
     
     start_time = time.perf_counter()  # Start timer
     
-    worst_case_time_estimate(f"Run", gallery_list)
+    time_estimate(f"Run", gallery_list)
     
     load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
     
@@ -394,7 +404,7 @@ def start_downloader(gallery_list=None):
         
         current_out_of_total_batch_number = f"{current_batch_number} / {total_batch_numbers}"
         
-        worst_case_time_estimate(f"Batch {current_out_of_total_batch_number}", batch_list)
+        time_estimate(f"Batch {current_out_of_total_batch_number}", batch_list)
         
         log_clarification()
         logger.info(f"Downloading Batch {current_out_of_total_batch_number} with {len(batch_list)} Galleries...")

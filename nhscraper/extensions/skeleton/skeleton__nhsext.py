@@ -18,9 +18,11 @@ from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe,
 ####################################################################################################################
 
 EXTENSION_NAME = "skeleton" # Must be fully lowercase
+EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
+EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
+
 EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
-#DEDICATED_DOWNLOAD_PATH = None # In case it tweaks out.
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -54,8 +56,8 @@ def pre_run_hook():
     This is one this module's entrypoints.
     """
     
-    logger.debug(f"Extension: {EXTENSION_NAME}: Ready.")
-    log(f"Extension: {EXTENSION_NAME}: Debugging started.", "debug")
+    logger.debug(f"{EXTENSION_REFERRER}: Ready.")
+    log(f"{EXTENSION_REFERRER}: Debugging started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
@@ -65,22 +67,22 @@ def pre_run_hook():
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.debug(f"Extension: {EXTENSION_NAME}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+        logger.debug(f"{EXTENSION_REFERRER}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+        logger.error(f"{EXTENSION_REFERRER}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
 def return_gallery_metas(meta):
     fetch_env_vars() # Refresh env vars in case config changed.
     
-    artists = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "group")
+    artists = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "artist")
+    groups = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
     
     title = clean_title(meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
     
-    gallery_language = get_meta_tags(f"Extension: {EXTENSION_NAME}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
+    gallery_language = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
     
     return {
         "creator": creators,
@@ -114,10 +116,10 @@ def install_extension():
         
         pre_run_hook()
         
-        logger.info(f"Extension: {EXTENSION_NAME}: Installed.")
+        logger.info(f"{EXTENSION_REFERRER}: Installed.")
     
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to install: {e}")
+        logger.error(f"{EXTENSION_REFERRER}: Failed to install: {e}")
 
 def uninstall_extension():
     """
@@ -139,10 +141,10 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
-        logger.info(f"Extension: {EXTENSION_NAME}: Uninstalled")
+        logger.info(f"{EXTENSION_REFERRER}: Uninstalled")
     
     except Exception as e:
-        logger.error(f"Extension: {EXTENSION_NAME}: Failed to uninstall: {e}")
+        logger.error(f"{EXTENSION_REFERRER}: Failed to uninstall: {e}")
 
 ####################################################################################################################
 # CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
@@ -158,7 +160,7 @@ def test_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Test Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
 
 # Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
 def clean_directories(RemoveEmptyArtistFolder: bool = True):
@@ -317,11 +319,11 @@ def pre_batch_hook(gallery_list):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-batch Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Pre-batch Hook Inactive.")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Pre-batch Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}: Pre-batch Hook Called.", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -333,10 +335,10 @@ def pre_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Pre-download Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Pre-download Hook Inactive.")
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"{EXTENSION_REFERRER}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -346,11 +348,11 @@ def during_gallery_download_hook(gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: During-download Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: During-download Hook Inactive.")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: During-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"{EXTENSION_REFERRER}: During-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -360,11 +362,11 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-download Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-download Hook Inactive.")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    log(f"{EXTENSION_REFERRER}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -374,11 +376,11 @@ def post_batch_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-batch Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-batch Hook Inactive.")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-batch Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -388,17 +390,17 @@ def post_run_hook():
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Extension: {EXTENSION_NAME}: Post-run Hook Inactive.")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-run Hook Inactive.")
         return
     
     log_clarification("debug")
-    log(f"Extension: {EXTENSION_NAME}: Post-run Hook Called.", "debug")
+    log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
     
     clean_directories(True)
     
     if orchestrator.skip_post_run == True:
         log_clarification("debug")
-        log(f"Extension: {EXTENSION_NAME}: Post-run Hook Skipped.", "debug")
+        log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
     else:
         log_clarification("debug")
         log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
