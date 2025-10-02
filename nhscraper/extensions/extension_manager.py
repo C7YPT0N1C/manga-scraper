@@ -87,17 +87,21 @@ async def fetch_remote_manifest(force: bool = False):
 
     try:
         log_clarification()
-        log("Fetching remote manifest from Primary Server...", "info")
+        if orchestrator.debug:
+            log("Fetching remote manifest from Primary Server...", "info")
         data = await _fetch(PRIMARY_URL_REMOTE_MANIFEST)
-        log(f"Sucessfully fetched remote manifest from Primary Server", "info")
-        #log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info") # NOTE: DEBUGGING
+        if orchestrator.debug:
+            log(f"Sucessfully fetched remote manifest from Primary Server", "info")
+            #log(f"Sucessfully fetched remote manifest from Primary Server: {data}", "info") # NOTE: DEBUGGING
     except Exception as e:
         log(f"Failed to fetch remote manifest from Primary Server: {e}", "warning")
         try:
-            log("Attempting to fetch remote manifest from Backup Server...", "info")
+            if orchestrator.debug:
+                log("Attempting to fetch remote manifest from Backup Server...", "info")
             data = await _fetch(BACKUP_URL_REMOTE_MANIFEST)
-            log(f"Sucessfully fetched remote manifest from Backup Server", "info")
-            #log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info") # NOTE: DEBUGGING
+            if orchestrator.debug:
+                log(f"Sucessfully fetched remote manifest from Backup Server", "info")
+                #log(f"Sucessfully fetched remote manifest from Backup Server: {data}", "info") # NOTE: DEBUGGING
         except Exception as e2:
             log(f"Failed to fetch remote manifest from Backup Server: {e2}", "warning")
             data = {"extensions": []}

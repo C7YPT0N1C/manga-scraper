@@ -82,18 +82,21 @@ def time_estimate(context: str, id_list: list):
     worst_time_days = worst_time_secs / 60 / 60
     worst_time_hours = worst_time_secs / 60 / 60 / 24
     
-    log_clarification()
+    log_clarification("info")
     log(
         f"{context} ({current_run_num_of_galleries} Galleries):"
         f"\nBest Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes"
         f"\nWorst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes",
-        "warn"
+        "info"
     )
 
 def build_gallery_path(meta, iteration: dict = None):
     """
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
     """
+    
+    log("BULDING GALLERY PATH") # NOTE: DEBUGGING
+    
     gallery_metas = active_extension.return_gallery_metas(meta)
     if iteration:
         for k, v in iteration.items():
@@ -263,7 +266,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                log(f"num_pages = {num_pages}")
+                
                 
                 # during_gallery_download_hook is sync; async_runner.invoke() used
                 await async_runner.invoke(active_extension.during_gallery_download_hook, gallery_id)
@@ -273,7 +276,7 @@ async def process_galleries(batch_ids, current_batch_number: int = 1, total_batc
                 
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
-                log(f"SLEEPING")
+                
                 await dynamic_sleep(stage="gallery", batch_ids=batch_ids, attempt=gallery_attempts) # Sleep before starting gallery
 
                 # --- Decide if gallery should be skipped ---
