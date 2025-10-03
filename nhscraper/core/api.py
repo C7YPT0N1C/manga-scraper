@@ -522,7 +522,7 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         
-        # Use quote so spaces become '%20'
+        # Use urllib.parse.quote so spaces become '%20'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
         
         if sort_value == "date":
@@ -533,14 +533,11 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
 
     # Search queries
     if query_lower == "search":
-        search_value = query_value
+        # Strip surrounding quotes if present
+        search_value = query_value.strip('"').strip("'")
 
-        # Only wrap in quotes if user didn’t already do so
-        if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
-            search_value = f'"{search_value}"'
-
-        # Use quote_plus so spaces become '+', not '%20'
-        encoded = urllib.parse.quote_plus(search_value, safe='"')
+        # Use urllib.parse.quote_plus so spaces become '+', not '%20'
+        encoded = urllib.parse.quote_plus(search_value)
 
         if sort_value == "date":
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
