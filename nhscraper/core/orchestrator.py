@@ -32,7 +32,7 @@ class ConditionalFormatter(logging.Formatter):
             self._style._fmt = "[%(levelname)s] %(message)s"
         return super().format(record)
 
-# --- Placeholder logger so logging during module imports don’t crash before setup_logger() runs ---
+# --- Placeholder logger so logging during module imports don't crash before setup_logger() runs ---
 logger = logging.getLogger("nhscraper")
 if not logger.handlers:  # Only add default handler if none exist (prevents duplicates on reload)
     

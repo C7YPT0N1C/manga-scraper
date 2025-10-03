@@ -48,7 +48,8 @@ LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
 CATEGORY_ID = None
 
-AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now. # TEST
+# NOTE: TEST
+AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
 AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
 
 # Max number of genres stored in a creator's details.json
@@ -60,41 +61,44 @@ MAX_GENRES_PARSED = 100
 graphql_session = None
 
 # Thread locks for file operations
-_popular_genres_lock = threading.Lock()
-
-_collected_gallery_metas = []
 _gallery_meta_lock = threading.Lock()
-
-_deferred_creators_lock = threading.Lock()
+_collected_gallery_metas = []
 
 creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
+_creators_metadata_lock = threading.Lock()
 
 def load_creators_metadata() -> dict:
-    if os.path.exists(creators_metadata_file):
-        try:
-            with open(creators_metadata_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load creators_metadata.json: {e}")
-    # Initialise dictionaries if missing
-    return {
-        "collected_manga_ids": [],
-        "deferred_creators": [],
-        "creators": {}
-    }
+    with _creators_metadata_lock:
+        if os.path.exists(creators_metadata_file):
+            try:
+                with open(creators_metadata_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Could not load creators_metadata.json: {e}")
+        
+        # Initialise dictionaries if missing
+        return {
+            "collected_manga_ids": [],
+            "deferred_creators": [],
+            "creators": {}
+        }
 
 def save_creators_metadata(metadata: dict):
-    try:
-        os.makedirs(os.path.dirname(creators_metadata_file), exist_ok=True)
-        with open(creators_metadata_file, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning(f"Could not save creators_metadata.json: {e}")
-
+    with _creators_metadata_lock:
+        try:
+            os.makedirs(os.path.dirname(creators_metadata_file), exist_ok=True)
+            with open(creators_metadata_file, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save creators_metadata.json: {e}")
+        
 # ---- Global deferred list ----
+_deferred_creators_lock = threading.Lock()
+
 def load_deferred_creators() -> set[str]:
-    metadata = load_creators_metadata()
-    return set(metadata.get("deferred_creators", []))
+    with _deferred_creators_lock:
+        metadata = load_creators_metadata()
+        return set(metadata.get("deferred_creators", []))
 
 def save_deferred_creators(creators: set[str]):
     metadata = load_creators_metadata()
@@ -349,14 +353,14 @@ def graphql_request(request: str, variables: dict = None, debugging: bool = Fals
     try:
         if debug == True:
             log_clarification("debug")
-            log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+            log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
         response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         result = response.json()
         
         if debug == True:
-            log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # DEBUGGING
+            log(f"GraphQL Response:\n{json.dumps(result, indent=2)}", "debug") # NOTE: DEBUGGING
         return result
     
     except requests.RequestException as e:
@@ -410,7 +414,7 @@ def new_graphql_request(request: str, variables: dict = None, debugging: bool = 
 
         if debug == True:
             log_clarification("debug")
-            log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # DEBUGGING
+            log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
         response = graphql_session.post(
             GRAPHQL_URL,
@@ -421,7 +425,7 @@ def new_graphql_request(request: str, variables: dict = None, debugging: bool = 
         result = response.json()
         
         if debug == True:
-            log(f"GraphQL Request Response: {json.dumps(result, indent=2)}", "debug") # DEBUGGING
+            log(f"GraphQL Request Response: {json.dumps(result, indent=2)}", "debug") # NOTE: DEBUGGING
         
         return result
 
@@ -617,7 +621,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
     if operation == "status":
         # Query to check the status repeatedly
         query = """
-        query CheckLibraryCategoryUpdateStatus {
+        query CheckGlobalUpdateStatus {
           libraryUpdateStatus {
             jobsInfo {
               isRunning
@@ -651,7 +655,10 @@ def populate_suwayomi(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id, debugging=False)
+            result = update_suwayomi("status", category_id, debugging=True) # NOTE: DEBUGGING
+            
+            # Wait BEFORE checking status to avoid exiting early.
+            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
@@ -706,9 +713,6 @@ def populate_suwayomi(category_id: int, attempt: int):
                 logger.warning(f"Waiting {wait}s for Suwayomi to reflect all changes...")
                 time.sleep(wait)
                 break
-
-            # Adaptive polling
-            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
         pbar.close()
 
@@ -972,8 +976,7 @@ def process_deferred_creators():
         # ----------------------------
         log_clarification()
 
-        with _deferred_creators_lock:
-            deferred_creators = load_deferred_creators()
+        deferred_creators = load_deferred_creators()
 
         if not deferred_creators:
             logger.info("GraphQL: No deferred creators to process.")

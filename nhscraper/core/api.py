@@ -132,7 +132,7 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
             log("Rebuilt HTTP session.", "debug")
         else:
             log("Built HTTP session.", "debug")
-        #logger.debug(f"Session ready: {session}") # DEBUGGING, not really needed.
+        #logger.debug(f"Session ready: {session}") # NOTE: DEBUGGING, not really needed.
 
         return session # Return the current session
     
@@ -156,7 +156,7 @@ def get_meta_tags(referrer: str, meta, tag_type):
             parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
             names.extend(parts)
     
-    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug") # DEBUGGING
+    #log(f"Fetcher: '{referrer}' Requested Tag Type '{tag_type}', returning {names}", "debug") # NOTE: DEBUGGING
     return names
 
 def make_filesystem_safe(s: str) -> str:
@@ -234,7 +234,7 @@ def clean_title(meta_or_title):
             except Exception as e:
                 logger.error(f"Could not save broken symbols: {e}")
     
-    def is_cjk(char: str) -> bool: # Add a flag for this? # TEST
+    def is_cjk(char: str) -> bool: # NOTE: TEST: Add a flag for this?
         """Return True if char is a Chinese/Japanese/Korean character."""
         code = ord(char)
         return (
@@ -480,7 +480,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
 #    GET /galleries/character/{character}
 #    - Fetch galleries by a specific character
 #
-# 9. Popular / Trending (if supported) # ADD SUPPORT FOR THESE # TEST
+# 9. Popular / Trending (if supported)
 #    GET /galleries/popular
 #    GET /galleries/trending
 #
@@ -518,7 +518,7 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     if query_lower in ("artist", "group", "tag", "character", "parody"):
         search_value = query_value
         
-        # Only wrap in quotes if user didn’t already do so
+        # Only wrap in quotes if user didn't already do so
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
         
@@ -686,7 +686,7 @@ def fetch_image_urls(meta: dict, page: int):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     try:
-        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # DEBUGGING
+        #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # NOTE: DEBUGGING
 
         pages = meta.get("images", {}).get("pages", [])
         if page - 1 >= len(pages):
@@ -719,7 +719,7 @@ def fetch_image_urls(meta: dict, page: int):
             for mirror in orchestrator.nhentai_mirrors
         ]
 
-        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # DEBUGGING
+        log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug") # NOTE: DEBUGGING
         return urls  # return list so downloader can try them in order
 
     except Exception as e:
@@ -759,7 +759,7 @@ def fetch_gallery_metadata(gallery_id: int):
 
             log_clarification("debug")
             log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
-            #log(f"Fetcher: Metadata for Gallery: {gallery_id}: {data}", "debug") # DEBUGGING
+            #log(f"Fetcher: Metadata for Gallery: {gallery_id}: {data}", "debug") # NOTE: DEBUGGING
             return data
         except requests.HTTPError as e:
             if "404 Client Error: Not Found for url" in str(e):

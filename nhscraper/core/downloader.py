@@ -74,12 +74,12 @@ def time_estimate(context: str, id_list: list):
     worst_time_days = worst_time_secs / 60 / 60
     worst_time_hours = worst_time_secs / 60 / 60 / 24
     
-    log_clarification("info")
+    log_clarification("warning")
     log(
         f"{context} ({current_run_num_of_galleries} Galleries):"
         f"\nBest Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes"
         f"\nWorst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes",
-        "info"
+        "warning"
     )
 
 def build_gallery_path(meta, iteration: dict = None):
@@ -327,7 +327,7 @@ def process_galleries(batch_ids):
                     img_path = os.path.join(primary_folder, img_filename)
                     tasks.append((page, img_urls, img_path, primary_creator))
 
-                # --- Download images (once, in primary creator’s folder) ---
+                # --- Download images (once, in primary creator's folder) ---
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=threads_images) as executor:
                         if not orchestrator.dry_run:
