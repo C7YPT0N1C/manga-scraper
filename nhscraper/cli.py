@@ -58,6 +58,17 @@ def parse_args():
     parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
 
     # Gallery selection
+    #parser.add_argument(
+    #    "--archive",
+    #    type=str,
+    #    nargs="?",                  # Makes the argument optional
+    #    const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
+    #    help=(
+    #        "Path to a file containing gallery URLs or IDs (one per line)."
+    #        "If no path is given, uses the default file."
+    #    )
+    #)
+    
     parser.add_argument(
         "--file",
         type=str,

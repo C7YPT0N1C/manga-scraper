@@ -1197,7 +1197,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     update_creator_manga(meta)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
-def post_batch_hook():
+def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     if orchestrator.dry_run:
@@ -1206,6 +1206,13 @@ def post_batch_hook():
     
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
+    
+    # Run this part of the Post Batch Hook IF this isn't the last batch.
+    if total_batch_numbers - current_batch_number != 0:
+        clean_directories(True)
+        
+        # Add all creators to Suwayomi
+        process_deferred_creators()
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():

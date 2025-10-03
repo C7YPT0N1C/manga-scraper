@@ -359,7 +359,7 @@ def chunkify(lst, n):
     k, m = divmod(len(lst), n)
     return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n) if lst[i*k + min(i, m):(i+1)*k + min(i+1, m)]]
 
-def start_batch(batch_list=None):
+def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
 
@@ -383,7 +383,7 @@ def start_batch(batch_list=None):
         for f in concurrent.futures.as_completed(futures):
             f.result() # propagate exceptions
 
-    active_extension.post_batch_hook()
+    active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
 
 def start_downloader(gallery_list=None):
     """
@@ -419,7 +419,7 @@ def start_downloader(gallery_list=None):
         log_clarification()
         logger.info(f"Downloading Batch {current_out_of_total_batch_number} with {len(batch_list)} Galleries...")
     
-        start_batch(batch_list) # Start batch.
+        start_batch(current_batch_number, total_batch_numbers, batch_list) # Start batch.
         
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             log_clarification()
