@@ -3,6 +3,7 @@
 
 import os, time, random, math, concurrent.futures
 
+from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
 
 from nhscraper.core import orchestrator
@@ -378,10 +379,18 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     def worker(gids):
         process_galleries(gids)
 
+    #with concurrent.futures.ThreadPoolExecutor(max_workers=threads_galleries) as executor:
+    #    futures = [executor.submit(worker, chunk) for chunk in gallery_chunks]
+    #    for f in concurrent.futures.as_completed(futures):
+    #        f.result() # propagate exceptions
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads_galleries) as executor:
         futures = [executor.submit(worker, chunk) for chunk in gallery_chunks]
-        for f in concurrent.futures.as_completed(futures):
-            f.result() # propagate exceptions
+        # Wrap as_completed() with tqdm for batch progress
+        for f in tqdm(concurrent.futures.as_completed(futures),
+                      total=len(futures),
+                      desc=f"Batch {current_batch_number}/{total_batch_numbers}"):
+            f.result()  # propagate exceptions
 
     active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
 
