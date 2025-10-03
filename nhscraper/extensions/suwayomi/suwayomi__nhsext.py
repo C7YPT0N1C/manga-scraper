@@ -466,7 +466,7 @@ def ensure_category(category_name=None):
     
     wait = 10
     log_clarification("debug")
-    log(f"Waiting {wait} seconds for Suwayomi to populate data...")
+    log(f"Waiting {wait}s for Suwayomi to populate data...")
     time.sleep(wait) # Wait 10
     
     global CATEGORY_ID
