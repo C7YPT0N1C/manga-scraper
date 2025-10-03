@@ -168,9 +168,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
     
-    # ------------------------------------
-    # Filtering
-    # ------------------------------------
+    # ------------------------------------------------------------------------
+    # Filtering (FALLBACK, FILTERING NOW OCCURS DURING GALLERY ID FETCH)
+    # ------------------------------------------------------------------------
 
     # --- Excluded Tags ---
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
@@ -181,7 +181,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if tag in excluded_gallery_tags:
             blocked_tags.append(tag)
 
-    # --- Allowed Languages (FALLBACK, MOVED TO GALLERY ID FETCH) ---
+    # --- Allowed Languages ---
     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []

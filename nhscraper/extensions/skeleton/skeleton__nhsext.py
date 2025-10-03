@@ -42,6 +42,11 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
+# Used to optionally run stuff in hooks every x batches.
+# Increase this if the operations in your post batch / run hooks get
+# increasingly demanding the larger the library is.
+EVERY_X_BATCHES = 2
+
 ####################################################################
 
 # PUT YOUR VARIABLES HERE
@@ -387,9 +392,9 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
     
     # Run this part of the Post Batch Hook
-    # IF the current Batch Number is even
+    # IF the current Batch Number is a multiple of EVERY_X_BATCHES
     # AND this isn't the last batch.
-    if (current_batch_number % 2) != 1 and (total_batch_numbers - current_batch_number) != 0:
+    if (current_batch_number % EVERY_X_BATCHES) != 0 and (total_batch_numbers - current_batch_number) != 0:
         cleanup_hook() # Call the cleanup hook
     
     #log_clarification("debug")

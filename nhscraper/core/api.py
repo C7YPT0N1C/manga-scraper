@@ -655,29 +655,60 @@ def fetch_gallery_ids(
                 logger.warning(f"{query_type} '{query_value}', Page {page}: Failed to decode JSON: {e}")
                 break
             
-            # Filter by language
-            allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
+            # ------------------------------------
+            # Filtering
+            # ------------------------------------
             results = data.get("result", [])
             batch = []
 
+            # --- Excluded Tags ---
+            excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags]
+            
+            # --- Allowed Languages ---
+            allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
+
             for g in results:
+                # Extract gallery tags
+                gallery_tags = [
+                    t["name"].lower()
+                    for t in g.get("tags", [])
+                    if t.get("type") == "tag"
+                ]
+
+                # Extract gallery languages
                 gallery_langs = [
                     t["name"].lower()
                     for t in g.get("tags", [])
                     if t.get("type") == "language"
                 ]
 
+                # --- Tag filter ---
+                blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
+                if blocked_tags:
+                    log(
+                        f"Fetcher: Skipping gallery {g['id']} due to excluded tags: {blocked_tags}",
+                        "debug"
+                    )
+                    continue
+
+                # --- Language filter ---
                 if allowed_gallery_language:
                     has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
                     has_translated = ("translated" in gallery_langs) and has_allowed
 
                     if not (has_allowed or has_translated):
-                        blocked_langs = gallery_langs[:] # NOTE: DEBUGGING
-                        continue # skip this gallery
+                        blocked_langs = gallery_langs[:]  # NOTE: debugging
+                        log(
+                            f"Fetcher: Skipping gallery {g['id']} due to blocked languages: {blocked_langs}",
+                            "debug"
+                        )
+                        continue
 
+                # If passed filters → keep
                 batch.append(int(g["id"]))
 
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs with languages: {allowed_gallery_language}", "debug")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "info")
+            log(f"Langs allowed: {allowed_gallery_language}, Excluded tags: {excluded_gallery_tags})", "debug")
 
             if not batch:
                 logger.info(f"{query_type} '{query_value}', Page {page}: No more results, stopping.")
