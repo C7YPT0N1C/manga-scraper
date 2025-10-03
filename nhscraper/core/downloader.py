@@ -376,8 +376,7 @@ def start_batch(batch_list=None):
     gallery_chunks = chunkify(batch_list, threads_galleries)
 
     def worker(gids):
-        for gid in gids:
-            process_galleries([gid])
+        process_galleries(gids)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads_galleries) as executor:
         futures = [executor.submit(worker, chunk) for chunk in gallery_chunks]
