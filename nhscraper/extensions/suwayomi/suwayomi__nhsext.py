@@ -47,7 +47,7 @@ GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
 CATEGORY_ID = None
-SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every 2 secs.
+SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every ~2 secs.
 
 # NOTE: TEST
 AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
@@ -640,7 +640,7 @@ def populate_suwayomi(category_id: int, attempt: int):
     log_clarification()
     logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
-    wait_time = SUWAYOMI_POPULATION_TIME * 2
+    wait_time = SUWAYOMI_POPULATION_TIME
 
     try:
         # Fetch all mangas in the category update
@@ -1202,6 +1202,13 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     # Update creator's popular genres
     update_creator_manga(meta)
 
+# Hook for cleaning after downloads
+def cleanup_hook():
+    clean_directories(True) # Clean up the download folder / directories
+        
+    # Add all creators to Suwayomi
+    process_deferred_creators()
+
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1):
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -1217,10 +1224,8 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     # IF the current Batch Number is even
     # AND this isn't the last batch.
     if (current_batch_number % 2) != 1 and (total_batch_numbers - current_batch_number) != 0:
-        clean_directories(True) # Clean up directories every batch
+        cleanup_hook() # Call the cleanup hook
         
-        # Add all creators to Suwayomi
-        process_deferred_creators()
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
@@ -1233,14 +1238,11 @@ def post_run_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
     
-    clean_directories(True)
-    
     if orchestrator.skip_post_run == True:
         log_clarification("debug")
         log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
     else:
-        # Add all creators to Suwayomi
-        process_deferred_creators()
+        cleanup_hook() # Call the cleanup hook
         
         # Update Suwayomi category at end
         log_clarification()

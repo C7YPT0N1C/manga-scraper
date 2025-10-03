@@ -371,6 +371,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
+# Hook for cleaning after downloads
+def cleanup_hook():
+    clean_directories(True) # Clean up the download folder / directories
+
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1):
     fetch_env_vars() # Refresh env vars in case config changed.
@@ -386,7 +390,7 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     # IF the current Batch Number is even
     # AND this isn't the last batch.
     if (current_batch_number % 2) != 1 and (total_batch_numbers - current_batch_number) != 0:
-        clean_directories(True) # Clean up directories every batch
+        cleanup_hook() # Call the cleanup hook
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -402,11 +406,11 @@ def post_run_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
     
-    clean_directories(True)
-    
     if orchestrator.skip_post_run == True:
         log_clarification("debug")
         log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
     else:
+        cleanup_hook() # Call the cleanup hook
+        
         log_clarification("debug")
         log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
