@@ -677,7 +677,7 @@ def fetch_gallery_ids(
 
                 batch.append(int(g["id"]))
 
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs with languages {allowed_gallery_language}", "debug")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs with languages: {allowed_gallery_language}", "debug")
 
             if not batch:
                 logger.info(f"{query_type} '{query_value}', Page {page}: No more results, stopping.")
