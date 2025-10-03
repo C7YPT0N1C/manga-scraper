@@ -47,6 +47,7 @@ GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
 CATEGORY_ID = None
+SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every 2 secs.
 
 # NOTE: TEST
 AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
@@ -467,11 +468,10 @@ def get_local_source_id():
     LOCAL_SOURCE_ID = None
 
 def ensure_category(category_name=None):
-    
-    wait = 10
+    wait = SUWAYOMI_POPULATION_TIME * 4
     log_clarification("debug")
     log(f"Waiting {wait}s for Suwayomi to populate data...")
-    time.sleep(wait) # Wait 10
+    time.sleep(wait)
     
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
@@ -640,7 +640,7 @@ def populate_suwayomi(category_id: int, attempt: int):
     log_clarification()
     logger.info(f"Suwayomi Update Triggered. Waiting for completion...")
     
-    wait_time = 4
+    wait_time = SUWAYOMI_POPULATION_TIME * 2
 
     try:
         # Fetch all mangas in the category update
@@ -691,7 +691,8 @@ def populate_suwayomi(category_id: int, attempt: int):
                 continue
 
             if not is_running:
-                logger.info("GraphQL: Suwayomi Update has been stopped either by the user or Suwayomi. Exiting.")
+                log("GraphQL: Suwayomi Update has either finished before GraphQL could check, or has been stopped either by the user or Suwayomi.", "info")
+                log("Exiting Update Loop.", "info")
                 break  # Immediate exit if update stopped
 
             # Set total if available
