@@ -592,7 +592,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
         }
         """
         query_variables = {"sourceId": LOCAL_SOURCE_ID, "page": 1}
-        graphql_request(popular_query, query_variables, debugging)
+        graphql_request(latest_query, query_variables, debugging)
 
     if operation == "library":
         # Mutation to trigger the update once
