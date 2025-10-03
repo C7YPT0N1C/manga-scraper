@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # nhscraper/core/downloader.py
 
-import os, time, random, math, concurrent.futures
+import os, time, random, concurrent.futures
 
-from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
 
 from nhscraper.core import orchestrator
@@ -355,15 +354,10 @@ def process_galleries(batch_ids):
 # MAIN
 ####################################################################################################
 
-def chunkify(lst, n):
-    """Split lst into n nearly-equal chunks."""
-    k, m = divmod(len(lst), n)
-    return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n) if lst[i*k + min(i, m):(i+1)*k + min(i+1, m)]]
-
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
-
+    
     active_extension.pre_batch_hook(batch_list)
 
     log_clarification()
@@ -373,24 +367,14 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     )
     log_clarification()
 
-    # Split galleries into chunks
-    gallery_chunks = chunkify(batch_list, threads_galleries)
-
-    def worker(gids):
-        process_galleries(gids)
-
-    #with concurrent.futures.ThreadPoolExecutor(max_workers=threads_galleries) as executor:
-    #    futures = [executor.submit(worker, chunk) for chunk in gallery_chunks]
-    #    for f in concurrent.futures.as_completed(futures):
-    #        f.result() # propagate exceptions
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=threads_galleries) as executor:
-        futures = [executor.submit(worker, chunk) for chunk in gallery_chunks]
-        # Wrap as_completed() with tqdm for batch progress
-        for f in tqdm(concurrent.futures.as_completed(futures),
-                      total=len(futures),
-                      desc=f"Batch {current_batch_number}/{total_batch_numbers}"):
-            f.result()  # propagate exceptions
+    # Each gallery is processed in parallel with its own thread
+    thread_map(
+        lambda gid: process_galleries([gid]),
+        batch_list,
+        max_workers=threads_galleries,
+        desc=f"Batch {current_batch_number}/{total_batch_numbers}",
+        unit="gallery"
+    )
 
     active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
 
