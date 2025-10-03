@@ -99,7 +99,7 @@ install_filebrowser() {
 install_scraper() {
     echo -e "\nInstalling nhentai-scraper..."
     #branch="main"
-    branch="dev-testing"  # Change to 'dev' for testing latest features
+    branch="nightly"  # Change to 'dev' for testing latest features
 
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning nhentai-scraper repo (branch: $branch)..."
