@@ -517,8 +517,12 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     # Artist / Group / Tag / Character / Parody
     if query_lower in ("artist", "group", "tag", "character", "parody"):
         search_value = query_value
+        
+        # Only wrap in quotes if user didn’t already do so
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
+        
+        # Use quote so spaces become '%20'
         encoded = urllib.parse.quote(f"{query_type}:{search_value}", safe=':"')
         
         if sort_value == "date":
@@ -530,10 +534,14 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     # Search queries
     if query_lower == "search":
         search_value = query_value
+
+        # Only wrap in quotes if user didn’t already do so
         if " " in search_value and not (search_value.startswith('"') and search_value.endswith('"')):
             search_value = f'"{search_value}"'
-        encoded = urllib.parse.quote(search_value, safe='"')
-        
+
+        # Use quote_plus so spaces become '+', not '%20'
+        encoded = urllib.parse.quote_plus(search_value, safe='"')
+
         if sort_value == "date":
             built_url = f"{nhentai_api_base}/galleries/search?query={encoded}&page={page}"
         else:
@@ -545,17 +553,36 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
 # ===============================
 # FETCH GALLERY IDS
 # ===============================
-def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAULT_PAGE_SORT, start_page: int = 1, end_page: int | None = None) -> set[int]:
+def fetch_gallery_ids(
+    query_type: str,
+    query_value: str,
+    sort_value: str = DEFAULT_PAGE_SORT,
+    start_page: int | None = None,
+    end_page: int | None = None,
+    archival: bool = False,
+) -> set[int]:
     """
     Fetch gallery IDs from NHentai based on query type, value, and optional sort type.
-    
+
     query_type: homepage, artist, group, tag, character, parody, search
     query_value: string query value (None for homepage)
     sort_value: date / recent / today / week / popular / all_time (defaults to 'date')
-    start_page, end_page: pagination
+    start_page, end_page: pagination (auto-defaults depend on archival flag)
+    archival: if True, crawl until NHentai returns no more results (ignores end_page)
     """
-    
+
     fetch_env_vars()  # Refresh env vars in case config changed.
+
+    # Apply default ranges depending on archival mode
+    if archival:
+        if start_page is None:
+            start_page = DEFAULT_PAGE_RANGE_START
+        end_page = None  # always unlimited in archival
+    else:
+        if start_page is None:
+            start_page = DEFAULT_PAGE_RANGE_START
+        if end_page is None:
+            end_page = DEFAULT_PAGE_RANGE_END
 
     ids: set[int] = set()
     page = start_page
@@ -570,6 +597,7 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
             log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
+            # Stop at configured end_page (non-archival only)
             if end_page is not None and page > end_page:
                 break
 
@@ -580,55 +608,62 @@ def fetch_gallery_ids(query_type: str, query_value: str, sort_value: str = DEFAU
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
                     resp = gallery_ids_session.get(url, timeout=10)
+
                     if resp.status_code == 429:
-                        wait = dynamic_sleep("api", attempt=(attempt))
-                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
+                        wait = dynamic_sleep("api", attempt=attempt)
+                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
                         time.sleep(wait)
                         continue
+
                     if resp.status_code == 403:
-                        wait = dynamic_sleep("api", attempt=(attempt))
+                        wait = dynamic_sleep("api", attempt=attempt)
+                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
                         time.sleep(wait)
                         continue
-                    
+
                     resp.raise_for_status()
-                    
-                    break
-                
+                    break  # success
+
                 except requests.RequestException as e:
                     if attempt >= orchestrator.max_retries:
                         log_clarification("debug")
-                        logger.warning(f"Page {page}: Skipped after {attempt} retries: {e}")
+                        logger.warning(f"Query '{query_value}', Page {page}: Failed after {attempt} retries: {e}")
                         resp = None
-                        # Rebuild session with Tor and try again once
+
+                        # Tor fallback
                         if use_tor:
-                            wait = dynamic_sleep("api", attempt=(attempt)) * 2
-                            logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying with new Tor Node in {wait:.2f}s")
+                            wait = dynamic_sleep("api", attempt=attempt) * 2
+                            logger.warning(f"Query '{query_value}', Page {page}: Retrying with new Tor node in {wait:.2f}s")
                             time.sleep(wait)
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
                                 resp = gallery_ids_session.get(url, timeout=10)
                                 resp.raise_for_status()
-                            
                             except Exception as e2:
-                                logger.warning(f"Page {page}: Still failed after Tor rotate: {e2}")
+                                logger.warning(f"Query '{query_value}', Page {page}: Still failed after Tor rotate: {e2}")
                                 resp = None
-                        
                         break
-                    
-                    wait = dynamic_sleep("api", attempt=(attempt))
+
+                    wait = dynamic_sleep("api", attempt=attempt)
                     logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
                     time.sleep(wait)
 
             if resp is None:
                 page += 1
-                continue  # skip this page if no success
+                continue  # skip this page
 
-            data = resp.json()
-            batch = [g["id"] for g in data.get("result", [])]
+            try:
+                data = resp.json()
+            except Exception as e:
+                logger.warning(f"Query '{query_value}', Page {page}: Failed to decode JSON: {e}")
+                break
+
+            results = data.get("result", [])
+            batch = [int(g["id"]) for g in results]
             log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
 
             if not batch:
-                logger.info(f"Page {page}: No results, stopping early")
+                logger.info(f"Query '{query_value}', Page {page}: No more results, stopping.")
                 break
 
             ids.update(batch)

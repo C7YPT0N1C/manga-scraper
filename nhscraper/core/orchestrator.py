@@ -213,10 +213,10 @@ DEFAULT_PAGE_SORT = "date"
 page_sort = DEFAULT_PAGE_SORT
 
 DEFAULT_PAGE_RANGE_START = 1
-homepage_range_start = DEFAULT_PAGE_RANGE_START
+page_range_start = DEFAULT_PAGE_RANGE_START
 
 DEFAULT_PAGE_RANGE_END = 2
-homepage_range_end = DEFAULT_PAGE_RANGE_END
+page_range_end = DEFAULT_PAGE_RANGE_END
 
 DEFAULT_RANGE_START = 500000
 range_start = DEFAULT_RANGE_START
@@ -440,7 +440,7 @@ def fetch_env_vars():
     
     def _update_globals():
         global download_path, doujin_txt_path, extension, extension_download_path
-        global nhentai_api_base, nhentai_mirrors, page_sort, homepage_range_start, homepage_range_end
+        global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
         global range_start, range_end, galleries, excluded_tags, language, title_type
         global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
         global use_tor, skip_post_run, dry_run, calm, debug

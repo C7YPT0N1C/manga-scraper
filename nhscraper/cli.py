@@ -56,19 +56,8 @@ def parse_args():
     parser.add_argument("--install-extension", type=str, help="Install an extension by name")
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
     parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
-
-    # Gallery selection
-    #parser.add_argument(
-    #    "--archive",
-    #    type=str,
-    #    nargs="?",                  # Makes the argument optional
-    #    const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
-    #    help=(
-    #        "Path to a file containing gallery URLs or IDs (one per line)."
-    #        "If no path is given, uses the default file."
-    #    )
-    #)
     
+    # Gallery selection
     parser.add_argument(
         "--file",
         type=str,
@@ -145,6 +134,25 @@ def parse_args():
         nargs="+",
         metavar="ARGS",
         help="Download galleries by search. Usage: --search SEARCH [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+    )
+    
+    # NHentai Archival
+    parser.add_argument(
+        "--archive",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help=(
+            "Archive mode: downloads ALL galleries for a query. "
+            "Usage: --archive QUERY [SORT_TYPE]. "
+            "Repeatable."
+        )
+    )
+
+    parser.add_argument(
+        "--archive-all",
+        action="store_true",
+        help="Archive EVERYTHING from NHentai (all pages of homepage)."
     )
 
     # Filters
@@ -405,6 +413,23 @@ def build_gallery_list(args):
     
     if args.search:
         gallery_ids.update(_handle_gallery_args(args.search, "search"))
+        
+    # ------------------------------------------------------------
+    # Archive Queries
+    # ------------------------------------------------------------
+    if args.archive:
+        for entry in args.archive:
+            query = entry[0]
+            sort_val = DEFAULT_PAGE_SORT
+            if len(entry) > 1:
+                sort_val = get_valid_sort_value(entry[1])
+
+            # No end_page → infinite crawl until NHentai runs out
+            gallery_ids.update(fetch_gallery_ids("search", query, sort_val, start_page=1, end_page=None, archival=True))
+
+    if args.archive_all:
+        # Same as homepage crawl but infinite
+        gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, archival=True))
 
     # ------------------------------------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
