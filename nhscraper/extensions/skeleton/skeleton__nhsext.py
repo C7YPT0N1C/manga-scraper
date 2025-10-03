@@ -382,8 +382,10 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
     
-    # Run this part of the Post Batch Hook IF this isn't the last batch.
-    if total_batch_numbers - current_batch_number != 0:
+    # Run this part of the Post Batch Hook
+    # IF the current Batch Number is even
+    # AND this isn't the last batch.
+    if (current_batch_number % 2) != 1 and (total_batch_numbers - current_batch_number) != 0:
         clean_directories(True) # Clean up directories every batch
     
     #log_clarification("debug")
