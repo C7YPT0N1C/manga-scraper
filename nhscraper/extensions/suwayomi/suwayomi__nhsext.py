@@ -54,9 +54,9 @@ AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set f
 AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
 
 # Max number of genres stored in a creator's details.json
-MAX_GENRES_STORED = 25
+MAX_GENRES_STORED = 50
 # Max number of genres parsed from a gallery and stored in a creator's "genre_count" field in creators_metadata.json.
-MAX_GENRES_PARSED = 100
+MAX_GENRES_PARSED = 1000
 
 # Keep a persistent session for cookie-based login
 graphql_session = None

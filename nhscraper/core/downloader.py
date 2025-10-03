@@ -192,9 +192,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         if not (has_allowed or has_translated):
             blocked_langs = gallery_langs[:]
 
-    log_clarification("debug")
-    log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
-    log(f"Allowed Languages: {allowed_gallery_language}", "debug") # NOTE: DEBUGGING
+    #log_clarification("debug") # NOTE: DEBUGGING
+    #log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
+    #log(f"Allowed Languages: {allowed_gallery_language}", "debug")
     
     if blocked_tags or blocked_langs:
         logger.info(
