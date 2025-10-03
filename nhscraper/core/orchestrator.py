@@ -202,7 +202,7 @@ DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE
 
 DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"
-# normalized into a list at import
+# normalised into a list at import
 nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 
 
@@ -232,11 +232,11 @@ galleries = DEFAULT_GALLERIES
 # Filters
 # ------------------------------------------------------------
 DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore"
-# normalized into a list at import
+# normalised into a list at import
 excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
 
 DEFAULT_LANGUAGE = "english"
-# normalized into a list at import
+# normalised into a list at import
 language = [DEFAULT_LANGUAGE.lower()]
 
 DEFAULT_TITLE_TYPE = "english"
@@ -435,7 +435,7 @@ def update_env(key, value):
 
 def fetch_env_vars():
     """
-    Refresh runtime globals from config with normalized values.
+    Refresh runtime globals from config with normalised values.
     """
     
     def _update_globals():

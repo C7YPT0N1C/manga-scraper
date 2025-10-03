@@ -167,6 +167,10 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             log_clarification()
             update_skipped_galleries(False, meta, "Already downloaded.")
             return False
+    
+    # ------------------------------------
+    # Filtering
+    # ------------------------------------
 
     # --- Excluded Tags ---
     #excluded_tags = configurator.excluded_tags or DEFAULT_EXCLUDED_TAGS # Normalised in configurator
@@ -175,23 +179,22 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
     gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
+    
+    for tag in gallery_tags:
+        if tag in excluded_gallery_tags:
+            blocked_tags.append(tag)
 
-    # --- Allowed Languages ---
+    # --- Allowed Languages (FALLBACK, MOVED TO GALLERY ID FETCH) ---
     #language = configurator.language or DEFAULT_LANGUAGE # Normalised in configurator
     #if isinstance(language, str):
     #    language = [language]
-    allowed_gallery_language = [lang.lower() for lang in language]
+    allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
     gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
     
     log_clarification("debug")
     log(f"Excluded Genres: {excluded_gallery_tags}", "debug")
-    log(f"Allowed Languages: {allowed_gallery_language}", "debug")
-
-    # --- Filtering ---
-    for tag in gallery_tags:
-        if tag in excluded_gallery_tags:
-            blocked_tags.append(tag)
+    log(f"Allowed Languages: {allowed_gallery_language}", "debug") # NOTE: DEBUGGING
 
     if allowed_gallery_language:
         has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)

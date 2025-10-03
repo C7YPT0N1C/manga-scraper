@@ -591,7 +591,7 @@ def fetch_gallery_ids(
         if query_value is None:
             log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
-            log(f"Fetching gallery IDs for query '{query_value}' (pages {start_page} → {end_page or '∞'})")
+            log(f"Fetching gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
             # Stop at configured end_page (non-archival only)
@@ -608,13 +608,13 @@ def fetch_gallery_ids(
 
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=attempt)
-                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
+                        logger.warning(f"{query_type} '{query_value}': Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
                         time.sleep(wait)
                         continue
 
                     if resp.status_code == 403:
                         wait = dynamic_sleep("api", attempt=attempt)
-                        logger.warning(f"Query '{query_value}': Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
+                        logger.warning(f"{query_type} '{query_value}': Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
                         time.sleep(wait)
                         continue
 
@@ -624,25 +624,25 @@ def fetch_gallery_ids(
                 except requests.RequestException as e:
                     if attempt >= orchestrator.max_retries:
                         log_clarification("debug")
-                        logger.warning(f"Query '{query_value}', Page {page}: Failed after {attempt} retries: {e}")
+                        logger.warning(f"{query_type} '{query_value}', Page {page}: Failed after {attempt} retries: {e}")
                         resp = None
 
                         # Tor fallback
                         if use_tor:
                             wait = dynamic_sleep("api", attempt=attempt) * 2
-                            logger.warning(f"Query '{query_value}', Page {page}: Retrying with new Tor node in {wait:.2f}s")
+                            logger.warning(f"{query_type} '{query_value}', Page {page}: Retrying with new Tor node in {wait:.2f}s")
                             time.sleep(wait)
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
                                 resp = gallery_ids_session.get(url, timeout=10)
                                 resp.raise_for_status()
                             except Exception as e2:
-                                logger.warning(f"Query '{query_value}', Page {page}: Still failed after Tor rotate: {e2}")
+                                logger.warning(f"{query_type} '{query_value}', Page {page}: Still failed after Tor rotate: {e2}")
                                 resp = None
                         break
 
                     wait = dynamic_sleep("api", attempt=attempt)
-                    logger.warning(f"Query '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
+                    logger.warning(f"{query_type} '{query_value}', Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
                     time.sleep(wait)
 
             if resp is None:
@@ -652,25 +652,45 @@ def fetch_gallery_ids(
             try:
                 data = resp.json()
             except Exception as e:
-                logger.warning(f"Query '{query_value}', Page {page}: Failed to decode JSON: {e}")
+                logger.warning(f"{query_type} '{query_value}', Page {page}: Failed to decode JSON: {e}")
                 break
-
+            
+            # Filter by language
+            allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
             results = data.get("result", [])
-            batch = [int(g["id"]) for g in results]
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "debug")
+            batch = []
+
+            for g in results:
+                gallery_langs = [
+                    t["name"].lower()
+                    for t in g.get("tags", [])
+                    if t.get("type") == "language"
+                ]
+
+                if allowed_gallery_language:
+                    has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
+                    has_translated = ("translated" in gallery_langs) and has_allowed
+
+                    if not (has_allowed or has_translated):
+                        blocked_langs = gallery_langs[:] # NOTE: DEBUGGING
+                        continue # skip this gallery
+
+                batch.append(int(g["id"]))
+
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs with languages {allowed_gallery_language}", "debug")
 
             if not batch:
-                logger.info(f"Query '{query_value}', Page {page}: No more results, stopping.")
+                logger.info(f"{query_type} '{query_value}', Page {page}: No more results, stopping.")
                 break
 
             ids.update(batch)
             page += 1
 
-        logger.info(f"Fetched total {len(ids)} galleries for query '{query_value}'")
+        logger.info(f"Fetched total {len(ids)} galleries for {query_type} '{query_value}'")
         return ids
 
     except Exception as e:
-        logger.warning(f"Failed to fetch galleries for query '{query_value}': {e}")
+        logger.warning(f"Failed to fetch galleries for {query_type} '{query_value}': {e}")
         return set()
 
 # ===============================
