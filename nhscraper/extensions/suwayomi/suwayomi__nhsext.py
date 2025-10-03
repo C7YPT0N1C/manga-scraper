@@ -658,7 +658,7 @@ def populate_suwayomi(category_id: int, attempt: int):
             result = update_suwayomi("status", category_id, debugging=True) # NOTE: DEBUGGING
             
             # Wait BEFORE checking status to avoid exiting early.
-            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
+            time.sleep(wait_time)
 
             if not result:
                 logger.warning("Failed to fetch update status, retrying...")
@@ -713,6 +713,8 @@ def populate_suwayomi(category_id: int, attempt: int):
                 logger.warning(f"Waiting {wait}s for Suwayomi to reflect all changes...")
                 time.sleep(wait)
                 break
+                
+            time.sleep(max(wait_time, (1 + total / 1000))) # Adaptive polling
 
         pbar.close()
 
