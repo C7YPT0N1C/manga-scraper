@@ -155,10 +155,6 @@ os.makedirs(SCRAPER_DIR, exist_ok=True)
 # Load environment variables
 if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
-    
-BATCH_SIZE = 500 # Splits large scrapes into smaller ones
-BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
-batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
@@ -227,6 +223,8 @@ range_end = DEFAULT_RANGE_END
 DEFAULT_GALLERIES = ""
 galleries = DEFAULT_GALLERIES
 
+total_gallery_images = 0
+
 
 # ------------------------------------------------------------
 # Filters
@@ -255,11 +253,17 @@ threads_images = DEFAULT_THREADS_IMAGES
 DEFAULT_MAX_RETRIES = 3
 max_retries = DEFAULT_MAX_RETRIES
 
-DEFAULT_MIN_SLEEP = 0.5
-min_sleep = DEFAULT_MIN_SLEEP
+DEFAULT_MIN_RETRY_SLEEP = 0.5
+min_api_sleep = 0.5
+min_retry_sleep = DEFAULT_MIN_RETRY_SLEEP
 
-DEFAULT_MAX_SLEEP = 100
-max_sleep = DEFAULT_MAX_SLEEP
+DEFAULT_MAX_RETRY_SLEEP = 100
+max_api_sleep = 0.75
+max_retry_sleep = DEFAULT_MAX_RETRY_SLEEP
+
+BATCH_SIZE = 500 # Splits large scrapes into smaller ones
+BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
+batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER # Seconds to sleep before starting a new batch
 
 
 # ------------------------------------------------------------
@@ -325,8 +329,6 @@ config = {
     "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
-    "MIN_SLEEP": getenv_numeric_value("MIN_SLEEP", DEFAULT_MIN_SLEEP),
-    "MAX_SLEEP": getenv_numeric_value("MAX_SLEEP", DEFAULT_MAX_SLEEP),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
@@ -362,8 +364,6 @@ def normalise_config():
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-        "MIN_SLEEP": DEFAULT_MIN_SLEEP,
-        "MAX_SLEEP": DEFAULT_MAX_SLEEP,
         "USE_TOR": DEFAULT_USE_TOR,
         "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
         "DRY_RUN": DEFAULT_DRY_RUN,
@@ -410,9 +410,6 @@ def normalise_value(key: str, value):
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
         return int(value)
 
-    if key in ("MIN_SLEEP", "MAX_SLEEP"):
-        return float(value)
-
     # Default: return as string
     return str(value)
 
@@ -442,7 +439,7 @@ def fetch_env_vars():
         global download_path, doujin_txt_path, extension, extension_download_path
         global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
         global range_start, range_end, galleries, excluded_tags, language, title_type
-        global threads_galleries, threads_images, max_retries, min_sleep, max_sleep
+        global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
         global use_tor, skip_post_run, dry_run, calm, debug
 
         for key, default in {
@@ -464,8 +461,6 @@ def fetch_env_vars():
             "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
             "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
             "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-            "MIN_SLEEP": DEFAULT_MIN_SLEEP,
-            "MAX_SLEEP": DEFAULT_MAX_SLEEP,
             "USE_TOR": DEFAULT_USE_TOR,
             "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
             "DRY_RUN": DEFAULT_DRY_RUN,

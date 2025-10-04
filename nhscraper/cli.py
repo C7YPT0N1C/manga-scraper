@@ -193,19 +193,19 @@ def parse_args():
     parser.add_argument(
         "--min-sleep",
         type=int,
-        default=DEFAULT_MIN_SLEEP,
+        default=DEFAULT_MIN_RETRY_SLEEP,
         help=(
-            f"Minimum amount of time each thread should sleep before starting a new download (default: {DEFAULT_MIN_SLEEP}). "
+            f"Minimum amount of time each thread should sleep before starting a new download (default: {DEFAULT_MIN_RETRY_SLEEP}). "
             f"Set this to a higher number if you are hitting API limits."
         )
     )
     parser.add_argument(
         "--max-sleep",
         type=int,
-        default=DEFAULT_MAX_SLEEP,
+        default=DEFAULT_MAX_RETRY_SLEEP,
         help=(
-            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_SLEEP}). "
-            f"Setting this to a number lower than {DEFAULT_MAX_SLEEP}, may result in hitting API limits."
+            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_RETRY_SLEEP}). "
+            f"Setting this to a number lower than {DEFAULT_MAX_RETRY_SLEEP}, may result in hitting API limits."
         )
     )
     
@@ -471,8 +471,6 @@ def update_config(args):
     update_env("THREADS_GALLERIES", args.threads_galleries)
     update_env("THREADS_IMAGES", args.threads_images)
     update_env("MAX_RETRIES", args.max_retries)
-    update_env("MIN_SLEEP", args.min_sleep)
-    update_env("MAX_SLEEP", args.max_sleep)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
     update_env("SKIP_POST_RUN", args.skip_post_run)

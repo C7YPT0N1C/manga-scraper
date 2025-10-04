@@ -335,9 +335,12 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     # Configurable parameters
     # ------------------------------------------------------------
     gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
-    # min_sleep = Minimum Gallery sleep time
-    # configurator.max_sleep = Maximum Gallery sleep time
-    api_min_sleep, api_max_sleep = 0.5, 0.75 # API sleep range
+    
+    # orchestrator.min_api_sleep = Minimum API sleep time
+    # orchestrator.max_api_sleep = Maximum API sleep time
+    
+    # orchestrator.min_retry_sleep = Minimum Gallery sleep time
+    # orchestrator.max_retry_sleep = Maximum Gallery sleep time
 
     log_clarification("debug")
     log("------------------------------", "debug")
@@ -349,7 +352,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     # ------------------------------------------------------------
     if stage == "api":
         attempt_scale = attempt ** 2
-        base_min, base_max = api_min_sleep * attempt_scale, api_max_sleep * attempt_scale
+        base_min, base_max = orchestrator.min_api_sleep * attempt_scale, orchestrator.max_api_sleep * attempt_scale
         sleep_time = random.uniform(base_min, base_max)
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s", "debug")
         log("------------------------------", "debug")
@@ -412,7 +415,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         scaled_sleep = unit_factor / thread_factor
         
         # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, min_sleep)
+        scaled_sleep = max(scaled_sleep, orchestrator.min_retry_sleep)
         
         if debug:
             log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
@@ -707,10 +710,15 @@ def fetch_gallery_ids(
 
                 # If passed filters → keep
                 batch.append(int(g["id"]))
+                
+                # --- Track total pages ---
+                num_pages = g.get("num_pages") or g.get("num_images") or 0
+                orchestrator.total_gallery_images += num_pages
 
             log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "info")
             log(f"Excluded tags: {excluded_gallery_tags})", "debug")
             log(f"Langs allowed: {allowed_gallery_language}", "debug")
+            log(f"Fetched {len(ids)} galleries ({orchestrator.total_gallery_images} total images).", "debug")
 
             if not batch:
                 logger.info(f"{query_type}{query_str}, Page {page}: No more results, stopping.")
@@ -764,7 +772,7 @@ def fetch_image_urls(meta: dict, page: int):
         filename = f"{page}.{ext}"
 
         # Try each mirror in order
-        #nhentai_mirrors = configurator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS # Normalised in configurator
+        #nhentai_mirrors = orchestrator.nhentai_mirrors or DEFAULT_NHENTAI_MIRRORS # Normalised in configurator
         #if isinstance(nhentai_mirrors, str):
         #    nhentai_mirrors = [nhentai_mirrors]
         urls = [

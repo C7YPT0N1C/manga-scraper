@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # nhscraper/core/downloader.py
 
-import os, time, random, concurrent.futures
+import os, time, random, concurrent.futures, math
 
 from tqdm.contrib.concurrent import thread_map
 
@@ -51,34 +51,61 @@ def load_extension(suppess_pre_run_hook: bool = False):
 # UTILITIES
 ####################################################################################################
 
-def time_estimate(context: str, id_list: list):
-    current_run_num_of_galleries = len(id_list)
-    
-    # Best Case
-    best_time_secs = (
-        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.min_sleep ) +
-        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
+def time_estimate(context: str, id_list: list, average_gallery_download_time: int = 5):
+    """
+    Estimate total runtime (best, median, worst) for current gallery set.
+    Takes into account number of pages (images) per gallery.
+    """
+    num_galleries = len(id_list)
+    if num_galleries == 0:
+        return
+
+    # --- Use global page count if available ---
+    total_pages = orchestrator.total_gallery_images or (num_galleries * 20)  # fallback estimate
+
+    # --- API hits (pages + galleries) ---
+    #                          FETCHING IDS          GET METADATA    IMAGE DOWNLOADING
+    total_api_hits = math.ceil(num_galleries / 25) + num_galleries + total_pages
+
+    # --- Batch timing ---
+    full_batches = num_galleries // BATCH_SIZE
+    remaining = num_galleries % BATCH_SIZE
+    total_sleep_time = full_batches * orchestrator.batch_sleep_time
+
+    # --- Galleries per thread ---
+    avg_batch_downloads = math.ceil(BATCH_SIZE / orchestrator.threads_galleries)
+    final_batch_downloads = math.ceil(remaining / orchestrator.threads_galleries) if remaining else 0
+    total_gallery_download_time = (avg_batch_downloads + final_batch_downloads) * average_gallery_download_time
+
+    # --- Helper for formatting ---
+    def fmt_time(seconds):
+        mins = seconds / 60
+        hours = seconds / 3600
+        days = seconds / 86400
+        return f"{mins:.2f} Minutes / {hours:.2f} Hours / {days:.2f} Days"
+
+    # --- Time computation ---
+    def compute_case(api_sleep, retry_sleep):
+        return (
+            total_sleep_time +
+            (total_api_hits * api_sleep) +
+            (total_gallery_download_time * retry_sleep)
+        )
+
+    best_case = compute_case(orchestrator.min_api_sleep, orchestrator.min_retry_sleep)
+    worst_case = compute_case(orchestrator.max_api_sleep, orchestrator.max_retry_sleep)
+    median_case = compute_case(
+        (orchestrator.min_api_sleep + orchestrator.max_api_sleep) / 2,
+        (orchestrator.min_retry_sleep + orchestrator.max_retry_sleep) / 2
     )
-    
-    best_time_mins = best_time_secs / 60
-    best_time_days = best_time_secs / 60 / 60
-    best_time_hours = best_time_secs / 60 / 60 / 24
-    
-    # Worst Case
-    worst_time_secs = (
-        ((current_run_num_of_galleries / orchestrator.threads_galleries) * orchestrator.max_sleep ) +
-        ((current_run_num_of_galleries / BATCH_SIZE) * orchestrator.batch_sleep_time)
-    )
-    
-    worst_time_mins = worst_time_secs / 60
-    worst_time_days = worst_time_secs / 60 / 60
-    worst_time_hours = worst_time_secs / 60 / 60 / 24
-    
+
+    # --- Output ---
     log_clarification("warning")
     log(
-        f"{context} ({current_run_num_of_galleries} Galleries):"
-        f"\nBest Case Time Estimate: {best_time_hours:.2f} Days / {best_time_days:.2f} Hours / {best_time_mins:.2f} Minutes"
-        f"\nWorst Case Time Estimate: {worst_time_hours:.2f} Days / {worst_time_days:.2f} Hours / {worst_time_mins:.2f} Minutes",
+        f"{context} ({num_galleries} Galleries, {total_pages} Pages):"
+        f"\nBest Case Estimate:   {fmt_time(best_case)}"
+        f"\nMedian Case Estimate: {fmt_time(median_case)}"
+        f"\nWorst Case Estimate:  {fmt_time(worst_case)}",
         "warning"
     )
 
@@ -392,7 +419,6 @@ def start_downloader(gallery_list=None):
     
     load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
     
-    batch_sleep_time = (BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER) # Seconds to sleep between batches.
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
         
@@ -413,8 +439,8 @@ def start_downloader(gallery_list=None):
         
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             log_clarification()
-            logger.info(f"Batch {current_out_of_total_batch_number} complete. Sleeping {batch_sleep_time}s before next batch...")
-            time.sleep(batch_sleep_time) # Pause between batches
+            logger.info(f"Batch {current_out_of_total_batch_number} complete. Sleeping {orchestrator.batch_sleep_time}s before next batch...")
+            time.sleep(orchestrator.batch_sleep_time) # Pause between batches
     
         else: # Last batch
             log_clarification()
