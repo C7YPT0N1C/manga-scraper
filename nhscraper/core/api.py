@@ -608,13 +608,13 @@ def fetch_gallery_ids(
 
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=attempt)
-                        logger.warning(f"{query_type} '{query_value}': Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
+                        logger.warning(f"{query_type} '{query_value}', Page {page}: Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
                         time.sleep(wait)
                         continue
 
                     if resp.status_code == 403:
                         wait = dynamic_sleep("api", attempt=attempt)
-                        logger.warning(f"{query_type} '{query_value}': Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
+                        logger.warning(f"{query_type} '{query_value}', Page {page}: Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
                         time.sleep(wait)
                         continue
 
