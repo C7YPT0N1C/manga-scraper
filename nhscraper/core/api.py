@@ -728,7 +728,8 @@ def fetch_gallery_ids(
             ids.update(batch)
             page += 1
 
-        logger.info(f"Fetched total {len(ids)} galleries for {query_type}{query_str}, Page {page}")
+        log(f"Fetched total {len(ids)} galleries for {query_type}{query_str}, Page {page}", "info")
+        log(f"Total Images across Galleries: {orchestrator.total_gallery_images})", "debug")
         return ids
 
     except Exception as e:
