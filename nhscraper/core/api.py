@@ -711,13 +711,15 @@ def fetch_gallery_ids(
                 # If passed filters → keep
                 batch.append(int(g["id"]))
                 
-                num_pages = len(g.get("pages", []))
+                # --- Track total pages ---
+                images = g.get("images", {})
+                num_pages = len(images.get("pages", []))
                 orchestrator.total_gallery_images += num_pages
 
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "info")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "debug")
+            log(f"Fetcher: Total Images across Galleries: {orchestrator.total_gallery_images})", "debug")
             log(f"Excluded tags: {excluded_gallery_tags})", "debug")
             log(f"Langs allowed: {allowed_gallery_language}", "debug")
-            log(f"Fetched {len(ids)} galleries ({orchestrator.total_gallery_images} total images).", "debug")
 
             if not batch:
                 logger.info(f"{query_type}{query_str}, Page {page}: No more results, stopping.")

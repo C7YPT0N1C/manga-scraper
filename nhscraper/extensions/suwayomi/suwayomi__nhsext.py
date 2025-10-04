@@ -894,11 +894,28 @@ def update_creator_manga(meta):
         try:
             for creator_name in creators:
                 creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-                gallery_folder = os.path.join(creator_folder, gallery_meta["title"])
-                if not os.path.exists(gallery_folder):
-                    logger.info(f"Skipping manga cover update: Gallery folder not found: {gallery_folder}")
+
+                # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
+                gallery_folders = [
+                    f for f in os.listdir(creator_folder)
+                    if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
+                ]
+                if not gallery_folders:
+                    logger.info(f"No gallery folders found for {creator_name}")
                     continue
 
+                # Sort folders by numeric GALLERY_ID descending
+                def extract_id(folder_name):
+                    try:
+                        return int(folder_name.split(")")[0].strip("("))
+                    except ValueError:
+                        return -1
+
+                gallery_folders.sort(key=extract_id, reverse=True)
+                latest_gallery = gallery_folders[0]
+                gallery_folder = os.path.join(creator_folder, latest_gallery)
+
+                # Find the first image (e.g., 1.jpg, 1.png, etc.)
                 candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
                 if not candidates:
                     logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
@@ -907,7 +924,7 @@ def update_creator_manga(meta):
                 page1_file = os.path.join(gallery_folder, candidates[0])
                 _, ext = os.path.splitext(page1_file)
 
-                # Remove old cover
+                # Remove old cover files
                 for f in os.listdir(creator_folder):
                     if f.startswith("cover."):
                         try:
@@ -917,8 +934,8 @@ def update_creator_manga(meta):
                             logger.info(f"Failed to remove old cover file for {creator_folder}: {e}")
                             logger.info("You can safely ignore this. Suwayomi will generate it automatically.")
 
+                # Copy the new cover
                 cover_file = os.path.join(creator_folder, f"cover{ext}")
-                
                 shutil.copy2(page1_file, cover_file)
                 logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
 
