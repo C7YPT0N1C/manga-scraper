@@ -589,9 +589,9 @@ def fetch_gallery_ids(
     try:
         log_clarification("debug")
         if query_value is None:
-            log(f"Fetching gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
+            log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
-            log(f"Fetching gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
+            log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
 
         while True:
             # Stop at configured end_page (non-archival only)
@@ -686,7 +686,7 @@ def fetch_gallery_ids(
                 blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
                 if blocked_tags:
                     log(
-                        f"Fetcher: Skipping gallery {g['id']} due to excluded tags: {blocked_tags}",
+                        f"Fetcher: Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}",
                         "debug"
                     )
                     continue
@@ -699,7 +699,7 @@ def fetch_gallery_ids(
                     if not (has_allowed or has_translated):
                         blocked_langs = gallery_langs[:]  # NOTE: debugging
                         log(
-                            f"Fetcher: Skipping gallery {g['id']} due to blocked languages: {blocked_langs}",
+                            f"Fetcher: Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}",
                             "debug"
                         )
                         continue
@@ -707,7 +707,7 @@ def fetch_gallery_ids(
                 # If passed filters → keep
                 batch.append(int(g["id"]))
 
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} gallery IDs", "info")
+            log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "info")
             log(f"Langs allowed: {allowed_gallery_language}, Excluded tags: {excluded_gallery_tags})", "debug")
 
             if not batch:

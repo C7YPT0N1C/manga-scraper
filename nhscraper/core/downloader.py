@@ -238,7 +238,7 @@ def process_galleries(batch_ids):
             db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
-            logger.info(f"[DRY RUN] Downloader: Would mark gallery {gallery_id} as started.")
+            logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
 
         gallery_attempts = 0
 
@@ -279,7 +279,7 @@ def process_galleries(batch_ids):
                         db.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
-                        logger.info(f"[DRY RUN] Downloader: Would mark gallery {gallery_id} as skipped.")
+                        logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
                 # --- Prepare primary folder (first creator only) ---
