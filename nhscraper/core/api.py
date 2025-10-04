@@ -717,7 +717,7 @@ def fetch_gallery_ids(
                 orchestrator.total_gallery_images += num_pages
 
             log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "debug")
-            log(f"Fetcher: Total Images across Galleries: {orchestrator.total_gallery_images})", "debug")
+            log(f"Fetcher: Current Total Images across Galleries for {query_type}{query_str}: {orchestrator.total_gallery_images}", "debug")
             log(f"Excluded tags: {excluded_gallery_tags})", "debug")
             log(f"Langs allowed: {allowed_gallery_language}", "debug")
 
@@ -728,12 +728,12 @@ def fetch_gallery_ids(
             ids.update(batch)
             page += 1
 
-        log(f"Fetched total {len(ids)} galleries for {query_type}{query_str}, Page {page}", "info")
-        log(f"Total Images across Galleries: {orchestrator.total_gallery_images})", "debug")
+        log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}, Page {page}", "info")
+        log(f"Overall Total Images across Galleries for {query_type}{query_str}: {orchestrator.total_gallery_images}", "debug")
         return ids
 
     except Exception as e:
-        logger.warning(f"Failed to fetch galleries for {query_type}{query_str}, Page {page}: {e}")
+        logger.warning(f"Failed to fetch Galleries for {query_type}{query_str}, Page {page}: {e}")
         return set()
 
 # ===============================
