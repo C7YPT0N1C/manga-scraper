@@ -41,9 +41,10 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
-# Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly every x batches.
+# Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly "RUNS_PER_X_BATCHES" times every "EVERY_X_BATCHES" batches.
 # Increase this if the operations in your post batch / run hooks get increasingly demanding the larger the library is.
-ROUGHLY_EVERY_X_BATCHES = 4
+EVERY_X_BATCHES = 10
+RUNS_PER_X_BATCHES = 3
 
 ####################################################################
 
@@ -1218,11 +1219,6 @@ def cleanup_hook():
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     fetch_env_vars()  # Refresh env vars in case config changed.
     
-    # --- Determine dynamic interval ---
-    # At least 1 run, roughly evenly spaced
-    desired_runs = max(1, int(math.ceil(total_batch_numbers / ROUGHLY_EVERY_X_BATCHES)))
-    interval = max(1, math.ceil(total_batch_numbers / desired_runs))
-    
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-batch Hook Inactive.")
         return
@@ -1230,7 +1226,8 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
 
-    # --- Decide whether to run ---
+    # --- Run if current batch hits interval or last batch ---
+    interval = max(1, round(RUNS_PER_X_BATCHES * total_batch_numbers / EVERY_X_BATCHES))
     is_last_batch = current_batch_number == total_batch_numbers
     if (current_batch_number % interval == 0) or is_last_batch:
         cleanup_hook() # Call the cleanup hook     
