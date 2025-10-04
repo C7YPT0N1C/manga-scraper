@@ -1229,7 +1229,7 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     # Run this part of the Post Batch Hook
     # IF the current Batch Number is a multiple of EVERY_X_BATCHES
     # AND this isn't the last batch.
-    if (current_batch_number % EVERY_X_BATCHES) == 0 and (total_batch_numbers - current_batch_number) != 0:
+    if (current_batch_number % EVERY_X_BATCHES) == 0 and (total_batch_numbers - current_batch_number) >= EVERY_X_BATCHES:
         cleanup_hook() # Call the cleanup hook
         
 
