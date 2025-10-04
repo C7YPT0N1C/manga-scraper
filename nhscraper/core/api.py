@@ -711,8 +711,7 @@ def fetch_gallery_ids(
                 # If passed filters → keep
                 batch.append(int(g["id"]))
                 
-                # --- Track total pages ---
-                num_pages = g.get("num_pages") or g.get("num_images") or 0
+                num_pages = len(g.get("pages", []))
                 orchestrator.total_gallery_images += num_pages
 
             log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "info")
