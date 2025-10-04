@@ -425,10 +425,10 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # 5. Add jitter to avoid predictable timing
         # --------------------------------------------------------
         jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_sleep)
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_retry_sleep)
         
         if debug:
-            log(f"→ Sleep after jitter (Capped at {orchestrator.max_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+            log(f"→ Sleep after jitter (Capped at {orchestrator.max_retry_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
 
         # --------------------------------------------------------
         # 6. Final result
