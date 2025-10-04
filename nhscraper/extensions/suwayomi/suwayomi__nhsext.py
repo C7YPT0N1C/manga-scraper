@@ -3,7 +3,7 @@
 # ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 # PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile
+import os, time, json, requests, threading, subprocess, shutil, tarfile, math
 
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
@@ -41,10 +41,9 @@ if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
-# Used to optionally run stuff in hooks every x batches.
-# Increase this if the operations in your post batch / run hooks get
-# increasingly demanding the larger the library is.
-EVERY_X_BATCHES = 4
+# Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly every x batches.
+# Increase this if the operations in your post batch / run hooks get increasingly demanding the larger the library is.
+ROUGHLY_EVERY_X_BATCHES = 4
 
 ####################################################################
 
@@ -1216,8 +1215,13 @@ def cleanup_hook():
     process_deferred_creators()
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
-def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1):
-    fetch_env_vars() # Refresh env vars in case config changed.
+def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
+    fetch_env_vars()  # Refresh env vars in case config changed.
+    
+    # --- Determine dynamic interval ---
+    # At least 1 run, roughly evenly spaced
+    desired_runs = max(1, int(math.ceil(total_batch_numbers / ROUGHLY_EVERY_X_BATCHES)))
+    interval = max(1, math.ceil(total_batch_numbers / desired_runs))
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-batch Hook Inactive.")
@@ -1225,13 +1229,11 @@ def post_batch_hook(current_batch_number: int = 1, total_batch_numbers: int = 1)
     
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
-    
-    # Run this part of the Post Batch Hook
-    # IF the current Batch Number is a multiple of EVERY_X_BATCHES
-    # AND this isn't the last batch.
-    if (current_batch_number % EVERY_X_BATCHES) == 0 and (total_batch_numbers - current_batch_number) >= EVERY_X_BATCHES:
-        cleanup_hook() # Call the cleanup hook
-        
+
+    # --- Decide whether to run ---
+    is_last_batch = current_batch_number == total_batch_numbers
+    if (current_batch_number % interval == 0) or is_last_batch:
+        cleanup_hook() # Call the cleanup hook     
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
