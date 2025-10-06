@@ -1,0 +1,6 @@
+# TODO.txt
+
+This file contains tasks and notes to be completed for the project.
+
+- [ ] List tasks here
+- [ ] Update this file as progress is made
