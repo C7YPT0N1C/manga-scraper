@@ -9,6 +9,7 @@ from pathlib import Path
 
 from nhscraper.core import orchestrator
 from nhscraper.core.orchestrator import *
+from nhscraper.core import database
 
 ################################################################################################################
 # GLOBAL VARIABLES
@@ -168,62 +169,10 @@ def clean_title(meta_or_title):
     fetch_env_vars() # Refresh env vars in case config changed.
     
     # Ensure global broken symbols file path is set
-    broken_symbols_file = os.path.join(orchestrator.extension_download_path, "possible_broken_symbols.json")
+    #broken_symbols_file = os.path.join(orchestrator.extension_download_path, "possible_broken_symbols.json")
     #log_clarification("debug")
     #log(f"Broken Symbols File at {broken_symbols_file}", "debug")
 
-    def load_possible_broken_symbols() -> dict[str, str]:
-        """
-        Load possible broken symbols as a mapping { "symbol": "_" }.
-        Always creates the file if missing.
-        Also attempts to recover from JSON errors by truncating after the last closing brace.
-        """
-        
-        with possible_broken_symbols_lock:
-            if not os.path.exists(broken_symbols_file):
-                try:
-                    os.makedirs(os.path.dirname(broken_symbols_file), exist_ok=True)
-                    with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                        json.dump({}, f, ensure_ascii=False, indent=2)
-                    logger.debug(f"Created new broken symbols file: {broken_symbols_file}")
-                except Exception as e:
-                    logger.error(f"Could not create broken symbols file: {e}")
-                return {}
-
-            try:
-                with open(broken_symbols_file, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-                    try:
-                        return json.loads(content)
-                    except json.JSONDecodeError as e:
-                        logger.info(f"JSON error: '{e}', attempting auto-recovery.")
-                        logger.info("This is handled automatically. You can (probably) safely ignore this if you don't see this too often or issues arise.")
-
-                        # Try to recover: cut everything after the last closing brace
-                        if "}" in content:
-                            fixed = content[: content.rfind("}") + 1]
-                            try:
-                                return json.loads(fixed)
-                            except Exception:
-                                pass
-            except Exception as e:
-                logger.warning(f"Could not load broken symbols file: {e}")
-            return {}
-
-    def save_possible_broken_symbols(symbols: dict[str, str]):
-        """
-        Save possible broken symbols as a mapping { "symbol": "_" }.
-        Also cleans out any empty or invisible symbols.
-        """
-        
-        with possible_broken_symbols_lock:
-            try:
-                cleaned = {s: "_" for s in symbols if s.strip()}  # drop empty or invisible
-                with open(broken_symbols_file, "w", encoding="utf-8") as f:
-                    json.dump(cleaned, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                logger.error(f"Could not save broken symbols: {e}")
-    
     def is_cjk(char: str) -> bool: # NOTE: TEST: Add a flag for this?
         """Return True if char is a Chinese/Japanese/Korean character."""
         code = ord(char)
@@ -243,7 +192,7 @@ def clean_title(meta_or_title):
         )
     
     # Load persisted broken symbols (mapping)
-    possible_broken_symbols = load_possible_broken_symbols()
+    possible_broken_symbols = database.load_broken_symbols()
 
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
@@ -272,11 +221,12 @@ def clean_title(meta_or_title):
     )
     new_broken = symbols.difference(known_symbols)
 
-    # Add new symbols to the mapping
+    # Add new symbols to the Database
     if new_broken:
         for s in new_broken:
-            possible_broken_symbols[s] = "_"
-        logger.info(f"New broken symbols detected in '{title}': {new_broken}")
+            possible_broken_symbols[s] = "_"  # maintain the mapping for this session
+        database.save_broken_symbols(possible_broken_symbols)  # persist mapping to DB
+        #log(f"New broken symbols detected in '{title}': {new_broken}", "info")
 
     # Remove content inside [] or {} brackets
     title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)

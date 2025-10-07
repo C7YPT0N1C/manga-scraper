@@ -80,7 +80,7 @@ def init_db():
         conn.commit()
 
 # ===============================
-# UTILITY FUNCTIONS
+# UPDATE GALLERIES
 # ===============================
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
@@ -151,6 +151,36 @@ def list_galleries(status=None):
         else:
             cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries")
         return cursor.fetchall()
+    
+# ===============================
+# BROKEN SYMBOLS MANAGEMENT
+# ===============================
+def load_broken_symbols() -> dict[str, str]:
+    """Load all detected broken symbols as { symbol: '_' }."""
+    init_db()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
+        rows = c.fetchall()
+        return {row[0]: "_" for row in rows if row[0].strip()}
+
+def save_broken_symbols(symbol_map: dict[str, str]):
+    """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
+    if not symbol_map:
+        return
+    init_db()
+    now = datetime.utcnow().isoformat()
+    with lock, sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        for symbol, replacement in symbol_map.items():
+            c.execute("""
+                INSERT INTO BrokenSymbols (symbol, example_occurrences, date_detected)
+                VALUES (?, ?, ?)
+                ON CONFLICT(symbol) DO UPDATE SET
+                    fixed=0,
+                    date_detected=excluded.date_detected
+            """, (symbol, "", now))
+        conn.commit()
 
 log_clarification("debug")
 logger.debug("Database: Ready.")
