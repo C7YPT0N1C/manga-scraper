@@ -680,7 +680,7 @@ def fetch_gallery_ids(
                 blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
                 if blocked_tags:
                     log(
-                        f"Fetcher: Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}",
+                        f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}",
                         "debug"
                     )
                     continue
@@ -693,7 +693,7 @@ def fetch_gallery_ids(
                     if not (has_allowed or has_translated):
                         blocked_langs = gallery_langs[:]  # NOTE: debugging
                         log(
-                            f"Fetcher: Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}",
+                            f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}",
                             "debug"
                         )
                         continue
@@ -706,13 +706,13 @@ def fetch_gallery_ids(
                 num_pages = len(images.get("pages", []))
                 orchestrator.total_gallery_images += num_pages
 
-            log(f"Fetcher: Page {page}: Fetched {len(batch)} Gallery IDs", "debug")
-            log(f"Fetcher: Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
+            log(f"Fetcher: {query_type}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "debug")
+            log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
             log(f"Excluded tags: {excluded_gallery_tags})", "debug")
             log(f"Langs allowed: {allowed_gallery_language}", "debug")
 
             if not batch:
-                logger.info(f"{query_type}{query_str}, Page {page}: No more results, stopping.")
+                logger.info(f"Fetcher: {query_type}{query_str}, Page {page}: No more results, stopping.")
                 break
 
             ids.update(batch)
