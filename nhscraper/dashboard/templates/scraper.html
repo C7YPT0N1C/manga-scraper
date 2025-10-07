@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Scraper Control</h2>
+
+<button id="startBtn">Start Scraper</button>
+<button id="stopBtn">Stop Scraper</button>
+
+<p>Status: <span id="status">Loading...</span></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updateStatus() {
+  const res = await fetch('/api/scraper/status');
+  const data = await res.json();
+  document.getElementById('status').textContent = data.status;
+}
+
+document.getElementById('startBtn').onclick = async () => {
+  await fetch('/api/scraper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  updateStatus();
+};
+document.getElementById('stopBtn').onclick = async () => {
+  await fetch('/api/scraper/stop', { method: 'POST' });
+  updateStatus();
+};
+
+updateStatus();
+</script>
+{% endblock %}

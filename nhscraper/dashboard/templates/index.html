@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>NHScraper Control Panel</h1>
+
+<div id="scraper-status">
+  <p>Status: <span id="status">Loading...</span></p>
+  <p>Batch: <span id="batch">0</span> / <span id="total">0</span></p>
+  <button onclick="startScraper()">Start</button>
+  <button onclick="stopScraper()">Stop</button>
+</div>
+
+<pre id="log"></pre>
+{% endblock %}

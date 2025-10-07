@@ -103,7 +103,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
     log(
-        f"{context} ({num_galleries} Galleries, {total_pages} Pages):"
+        f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}:)"
         #f"\nBest Time Estimate:   {fmt_time(best_case)}"
         f"\nAverage Time Estimate: {fmt_time(median_case)}"
         #f"\nWorst Time Estimate:  {fmt_time(worst_case)}",

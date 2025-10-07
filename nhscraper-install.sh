@@ -46,7 +46,7 @@ install_python_packages() {
     echo "Installing Python requirements..."
     source "$SCRAPER_DIR/venv/bin/activate"
     "$SCRAPER_DIR/venv/bin/pip" install --upgrade pip setuptools wheel
-    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "tqdm"
+    "$SCRAPER_DIR/venv/bin/pip" install --editable "$SCRAPER_DIR" "requests[socks]" "flask-cors" "tqdm"
     export PATH="$SCRAPER_DIR/venv/bin:$PATH"
     echo "Python packages installed."
 }
@@ -241,14 +241,14 @@ print_links() {
     HOSTNAME=$(hostname)
 
     echo -e "\nAccess Links:"
+    echo "Scraper Dashboard: http://$IP:6969/dashboard"
+    echo "Scraper API Endpoint: http://$IP:6969/status"
     echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
-    echo "Scraper API Dashboard: http://$IP:5000/dashboard"
-    echo "Scraper API Endpoint: http://$IP:5000/status"
     if [ ! -z "$HOSTNAME" ]; then
         echo -e "\nDNS Hostname Links:"
+        echo "Scraper Dashboard: http://$HOSTNAME:6969/dashboard"
+        echo "Scraper API Endpoint: http://$HOSTNAME:6969/status"
         echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
-        echo "Scraper API Dashboard: http://$HOSTNAME:5000/dashboard"
-        echo "Scraper API Endpoint: http://$HOSTNAME:5000/status"
     fi
 }
 
@@ -385,7 +385,7 @@ start_install() {
             echo -e "\nInstallation complete!"
 
             # Run nhentai-scraper commands after installation to initialise config, files, etc
-            nhentai-scraper --help
+            #nhentai-scraper --help
 
             exit 0
             ;;

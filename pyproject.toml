@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nhentai-scraper"
-version = "1.18.0-beta"
+version = "1.19.0-beta"
 description = "NHentai scraper with extensions for the integration into other services."
 readme = "README.md"
 authors = [{ name = "C7YPT0N1C" }]
@@ -12,6 +12,7 @@ dependencies = [
     "cloudscraper",
     "requests[socks]>=2.31.0",
     "flask>=2.3.3",
+    "flask-cors>=4.0.0",
     "beautifulsoup4>=4.12.2",
     "tqdm>=4.66.1",
     "gql[all]>=3.5.0",

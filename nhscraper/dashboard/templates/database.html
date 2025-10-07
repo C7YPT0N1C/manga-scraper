@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Database Viewer</h2>
+<ul id="galleryList"></ul>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadGalleries() {
+  const res = await fetch('/api/db/list');
+  const data = await res.json();
+  const list = document.getElementById('galleryList');
+  list.innerHTML = '';
+  data.galleries.forEach(g => {
+    const li = document.createElement('li');
+    li.textContent = JSON.stringify(g);
+    list.appendChild(li);
+  });
+}
+loadGalleries();
+</script>
+{% endblock %}
