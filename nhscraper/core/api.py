@@ -255,7 +255,7 @@ def clean_title(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     # Persist updated broken symbols mapping (always save to guarantee file exists)
-    save_possible_broken_symbols(possible_broken_symbols)
+    database.save_broken_symbols(possible_broken_symbols)
 
     return make_filesystem_safe(title)
 
