@@ -585,7 +585,7 @@ def fetch_gallery_ids(
             log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
             log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
-        query_str = f" {query_value}" if query_value else ""
+        query_str = f" '{query_value}'" if query_value else ""
 
         while True:
             # Stop at configured end_page (non-archival only)
@@ -718,12 +718,12 @@ def fetch_gallery_ids(
             ids.update(batch)
             page += 1
 
-        log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}, Page {page}", "info")
+        log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}", "info")
         log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
         return ids
 
     except Exception as e:
-        logger.warning(f"Failed to fetch Galleries for {query_type}{query_str}, Page {page}: {e}")
+        logger.warning(f"Failed to fetch Galleries for {query_type}{query_str}: {e}")
         return set()
 
 # ===============================
