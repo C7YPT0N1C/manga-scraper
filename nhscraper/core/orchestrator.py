@@ -272,6 +272,9 @@ batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER # Seconds to sleep b
 DEFAULT_USE_TOR = True
 use_tor = DEFAULT_USE_TOR
 
+DEFAULT_SKIP_POST_BATCH = False
+skip_post_batch = DEFAULT_SKIP_POST_BATCH
+
 DEFAULT_SKIP_POST_RUN = False
 skip_post_run = DEFAULT_SKIP_POST_RUN
 
@@ -330,6 +333,7 @@ config = {
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
+    "SKIP_POST_BATCH": str(os.getenv("SKIP_POST_BATCH", DEFAULT_SKIP_POST_BATCH)).lower() == "true",
     "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
     "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
     "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "true",
@@ -365,6 +369,7 @@ def normalise_config():
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
         "USE_TOR": DEFAULT_USE_TOR,
+        "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
         "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
         "DRY_RUN": DEFAULT_DRY_RUN,
         "CALM": DEFAULT_CALM,
@@ -440,7 +445,7 @@ def fetch_env_vars():
         global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
         global range_start, range_end, galleries, excluded_tags, language, title_type
         global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
-        global use_tor, skip_post_run, dry_run, calm, debug
+        global use_tor, skip_post_batch, skip_post_run, dry_run, calm, debug
 
         for key, default in {
             "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -462,6 +467,7 @@ def fetch_env_vars():
             "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
             "MAX_RETRIES": DEFAULT_MAX_RETRIES,
             "USE_TOR": DEFAULT_USE_TOR,
+            "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
             "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
             "DRY_RUN": DEFAULT_DRY_RUN,
             "CALM": DEFAULT_CALM,

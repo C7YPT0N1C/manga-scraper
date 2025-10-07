@@ -136,9 +136,9 @@ def parse_args():
         help=(
             f"Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated. "
             f"You can search for multiple terms at the same time, and this will return only galleries that contain both terms. For example, \"anal tanlines\" finds all galleries that contain both \"anal\" and \"tanlines\". "
-            f"You can exclude terms by prefixing them with \"-\". For example, \"anal tanlines -yaoi\" matches all galleries matching \"ana\" and \"tanlines\" but not \"yaoi\". "
+            f"You can exclude terms by prefixing them with \"-\". For example, \"anal tanlines -yaoi\" matches all galleries matching \"anal\" and \"tanlines\" but not \"yaoi\". "
             f"Exact searches can be performed by wrapping terms in double quotes. For example, \"big breasts\" only matches galleries with \"big breasts\" somewhere in the title or in tags. "
-            f"These can be combined with tag namespaces for finer control over the query: \"parodies:railgun -tag:\"big breasts\"\". "
+            f"These can be combined with tag namespaces for finer control over the query: \" parodies:railgun -tag:'big breasts'\". "
             f"You can search for galleries with a specific number of pages with \"pages:20\", or with a page range: \"pages:>20 pages:<=30\". "
             f"You can search for galleries uploaded within some timeframe with \"uploaded:20d\". Valid units are \"h\", \"d\", \"w\", \"m\", \"y\". You can use ranges as well: \"uploaded:>20d uploaded:<30d\"."
         )
@@ -220,11 +220,20 @@ def parse_args():
     # Download / runtime options
     parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
     parser.add_argument(
+        "--skip-post-batch",
+        action="store_true",
+        default=DEFAULT_SKIP_POST_BATCH,
+        help=(
+            f"Skips the extra post batch actions that run occassionally during scrapes (default: {DEFAULT_SKIP_POST_BATCH}). "
+            "Turning this off will make the scrape complete quicker (depending on Extension used, number of galleries, etc)."
+        )
+    )
+    parser.add_argument(
         "--skip-post-run",
         action="store_true",
         default=DEFAULT_SKIP_POST_RUN,
         help=(
-            f"Skips the extra post download actions (default: {DEFAULT_SKIP_POST_RUN}). "
+            f"Skips the post download actions (default: {DEFAULT_SKIP_POST_RUN}). "
             "For example, if you're using the Suwayomi extension, the download directory is still cleaned, but things like updating Suwayomi are skipped."
         )
     )
@@ -481,6 +490,7 @@ def update_config(args):
     update_env("MAX_RETRIES", args.max_retries)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
+    update_env("SKIP_POST_BATCH", args.skip_post_batch)
     update_env("SKIP_POST_RUN", args.skip_post_run)
     update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)

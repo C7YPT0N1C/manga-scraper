@@ -1243,10 +1243,10 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
 
-    # --- Run if current batch hits interval and not last batch ---
+    # --- Run if NOT skipping post batch, current batch hits interval and not last batch ---
     interval = max(1, round(RUNS_PER_X_BATCHES * total_batch_numbers / EVERY_X_BATCHES))
     is_last_batch = current_batch_number == total_batch_numbers
-    if (current_batch_number % interval == 0) and not is_last_batch:
+    if not orchestrator.skip_post_batch and not is_last_batch and (current_batch_number % interval == 0):
         cleanup_hook() # Call the cleanup hook     
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
@@ -1260,7 +1260,7 @@ def post_run_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
     
-    if orchestrator.skip_post_run == True:
+    if orchestrator.skip_post_run:
         log_clarification("debug")
         log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
     else:

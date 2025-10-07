@@ -181,6 +181,7 @@ MAX_SLEEP=
 
 # Download Options
 USE_TOR=True
+SKIP_POST_BATCH=False
 SKIP_POST_RUN=False
 DRY_RUN=False
 CALM=False
