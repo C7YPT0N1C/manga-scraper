@@ -241,13 +241,13 @@ print_links() {
     HOSTNAME=$(hostname)
 
     echo -e "\nAccess Links:"
-    echo "Scraper Dashboard: http://$IP:6969/dashboard"
-    echo "Scraper API Endpoint: http://$IP:6969/status"
+    echo "Scraper Dashboard: http://$IP:6969/"
+    echo "Scraper API Endpoint: http://$IP:6969/api/scraper/status"
     echo "FileBrowser: http://$IP:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
     if [ ! -z "$HOSTNAME" ]; then
         echo -e "\nDNS Hostname Links:"
-        echo "Scraper Dashboard: http://$HOSTNAME:6969/dashboard"
-        echo "Scraper API Endpoint: http://$HOSTNAME:6969/status"
+        echo "Scraper Dashboard: http://$HOSTNAME:6969/"
+        echo "Scraper API Endpoint: http://$HOSTNAME:6969/api/scraper/status"
         echo "FileBrowser: http://$HOSTNAME:8080/files/opt/ (User: admin, Password: $FILEBROWSER_PASS)"
     fi
 }

@@ -1,22 +1,71 @@
 {% extends "base.html" %}
+
 {% block content %}
-<h2>Database Viewer</h2>
-<ul id="galleryList"></ul>
+<h2>📦 Database Viewer</h2>
+
+<div id="controls">
+  <button id="refreshBtn">🔄 Refresh</button>
+  <input type="text" id="searchBox" placeholder="Search by title or ID...">
+</div>
+
+<table id="galleryTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Language</th>
+      <th>Tags</th>
+      <th>Pages</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<p id="statusMsg">Loading galleries...</p>
 {% endblock %}
 
 {% block scripts %}
 <script>
 async function loadGalleries() {
-  const res = await fetch('/api/db/list');
-  const data = await res.json();
-  const list = document.getElementById('galleryList');
-  list.innerHTML = '';
-  data.galleries.forEach(g => {
-    const li = document.createElement('li');
-    li.textContent = JSON.stringify(g);
-    list.appendChild(li);
-  });
+  const status = document.getElementById('statusMsg');
+  const tbody = document.querySelector('#galleryTable tbody');
+  const search = document.getElementById('searchBox').value.toLowerCase();
+
+  status.textContent = 'Loading...';
+  tbody.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/db/list');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const filtered = data.galleries.filter(g => {
+      const title = (g.title || '').toLowerCase();
+      const id = String(g.id || '');
+      return title.includes(search) || id.includes(search);
+    });
+
+    filtered.forEach(g => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${g.id || '-'}</td>
+        <td>${g.title || '(no title)'}</td>
+        <td>${g.language || '-'}</td>
+        <td>${(g.tags || []).join(', ')}</td>
+        <td>${g.pages || '-'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    status.textContent = `${filtered.length} galleries loaded.`;
+  } catch (err) {
+    status.textContent = '❌ Failed to load galleries: ' + err.message;
+  }
 }
+
+document.getElementById('refreshBtn').addEventListener('click', loadGalleries);
+document.getElementById('searchBox').addEventListener('input', loadGalleries);
+
 loadGalleries();
 </script>
 {% endblock %}

@@ -5,6 +5,8 @@ import os
 from flask import Flask, render_template
 from flask_cors import CORS
 
+from nhscraper.core import database
+
 from nhscraper.dashboard.routes.scraper_routes import scraper_bp
 from nhscraper.dashboard.routes.database_routes import db_bp
 from nhscraper.dashboard.routes.gallery_routes import gallery_bp
@@ -35,7 +37,8 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        return render_template("database.html")
+        entries = database.list_galleries()
+        return render_template("database.html", entries=entries)
 
     @app.route("/gallery")
     def gallery_page():
