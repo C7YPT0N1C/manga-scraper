@@ -98,42 +98,50 @@ def parse_args():
         action="append",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
-        help="Download galleries by artist. Usage: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=f"Download galleries by artist. Usage: --artist ARTIST_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
     )
     parser.add_argument(
         "--group",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by group. Usage: --group GROUP [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=f"Download galleries by group. Usage: --group GROUP_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
     )
     parser.add_argument(
         "--tag",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by tag. Usage: --tag TAG [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=f"Download galleries by tag. Usage: --tag TAG_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
     )
     parser.add_argument(
         "--character",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by character. Usage: --character CHARACTER [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=f"Download galleries by character. Usage: --character CHARACTER_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
     )
     parser.add_argument(
         "--parody",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by parody. Usage: --parody PARODY [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=f"Download galleries by parody. Usage: --parody PARODY_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
     )
     parser.add_argument(
         "--search",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download galleries by search. Usage: --search SEARCH [SORT_TYPE] [START_PAGE] [END_PAGE]. Can be repeated."
+        help=(
+            f"Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated. "
+            f"You can search for multiple terms at the same time, and this will return only galleries that contain both terms. For example, \"anal tanlines\" finds all galleries that contain both \"anal\" and \"tanlines\". "
+            f"You can exclude terms by prefixing them with \"-\". For example, \"anal tanlines -yaoi\" matches all galleries matching \"ana\" and \"tanlines\" but not \"yaoi\". "
+            f"Exact searches can be performed by wrapping terms in double quotes. For example, \"big breasts\" only matches galleries with \"big breasts\" somewhere in the title or in tags. "
+            f"These can be combined with tag namespaces for finer control over the query: \"parodies:railgun -tag:\"big breasts\"\". "
+            f"You can search for galleries with a specific number of pages with \"pages:20\", or with a page range: \"pages:>20 pages:<=30\". "
+            f"You can search for galleries uploaded within some timeframe with \"uploaded:20d\". Valid units are \"h\", \"d\", \"w\", \"m\", \"y\". You can use ranges as well: \"uploaded:>20d uploaded:<30d\"."
+        )
     )
     
     # NHentai Archival

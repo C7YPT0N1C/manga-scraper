@@ -43,8 +43,8 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 # Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly "RUNS_PER_X_BATCHES" times every "EVERY_X_BATCHES" batches.
 # Increase this if the operations in your post batch / run hooks get increasingly demanding the larger the library is.
-EVERY_X_BATCHES = 10
-RUNS_PER_X_BATCHES = 3
+EVERY_X_BATCHES = 5
+RUNS_PER_X_BATCHES = 2
 
 ####################################################################
 

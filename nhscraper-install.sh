@@ -210,10 +210,10 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # nhscraper-api
-    echo "Creating systemd service for nhscraper-api..."
-    if [ ! -f /etc/systemd/system/nhscraper-api.service ]; then
-        sudo tee /etc/systemd/system/nhscraper-api.service > /dev/null <<EOF
+    # nhscraper-dashboard
+    echo "Creating systemd service for nhscraper-dashboard..."
+    if [ ! -f /etc/systemd/system/nhscraper-dashboard.service ]; then
+        sudo tee /etc/systemd/system/nhscraper-dashboard.service > /dev/null <<EOF
 [Unit]
 Description=NHentai Scraper API
 After=network.target
@@ -221,7 +221,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$SCRAPER_DIR
-ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/nhscraper/core/api.py
+ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/nhscraper/dashboard/control_panel.py
 Restart=always
 EnvironmentFile=$ENV_FILE
 
@@ -231,9 +231,9 @@ EOF
     fi
 
     systemctl daemon-reexec
-    systemctl enable filebrowser nhscraper-api tor
-    systemctl restart filebrowser nhscraper-api tor
-    echo "Systemd services 'filebrowser', 'nhscraper-api' 'tor' created and started."
+    systemctl enable filebrowser nhscraper-dashboard tor
+    systemctl restart filebrowser nhscraper-dashboard tor
+    echo "Systemd services 'filebrowser', 'nhscraper-dashboard' 'tor' created and started."
 }
 
 print_links() {
@@ -285,11 +285,11 @@ start_uninstall() {
             done
 
             # Reload systemd and stop services
-            systemctl disable filebrowser nhscraper-api || true
-            systemctl stop filebrowser nhscraper-api || true
+            systemctl disable filebrowser nhscraper-dashboard || true
+            systemctl stop filebrowser nhscraper-dashboard || true
 
             # Remove systemd services with status reporting
-            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/nhscraper-api.service; do
+            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/nhscraper-dashboard.service; do
                 if [ -e "$svc" ]; then
                     rm -f "$svc" && echo "Removed: $svc" || echo "Failed to remove: $svc"
                 else
@@ -299,7 +299,7 @@ start_uninstall() {
 
             echo -e "\nStopped and disabled services:"
             echo "    filebrowser"
-            echo "    nhscraper-api"
+            echo "    nhscraper-dashboard"
 
             # Reload systemd
             systemctl daemon-reload
