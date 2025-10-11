@@ -448,6 +448,8 @@ def build_gallery_list(args):
     # ------------------------------------------------------------
     if args.archive_all:
         # Same as homepage crawl but infinite
+        log_clarification("debug") # NOTE: DEBUGGING
+        log(f"SWITCHING TO ARCHIVAL MODE", "debug")
         gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, archival=True))
 
     # ------------------------------------------------------------
