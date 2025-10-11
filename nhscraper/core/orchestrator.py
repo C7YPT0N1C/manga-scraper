@@ -432,13 +432,13 @@ def normalise_value(key: str, value):
     
     # Ensure variables values are valid (non zero / negative)
     if key.lower() == "threads_galleries":
-        threads_galleries = min(max(MAX_THREADS_GALLERIES, threads_galleries), MIN_THREADS_GALLERIES)
+        threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
     if key.lower() == "threads_images":
-        threads_images = min(max(MAX_THREADS_IMAGES, threads_images), MIN_THREADS_IMAGES)
+        threads_images = min(max(MIN_THREADS_IMAGES, threads_images), MAX_THREADS_IMAGES)
     if key.lower() == "max_retries":
-        max_retries = min(0.1, max_retries)
-    min_retry_sleep = min(0.1, min_retry_sleep)
-    max_retry_sleep = min(0.1, max_retry_sleep)
+        max_retries = max(0.1, max_retries)
+    min_retry_sleep = max(0.1, min_retry_sleep)
+    max_retry_sleep = max(0.1, max_retry_sleep)
 
     # Default: return as string
     return str(value)
