@@ -435,6 +435,9 @@ def update_env(key, value):
     """
     Update a single variable in the .env file safely under lock.
     """
+    
+    global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
+    
     def _update():
         if not os.path.exists(ENV_FILE):
             with open(ENV_FILE, "w") as f:
