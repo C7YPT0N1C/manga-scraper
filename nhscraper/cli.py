@@ -500,6 +500,10 @@ def update_config(args, archive_all: bool = False):
     update_env("DEBUG", args.debug)
     
     fetch_env_vars() # Refresh env vars in case config changed.
+    
+    log_clarification("debug") # NOTE: DEBUGGING
+    log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
+    log(f"IMAGE THREADS = {orchestrator.threads_images}", "debug")
 
 # ------------------------------------------------------------
 # Main
@@ -579,10 +583,6 @@ def main():
     # Update Config With CLI Args
     # Allows session to use correct config values on creation
     update_config(args)
-    
-    log_clarification("debug") # NOTE: DEBUGGING
-    log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
-    log(f"IMAGE THREADS = {orchestrator.threads_images}", "debug")
     
     # Build initial session.
     get_session(referrer="CLI", status="build")
