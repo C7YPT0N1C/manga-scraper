@@ -470,7 +470,7 @@ def build_gallery_list(args):
     
     return gallery_list
 
-def update_config(args):
+def update_config(args, archive_all: bool = False):
     log_clarification("debug")
     log("Updating Config...", "debug")
     
@@ -510,29 +510,6 @@ def main():
     """
     
     args = parse_args()
-    
-    # --- Handle --archive-all conflicts by overriding other gallery-selection flags ---
-    if args.archive_all:
-        conflict_flags = {
-            "--file": "file",
-            "--range": "range",
-            "--galleries": "galleries",
-            "--homepage": "homepage",
-            "--artist": "artist",
-            "--group": "group",
-            "--tag": "tag",
-            "--character": "character",
-            "--parody": "parody",
-            "--search": "search",
-        }
-
-        # Detect and clear conflicting flags
-        used_conflicts = [flag for flag, attr in conflict_flags.items() if getattr(args, attr)]
-        if used_conflicts:
-            print(f"[INFO] --archive-all detected. Ignoring conflicting gallery-selection flags:")
-            print(f"       {', '.join(used_conflicts)}")
-            for attr in conflict_flags.values():
-                setattr(args, attr, None)
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(calm=args.calm, debug=args.debug)
@@ -570,12 +547,35 @@ def main():
     logger.debug("CLI: Ready.")
     log("CLI: Debugging Started.", "debug")
     
-    # If no gallery input is provided, default to homepage 1 1
-    gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                    args.group, args.tag, args.character, args.parody, args.search, args.archive_all]
-    if not any(gallery_args):
-        args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
-    
+    # --- Handle --archive-all conflicts by overriding other gallery-selection flags ---
+    if args.archive_all:
+        conflict_flags = {
+            "--file": "file",
+            "--range": "range",
+            "--galleries": "galleries",
+            "--homepage": "homepage",
+            "--artist": "artist",
+            "--group": "group",
+            "--tag": "tag",
+            "--character": "character",
+            "--parody": "parody",
+            "--search": "search",
+        }
+
+        # Detect and clear conflicting flags
+        used_conflicts = [flag for flag, attr in conflict_flags.items() if getattr(args, attr)]
+        if used_conflicts:
+            print(f"[INFO] --archive-all detected. Ignoring conflicting gallery-selection flags:")
+            print(f"       {', '.join(used_conflicts)}")
+            for attr in conflict_flags.values():
+                setattr(args, attr, None)
+    else:
+        # If no gallery input is provided, default to homepage
+        gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
+                        args.group, args.tag, args.character, args.parody, args.search, args.archive_all]
+        if not any(gallery_args):
+            args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
+        
     # Update Config With CLI Args
     # Allows session to use correct config values on creation
     update_config(args)
