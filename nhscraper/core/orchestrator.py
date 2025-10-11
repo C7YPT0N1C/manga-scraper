@@ -408,6 +408,7 @@ def normalise_value(key: str, value):
     
     # Ensure variables values are valid (non zero / negative)
     if key == "THREADS_GALLERIES": # only recalc image threads if gallery threads change
+        log("TESTING", "debug")
         threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
         calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
         threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
