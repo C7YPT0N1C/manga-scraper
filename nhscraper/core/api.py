@@ -520,9 +520,7 @@ def fetch_gallery_ids(
     if start_page is None:
         start_page = DEFAULT_PAGE_RANGE_START
     
-    if file_used: # Default to archival mode
-        end_page = None # Always unlimited in archival mode
-    if archival: # Default to archival mode
+    if file_used or archival: # Default to archival mode
         log_clarification("debug") # NOTE: DEBUGGING
         log(f"SWITCHING TO ARCHIVAL MODE FOR {query_type}{query_str}", "debug")
         end_page = None # Always unlimited in archival mode
@@ -670,9 +668,16 @@ def fetch_gallery_ids(
             log(f"Excluded tags: {excluded_gallery_tags})", "debug")
             log(f"Langs allowed: {allowed_gallery_language}", "debug")
 
-            if not batch:
-                logger.info(f"Fetcher: {query_type}{query_str}, Page {page}: No more results, stopping.")
+            # Stop only if NHentai itself returns no results
+            if not results:
+                logger.info(f"Fetcher: {query_type}{query_str}, Page {page}: No more results from NHentai, stopping.")
                 break
+
+            # If results exist but all were filtered out, just skip to next page
+            if not batch:
+                logger.debug(f"Fetcher: {query_type}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
+                page += 1
+                continue
 
             ids.update(batch)
             page += 1
