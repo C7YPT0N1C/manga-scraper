@@ -225,6 +225,9 @@ galleries = DEFAULT_GALLERIES
 
 total_gallery_images = 0
 
+DEFAULT_ARCHIVING = False
+archiving = DEFAULT_RANGE_END
+
 
 # ------------------------------------------------------------
 # Filters

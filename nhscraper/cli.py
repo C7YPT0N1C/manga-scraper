@@ -57,6 +57,17 @@ def parse_args():
     parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
     parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
     
+    # NHentai mirror URLs
+    parser.add_argument(
+        "--mirrors",
+        type=str,
+        default=DEFAULT_NHENTAI_MIRRORS,
+        help=(
+            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS}). "
+            "Use this if the main site is down or to rotate mirrors."
+        )
+    )
+    
     # Gallery selection
     parser.add_argument(
         "--file",
@@ -66,17 +77,6 @@ def parse_args():
         help=(
             "Path to a file containing gallery URLs or IDs (one per line)."
             "If no path is given, uses the default file."
-        )
-    )
-    
-    # NHentai mirror URLs
-    parser.add_argument(
-        "--mirrors",
-        type=str,
-        default=DEFAULT_NHENTAI_MIRRORS,
-        help=(
-            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS}). "
-            "Use this if the main site is down or to rotate mirrors."
         )
     )
     
@@ -98,35 +98,50 @@ def parse_args():
         action="append",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
-        help=f"Download galleries by artist. Usage: --artist ARTIST_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
+        help=(
+            f"Download galleries by artist. "
+            f"Usage: --artist ARTIST_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
+        )
     )
     parser.add_argument(
         "--group",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=f"Download galleries by group. Usage: --group GROUP_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
+        help=(
+            f"Download galleries by group. "
+            f"Usage: --group GROUP_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
+        )
     )
     parser.add_argument(
         "--tag",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=f"Download galleries by tag. Usage: --tag TAG_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
+        help=(
+            f"Download galleries by tag. "
+            f"Usage: --tag TAG_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
+        )
     )
     parser.add_argument(
         "--character",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=f"Download galleries by character. Usage: --character CHARACTER_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
+        help= (
+            f"Download galleries by character. "
+            f"Usage: --character CHARACTER_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
+        )
     )
     parser.add_argument(
         "--parody",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=f"Download galleries by parody. Usage: --parody PARODY_NAME [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated."
+        help=(
+            f"Download galleries by parody. "
+            f"Usage: --parody PARODY_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
+        )
     )
     parser.add_argument(
         "--search",
@@ -134,7 +149,8 @@ def parse_args():
         nargs="+",
         metavar="ARGS",
         help=(
-            f"Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END}). Can be repeated. "
+            f"Download galleries by search. "
+            f"Usage: --search SEARCH_QUERY [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated. "
             f"You can search for multiple terms at the same time, and this will return only galleries that contain both terms. For example, \"anal tanlines\" finds all galleries that contain both \"anal\" and \"tanlines\". "
             f"You can exclude terms by prefixing them with \"-\". For example, \"anal tanlines -yaoi\" matches all galleries matching \"anal\" and \"tanlines\" but not \"yaoi\". "
             f"Exact searches can be performed by wrapping terms in double quotes. For example, \"big breasts\" only matches galleries with \"big breasts\" somewhere in the title or in tags. "
@@ -145,18 +161,6 @@ def parse_args():
     )
     
     # NHentai Archival
-    parser.add_argument(
-        "--archive",
-        action="append",
-        nargs="+",
-        metavar="ARGS",
-        help=(
-            "Archive mode: downloads ALL galleries for a query. "
-            "Usage: --archive QUERY [SORT_TYPE]. "
-            "Repeatable."
-        )
-    )
-
     parser.add_argument(
         "--archive-all",
         action="store_true",
@@ -249,7 +253,7 @@ def parse_args():
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     """
     Parse CLI args or file URLs and call fetch_gallery_ids for any query type.
-    Supports optional sort type in flags: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE]
+    Supports optional sort type in flags: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE] [ARCHIVAL_BOOL]
     Defaults: sort='date', start_page=1, end_page=DEFAULT_PAGE_RANGE_END
 
     File input supports:
@@ -366,7 +370,12 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         sort_val = get_valid_sort_value(sort_val)
         start_page = DEFAULT_PAGE_RANGE_START
         end_page = DEFAULT_PAGE_RANGE_END
-
+        
+        archive_mode = DEFAULT_ARCHIVING
+        if str(entry[-1]).lower() in ("true", "archive"):
+            archive_mode = True
+            entry = entry[:-1] # Remove the flag before parsing numbers
+        
         if len(entry) > 1 and str(entry[1]).lower() in valid_sorts:
             sort_val = str(entry[1]).lower()
             if len(entry) > 2:
@@ -379,7 +388,10 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
+        if archive_mode:
+            gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, archival=True))
+        else:
+            gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
 
     return gallery_ids
 
@@ -434,16 +446,6 @@ def build_gallery_list(args):
     # ------------------------------------------------------------
     # Archive Queries
     # ------------------------------------------------------------
-    if args.archive:
-        for entry in args.archive:
-            query = entry[0]
-            sort_val = DEFAULT_PAGE_SORT
-            if len(entry) > 1:
-                sort_val = get_valid_sort_value(entry[1])
-
-            # No end_page → infinite crawl until NHentai runs out
-            gallery_ids.update(fetch_gallery_ids("search", query, sort_val, start_page=1, end_page=None, archival=True))
-
     if args.archive_all:
         # Same as homepage crawl but infinite
         gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, archival=True))
@@ -506,6 +508,29 @@ def main():
     """
     
     args = parse_args()
+    
+    # --- Handle --archive-all conflicts by overriding other gallery-selection flags ---
+    if args.archive_all:
+        conflict_flags = {
+            "--file": "file",
+            "--range": "range",
+            "--galleries": "galleries",
+            "--homepage": "homepage",
+            "--artist": "artist",
+            "--group": "group",
+            "--tag": "tag",
+            "--character": "character",
+            "--parody": "parody",
+            "--search": "search",
+        }
+
+        # Detect and clear conflicting flags
+        used_conflicts = [flag for flag, attr in conflict_flags.items() if getattr(args, attr)]
+        if used_conflicts:
+            print(f"[INFO] --archive-all detected. Ignoring conflicting gallery-selection flags:")
+            print(f"       {', '.join(used_conflicts)}")
+            for attr in conflict_flags.values():
+                setattr(args, attr, None)
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(calm=args.calm, debug=args.debug)

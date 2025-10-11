@@ -500,7 +500,7 @@ def fetch_gallery_ids(
     start_page: int | None = None,
     end_page: int | None = None,
     file_used: bool = False,
-    archival: bool = False,
+    archival: bool = DEFAULT_ARCHIVING,
 ) -> set[int]:
     """
     Fetch gallery IDs from NHentai based on query type, value, and optional sort type.
