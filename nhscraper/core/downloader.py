@@ -70,7 +70,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- Batch timing ---
     full_batches = num_galleries // BATCH_SIZE # 37
     remaining_batches = num_galleries % BATCH_SIZE # 219
-    batch_sleep_time = (full_batches + 1 if remaining_batches else full_batches) * batch_sleep_time # 925
+    total_batch_sleep_time = (full_batches + 1 if remaining_batches else full_batches) * batch_sleep_time # 925
 
     # --- Galleries ---
     downloads_per_batch = math.ceil(BATCH_SIZE / orchestrator.threads_galleries) # 250
@@ -89,7 +89,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
         effective_parallelism = max(1, orchestrator.threads_images / orchestrator.threads_galleries)
     
         return (
-            batch_sleep_time +
+            total_batch_sleep_time +
             (total_api_hits * api_sleep) +
             (total_gallery_download_time * retry_sleep)
         ) / effective_parallelism
