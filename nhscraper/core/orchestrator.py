@@ -404,19 +404,6 @@ def normalise_value(key: str, value):
     Normalise values from .env/config to consistent runtime types.
     """
     
-    global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
-    
-    # Ensure variables values are valid (non zero / negative)
-    if key == "THREADS_GALLERIES": # only recalc image threads if gallery threads change
-        log("TESTING", "debug")
-        threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
-        calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
-        threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
-    if key == "MAX_RETRIES":
-        max_retries = max(0.1, max_retries)
-    min_retry_sleep = max(0.1, min_retry_sleep)
-    max_retry_sleep = max(0.1, max_retry_sleep)
-    
     if key in ("EXCLUDED_TAGS", "LANGUAGE"):
         if isinstance(value, str):
             return [v.strip().lower() for v in value.split(",") if v.strip()]
@@ -460,6 +447,13 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
+    
+    if key == "threads_galleries" or key == "threads_images":
+        log_clarification()
+        log("TESTING", "debug")
+        threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
+        calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
+        threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
 
 def fetch_env_vars():
     """
