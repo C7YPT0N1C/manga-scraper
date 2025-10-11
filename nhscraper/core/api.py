@@ -316,18 +316,18 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
             gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
             image_threads = gallery_threads * 5  # Keep ratio 1:5
             if dynamic_sleep_debug:
-                log(f"→ Optimised Threads: {gallery_threads} gallery, {image_threads} image", "debug")
+                log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
         else:
             gallery_threads = orchestrator.threads_galleries
             image_threads = orchestrator.threads_images
             if dynamic_sleep_debug:
-                log(f"→ Threads: {gallery_threads} gallery, {image_threads} image", "debug")
+                log(f"→ Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
                 log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
 
         # --------------------------------------------------------
         # 2. Calculate total load (Units Of Work)
         # --------------------------------------------------------        
-        concurrency = gallery_threads * image_threads
+        concurrency = (gallery_threads * image_threads) + gallery_threads
         current_load = (concurrency * attempt) * num_of_galleries
         if dynamic_sleep_debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")

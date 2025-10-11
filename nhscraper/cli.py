@@ -197,7 +197,7 @@ def parse_args():
         default=DEFAULT_THREADS_IMAGES,
         help=(
             f"Number of threads per gallery downloading images at once (default: {DEFAULT_THREADS_IMAGES}). "
-            f"You're better off increasing this value than increasing the number of gallery threads."
+            f"You're better off increasing this value than increasing the number of gallery threads. "
             f"There isn't really a limit, but still be careful setting this any higher than {RECOMMENDED_MAX_THREADS_IMAGES}"
         )
     )
