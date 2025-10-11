@@ -644,7 +644,7 @@ def update_suwayomi(operation: str, category_id, debugging: bool = False):
 
 def populate_suwayomi(category_id: int, attempt: int):
     log_clarification()
-    log(f"Suwayomi Update Triggered. Waiting for completion...", "warning")
+    log(f"Suwayomi Update Triggered. Waiting for completion...")
     
     wait_time = SUWAYOMI_POPULATION_TIME
 
