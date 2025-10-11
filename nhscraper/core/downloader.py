@@ -396,7 +396,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     thread_map(
         lambda gid: process_galleries([gid]),
         batch_list,
-        max_workers=threads_galleries,
+        max_workers=orchestrator.threads_galleries,
         desc=f"Batch {current_batch_number}/{total_batch_numbers}",
         unit="gallery"
     )

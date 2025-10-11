@@ -581,8 +581,8 @@ def main():
     update_config(args)
     
     log_clarification("debug") # NOTE: DEBUGGING
-    log(f"GALLERY THREADS = {threads_galleries}", "debug")
-    log(f"IMAGE THREADS = {threads_images}", "debug")
+    log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
+    log(f"IMAGE THREADS = {orchestrator.threads_images}", "debug")
     
     # Build initial session.
     get_session(referrer="CLI", status="build")
