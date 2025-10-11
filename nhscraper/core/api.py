@@ -318,7 +318,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         else:
             gallery_threads = orchestrator.threads_galleries
             image_threads = orchestrator.threads_images
-            log(f"→  threads: {gallery_threads} gallery, {image_threads} image", "debug")
+            log(f"→ Threads: {gallery_threads} gallery, {image_threads} image", "debug")
             log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
 
         # --------------------------------------------------------
