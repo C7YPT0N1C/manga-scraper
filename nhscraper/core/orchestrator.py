@@ -448,7 +448,7 @@ def update_env(key, value):
 
     with_env_lock(_update)
     
-    if key == "threads_galleries" or key == "threads_images":
+    if key == "THREADS_GALLERIES" or key == "THREADS_IMAGES":
         log_clarification()
         log("TESTING", "debug")
         threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
