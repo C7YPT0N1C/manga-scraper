@@ -450,16 +450,6 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
-    
-    if key == "THREADS_GALLERIES" or key == "THREADS_IMAGES":
-        log_clarification()
-        log("TESTING", "debug")
-        threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
-        log(f"threads_galleries = {threads_galleries}")
-        calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
-        log(f"calculated_threads_images = {calculated_threads_images}")
-        threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
-        log(f"threads_images = {threads_images}")
 
 def fetch_env_vars():
     """

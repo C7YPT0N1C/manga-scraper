@@ -497,11 +497,8 @@ def update_config(args, archive_all: bool = False):
     
     update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)
-    
     update_env("THREADS_GALLERIES", args.threads_galleries)
-    
     update_env("THREADS_IMAGES", args.threads_images)
-    
     update_env("MAX_RETRIES", args.max_retries)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
