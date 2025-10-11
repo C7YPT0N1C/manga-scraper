@@ -459,6 +459,7 @@ def update_env(key, value):
         calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
         log(f"calculated_threads_images = {calculated_threads_images}")
         threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
+        log(f"threads_images = {threads_images}")
 
 def fetch_env_vars():
     """
