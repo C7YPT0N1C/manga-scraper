@@ -572,7 +572,7 @@ def main():
     
     # If no gallery input is provided, default to homepage 1 1
     gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                    args.group, args.tag, args.character, args.parody, args.search]
+                    args.group, args.tag, args.character, args.parody, args.search, args.archive_all]
     if not any(gallery_args):
         args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
     
