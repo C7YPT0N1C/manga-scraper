@@ -68,14 +68,14 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     total_api_hits = math.ceil(num_galleries / 25) + num_galleries + total_pages
 
     # --- Batch timing ---
-    full_batches = num_galleries // BATCH_SIZE
-    remaining = num_galleries % BATCH_SIZE
-    total_sleep_time = full_batches * orchestrator.batch_sleep_time
+    full_batches = num_galleries // BATCH_SIZE # 37
+    remaining_batches = num_galleries % BATCH_SIZE # 219
+    batch_sleep_time = (full_batches + 1 if remaining_batches else full_batches) * batch_sleep_time # 925
 
-    # --- Galleries per thread ---
-    avg_batch_downloads = math.ceil(BATCH_SIZE / orchestrator.threads_galleries)
-    final_batch_downloads = math.ceil(remaining / orchestrator.threads_galleries) if remaining else 0
-    total_gallery_download_time = (avg_batch_downloads + final_batch_downloads) * average_gallery_download_time
+    # --- Galleries ---
+    downloads_per_batch = math.ceil(BATCH_SIZE / orchestrator.threads_galleries) # 250
+    remaining_downloads_per_batch = math.ceil(remaining_batches / orchestrator.threads_galleries) if remaining_batches else 0 # 109
+    total_gallery_download_time = (downloads_per_batch + remaining_downloads_per_batch) * average_gallery_download_time # 1,795
 
     # --- Helper for formatting ---
     def fmt_time(seconds):
@@ -86,29 +86,28 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
 
     # --- Time computation ---
     def compute_case(api_sleep, retry_sleep):
+        effective_parallelism = max(1, orchestrator.threads_images / orchestrator.threads_galleries)
+    
         return (
-            total_sleep_time +
+            batch_sleep_time +
             (total_api_hits * api_sleep) +
             (total_gallery_download_time * retry_sleep)
-        )
+        ) / effective_parallelism
 
     best_case = compute_case(orchestrator.min_api_sleep, orchestrator.min_retry_sleep)
-    worst_case = compute_case(orchestrator.max_api_sleep, orchestrator.max_retry_sleep)
     median_case = compute_case(
         (orchestrator.min_api_sleep + orchestrator.max_api_sleep) / 2,
         (orchestrator.min_retry_sleep + orchestrator.max_retry_sleep) / 2
     )
+    worst_case = compute_case(orchestrator.max_api_sleep, orchestrator.max_retry_sleep)
 
     # --- Output ---
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
-    log(
-        f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}:)"
-        #f"\nBest Time Estimate:   {fmt_time(best_case)}"
-        f"\nAverage Time Estimate: {fmt_time(median_case)}",
-        #f"\nWorst Time Estimate:  {fmt_time(worst_case)}",
-        "warning"
-    )
+    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}:)", "warning")
+    log(f"\nBest Time Estimate:    {fmt_time(best_case)}", "debug")
+    log(f"\nAverage Time Estimate: {fmt_time(median_case)}", "warning")
+    log(f"\nWorst Time Estimate:   {fmt_time(worst_case)}", "debug")
 
 def build_gallery_path(meta, iteration: dict = None):
     """

@@ -269,7 +269,8 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     including dynamic thread optimisation with anchor + units scaling.
     """
     
-    dynamic_sleep_debug = True # Forcefully enable detailed debug logs
+    # Forcefully enable or disable detailed debug logs
+    dynamic_sleep_debug = True 
 
     # ------------------------------------------------------------
     # Configurable parameters
