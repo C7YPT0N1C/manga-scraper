@@ -521,8 +521,6 @@ def fetch_gallery_ids(
         start_page = DEFAULT_PAGE_RANGE_START
     
     if file_used or archival: # Default to archival mode
-        log_clarification("debug") # NOTE: DEBUGGING
-        log(f"SWITCHING TO ARCHIVAL MODE FOR {query_type}{query_str}", "debug")
         end_page = None # Always unlimited in archival mode
     else:
         if end_page is None:
@@ -531,10 +529,6 @@ def fetch_gallery_ids(
     ids: set[int] = set()
     page = start_page
     
-    log_clarification("debug") # NOTE: DEBUGGING
-    log(f"START PAGE = {start_page}", "debug")
-    log(f"END PAGE = {end_page}", "debug")
-
     gallery_ids_session = get_session(referrer="API", status="return")
 
     try:
