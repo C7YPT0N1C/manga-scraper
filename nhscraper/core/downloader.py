@@ -444,9 +444,7 @@ def start_downloader(gallery_list=None):
     
         else: # Last batch
             log_clarification()
-            logger.info(f"All batches complete.")   
-
-    active_extension.post_run_hook()
+            logger.info(f"All batches complete.")
     
     end_time = time.perf_counter()  # End timer
     runtime = end_time - start_time
@@ -456,6 +454,8 @@ def start_downloader(gallery_list=None):
     minutes, seconds = divmod(rem, 60)
     human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
 
+    active_extension.post_run_hook()
+    
     #update_skipped_galleries(True) # Report all skipped galleries at end
     log_clarification()
     log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
