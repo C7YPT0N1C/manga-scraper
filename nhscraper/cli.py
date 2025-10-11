@@ -478,6 +478,10 @@ def update_config(args, archive_all: bool = False):
     log_clarification("debug")
     log("Updating Config...", "debug")
     
+    log_clarification("debug") # NOTE: DEBUGGING
+    log(f"FORMER GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
+    log(f"FORMER IMAGE THREADS = {orchestrator.threads_images}", "debug")
+    
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
         
