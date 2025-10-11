@@ -373,6 +373,8 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         
         archive_mode = DEFAULT_ARCHIVING
         if str(entry[-1]).lower() in ("true", "archive"):
+            log_clarification("debug") # NOTE: DEBUGGING
+            log("ARCHIVING", "debug")
             archive_mode = True
             entry = entry[:-1] # Remove the flag before parsing numbers
         

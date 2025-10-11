@@ -529,6 +529,10 @@ def fetch_gallery_ids(
 
     ids: set[int] = set()
     page = start_page
+    
+    log_clarification("debug")
+    log(f"START PAGE = {start_page}", "debug")
+    log(f"END PAGE = {end_page}", "debug")
 
     gallery_ids_session = get_session(referrer="API", status="return")
 
