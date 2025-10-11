@@ -187,7 +187,7 @@ def parse_args():
         default=DEFAULT_THREADS_GALLERIES,
         help=(
             f"Number of threads downloading galleries at once (default: {DEFAULT_THREADS_GALLERIES}). "
-            f"Be careful setting this any higher than {DEFAULT_THREADS_GALLERIES}"
+            f"Be careful setting this any higher than {RECOMMENDED_MAX_THREADS_GALLERIES}"
         )
     )
     
@@ -197,7 +197,7 @@ def parse_args():
         default=DEFAULT_THREADS_IMAGES,
         help=(
             f"Number of threads per gallery downloading images at once (default: {DEFAULT_THREADS_IMAGES}). "
-            f"Be careful setting this any higher than {DEFAULT_THREADS_IMAGES}"
+            f"Be careful setting this any higher than {RECOMMENDED_MAX_THREADS_IMAGES} or the value of --threads-galleries X 40"
         )
     )
     

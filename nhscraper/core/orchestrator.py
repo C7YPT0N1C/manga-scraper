@@ -247,11 +247,19 @@ title_type = DEFAULT_TITLE_TYPE.lower()
 # ------------------------------------------------------------
 # Threads
 # ------------------------------------------------------------
+MAX_ALLOWED_API_HITS = 10000
+BATCH_SIZE = 500 # Splits large scrapes into smaller ones
+BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
+batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER # Seconds to sleep before starting a new batch
+
+RECOMMENDED_MAX_THREADS_GALLERIES = 2
 DEFAULT_THREADS_GALLERIES = 2
 threads_galleries = DEFAULT_THREADS_GALLERIES
 
+RECOMMENDED_MAX_THREADS_IMAGES = 10
 DEFAULT_THREADS_IMAGES = 10
-threads_images = DEFAULT_THREADS_IMAGES
+calculated_threads_images = round((MAX_ALLOWED_API_HITS - threads_galleries) / BATCH_SIZE / threads_galleries)
+threads_images = max(DEFAULT_THREADS_IMAGES, calculated_threads_images)
 
 DEFAULT_MAX_RETRIES = 3
 max_retries = DEFAULT_MAX_RETRIES
@@ -263,10 +271,6 @@ min_retry_sleep = DEFAULT_MIN_RETRY_SLEEP
 DEFAULT_MAX_RETRY_SLEEP = (DEFAULT_THREADS_GALLERIES * DEFAULT_THREADS_IMAGES * 5) / 2
 max_api_sleep = 0.75
 max_retry_sleep = DEFAULT_MAX_RETRY_SLEEP
-
-BATCH_SIZE = 500 # Splits large scrapes into smaller ones
-BATCH_SIZE_SLEEP_MULTIPLIER = 0.05 # Seconds to sleep per gallery in batch
-batch_sleep_time = BATCH_SIZE * BATCH_SIZE_SLEEP_MULTIPLIER # Seconds to sleep before starting a new batch
 
 
 # ------------------------------------------------------------
