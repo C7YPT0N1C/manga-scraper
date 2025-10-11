@@ -407,12 +407,12 @@ def normalise_value(key: str, value):
     global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
     
     # Ensure variables values are valid (non zero / negative)
-    if key == "threads_galleries" or key == "threads_images":
+    if key == "THREADS_GALLERIES" or key == "THREADS_IMAGES":
         threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
-        if key == "threads_galleries":  # only recalc if gallery threads change
+        if key == "THREADS_GALLERIES":  # only recalc if gallery threads change
             calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
             threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
-    if key == "max_retries":
+    if key == "MAX_RETRIES":
         max_retries = max(0.1, max_retries)
     min_retry_sleep = max(0.1, min_retry_sleep)
     max_retry_sleep = max(0.1, max_retry_sleep)
