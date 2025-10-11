@@ -296,11 +296,11 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 # Homepage URLs (e.g. https://nhentai.net/?page=6)
                 m_homepage = re.search(r"nhentai\.net/\?page=(\d+)", line)
                 if m_homepage:
-                    end_page = int(m_homepage.group(1))
                     sort_val = DEFAULT_PAGE_SORT
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
-                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+                    end_page = int(m_homepage.group(1))
+                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page, file_used=True))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -316,7 +316,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page, file_used=True))
                     continue
 
                 elif m_search:
@@ -325,7 +325,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page, file_used=True))
                     continue
 
                 else:

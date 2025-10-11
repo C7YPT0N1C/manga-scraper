@@ -499,6 +499,7 @@ def fetch_gallery_ids(
     sort_value: str = DEFAULT_PAGE_SORT,
     start_page: int | None = None,
     end_page: int | None = None,
+    file_used: bool = False,
     archival: bool = False,
 ) -> set[int]:
     """
@@ -513,14 +514,16 @@ def fetch_gallery_ids(
 
     fetch_env_vars()  # Refresh env vars in case config changed.
 
-    # Apply default ranges depending on archival mode
+    # Apply default ranges depending on flags used.
+    if start_page is None:
+        start_page = DEFAULT_PAGE_RANGE_START
+    
+    if file_used:
+        if end_page is None:
+            end_page = None # Default to unlimited during file parsing
     if archival:
-        if start_page is None:
-            start_page = DEFAULT_PAGE_RANGE_START
-        end_page = None  # always unlimited in archival
+        end_page = None # Always unlimited in archival mode
     else:
-        if start_page is None:
-            start_page = DEFAULT_PAGE_RANGE_START
         if end_page is None:
             end_page = DEFAULT_PAGE_RANGE_END
 
