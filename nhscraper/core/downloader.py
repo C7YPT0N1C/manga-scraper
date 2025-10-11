@@ -86,6 +86,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
 
     # --- Time computation ---
     def compute_case(api_sleep, retry_sleep):
+        # Average parallel work happening per gallery thread
         effective_parallelism = max(1, orchestrator.threads_images / orchestrator.threads_galleries)
     
         return (
