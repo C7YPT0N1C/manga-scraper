@@ -172,9 +172,9 @@ if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
             "# 1) Plain gallery ID: e.g. 123456\n"
             "# 2) Full gallery URL: e.g. https://nhentai.net/g/123456/\n"
             "# 3) NHentai Homepage URL: e.g. https://nhentai.net/ or https://nhentai.net/?page=2/\n"
-            "#    Optional page parameter supported (e.g.) ?page=2 (fetches pages 1 to 2)\n"
+            "#    Optional page parameter supported (e.g. '?page=2') (fetches pages 1 to 2)\n"
             "# 4) Artist / Group / Tag / Character / Parody URLs: e.g. https://nhentai.net/artist/ARTIST/ or https://nhentai.net/group/GROUP/popular-week, etc\n"
-            "#    Optional page parameter supported (e.g.) ?page=3 (fetches pages 1 to 3)\n"
+            "#    Optional page parameter supported (e.g. '?page=3') (fetches pages 1 to 3)\n"
             "# 5) Search URLs: e.g. https://nhentai.net/search/?q=QUERY\n"
             "# Lines that do not match these formats will be skipped.\n"
         )
