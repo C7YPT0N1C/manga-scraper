@@ -259,7 +259,7 @@ RECOMMENDED_MAX_THREADS_GALLERIES = 2
 DEFAULT_THREADS_GALLERIES = 2
 threads_galleries = DEFAULT_THREADS_GALLERIES
 
-RECOMMENDED_MAX_THREADS_IMAGES = 10
+RECOMMENDED_MAX_THREADS_IMAGES = 50
 DEFAULT_THREADS_IMAGES = 10
 calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
 threads_images = max(DEFAULT_THREADS_IMAGES, calculated_threads_images)
