@@ -519,12 +519,15 @@ def fetch_gallery_ids(
     # Apply default ranges depending on flags used.
     if start_page is None:
         start_page = DEFAULT_PAGE_RANGE_START
-    if end_page is None:
-        if file_used or archival: # Default to archival mode
-            log_clarification("debug") # NOTE: DEBUGGING
-            log(f"SWITCHING TO ARCHIVAL MODE FOR {query_type}{query_str}", "debug")
-            end_page = None # Always unlimited in archival mode
-        else:
+    
+    if file_used: # Default to archival mode
+        end_page = None # Always unlimited in archival mode
+    if archival: # Default to archival mode
+        log_clarification("debug") # NOTE: DEBUGGING
+        log(f"SWITCHING TO ARCHIVAL MODE FOR {query_type}{query_str}", "debug")
+        end_page = None # Always unlimited in archival mode
+    else:
+        if end_page is None:
             end_page = DEFAULT_PAGE_RANGE_END
 
     ids: set[int] = set()
