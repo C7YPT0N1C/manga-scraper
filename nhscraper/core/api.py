@@ -513,24 +513,24 @@ def fetch_gallery_ids(
     """
 
     fetch_env_vars()  # Refresh env vars in case config changed.
+    
+    query_str = f" '{query_value}'" if query_value else ""
 
     # Apply default ranges depending on flags used.
     if start_page is None:
         start_page = DEFAULT_PAGE_RANGE_START
-    
-    if file_used:
-        if end_page is None:
-            end_page = None # Default to unlimited during file parsing
-    if archival:
-        end_page = None # Always unlimited in archival mode
-    else:
-        if end_page is None:
+    if end_page is None:
+        if file_used or archival: # Default to archival mode
+            log_clarification("debug") # NOTE: DEBUGGING
+            log(f"SWITCHING TO ARCHIVAL MODE FOR {query_type}{query_str}", "debug")
+            end_page = None # Always unlimited in archival mode
+        else:
             end_page = DEFAULT_PAGE_RANGE_END
 
     ids: set[int] = set()
     page = start_page
     
-    log_clarification("debug")
+    log_clarification("debug") # NOTE: DEBUGGING
     log(f"START PAGE = {start_page}", "debug")
     log(f"END PAGE = {end_page}", "debug")
 
@@ -542,7 +542,6 @@ def fetch_gallery_ids(
             log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
             log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
-        query_str = f" '{query_value}'" if query_value else ""
 
         while True:
             # Stop at configured end_page (non-archival only)
