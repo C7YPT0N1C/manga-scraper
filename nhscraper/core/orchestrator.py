@@ -409,8 +409,9 @@ def normalise_value(key: str, value):
     # Ensure variables values are valid (non zero / negative)
     if key == "threads_galleries" or key == "threads_images":
         threads_galleries = min(max(MIN_THREADS_GALLERIES, threads_galleries), MAX_THREADS_GALLERIES)
-        calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
-        threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
+        if key == "threads_galleries":  # only recalc if gallery threads change
+            calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
+            threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
     if key == "max_retries":
         max_retries = max(0.1, max_retries)
     min_retry_sleep = max(0.1, min_retry_sleep)
