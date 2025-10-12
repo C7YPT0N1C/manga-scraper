@@ -595,7 +595,7 @@ def fetch_gallery_ids(
     
     global archiving
 
-    fetch_env_vars()  # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     query_str = f" '{query_value}'" if query_value else ""
     sort_str = f"'{sort_value}'" if sort_value != "date" else ""

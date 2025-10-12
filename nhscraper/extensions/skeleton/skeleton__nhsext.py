@@ -239,7 +239,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Updates tqdm progress bar with current creator.
     """
 
-    fetch_env_vars()  # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
 
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
@@ -383,7 +383,7 @@ def cleanup_hook():
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
-    fetch_env_vars()  # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Post-batch Hook Inactive.")
