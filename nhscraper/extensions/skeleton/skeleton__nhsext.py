@@ -392,20 +392,24 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
     
-    def _post_batch_interval_pass():
+    def _should_run_post_batch():
         # --- If Total Batches higher than MAX_X_BATCHES, do not run ---
         if total_batch_numbers > MAX_X_BATCHES:
             return False
         
-        # --- Run if NOT skipping post batch, current batch hits interval and not last batch ---
+        # --- Calculate when to trigger cleanup ---
         interval = max(1, round(RUNS_PER_X_BATCHES * total_batch_numbers / EVERY_X_BATCHES))
         is_last_batch = current_batch_number == total_batch_numbers
-        if not orchestrator.skip_post_batch and not orchestrator.archiving and not is_last_batch and (current_batch_number % interval == 0):
-            return True
-        else:
-            return False
+        
+        # --- Only run if conditions are met ---
+        return (
+            not orchestrator.skip_post_batch # If NOT skipping post batch
+            and not orchestrator.archiving # If NOT in archival mode
+            and not is_last_batch # If not last batch
+            and (current_batch_number % interval == 0) # If current batch hits interval
+        )
     
-    if _post_batch_interval_pass():
+    if _should_run_post_batch():
         cleanup_hook() # Call the cleanup hook
     
     #log_clarification("debug")
