@@ -314,8 +314,8 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
 
         if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
             # Base gallery threads = 2, scale with number of galleries
-            gallery_threads = max(2, int(num_of_galleries / 500) + 1)  # 500 galleries per thread baseline
-            image_threads = gallery_threads * 5  # Keep ratio 1:5
+            gallery_threads = max(2, int(num_of_galleries / BATCH_SIZE) + 1) # 500 galleries per thread baseline
+            image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
             if dynamic_sleep_debug:
                 log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
         else:

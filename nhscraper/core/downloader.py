@@ -66,6 +66,9 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- API hits (pages + galleries) ---
     #                          FETCHING IDS          GET METADATA    IMAGE DOWNLOADING
     total_api_hits = math.ceil(num_galleries / 25) + num_galleries + total_pages
+    
+    # Average parallel work happening per gallery thread
+    effective_parallelism = max(1, orchestrator.threads_images / orchestrator.threads_galleries)
 
     # --- Batch timing ---
     full_batches = num_galleries // BATCH_SIZE
@@ -98,15 +101,12 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
 
     # --- Time computation ---
     def compute_case(api_sleep, retry_sleep):
-        # Average parallel work happening per gallery thread
-        effective_parallelism = max(1, orchestrator.threads_images / orchestrator.threads_galleries)
-    
         return (
             total_batch_sleep_time +
             (total_api_hits * api_sleep) +
             (total_gallery_download_time * retry_sleep)
         ) / effective_parallelism
-
+    
     best_case = compute_case(orchestrator.min_api_sleep, orchestrator.min_retry_sleep)
     median_case = compute_case(
         (orchestrator.min_api_sleep + orchestrator.max_api_sleep) / 2,
@@ -117,20 +117,10 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- Output ---
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
-    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):"
-        f"\nAverage Time Estimate:         {fmt_time(median_case)}")
+    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):")
     log(f"Best Time Estimate:    {fmt_time(best_case)}", "debug")
+    log(f"Average Time Estimate: {fmt_time(median_case)}")
     log(f"Worst Time Estimate:   {fmt_time(worst_case)}", "debug")
-    
-    log(f"total_pages: {total_pages}", "debug")
-    log(f"total_api_hits: {total_api_hits}", "debug")
-    log(f"full_batches: {full_batches}", "debug")
-    log(f"remaining_batches: {remaining_batches}", "debug")
-    log(f"total_batch_sleep_time: {total_batch_sleep_time}", "debug")
-    log(f"downloads_per_batch: {downloads_per_batch}", "debug")
-    log(f"remaining_downloads_per_batch: {remaining_downloads_per_batch}", "debug")
-    log(f"total_gallery_download_time: {total_gallery_download_time}", "debug")
-    
 
 def build_gallery_path(meta, iteration: dict = None):
     """
