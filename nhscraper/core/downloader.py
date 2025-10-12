@@ -420,11 +420,15 @@ def start_downloader(gallery_list=None):
     This is one this module's entrypoints.
     """
     
+    global galleries
+    
     log_clarification("debug")
     logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
     
     fetch_env_vars() # Refresh env vars in case config changed.
+    
+    orchestrator.galleries = gallery_list
     
     start_time = time.perf_counter()  # Start timer
     
