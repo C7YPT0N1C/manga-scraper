@@ -1145,7 +1145,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                     return True
 
                 except Exception as e:
-                    wait = dynamic_sleep("gallery", attempt=attempt)
+                    wait = dynamic_sleep("image", attempt=attempt)
                     log_clarification()
                     logger.warning(
                         f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s"

@@ -275,7 +275,7 @@ def dynamic_sleep(stage, id_list = None, attempt: int = 1):
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
-    gallery_cap = 3750 # Maximum Number of Galleries considered for scaling (~150 pages)
+    gallery_cap = 3750 # Maximum Count considered for scaling (~150 pages)
     
     # orchestrator.min_api_sleep = Minimum API sleep time
     # orchestrator.max_api_sleep = Maximum API sleep time
@@ -299,22 +299,25 @@ def dynamic_sleep(stage, id_list = None, attempt: int = 1):
         log("------------------------------", "debug")
         log_clarification()
         return sleep_time
-
-    # ------------------------------------------------------------
-    # GALLERY STAGE
-    # ------------------------------------------------------------
-    if stage == "gallery":
+    
+    def _calc_sleep_time(sleep_stage: str):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = max(1, len(id_list))
+        num_of_galleries = min(gallery_cap, len(id_list))
+        num_of_images = max(1, orchestrator.total_gallery_images)
+        
+        if sleep_stage == "gallery":
+            count = num_of_galleries
+        if sleep_stage == "image":
+            count = num_of_images
         
         if dynamic_sleep_debug:
-            log(f"→ Number of Galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
-
+            log(f"→ Count: {f'{count} (Capped at {gallery_cap})' if sleep_stage == "gallery" else f'{count}'}", "debug")
+        
         if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
-            # Base gallery threads = 2, scale with Number of Galleries
-            gallery_threads = max(2, int(num_of_galleries / BATCH_SIZE) + 1) # 500 galleries per thread baseline
+            # Base gallery threads = 2, scale with Count
+            gallery_threads = max(2, int(count / BATCH_SIZE) + 1) if sleep_stage == "gallery" else DEFAULT_THREADS_GALLERIES # 500 galleries per thread baseline
             image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
             if dynamic_sleep_debug:
                 log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
@@ -329,10 +332,10 @@ def dynamic_sleep(stage, id_list = None, attempt: int = 1):
         # 2. Calculate total load (Units Of Work)
         # --------------------------------------------------------        
         concurrency = (gallery_threads * image_threads) + gallery_threads
-        current_load = (concurrency * attempt) * num_of_galleries
+        current_load = (concurrency * attempt) * count
         if dynamic_sleep_debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
-            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Galleries = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Count = ({concurrency} * {attempt}) * {count} = {current_load:.2f} Units Of Work", "debug")
 
         # --------------------------------------------------------
         # 3. Unit-based scaling
@@ -379,6 +382,20 @@ def dynamic_sleep(stage, id_list = None, attempt: int = 1):
         log("------------------------------", "debug")
         log_clarification()
         return sleep_time
+    
+    # ------------------------------------------------------------
+    # GALLERY STAGE
+    # ------------------------------------------------------------
+    if stage == "gallery":
+        calculated_sleep_time = _calc_sleep_time("gallery")
+        return calculated_sleep_time
+    
+    # ------------------------------------------------------------
+    # IMAGE STAGE
+    # ------------------------------------------------------------
+    if stage == "image":
+        calculated_sleep_time = _calc_sleep_time("image")
+        return calculated_sleep_time
 
 #####################################################################################################################################################################
 
