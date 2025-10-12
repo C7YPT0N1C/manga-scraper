@@ -431,26 +431,6 @@ def normalise_value(key: str, value):
     # Default: return as string
     return str(value)
 
-def update_env(key, value):
-    """
-    Update a single variable in the .env file safely under lock.
-    """
-    
-    global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
-    
-    def _update():
-        if not os.path.exists(ENV_FILE):
-            with open(ENV_FILE, "w") as f:
-                f.write("")
-
-        # Safely update .env
-        set_key(ENV_FILE, key, str(value))
-        
-        # Update runtime config
-        config[key] = normalise_value(key, value)
-
-    with_env_lock(_update)
-
 def fetch_env_vars():
     """
     Refresh runtime globals from config with normalised values.
@@ -493,6 +473,27 @@ def fetch_env_vars():
     
     # Execute the update under the lock
     with_env_lock(_update_globals)
+
+def update_env(key, value):
+    """
+    Update a single variable in the .env file safely under lock.
+    """
+    
+    global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
+    
+    def _update():
+        if not os.path.exists(ENV_FILE):
+            with open(ENV_FILE, "w") as f:
+                f.write("")
+
+        # Safely update .env
+        set_key(ENV_FILE, key, str(value))
+        
+        # Update runtime config
+        config[key] = normalise_value(key, value)
+
+    with_env_lock(_update)
+    fetch_env_vars() # Refresh env vars in case config changed.
 
 def get_valid_sort_value(sort_value):
     fetch_env_vars() # Refresh env vars in case config changed.
