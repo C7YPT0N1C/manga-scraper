@@ -117,10 +117,12 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- Output ---
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
-    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):")
-    log(f"Best Time Estimate:    {fmt_time(best_case)}", "debug")
-    log(f"Average Time Estimate: {fmt_time(median_case)}")
-    log(f"Worst Time Estimate:   {fmt_time(worst_case)}", "debug")
+    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):",
+        f"Best Time Estimate:    {fmt_time(best_case)}",
+        #f"Average Time Estimate: {fmt_time(median_case)}",
+        #f"Worst Time Estimate:   {fmt_time(worst_case)}",
+        "debug"
+    )
 
 def build_gallery_path(meta, iteration: dict = None):
     """
@@ -304,7 +306,7 @@ def process_galleries(batch_ids):
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 
-                time.sleep(dynamic_sleep("gallery", batch_ids, gallery_attempts)) # Sleep before starting gallery.
+                time.sleep(dynamic_sleep("gallery", id_list=batch_ids, attempt=gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False

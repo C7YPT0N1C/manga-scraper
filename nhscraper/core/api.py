@@ -263,7 +263,7 @@ def clean_title(meta_or_title):
 #  NHentai API Handling
 ################################################################################################################
 
-def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
+def dynamic_sleep(stage, id_list = None, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
@@ -275,7 +275,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
-    gallery_cap = 3750 # Maximum number of galleries considered for scaling (~150 pages)
+    gallery_cap = 3750 # Maximum Number of Galleries considered for scaling (~150 pages)
     
     # orchestrator.min_api_sleep = Minimum API sleep time
     # orchestrator.max_api_sleep = Maximum API sleep time
@@ -307,13 +307,13 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = max(1, len(batch_ids))
+        num_of_galleries = max(1, len(id_list))
         
         if dynamic_sleep_debug:
-            log(f"→ Number of galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
+            log(f"→ Number of Galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
 
         if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
-            # Base gallery threads = 2, scale with number of galleries
+            # Base gallery threads = 2, scale with Number of Galleries
             gallery_threads = max(2, int(num_of_galleries / BATCH_SIZE) + 1) # 500 galleries per thread baseline
             image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
             if dynamic_sleep_debug:
@@ -332,7 +332,7 @@ def dynamic_sleep(stage, batch_ids = None, attempt: int = 1):
         current_load = (concurrency * attempt) * num_of_galleries
         if dynamic_sleep_debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
-            log(f"→ Current Load = (Concurrency * Attempt) * Gallery Weight = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Galleries = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
         # --------------------------------------------------------
         # 3. Unit-based scaling
@@ -512,6 +512,8 @@ def fetch_gallery_ids(
     start_page, end_page: pagination (auto-defaults depend on archival flag)
     archival: if True, crawl until NHentai returns no more results (ignores end_page)
     """
+    
+    global archiving
 
     fetch_env_vars()  # Refresh env vars in case config changed.
     
@@ -525,6 +527,7 @@ def fetch_gallery_ids(
         if end_page is None:
             end_page = None # Always unlimited in archival mode if no end page provided
     if archival:
+        orchestrator.archiving = True # Let scraper know there is archival being done.
         end_page = None # Always unlimited in archival mode
     else:
         if end_page is None:
