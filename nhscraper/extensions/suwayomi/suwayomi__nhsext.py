@@ -484,7 +484,6 @@ def ensure_category(category_name=None):
     wait = SUWAYOMI_POPULATION_TIME * 4
     log_clarification("debug")
     log(f"Waiting {wait}s for Suwayomi to populate data...")
-    time.sleep(wait)
     
     global CATEGORY_ID
     name = category_name or SUWAYOMI_CATEGORY_NAME
@@ -518,6 +517,8 @@ def ensure_category(category_name=None):
     result = graphql_request(mutation, variables=query_variables)
     log(f"GraphQL: Create category result: {result}", "debug")
     CATEGORY_ID = int(result["data"]["createCategory"]["category"]["id"])
+    
+    time.sleep(wait)
     return CATEGORY_ID
 
 # ----------------------------

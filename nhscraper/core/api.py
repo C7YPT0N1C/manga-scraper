@@ -262,14 +262,11 @@ def clean_title(meta_or_title):
 ################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
-
-def dynamic_sleep(stage, attempt: int = 1):
+def dynamic_sleep(stage, id_list: list = None, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
     """
-    
-    #fetch_env_vars() # Refresh env vars in case config changed.
     
     # Forcefully enable or disable detailed debug logs
     dynamic_sleep_debug = True 
@@ -277,7 +274,7 @@ def dynamic_sleep(stage, attempt: int = 1):
     # ------------------------------------------------------------
     # Configurable parameters
     # ------------------------------------------------------------
-    gallery_cap = 3750 # Maximum Count considered for scaling (~150 pages)
+    gallery_cap = 3750 # Maximum Number of Galleries considered for scaling (~150 pages)
     
     # orchestrator.min_api_sleep = Minimum API sleep time
     # orchestrator.max_api_sleep = Maximum API sleep time
@@ -301,27 +298,22 @@ def dynamic_sleep(stage, attempt: int = 1):
         log("------------------------------", "debug")
         log_clarification()
         return sleep_time
-    
-    def _calc_sleep_time(sleep_stage: str):
+
+    # ------------------------------------------------------------
+    # GALLERY STAGE
+    # ------------------------------------------------------------
+    if stage == "gallery":
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = min(gallery_cap, len(orchestrator.galleries))
-        log(f"galleries = {orchestrator.galleries}", "debug")
-        log(f"len galleries = {len(orchestrator.galleries)}", "debug")
-        num_of_images = max(1, orchestrator.total_gallery_images)
-        
-        if sleep_stage == "gallery":
-            count = num_of_galleries
-        if sleep_stage == "image":
-            count = num_of_images
+        num_of_galleries = max(1, len(id_list))
         
         if dynamic_sleep_debug:
-            log(f"→ Count: {f'{count} (Capped at {gallery_cap})' if sleep_stage == "gallery" else f'{count}'}", "debug")
-        
+            log(f"→ Number of Galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
+
         if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
-            # Base gallery threads = 2, scale with Count
-            gallery_threads = max(2, int(count / BATCH_SIZE) + 1) if sleep_stage == "gallery" else DEFAULT_THREADS_GALLERIES # 500 galleries per thread baseline
+            # Base gallery threads = 2, scale with Number of Galleries
+            gallery_threads = max(2, int(num_of_galleries / BATCH_SIZE) + 1) # 500 galleries per thread baseline
             image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
             if dynamic_sleep_debug:
                 log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
@@ -336,10 +328,10 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 2. Calculate total load (Units Of Work)
         # --------------------------------------------------------        
         concurrency = (gallery_threads * image_threads) + gallery_threads
-        current_load = (concurrency * attempt) * count
+        current_load = (concurrency * attempt) * num_of_galleries
         if dynamic_sleep_debug:
             log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
-            log(f"→ Current Load = (Concurrency * Attempt) * Count = ({concurrency} * {attempt}) * {count} = {current_load:.2f} Units Of Work", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Galleries = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
 
         # --------------------------------------------------------
         # 3. Unit-based scaling
@@ -388,18 +380,84 @@ def dynamic_sleep(stage, attempt: int = 1):
         return sleep_time
     
     # ------------------------------------------------------------
-    # GALLERY STAGE
-    # ------------------------------------------------------------
-    if stage == "gallery":
-        calculated_sleep_time = _calc_sleep_time("gallery")
-        return calculated_sleep_time
-    
-    # ------------------------------------------------------------
     # IMAGE STAGE
     # ------------------------------------------------------------
     if stage == "image":
-        calculated_sleep_time = _calc_sleep_time("image")
-        return calculated_sleep_time
+        # --------------------------------------------------------
+        # 1. Calculate Galleries / Threads
+        # --------------------------------------------------------
+        num_of_images = max(1, orchestrator.total_gallery_images)
+        
+        if dynamic_sleep_debug:
+            log(f"→ Number of Images: {num_of_images}", "debug")
+
+        if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
+            # Base gallery threads = 2, scale with Number of Galleries
+            gallery_threads = DEFAULT_THREADS_GALLERIES
+            image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
+            if dynamic_sleep_debug:
+                log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
+        else:
+            gallery_threads = orchestrator.threads_galleries
+            image_threads = orchestrator.threads_images
+            if dynamic_sleep_debug:
+                log(f"→ Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
+                log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
+
+        # --------------------------------------------------------
+        # 2. Calculate total load (Units Of Work)
+        # --------------------------------------------------------        
+        concurrency = (gallery_threads * image_threads) + gallery_threads
+        current_load = (concurrency * attempt) * num_of_images
+        if dynamic_sleep_debug:
+            log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
+            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Images = ({concurrency} * {attempt}) * {num_of_images} = {current_load:.2f} Units Of Work", "debug")
+
+        # --------------------------------------------------------
+        # 3. Unit-based scaling
+        # --------------------------------------------------------
+        unit_factor = (current_load) / gallery_cap
+        if dynamic_sleep_debug:
+            log_clarification("debug")
+            log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
+
+        # --------------------------------------------------------
+        # 4. Thread factor, attempt scaling, and load factor
+        # --------------------------------------------------------
+        BASE_GALLERY_THREADS = 2
+        BASE_IMAGE_THREADS = 10
+        
+        gallery_thread_damper = 0.9
+        image_thread_damper = 0.9
+
+        thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
+
+        scaled_sleep = unit_factor / thread_factor
+        
+        # Enforce the minimum sleep time
+        scaled_sleep = max(scaled_sleep, orchestrator.min_retry_sleep)
+        
+        if dynamic_sleep_debug:
+            log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
+            log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
+
+        # --------------------------------------------------------
+        # 5. Add jitter to avoid predictable timing
+        # --------------------------------------------------------
+        jitter_min, jitter_max = 0.9, 1.1
+        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_retry_sleep)
+        
+        if dynamic_sleep_debug:
+            log(f"→ Sleep after jitter (Capped at {orchestrator.max_retry_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+
+        # --------------------------------------------------------
+        # 6. Final result
+        # --------------------------------------------------------
+        log_clarification("debug")
+        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
+        log("------------------------------", "debug")
+        log_clarification()
+        return sleep_time
 
 #####################################################################################################################################################################
 
