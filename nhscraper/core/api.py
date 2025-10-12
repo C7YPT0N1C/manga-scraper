@@ -262,7 +262,7 @@ def clean_title(meta_or_title):
 ################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
-def dynamic_sleep(stage, id_list: list = None, attempt: int = 1):
+def dynamic_sleep(stage, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
