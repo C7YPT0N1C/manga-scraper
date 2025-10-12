@@ -1262,7 +1262,7 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
         else:
             return False
     
-    if _post_batch_interval_pass:
+    if _post_batch_interval_pass():
         cleanup_hook() # Call the cleanup hook
         
         # Add all creators to Suwayomi
