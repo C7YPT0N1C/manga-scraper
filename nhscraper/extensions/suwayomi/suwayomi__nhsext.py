@@ -532,7 +532,7 @@ def update_suwayomi(operation: str, category_id):
     
     debugging = True
 
-    if operation == "category":
+    if operation == "category browse":
         # Query to fetch available filters and meta for a source
         query = """
         query FetchSourceBrowse($sourceId: LongString!) {
@@ -612,10 +612,10 @@ def update_suwayomi(operation: str, category_id):
         query_variables = {"sourceId": LOCAL_SOURCE_ID, "page": 1}
         graphql_request(latest_query, variables=query_variables, gql_debugging=debugging)
 
-    if operation == "library":
+    if operation == "category":
         # Mutation to trigger the update once
         query = """
-        mutation TriggerGlobalUpdate($categoryId: Int!) {
+        mutation TriggerCategoryUpdate($categoryId: Int!) {
           updateLibrary(input: { categories: [$categoryId] }) {
             updateStatus {
               jobsInfo {
@@ -650,18 +650,19 @@ def update_suwayomi(operation: str, category_id):
         result = graphql_request(query, gql_debugging=debugging)
         return result
 
-def populate_suwayomi(category_id: int, attempt: int):
+def populate_suwayomi(category_id: int, attempt: int, update_library: bool = True):
     log_clarification()
     log(f"Suwayomi Update Triggered. Waiting for completion...")
     
     wait_time = SUWAYOMI_POPULATION_TIME
 
     try:
-        # Fetch all mangas in the category update
-        update_suwayomi("category", category_id)
+        # Load category data
+        update_suwayomi("category browse", category_id)
         
         # Trigger the global update
-        update_suwayomi("library", category_id)
+        if update_library:
+            update_suwayomi("category", category_id)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{orchestrator.max_retries})", unit="job", dynamic_ncols=True)
@@ -952,7 +953,7 @@ def update_creator_manga(meta):
     else:
         log(f"[DRY RUN] Would update manga cover for creators: {creators}", "debug")
 
-def process_deferred_creators():
+def process_deferred_creators(populate: bool = True):
     """
     Adds deferred creators to library and updates their category.
     Ensures only existing local creator folders are added.
@@ -970,7 +971,8 @@ def process_deferred_creators():
         log_clarification()
         logger.info(f"Processing creators (attempt {process_creators_attempt}/{orchestrator.max_retries})...")
         
-        populate_suwayomi(CATEGORY_ID, process_creators_attempt) # Update Suwayomi category first
+        if populate:
+            populate_suwayomi(CATEGORY_ID, process_creators_attempt, update_library=populate) # Update Suwayomi category first
 
         # ----------------------------
         # Add mangas not yet in library
@@ -985,7 +987,7 @@ def process_deferred_creators():
         }
         }
         """
-        result = graphql_request(query, {"sourceId": LOCAL_SOURCE_ID})
+        result = graphql_request(query, variables={"sourceId": LOCAL_SOURCE_ID})
         nodes = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
         new_ids = []
@@ -1047,7 +1049,7 @@ def process_deferred_creators():
                 still_deferred.add(creator_name)
                 continue
 
-            result = graphql_request(query, {"creatorName": creator_name})
+            result = graphql_request(query, variables={"creatorName": creator_name})
             mangas = result.get("data", {}).get("mangas", {}).get("nodes", []) if result else []
 
             if not mangas:
@@ -1236,9 +1238,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 # Hook for cleaning after downloads
 def cleanup_hook():
     clean_directories(True) # Clean up the download folder / directories
-        
-    # Add all creators to Suwayomi
-    process_deferred_creators()
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
@@ -1255,7 +1254,10 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     interval = max(1, round(RUNS_PER_X_BATCHES * total_batch_numbers / EVERY_X_BATCHES))
     is_last_batch = current_batch_number == total_batch_numbers
     if not orchestrator.archiving and not orchestrator.skip_post_batch and not is_last_batch and (current_batch_number % interval == 0):
-        cleanup_hook() # Call the cleanup hook     
+        cleanup_hook() # Call the cleanup hook
+        
+        # Add all creators to Suwayomi
+        process_deferred_creators(populate=False)
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
@@ -1274,6 +1276,9 @@ def post_run_hook():
     else:
         cleanup_hook() # Call the cleanup hook
         
+        # Add all creators to Suwayomi
+        process_deferred_creators(populate=True)
+                
         # Update Suwayomi category at end
         log_clarification()
         log("Please update the library manually and / or run a small download to reflect any changes.")

@@ -78,11 +78,23 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     total_gallery_download_time = (downloads_per_batch + remaining_downloads_per_batch) * average_gallery_download_time
 
     # --- Helper for formatting ---
-    def fmt_time(seconds):
-        mins = seconds / 60
-        hours = seconds / 3600
-        days = seconds / 86400
-        return f"{mins:.2f} Minutes / {hours:.2f} Hours / {days:.2f} Days"
+    def fmt_time(seconds: float) -> str:
+        seconds = int(seconds)
+        days, seconds = divmod(seconds, 86400)
+        hours, seconds = divmod(seconds, 3600)
+        minutes, seconds = divmod(seconds, 60)
+
+        parts = []
+        if days > 0:
+            parts.append(f"{days} Day{'s' if days != 1 else ''}")
+        if hours > 0:
+            parts.append(f"{hours} Hour{'s' if hours != 1 else ''}")
+        if minutes > 0:
+            parts.append(f"{minutes} Min{'s' if minutes != 1 else ''}")
+        if seconds > 0 or not parts:  # always show seconds
+            parts.append(f"{seconds} Sec{'s' if seconds != 1 else ''}")
+
+        return ", ".join(parts)
 
     # --- Time computation ---
     def compute_case(api_sleep, retry_sleep):

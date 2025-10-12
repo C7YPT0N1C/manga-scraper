@@ -76,12 +76,12 @@ chmod +x nhscraper-install.sh
 - An environemt file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/nhentai-scraper/config.env`.
 ```bash
 usage: nhentai-scraper [-h] [--install] [--update] [--update-env] [--uninstall] [--install-extension INSTALL_EXTENSION]
-                       [--uninstall-extension UNINSTALL_EXTENSION] [--extension EXTENSION] [--file [FILE]] [--mirrors MIRRORS] [--range START END]
+                       [--uninstall-extension UNINSTALL_EXTENSION] [--extension EXTENSION] [--mirrors MIRRORS] [--file [FILE]] [--range START END]
                        [--galleries GALLERIES] [--homepage ARGS [ARGS ...]] [--artist ARGS [ARGS ...]] [--group ARGS [ARGS ...]] [--tag ARGS [ARGS ...]]
-                       [--character ARGS [ARGS ...]] [--parody ARGS [ARGS ...]] [--search ARGS [ARGS ...]] [--archive ARGS [ARGS ...]] [--archive-all]
-                       [--excluded-tags EXCLUDED_TAGS] [--language LANGUAGE] [--title-type {english,japanese,pretty}] [--threads-galleries THREADS_GALLERIES]
+                       [--character ARGS [ARGS ...]] [--parody ARGS [ARGS ...]] [--search ARGS [ARGS ...]] [--archive-all] [--excluded-tags EXCLUDED_TAGS]
+                       [--language LANGUAGE] [--title-type {english,japanese,pretty}] [--threads-galleries THREADS_GALLERIES]
                        [--threads-images THREADS_IMAGES] [--max-retries MAX_RETRIES] [--min-sleep MIN_SLEEP] [--max-sleep MAX_SLEEP] [--use-tor]
-                       [--skip-post-run] [--dry-run] [--calm | --debug]
+                       [--skip-post-batch] [--skip-post-run] [--dry-run] [--calm | --debug]
 
 NHentai scraper CLI
 
@@ -98,38 +98,38 @@ options:
                         Uninstall an extension by name
   --extension EXTENSION
                         Extension to use (default: skeleton)
-  --file [FILE]         Path to a file containing gallery URLs or IDs (one per line).If no path is given, uses the default file.
   --mirrors MIRRORS     Comma-separated list of NHentai mirror URLs (default: https://i.nhentai.net). Use this if the main site is down or to rotate mirrors.
+  --file [FILE]         Path to a file containing gallery URLs or IDs (one per line).If no path is given, uses the default file.
   --range START END     Gallery ID range to download (default: 500000-600000)
   --galleries GALLERIES
                         Comma-separated gallery IDs to download. Must be incased in quotes if multiple. (e.g. '123456, 654321')
   --homepage ARGS [ARGS ...]
                         Page range or sort type of galleries to download from NHentai Homepage (default: 1 - 10)
   --artist ARGS [ARGS ...]
-                        Download galleries by artist. Usage: --artist ARTIST_NAME [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can be
-                        repeated.
+                        Download galleries by artist. Usage: --artist ARTIST_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
+                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
   --group ARGS [ARGS ...]
-                        Download galleries by group. Usage: --group GROUP_NAME [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can be repeated.
+                        Download galleries by group. Usage: --group GROUP_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default: 10)]
+                        [ARCHIVAL_BOOL (default: False)] Can be repeated.
   --tag ARGS [ARGS ...]
-                        Download galleries by tag. Usage: --tag TAG_NAME [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can be repeated.
+                        Download galleries by tag. Usage: --tag TAG_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default: 10)]
+                        [ARCHIVAL_BOOL (default: False)] Can be repeated.
   --character ARGS [ARGS ...]
-                        Download galleries by character. Usage: --character CHARACTER_NAME [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can
-                        be repeated.
+                        Download galleries by character. Usage: --character CHARACTER_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE
+                        (default: 10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
   --parody ARGS [ARGS ...]
-                        Download galleries by parody. Usage: --parody PARODY_NAME [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can be
-                        repeated.
+                        Download galleries by parody. Usage: --parody PARODY_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
+                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
   --search ARGS [ARGS ...]
-                        Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE] [START_PAGE (default: 1)] [END_PAGE (default: 10). Can be
-                        repeated. You can search for multiple terms at the same time, and this will return only galleries that contain both terms. For
-                        example, "anal tanlines" finds all galleries that contain both "anal" and "tanlines". You can exclude terms by prefixing them with
-                        "-". For example, "anal tanlines -yaoi" matches all galleries matching "anal" and "tanlines" but not "yaoi". Exact searches can be
-                        performed by wrapping terms in double quotes. For example, "big breasts" only matches galleries with "big breasts" somewhere in the
-                        title or in tags. These can be combined with tag namespaces for finer control over the query: "parodies:railgun -tag:'big breasts'".
-                        You can search for galleries with a specific number of pages with "pages:20", or with a page range: "pages:>20 pages:<=30". You can
-                        search for galleries uploaded within some timeframe with "uploaded:20d". Valid units are "h", "d", "w", "m", "y". You can use ranges
-                        as well: "uploaded:>20d uploaded:<30d".
-  --archive ARGS [ARGS ...]
-                        Archive mode: downloads ALL galleries for a query. Usage: --archive QUERY [SORT_TYPE]. Repeatable.
+                        Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
+                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated. You can search for multiple terms at the same time, and this will return only
+                        galleries that contain both terms. For example, "anal tanlines" finds all galleries that contain both "anal" and "tanlines". You can
+                        exclude terms by prefixing them with "-". For example, "anal tanlines -yaoi" matches all galleries matching "anal" and "tanlines" but
+                        not "yaoi". Exact searches can be performed by wrapping terms in double quotes. For example, "big breasts" only matches galleries with
+                        "big breasts" somewhere in the title or in tags. These can be combined with tag namespaces for finer control over the query: "
+                        parodies:railgun -tag:'big breasts'". You can search for galleries with a specific number of pages with "pages:20", or with a page
+                        range: "pages:>20 pages:<=30". You can search for galleries uploaded within some timeframe with "uploaded:20d". Valid units are "h",
+                        "d", "w", "m", "y". You can use ranges as well: "uploaded:>20d uploaded:<30d".
   --archive-all         Archive EVERYTHING from NHentai (all pages of homepage).
   --excluded-tags EXCLUDED_TAGS
                         Comma-separated list of tags to exclude galleries (default: 'snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore')
@@ -138,20 +138,24 @@ options:
                         What title type to use (default: english). Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be
                         filesystem compatible, although titles are cleaned to try and avoid this.
   --threads-galleries THREADS_GALLERIES
-                        Number of threads downloading galleries at once (default: 2). Be careful setting this any higher than 2
+                        Number of threads downloading galleries at once (default: 2). Be careful setting this any higher than 2. You'll be better off
+                        increasing the number of image threads.
   --threads-images THREADS_IMAGES
-                        Number of threads per gallery downloading images at once (default: 10). Be careful setting this any higher than 10
+                        Number of threads per gallery downloading images at once (default: 10). You're better off increasing this value than increasing the
+                        number of gallery threads. There isn't really a limit, but still be careful setting this any higher than 10
   --max-retries MAX_RETRIES
                         Maximum number of retry attempts for failed downloads (default: 3)
   --min-sleep MIN_SLEEP
                         Minimum amount of time each thread should sleep before starting a new download (default: 0.5). Set this to a higher number if you are
                         hitting API limits.
   --max-sleep MAX_SLEEP
-                        Maximum amount of time each thread can sleep before starting a new download (default: 100). Setting this to a number lower than 100,
+                        Maximum amount of time each thread can sleep before starting a new download (default: 50.0). Setting this to a number lower than 50.0,
                         may result in hitting API limits.
   --use-tor             Use TOR network for downloads (default: True)
-  --skip-post-run       Skips the extra post download actions (default: False). For example, if you're using the Suwayomi extension, the download directory is
-                        still cleaned, but things like updating Suwayomi are skipped.
+  --skip-post-batch     Skips the extra post batch actions that run occassionally during scrapes (default: False). Turning this off will make the scrape
+                        complete quicker (depending on Extension used, number of galleries, etc).
+  --skip-post-run       Skips the post download actions (default: False). For example, if you're using the Suwayomi extension, the download directory is still
+                        cleaned, but things like updating Suwayomi are skipped.
   --dry-run             Simulate downloads without saving files (default: False)
   --calm                Enable calm logging (warnings and higher) (default: False)
   --debug               Enable debug logging (critical errors and lower) (default: False)
