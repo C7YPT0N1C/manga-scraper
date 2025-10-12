@@ -598,6 +598,7 @@ def fetch_gallery_ids(
     fetch_env_vars()  # Refresh env vars in case config changed.
     
     query_str = f" '{query_value}'" if query_value else ""
+    sort_str = f"'{sort_value}'" if sort_value != "date" else ""
 
     # Apply default ranges depending on flags used.
     if start_page is None:
@@ -629,7 +630,7 @@ def fetch_gallery_ids(
         if query_value is None:
             log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
-            log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'}), sorted by {sort_value}")
+            log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'}), sorted by {sort_str}")
 
         while True:
             # Stop at configured end_page (non-archival only)
