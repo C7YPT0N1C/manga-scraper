@@ -359,7 +359,7 @@ config = {
 # ------------------------------------------------------------
 def refresh_globals():
     """
-    Refresh runtime globals from config with normalised values.
+    Refresh runtime globals from config with the normalised default values.
     """
     
     def _update_globals():
@@ -450,8 +450,6 @@ def normalise_value(key: str, value):
     """
     Normalise values from .env/config to consistent runtime types.
     """
-    
-    refresh_globals()
     
     if key in ("EXCLUDED_TAGS", "LANGUAGE"):
         if isinstance(value, str):
