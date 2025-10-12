@@ -386,8 +386,7 @@ def dynamic_sleep(stage, id_list: list = None, attempt: int = 1):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        #num_of_images = max(1, orchestrator.total_gallery_images) # NOTE: Values aren't showing up properly, fix this later
-        num_of_images = 1
+        num_of_images = max(1, orchestrator.total_gallery_images) # NOTE: Values aren't showing up properly, fix this later
         
         if dynamic_sleep_debug:
             log(f"→ Number of Images: {num_of_images}", "debug")
