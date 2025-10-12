@@ -15,7 +15,7 @@ lock = threading.Lock()
 # DB INITIALISATION
 # ===============================
 def init_db():
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     os.makedirs(SCRAPER_DIR, exist_ok=True)
     with lock, sqlite3.connect(DB_PATH) as conn:

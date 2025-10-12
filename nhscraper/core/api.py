@@ -39,7 +39,7 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     
     global session
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
 
     log_clarification("debug")
     # If status is "none", report that Referrer is requesting to only retrieve session, else report build / rebuild.
@@ -166,7 +166,7 @@ def clean_title(meta_or_title):
         str: Sanitised title.
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     # Ensure global broken symbols file path is set
     #broken_symbols_file = os.path.join(orchestrator.extension_download_path, "possible_broken_symbols.json")
@@ -526,7 +526,7 @@ def build_url(query_type: str, query_value: str, sort_value: str, page: int) -> 
     page: page number (1-based)
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     query_lower = query_type.lower()
 
@@ -782,7 +782,7 @@ def fetch_image_urls(meta: dict, page: int):
     Handles missing metadata, unknown types, and defaulting to webp.
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     try:
         #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # NOTE: DEBUGGING
@@ -826,7 +826,7 @@ def fetch_image_urls(meta: dict, page: int):
         return None
 
 def fetch_gallery_metadata(gallery_id: int):
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
 
     metadata_session = get_session(referrer="API", status="return")
     

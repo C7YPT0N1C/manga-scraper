@@ -29,7 +29,7 @@ skipped_galleries = []
 def load_extension(suppess_pre_run_hook: bool = False):
     global active_extension, download_location
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
 
     ext_name = orchestrator.extension
     active_extension = get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
@@ -149,7 +149,7 @@ def build_gallery_path(meta, iteration: dict = None):
 def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Reason Given."):
     global skipped_galleries
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
 
     if ReturnReport:
         log_clarification()
@@ -171,7 +171,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     Decide whether to download a gallery or skip it.
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     if not meta:
         update_skipped_galleries(False, meta, "Not Meta.")
@@ -270,7 +270,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
 # CORE
 ####################################################################################################
 def process_galleries(batch_ids):
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
@@ -426,7 +426,7 @@ def start_downloader(gallery_list=None):
     logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     orchestrator.galleries = gallery_list
     

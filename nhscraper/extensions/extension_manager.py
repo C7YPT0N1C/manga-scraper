@@ -149,7 +149,7 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
     Load installed extensions dynamically; reinstall if missing.
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
@@ -331,7 +331,7 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
     Ensures 'skeleton' is always installed to provide a valid download path.
     """
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     original_name = name  # Save the originally requested extension
 

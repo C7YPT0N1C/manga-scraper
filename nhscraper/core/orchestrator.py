@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nhscraper/core/configurator.py
+# nhscraper/core/orchestrator.py
 
 import os, sys, logging, math, threading
 
@@ -355,83 +355,9 @@ config = {
 ##################
 
 # ------------------------------------------------------------
-# Normalise config with defaults
-# ------------------------------------------------------------
-def normalise_config():
-    log_clarification("debug")
-    log("Populating Config...", "debug")
-    
-    defaults = {
-        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
-        "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
-        "EXTENSION": DEFAULT_EXTENSION,
-        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
-        "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
-        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
-        "PAGE_SORT": DEFAULT_PAGE_SORT,
-        "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
-        "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
-        "RANGE_START": DEFAULT_RANGE_START,
-        "RANGE_END": DEFAULT_RANGE_END,
-        "GALLERIES": DEFAULT_GALLERIES,
-        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
-        "LANGUAGE": DEFAULT_LANGUAGE,
-        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
-        "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
-        "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
-        "MAX_RETRIES": DEFAULT_MAX_RETRIES,
-        "USE_TOR": DEFAULT_USE_TOR,
-        "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
-        "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
-        "DRY_RUN": DEFAULT_DRY_RUN,
-        "CALM": DEFAULT_CALM,
-        "DEBUG": DEFAULT_DEBUG,
-    }
-
-    for key, default_val in defaults.items():
-        val = config.get(key)
-        if val is None or (isinstance(val, str) and val.strip() == ""):
-            config[key] = default_val
-            update_env(key, default_val)
-
-# normalise_config() is called by CLI to normalise and populate .env
-
-# ------------------------------------------------------------
 # Update .env safely
 # ------------------------------------------------------------
-def normalise_value(key: str, value):
-    """
-    Normalise values from .env/config to consistent runtime types.
-    """
-    
-    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
-        if isinstance(value, str):
-            return [v.strip().lower() for v in value.split(",") if v.strip()]
-        elif isinstance(value, list):
-            return [str(v).lower() for v in value]
-        else:
-            return []
-    
-    if key == "NHENTAI_MIRRORS":
-        if isinstance(value, str):
-            mirrors = [m.strip() for m in value.split(",") if m.strip()]
-        elif isinstance(value, list):
-            mirrors = value
-        else:
-            mirrors = [DEFAULT_NHENTAI_MIRRORS]
-        # Ensure default mirror is first
-        return [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
-
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
-        return str(value).lower() == "true"
-
-    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
-        return int(value)
-
-    # Default: return as string
-    return str(value)
-
-def fetch_env_vars():
+def refresh_globals():
     """
     Refresh runtime globals from config with normalised values.
     """
@@ -474,6 +400,86 @@ def fetch_env_vars():
     # Execute the update under the lock
     with_env_lock(_update_globals)
 
+def normalise_config():
+    """
+    Normalise config with defaults.
+    normalise_config() is called by CLI to normalise and populate the .env file
+    """
+    log_clarification("debug")
+    log("Populating Config...", "debug")
+    
+    defaults = {
+        "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
+        "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
+        "EXTENSION": DEFAULT_EXTENSION,
+        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
+        "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
+        "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+        "PAGE_SORT": DEFAULT_PAGE_SORT,
+        "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+        "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
+        "RANGE_START": DEFAULT_RANGE_START,
+        "RANGE_END": DEFAULT_RANGE_END,
+        "GALLERIES": DEFAULT_GALLERIES,
+        "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
+        "LANGUAGE": DEFAULT_LANGUAGE,
+        "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+        "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
+        "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+        "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+        "USE_TOR": DEFAULT_USE_TOR,
+        "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
+        "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
+        "DRY_RUN": DEFAULT_DRY_RUN,
+        "CALM": DEFAULT_CALM,
+        "DEBUG": DEFAULT_DEBUG,
+    }
+
+    #for key, default_val in defaults.items():
+    #    val = config.get(key)
+    #    if val is None or (isinstance(val, str) and val.strip() == ""):
+    #        config[key] = default_val
+    #        update_env(key, default_val)
+            
+    for key, default_val in defaults.items():
+        update_env(key, default_val)
+    
+    refresh_globals()
+
+def normalise_value(key: str, value):
+    """
+    Normalise values from .env/config to consistent runtime types.
+    """
+    
+    refresh_globals()
+    
+    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
+        if isinstance(value, str):
+            return [v.strip().lower() for v in value.split(",") if v.strip()]
+        elif isinstance(value, list):
+            return [str(v).lower() for v in value]
+        else:
+            return []
+    
+    if key == "NHENTAI_MIRRORS":
+        if isinstance(value, str):
+            mirrors = [m.strip() for m in value.split(",") if m.strip()]
+        elif isinstance(value, list):
+            mirrors = value
+        else:
+            mirrors = [DEFAULT_NHENTAI_MIRRORS]
+        # Ensure default mirror is first
+        return [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
+
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
+        return str(value).lower() == "true"
+
+    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
+        return int(value)
+
+    # Default: return as string
+    return str(value)
+
 def update_env(key, value):
     """
     Update a single variable in the .env file safely under lock.
@@ -493,10 +499,10 @@ def update_env(key, value):
         config[key] = normalise_value(key, value)
 
     with_env_lock(_update)
-    fetch_env_vars() # Refresh env vars in case config changed.
+    refresh_globals()
 
 def get_valid_sort_value(sort_value):
-    fetch_env_vars() # Refresh env vars in case config changed.
+    refresh_globals()
     
     valid_sort_value = DEFAULT_PAGE_SORT # Set to default.
     

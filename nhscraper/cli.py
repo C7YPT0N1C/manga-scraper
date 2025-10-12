@@ -514,7 +514,7 @@ def update_config(args, archive_all: bool = False):
     update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)
     
-    fetch_env_vars() # Refresh env vars in case config changed.
+    orchestrator.refresh_globals()
     
     log_clarification("debug") # NOTE: DEBUGGING
     log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
