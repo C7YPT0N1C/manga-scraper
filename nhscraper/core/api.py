@@ -306,7 +306,7 @@ def dynamic_sleep(stage, id_list: list = None, attempt: int = 1):
         # --------------------------------------------------------
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
-        num_of_galleries = max(1, len(id_list)) # NOTE: ID List isn't showing up properly, fix this later
+        num_of_galleries = max(1, len(id_list)) or 1 # NOTE: ID List isn't showing up properly, fix this later
         
         if dynamic_sleep_debug:
             log(f"→ Number of Galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
