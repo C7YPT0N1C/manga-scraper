@@ -181,7 +181,3 @@ def save_broken_symbols(symbol_map: dict[str, str]):
                     date_detected=excluded.date_detected
             """, (symbol, "", now))
         conn.commit()
-
-log_clarification("debug")
-logger.debug("Database: Ready.")
-log("Database: Debugging Started.", "debug")
