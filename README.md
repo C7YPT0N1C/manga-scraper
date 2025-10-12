@@ -32,13 +32,14 @@ However, now that I am releasing this to the public, I have gone over the code l
 - `MORE COMING SOON`
 
 ## Important Notes and Known Pitfalls
-- I'll fill this out later lmfaooooo
+- Suwayomi is NOT a mass downloader, saving large amounts of galleries will make it tweak out if the server doesn't have enough resources.
+- I'll add other shit later lmfaooooo
 
 ## Installation
 ### System Requirements
 - OS: `Ubuntu / Linux server or VM`
 - RAM: `Recommended: ~4GB (scale based on need)`
-- Storage: **`A fucking lot.`**
+- Storage: **`Recommended: At least 100GB, but honest you'll need a fucking lot depending on use.`**
 - **REQUIRED**: `Python 3.9+, pip`
 - **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
 
