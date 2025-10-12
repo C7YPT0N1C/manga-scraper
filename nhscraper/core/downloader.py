@@ -68,14 +68,14 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     total_api_hits = math.ceil(num_galleries / 25) + num_galleries + total_pages
 
     # --- Batch timing ---
-    full_batches = num_galleries // BATCH_SIZE # 37
-    remaining_batches = num_galleries % BATCH_SIZE # 219
-    total_batch_sleep_time = (full_batches + 1 if remaining_batches else full_batches) * batch_sleep_time # 925
+    full_batches = num_galleries // BATCH_SIZE
+    remaining_batches = num_galleries % BATCH_SIZE
+    total_batch_sleep_time = (full_batches + 1 if remaining_batches else full_batches) * batch_sleep_time
 
     # --- Galleries ---
-    downloads_per_batch = math.ceil(BATCH_SIZE / orchestrator.threads_galleries) # 250
-    remaining_downloads_per_batch = math.ceil(remaining_batches / orchestrator.threads_galleries) if remaining_batches else 0 # 109
-    total_gallery_download_time = (downloads_per_batch + remaining_downloads_per_batch) * average_gallery_download_time # 1,795
+    downloads_per_batch = math.ceil(BATCH_SIZE / orchestrator.threads_galleries)
+    remaining_downloads_per_batch = math.ceil(remaining_batches / orchestrator.threads_galleries) if remaining_batches else 0
+    total_gallery_download_time = (downloads_per_batch + remaining_downloads_per_batch) * average_gallery_download_time
 
     # --- Helper for formatting ---
     def fmt_time(seconds):
@@ -105,9 +105,20 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- Output ---
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
-    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):\nAverage Time Estimate: {fmt_time(median_case)}")
+    log(f"{context} ({num_galleries} Galleries{f', {total_pages} Pages' if context ==  "Run" else ''}):"
+        f"\nAverage Time Estimate: {fmt_time(median_case)}")
     log(f"Best Time Estimate:    {fmt_time(best_case)}", "debug")
     log(f"Worst Time Estimate:   {fmt_time(worst_case)}", "debug")
+    
+    log(f"total_pages: {total_pages}", "debug")
+    log(f"total_api_hits: {total_api_hits}", "debug")
+    log(f"full_batches: {full_batches}", "debug")
+    log(f"remaining_batches: {remaining_batches}", "debug")
+    log(f"total_batch_sleep_time: {total_batch_sleep_time}", "debug")
+    log(f"downloads_per_batch: {downloads_per_batch}", "debug")
+    log(f"remaining_downloads_per_batch: {remaining_downloads_per_batch}", "debug")
+    log(f"total_gallery_download_time: {total_gallery_download_time}", "debug")
+    
 
 def build_gallery_path(meta, iteration: dict = None):
     """
