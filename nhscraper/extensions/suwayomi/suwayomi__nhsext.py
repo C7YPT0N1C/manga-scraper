@@ -653,7 +653,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         update_suwayomi("category", category_id, debugging=False)
         
         # Trigger the global update
-        update_suwayomi("library", category_id, debugging=False)
+        update_suwayomi("library", category_id, debugging=True)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{orchestrator.max_retries})", unit="job", dynamic_ncols=True)
@@ -661,7 +661,7 @@ def populate_suwayomi(category_id: int, attempt: int):
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id, debugging=False) # NOTE: DEBUGGING
+            result = update_suwayomi("status", category_id, debugging=True) # NOTE: DEBUGGING
             
             # Wait BEFORE checking status to avoid exiting early.
             time.sleep(wait_time)
@@ -1246,7 +1246,7 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     # --- Run if NOT skipping post batch, current batch hits interval and not last batch ---
     interval = max(1, round(RUNS_PER_X_BATCHES * total_batch_numbers / EVERY_X_BATCHES))
     is_last_batch = current_batch_number == total_batch_numbers
-    if not orchestrator.skip_post_batch and not is_last_batch and (current_batch_number % interval == 0):
+    if not orchestrator.archiving and not orchestrator.skip_post_batch and not is_last_batch and (current_batch_number % interval == 0):
         cleanup_hook() # Call the cleanup hook     
 
 # Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
