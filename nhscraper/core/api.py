@@ -581,7 +581,7 @@ def fetch_gallery_ids(
     start_page: int | None = None,
     end_page: int | None = None,
     file_used: bool = False,
-    archival: bool = DEFAULT_ARCHIVING,
+    fetch_as_archival: bool = DEFAULT_ARCHIVING,
 ) -> set[int]:
     """
     Fetch gallery IDs from NHentai based on query type, value, and optional sort type.
@@ -606,7 +606,9 @@ def fetch_gallery_ids(
     if file_used:
         if end_page is None:
             end_page = None # Always unlimited in archival mode if no end page provided
-    if archival:
+    if fetch_as_archival:
+        log_clarification("debug") # NOTE: DEBUGGING
+        log(f"SWITCHING TO ARCHIVAL MODE", "debug")
         orchestrator.archiving = True # Let scraper know there is archival being done.
         end_page = None # Always unlimited in archival mode
     else:

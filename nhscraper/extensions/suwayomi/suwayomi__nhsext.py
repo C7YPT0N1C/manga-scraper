@@ -973,8 +973,7 @@ def process_deferred_creators(populate: bool = True):
         log_clarification()
         logger.info(f"Processing creators (attempt {process_creators_attempt}/{orchestrator.max_retries})...")
         
-        if populate:
-            populate_suwayomi(CATEGORY_ID, process_creators_attempt, update_library=populate) # Update Suwayomi category first
+        populate_suwayomi(CATEGORY_ID, process_creators_attempt, update_library=populate) # Update Suwayomi category first
 
         # ----------------------------
         # Add mangas not yet in library

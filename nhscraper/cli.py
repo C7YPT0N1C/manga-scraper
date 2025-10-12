@@ -162,6 +162,13 @@ def parse_args():
     
     # NHentai Archival
     parser.add_argument(
+        "--archive",
+        action="append",
+        nargs="+",
+        metavar="ARGS",
+        help=f"The same as --search, but downloads every gallery from the results."
+    )
+    parser.add_argument(
         "--archive-all",
         action="store_true",
         help="Archive EVERYTHING from NHentai (all pages of homepage)."
@@ -268,6 +275,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     gallery_ids = set()
     query_lower = query_type.lower()
+    force_archive = (query_lower == "archive")
     
     valid_sorts = ("date", "recent", "popular_today", "today", "popular_week", "week", "popular", "all_time")
 
@@ -363,8 +371,11 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- Other queries (CLI flags) ---
     for entry in arg_list:
+        # Normalise to list
         if isinstance(entry, str):
-            entry = [entry]
+            # Allow comma-separated or space-separated inputs
+            parts = [p.strip() for p in re.split(r'[,\s]+', entry) if p.strip()]
+            entry = parts
 
         name = str(entry[0]).strip()
         sort_val = DEFAULT_PAGE_SORT
@@ -389,10 +400,8 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
             if len(entry) > 2:
                 end_page = int(entry[2])
 
-        if archive_mode:
-            gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, archival=True))
-        else:
-            gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page))
+        archival_flag = archive_mode or force_archive
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
 
     return gallery_ids
 
@@ -450,11 +459,13 @@ def build_gallery_list(args):
     # ------------------------------------------------------------
     # Archive Queries
     # ------------------------------------------------------------
+    if args.archive:
+        # Same as search crawl but infinite
+        gallery_ids.update(_handle_gallery_args(args.archive, "search"))
+    
     if args.archive_all:
         # Same as homepage crawl but infinite
-        log_clarification("debug") # NOTE: DEBUGGING
-        log(f"SWITCHING TO ARCHIVAL MODE", "debug")
-        gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, archival=True))
+        gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
 
     # ------------------------------------------------------------
     # Final sorted list (Processes highest gallery ID (latest gallery) first.)
@@ -568,6 +579,7 @@ def main():
             "--character": "character",
             "--parody": "parody",
             "--search": "search",
+            "--archive": "archive",
         }
 
         # Detect and clear conflicting flags
@@ -580,7 +592,7 @@ def main():
     else:
         # If no gallery input is provided, default to homepage
         gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                        args.group, args.tag, args.character, args.parody, args.search, args.archive_all]
+                        args.group, args.tag, args.character, args.parody, args.search, args.archive, args.archive_all]
         if not any(gallery_args):
             args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
         
