@@ -454,19 +454,19 @@ def start_downloader(gallery_list=None):
             time.sleep(orchestrator.batch_sleep_time) # Pause between batches
     
         else: # Last batch
-            log_clarification()
-            logger.info(f"All batches complete.")
-    
-    end_time = time.perf_counter()  # End timer
-    runtime = end_time - start_time
+            end_time = time.perf_counter()  # End timer
+            runtime = end_time - start_time
 
-    # Convert seconds to h:m:s
-    hours, rem = divmod(runtime, 3600)
-    minutes, seconds = divmod(rem, 60)
-    human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
+            # Convert seconds to h:m:s
+            hours, rem = divmod(runtime, 3600)
+            minutes, seconds = divmod(rem, 60)
+            human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
+            
+            #update_skipped_galleries(True) # Report all skipped galleries at end
+            log_clarification()
+            log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")    
 
     active_extension.post_run_hook()
     
-    #update_skipped_galleries(True) # Report all skipped galleries at end
     log_clarification()
-    log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
+    logger.info(f"All batches complete.")
