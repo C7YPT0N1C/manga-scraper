@@ -461,7 +461,7 @@ def build_gallery_list(args):
     # ------------------------------------------------------------
     if args.archive:
         # Same as search crawl but infinite
-        gallery_ids.update(_handle_gallery_args(args.archive, "search"))
+        gallery_ids.update(_handle_gallery_args(args.archive, "archive"))
     
     if args.archive_all:
         # Same as homepage crawl but infinite
