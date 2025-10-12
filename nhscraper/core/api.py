@@ -305,6 +305,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
         num_of_galleries = min(gallery_cap, len(orchestrator.galleries))
+        log(f"galleries = {orchestrator.galleries}")
         num_of_images = max(1, orchestrator.total_gallery_images)
         
         if sleep_stage == "gallery":
