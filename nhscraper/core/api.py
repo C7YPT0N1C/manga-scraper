@@ -269,6 +269,8 @@ def dynamic_sleep(stage, attempt: int = 1):
     including dynamic thread optimisation with anchor + units scaling.
     """
     
+    fetch_env_vars() # Refresh env vars in case config changed.
+    
     # Forcefully enable or disable detailed debug logs
     dynamic_sleep_debug = True 
 
@@ -305,7 +307,7 @@ def dynamic_sleep(stage, attempt: int = 1):
         # 1. Calculate Galleries / Threads
         # --------------------------------------------------------
         num_of_galleries = min(gallery_cap, len(orchestrator.galleries))
-        log(f"galleries = {orchestrator.galleries}")
+        log(f"galleries = {orchestrator.galleries}", "debug")
         num_of_images = max(1, orchestrator.total_gallery_images)
         
         if sleep_stage == "gallery":
