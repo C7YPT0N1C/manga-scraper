@@ -133,7 +133,7 @@ def log(message: str, log_type: str = "warning"):
 # CONFIGS
 ##########################################################################################
 
-_env_lock = threading.Lock() # Make all necessary operations thread safe.
+_env_lock = threading.RLock() # Make all necessary operations thread safe.
 
 def with_env_lock(func, *args, **kwargs):
     """
