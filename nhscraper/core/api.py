@@ -724,10 +724,7 @@ def fetch_gallery_ids(
                 # --- Tag filter ---
                 blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
                 if blocked_tags:
-                    log(
-                        f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}",
-                        "debug"
-                    )
+                    log(f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}", "debug") # NOTE: DEBUGGING
                     continue
 
                 # --- Language filter ---
@@ -736,11 +733,8 @@ def fetch_gallery_ids(
                     has_translated = ("translated" in gallery_langs) and has_allowed
 
                     if not (has_allowed or has_translated):
-                        blocked_langs = gallery_langs[:]  # NOTE: debugging
-                        log(
-                            f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}",
-                            "debug"
-                        )
+                        blocked_langs = gallery_langs[:]
+                        log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
                         continue
 
                 # If passed filters → keep
@@ -753,8 +747,8 @@ def fetch_gallery_ids(
 
             log(f"Fetcher: {query_type}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "debug")
             log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
-            log(f"Excluded tags: {excluded_gallery_tags})", "debug")
-            log(f"Langs allowed: {allowed_gallery_language}", "debug")
+            #log(f"Excluded tags: {excluded_gallery_tags})", "debug") # NOTE: DEBUGGING
+            #log(f"Langs allowed: {allowed_gallery_language}", "debug") # NOTE: DEBUGGING
 
             # Stop only if NHentai itself returns no results
             if not results:

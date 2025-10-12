@@ -525,14 +525,12 @@ def ensure_category(category_name=None):
 # Bulk Update Functions
 # ----------------------------
 
-def update_suwayomi(operation: str, category_id):
+def update_suwayomi(operation: str, category_id, update_suwayomi_debugging: bool = False):
     """
     Turn debug on for the GraphQL queries and the logs will get VERY long.
     """
 
     LOCAL_SOURCE_ID = get_local_source_id()  # Fetch again in case
-    
-    debugging = True
 
     if operation == "category browse":
         # Query to fetch available filters and meta for a source
@@ -576,7 +574,7 @@ def update_suwayomi(operation: str, category_id):
         }
         """
         query_variables = {"sourceId": LOCAL_SOURCE_ID}
-        graphql_request(query, variables=query_variables, gql_debugging=debugging)
+        graphql_request(query, variables=query_variables, gql_debugging=update_suwayomi_debugging)
 
         # Mutation to fetch source mangas, sorted by latest
         latest_query = """
@@ -612,7 +610,7 @@ def update_suwayomi(operation: str, category_id):
         }
         """
         query_variables = {"sourceId": LOCAL_SOURCE_ID, "page": 1}
-        graphql_request(latest_query, variables=query_variables, gql_debugging=debugging)
+        graphql_request(latest_query, variables=query_variables, gql_debugging=update_suwayomi_debugging)
 
     if operation == "category":
         # Mutation to trigger the update once
@@ -632,7 +630,7 @@ def update_suwayomi(operation: str, category_id):
         }
         """
         query_variables = {"categoryId": category_id}
-        graphql_request(query, variables=query_variables, gql_debugging=debugging)
+        graphql_request(query, variables=query_variables, gql_debugging=update_suwayomi_debugging)
 
     if operation == "status":
         # Query to check the status repeatedly
@@ -649,7 +647,7 @@ def update_suwayomi(operation: str, category_id):
           }
         }
         """
-        result = graphql_request(query, gql_debugging=debugging)
+        result = graphql_request(query, gql_debugging=update_suwayomi_debugging)
         return result
 
 def populate_suwayomi(category_id: int, attempt: int, update_library: bool = True):
@@ -660,11 +658,11 @@ def populate_suwayomi(category_id: int, attempt: int, update_library: bool = Tru
 
     try:
         # Load category data
-        update_suwayomi("category browse", category_id)
+        update_suwayomi("category browse", category_id, update_suwayomi_debugging=False)
         
         # Trigger the global update
         if update_library:
-            update_suwayomi("category", category_id)
+            update_suwayomi("category", category_id, update_suwayomi_debugging=False)
 
         # Initialise progress bar
         pbar = tqdm(total=0, desc=f"Suwayomi Update (Attempt {attempt}/{orchestrator.max_retries})", unit="job", dynamic_ncols=True)
@@ -672,7 +670,7 @@ def populate_suwayomi(category_id: int, attempt: int, update_library: bool = Tru
         total_jobs = None
 
         while True:
-            result = update_suwayomi("status", category_id) # NOTE: DEBUGGING
+            result = update_suwayomi("status", category_id, update_suwayomi_debugging=True) # NOTE: DEBUGGING
             
             # Wait BEFORE checking status to avoid exiting early.
             time.sleep(wait_time)
