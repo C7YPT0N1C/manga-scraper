@@ -629,7 +629,7 @@ def fetch_gallery_ids(
         if query_value is None:
             log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
         else:
-            log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'})")
+            log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'}), sorted by {sort_value}")
 
         while True:
             # Stop at configured end_page (non-archival only)
