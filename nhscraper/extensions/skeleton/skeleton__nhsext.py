@@ -267,7 +267,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         for url in mirrors:
             for attempt in range(1, retries + 1):
                 try:
-                    r = session.get(url, timeout=10, stream=True)
+                    r = session.get(url, timeout=(5, 60), stream=True)
                     if r.status_code == 429:
                         wait = 2 ** attempt
                         logger.warning(f"429 rate limit hit for {url}, waiting {wait}s")
