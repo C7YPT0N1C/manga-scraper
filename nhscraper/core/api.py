@@ -643,7 +643,7 @@ def fetch_gallery_ids(
             resp = None
             for attempt in range(1, orchestrator.max_retries + 1):
                 try:
-                    resp = gallery_ids_session.get(url, timeout=(5, 60))
+                    resp = gallery_ids_session.get(url, timeout=30)
 
                     if resp.status_code == 429:
                         wait = dynamic_sleep("api", attempt=attempt)
@@ -673,7 +673,7 @@ def fetch_gallery_ids(
                             time.sleep(wait)
                             gallery_ids_session = get_session(referrer="API", status="rebuild")
                             try:
-                                resp = gallery_ids_session.get(url, timeout=(5, 60))
+                                resp = gallery_ids_session.get(url, timeout=30)
                                 resp.raise_for_status()
                             except Exception as e2:
                                 logger.warning(f"{query_type}{query_str}, Page {page}: Still failed after Tor rotate: {e2}")
@@ -836,7 +836,7 @@ def fetch_gallery_metadata(gallery_id: int):
             log_clarification("debug")
             log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
-            resp = metadata_session.get(url, timeout=(5, 60))
+            resp = metadata_session.get(url, timeout=30)
             if resp.status_code == 429:
                 wait = dynamic_sleep("api", attempt=(attempt))
                 logger.warning(f"Gallery: {gallery_id}: Attempt {attempt}: 429 rate limit hit, waiting {wait}s")
@@ -873,7 +873,7 @@ def fetch_gallery_metadata(gallery_id: int):
                     time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
-                        resp = metadata_session.get(url, timeout=(5, 60))
+                        resp = metadata_session.get(url, timeout=30)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
@@ -892,7 +892,7 @@ def fetch_gallery_metadata(gallery_id: int):
                     time.sleep(wait)
                     metadata_session = get_session(referrer="API", status="rebuild")
                     try:
-                        resp = metadata_session.get(url, timeout=(5, 60))
+                        resp = metadata_session.get(url, timeout=30)
                         resp.raise_for_status()
                         return resp.json()
                     except Exception as e2:
