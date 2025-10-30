@@ -597,7 +597,8 @@ def fetch_gallery_ids(
 
     orchestrator.refresh_globals()
     
-    query_str = f" ' {query_value}'" if query_value else " none"
+    query_type = query_type.capitalize()
+    query_str = f" ' {query_value}'" if query_value else ""
     sort_str = f"'{sort_value}'" if sort_value != "date" else "date"
 
     # Apply default ranges depending on flags used.
