@@ -318,7 +318,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
                 # Creator / group / tag / character / parody / search URLs
                 m_query = re.search(
-                    r"nhentai\.net/(artist|group|tag|character|parody)/([^/?]+)(?:/(popular-today|popular-week|popular))?(?:\?page=(\d+))?",
+                    r"nhentai\.net/(artist|group|tag|character|parody)/([^/?]+?)/?(?:/(popular-today|popular-week|popular))?(?:/?\?page=(\d+))?",
                     line
                 )
                 m_search = re.search(r"nhentai\.net/search/\?q=([^&]+)(?:&page=(\d+))?", line)
