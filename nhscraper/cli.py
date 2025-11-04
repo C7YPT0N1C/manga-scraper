@@ -324,7 +324,8 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 m_search = re.search(r"nhentai\.net/search/\?q=([^&]+)(?:&page=(\d+))?", line)
                 
                 if m_query:
-                    qtype, qvalue, sort_path, page_q = m_query.groups()
+                    qtype, qvalue, sort_path, page1, page2 = m_query.groups()
+                    page_q = page1 or page2
                     qvalue = urllib.parse.unquote(qvalue)
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
