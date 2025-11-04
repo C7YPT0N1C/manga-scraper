@@ -746,7 +746,7 @@ def fetch_gallery_ids(
                 num_pages = len(images.get("pages", []))
                 orchestrator.total_gallery_images += num_pages
 
-            log(f"Fetcher: {query_type}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "warning")
+            log(f"Fetcher: {query_type}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
             log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
             #log(f"Excluded tags: {excluded_gallery_tags})", "debug") # NOTE: DEBUGGING
             #log(f"Langs allowed: {allowed_gallery_language}", "debug") # NOTE: DEBUGGING
