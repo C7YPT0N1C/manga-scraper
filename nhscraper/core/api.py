@@ -765,7 +765,7 @@ def fetch_gallery_ids(
             ids.update(batch)
             page += 1
 
-        log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}", "info")
+        log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}", "warning")
         log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
         return ids
 
