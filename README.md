@@ -39,9 +39,7 @@ However, now that I am releasing this to the public, I have gone over the code l
 ### System Requirements
 - OS: `Ubuntu / Linux server or VM`
 - RAM: `Recommended: ~4GB (scale based on need)`
-- Storage: **`Recommended: At least 100GB, but honest you'll need a fucking lot depending on use.`**
-- **REQUIRED**: `Python 3.9+, pip`
-- **Optional**: `Tor (installed automatically) or VPN (OpenVPN, WireGuard)`
+- Storage: **`1 Doujin is ~16MB, so you do the math.`**
 
 ### Installation Commands
 One Line Install: `wget -O nhscraper-install.sh https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
