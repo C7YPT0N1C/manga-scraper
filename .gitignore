@@ -4,3 +4,4 @@ skipped.log
 *.pyc
 __pycache__/
 *.db
+*-workspace
