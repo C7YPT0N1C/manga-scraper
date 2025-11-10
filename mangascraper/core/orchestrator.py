@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-# nhscraper/core/orchestrator.py
+# mangascraper/core/orchestrator.py
 
 import os, sys, logging, math, threading
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 
-from nhscraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
+from mangascraper.core.cleaning_helper import ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
 
 ##########################################################################################
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = "/tmp/nhentai-scraper/logs"
+LOG_DIR = "/tmp/manga-scraper/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log
@@ -33,7 +33,7 @@ class ConditionalFormatter(logging.Formatter):
         return super().format(record)
 
 # --- Placeholder logger so logging during module imports don't crash before setup_logger() runs ---
-logger = logging.getLogger("nhscraper")
+logger = logging.getLogger("mangascraper")
 if not logger.handlers:  # Only add default handler if none exist (prevents duplicates on reload)
     
     # Console handler
@@ -60,7 +60,7 @@ def log_clarification(clarification_type: str = "info"):
     Prints a blank line in the terminal if the console handler is at INFO,
     or adds a blank debug line otherwise.
     """
-    logger = logging.getLogger("nhscraper")
+    logger = logging.getLogger("mangascraper")
 
     console_handler = next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
     if console_handler and console_handler.level == logging.INFO and clarification_type != "debug":
@@ -69,11 +69,11 @@ def log_clarification(clarification_type: str = "info"):
 
 def setup_logger(calm=False, debug=False):
     """
-    Configure the nhscraper logger.
+    Configure the mangascraper logger.
     - Console respects calm/debug flags with conditional formatting
     - File logs always DEBUG with full level info
     """
-    logger = logging.getLogger("nhscraper")
+    logger = logging.getLogger("mangascraper")
     logger.handlers.clear()  # Remove previous handlers
 
     # Console handler
@@ -115,7 +115,7 @@ def log(message: str, log_type: str = "warning"):
     log_type: "debug", "info", "warning", "error", "critical"
     """
     
-    logger = logging.getLogger("nhscraper")
+    logger = logging.getLogger("mangascraper")
 
     # Map string to logging function
     log_map = {
@@ -146,8 +146,8 @@ def with_env_lock(func, *args, **kwargs):
 # ------------------------------------------------------------
 # Paths & Env
 # ------------------------------------------------------------
-SCRAPER_DIR = "/opt/nhentai-scraper"
-ENV_FILE = os.path.join(SCRAPER_DIR, "nhentai-scraper.env")
+SCRAPER_DIR = "/opt/manga-scraper"
+ENV_FILE = os.path.join(SCRAPER_DIR, "manga-scraper.env")
 
 # Ensure NHentai directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
@@ -160,7 +160,7 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-DEFAULT_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads"
+DEFAULT_DOWNLOAD_PATH = "/opt/manga-scraper/downloads"
 download_path = DEFAULT_DOWNLOAD_PATH  # public variable
 
 DEFAULT_DOUJIN_TXT_PATH = "/root/Doujinshi_IDs.txt"
@@ -187,7 +187,7 @@ doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 DEFAULT_EXTENSION = "skeleton"
 extension = DEFAULT_EXTENSION
 
-DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads"
+DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/manga-scraper/downloads"
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 

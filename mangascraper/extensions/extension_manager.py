@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# nhscraper/extensions/extension_loader.py
+# mangascraper/extensions/extension_loader.py
 
 import os, json, importlib, shutil, subprocess
 
 from urllib.request import urlopen
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.extensions import * # Ensure extensions package is recognised
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------
 # Constants / Paths
@@ -16,16 +16,16 @@ EXTENSIONS_DIR = os.path.dirname(__file__)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
 # Primary + backup repo / manifest locations
-PRIMARY_BASE_REPO_URL = "https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions/"
+PRIMARY_BASE_REPO_URL = "https://github.com/C7YPT0N1C/manga-scraper-extensions/"
 PRIMARY_REMOTE_MANIFEST_URL = (
-    "https://git.zenithnetwork.online/C7YPT0N1C/"
-    "nhentai-scraper-extensions/raw/branch/main/master_manifest.json"
+    "https://github.com/C7YPT0N1C/manga-scraper-extensions/"
+    "raw/main/master_manifest.json"
 )
 
-BACKUP_BASE_REPO_URL = "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
+BACKUP_BASE_REPO_URL = "https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper-extensions/"
 BACKUP_REMOTE_MANIFEST_URL = (
-    "https://github.com/C7YPT0N1C/nhentai-scraper-extensions/"
-    "raw/main/master_manifest.json"
+    "https://git.zenithnetwork.online/C7YPT0N1C/"
+    "manga-scraper-extensions/raw/branch/main/master_manifest.json"
 )
 
 INSTALLED_EXTENSIONS = []
@@ -165,7 +165,7 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
             entry_point = os.path.join(ext_folder, ext["entry_point"])  # refresh path after install
 
         if os.path.exists(entry_point):
-            module_name = f"nhscraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
+            module_name = f"mangascraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
             try:
                 module = importlib.import_module(module_name)
                 INSTALLED_EXTENSIONS.append(module)
@@ -284,7 +284,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
 
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
-    module_name = f"nhscraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
+    module_name = f"mangascraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
     module = importlib.import_module(module_name)
     if hasattr(module, "install_extension"):
         module.install_extension()

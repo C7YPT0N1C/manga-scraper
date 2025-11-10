@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nhentai-scraper"
+name = "manga-scraper"
 version = "1.19.0-beta"
-description = "NHentai scraper with extensions for the integration into other services."
+description = "Manga scraper with extensions for the integration into other services."
 readme = "README.md"
 authors = [{ name = "C7YPT0N1C" }]
 dependencies = [
@@ -21,8 +21,8 @@ dependencies = [
 requires-python = ">=3.9"
 
 [project.scripts]
-nhentai-scraper = "nhscraper.cli:main"
+manga-scraper = "mangascraper.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["nhscraper*", "nhscraper.core*", "nhscraper.extensions*"]
+include = ["mangascraper*", "mangascraper.core*", "mangascraper.extensions*"]

@@ -4,16 +4,16 @@
       "name": "skeleton",
       "version": "3.0.0",
       "description": "Skeleton extension with dummy hooks",
-      "repo_url": "https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
+      "repo_url": "https://github.com/C7YPT0N1C/manga-scraper-extensions.git",
       "installed": true,
       "entry_point": "skeleton__nhsext.py",
-      "image_download_path": "/opt/nhentai-scraper/downloads/"
+      "image_download_path": "/opt/manga-scraper/downloads/"
     },
     {
       "name": "suwayomi",
       "version": "3.0.0",
       "description": "Suwayomi extension",
-      "repo_url": "https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper-extensions.git",
+      "repo_url": "https://github.com/C7YPT0N1C/manga-scraper-extensions.git",
       "installed": true,
       "entry_point": "suwayomi__nhsext.py",
       "image_download_path": "/opt/suwayomi-server/local/"

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# nhscraper/dashboard/routes/scraper_routes.py
+# mangascraper/dashboard/routes/scraper_routes.py
 
 import os, time, random, threading
 
 from flask import Blueprint, jsonify, request
 
-from nhscraper.core import orchestrator
+from mangascraper.core import orchestrator
 
 scraper_bp = Blueprint("scraper", __name__)
 

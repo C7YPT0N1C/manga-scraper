@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# nhscraper/dashboard/routes/database_routes.py
+# mangascraper/dashboard/routes/database_routes.py
 
 import os, time, random
 
 from flask import Blueprint, jsonify, request
 
-from nhscraper.core import database
+from mangascraper.core import database
 
 db_bp = Blueprint("database", __name__)
 

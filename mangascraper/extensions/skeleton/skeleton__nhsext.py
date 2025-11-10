@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-# nhscraper/extensions/skeleton/skeleton__nhsext.py
-# ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
-# PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
+# mangascraper/extensions/skeleton/skeleton__nhsext.py
 
 import os, time, json, requests, math
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
 
-# This is a skeleton/example extension for nhentai-scraper. It is also used as the default extension if none is specified.
+# This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
 
 # ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE. 
 
@@ -21,8 +19,8 @@ EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
-EXTENSION_INSTALL_PATH = "/opt/nhentai-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
-REQUESTED_DOWNLOAD_PATH = "/opt/nhentai-scraper/downloads/"
+EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
+REQUESTED_DOWNLOAD_PATH = "/opt/manga-scraper/downloads/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-# nhscraper/core/downloader.py
+# mangascraper/core/downloader.py
 
 import os, time, random, concurrent.futures
 
 from tqdm.contrib.concurrent import thread_map
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.core import database as db
-from nhscraper.core.api import (
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.core import database as db
+from mangascraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title
 )
-from nhscraper.extensions.extension_manager import get_selected_extension  # Import active extension
+from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
 
 ####################################################################################################
 # Global Variables

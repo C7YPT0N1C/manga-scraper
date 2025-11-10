@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# nhscraper-install.sh
-# Installer for nhentai-scraper and FileBrowser with extension support
+# mangascraper-install.sh
+# Installer for manga-scraper and FileBrowser with extension support
 
 set -e
 
@@ -8,17 +8,17 @@ set -e
 # ROOT CHECK
 # ===============================
 if [[ $EUID -ne 0 ]]; then
-    echo "Please run as root: sudo ./nhscraper-install.sh --install"
+    echo "Please run as root: sudo ./mangascraper-install.sh --install"
     exit 1
 fi
 
 # ===============================
 # VARIABLES
 # ===============================
-SCRAPER_DIR="/opt/nhentai-scraper"
+SCRAPER_DIR="/opt/manga-scraper"
 FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
-ENV_FILE="$SCRAPER_DIR/nhentai-scraper.env"
+ENV_FILE="$SCRAPER_DIR/manga-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9"
 
 # ===============================
@@ -97,15 +97,15 @@ install_filebrowser() {
 }
 
 install_scraper() {
-    echo -e "\nInstalling nhentai-scraper..."
+    echo -e "\nInstalling manga-scraper..."
     #branch="main"
     branch="nightly"  # Change to 'dev' for testing latest features
 
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
-        echo "Cloning nhentai-scraper repo (branch: $branch)..."
-        git clone --depth 1 --branch "$branch" https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || \
-        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/nhentai-scraper.git "$SCRAPER_DIR" || {
-            echo "Failed to clone nhentai-scraper repo."
+        echo "Cloning manga-scraper repo (branch: $branch)..."
+        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || \
+        git clone --depth 1 --branch "$branch" https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || {
+            echo "Failed to clone manga-scraper repo."
             exit 1
         }
     else
@@ -124,12 +124,12 @@ install_scraper() {
     install_python_packages
 
     # Symlink CLI
-    ln -sf "$SCRAPER_DIR/venv/bin/nhentai-scraper" /usr/local/bin/nhentai-scraper
+    ln -sf "$SCRAPER_DIR/venv/bin/manga-scraper" /usr/local/bin/manga-scraper
 
     # Symlink Local Manifest
-    ln -sf "$SCRAPER_DIR/nhscraper/extensions/local_manifest.json" $SCRAPER_DIR/local_manifest.json
+    ln -sf "$SCRAPER_DIR/mangascraper/extensions/local_manifest.json" $SCRAPER_DIR/local_manifest.json
 
-    echo -e "\nnhentai-scraper (branch: $branch) installed at $SCRAPER_DIR"
+    echo -e "\nmanga-scraper (branch: $branch) installed at $SCRAPER_DIR"
 }
 
 create_env_file() {
@@ -137,7 +137,7 @@ create_env_file() {
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
     sudo tee "$ENV_FILE" > /dev/null <<EOF
-# NHentai Scraper Configuration
+# Manga Scraper Configuration
 
 # Custom (Username and Password must be manually set for now)
 # TEST
@@ -145,7 +145,7 @@ AUTH_USERNAME = "Username"
 AUTH_PASSWORD = "Password"
 
 # Directories
-SCRAPER_DIR=/opt/nhentai-scraper
+SCRAPER_DIR=/opt/manga-scraper
 
 # Default Paths
 DOWNLOAD_PATH=
@@ -211,18 +211,18 @@ WantedBy=multi-user.target
 EOF
     fi
 
-    # nhscraper-dashboard
-    echo "Creating systemd service for nhscraper-dashboard..."
-    if [ ! -f /etc/systemd/system/nhscraper-dashboard.service ]; then
-        sudo tee /etc/systemd/system/nhscraper-dashboard.service > /dev/null <<EOF
+    # mangascraper-dashboard
+    echo "Creating systemd service for mangascraper-dashboard..."
+    if [ ! -f /etc/systemd/system/mangascraper-dashboard.service ]; then
+        sudo tee /etc/systemd/system/mangascraper-dashboard.service > /dev/null <<EOF
 [Unit]
-Description=NHentai Scraper API
+Description=Manga Scraper API
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=$SCRAPER_DIR
-ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/nhscraper/dashboard/control_panel.py
+ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/mangascraper/dashboard/control_panel.py
 Restart=always
 EnvironmentFile=$ENV_FILE
 
@@ -232,9 +232,9 @@ EOF
     fi
 
     systemctl daemon-reexec
-    systemctl enable filebrowser nhscraper-dashboard tor
-    systemctl restart filebrowser nhscraper-dashboard tor
-    echo "Systemd services 'filebrowser', 'nhscraper-dashboard' 'tor' created and started."
+    systemctl enable filebrowser mangascraper-dashboard tor
+    systemctl restart filebrowser mangascraper-dashboard tor
+    echo "Systemd services 'filebrowser', 'mangascraper-dashboard' 'tor' created and started."
 }
 
 print_links() {
@@ -256,9 +256,9 @@ print_links() {
 start_uninstall() {
     echo ""
     echo "===================================================="
-    echo "           nhentai-scraper UNINSTALLER              "
+    echo "           manga-scraper UNINSTALLER              "
     echo "===================================================="
-    echo "This will REMOVE nhentai-scraper, FileBrowser, and related services."
+    echo "This will REMOVE manga-scraper, FileBrowser, and related services."
     echo "TOR WILL NOT BE STOPPED OR REMOVED FOR SECURITY REASONS. IF YOU DO NOT WANT TOR, YOU MUST REMOVE IT MANUALLY."
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
@@ -277,7 +277,7 @@ start_uninstall() {
 
             echo ""
             # Remove symlinks with status reporting
-            for link in /usr/local/bin/filebrowser /usr/local/bin/nhentai-scraper; do
+            for link in /usr/local/bin/filebrowser /usr/local/bin/manga-scraper; do
                 if [ -L "$link" ] || [ -e "$link" ]; then
                     rm -f "$link" && echo "Removed: $link" || echo "Failed to remove: $link"
                 else
@@ -286,11 +286,11 @@ start_uninstall() {
             done
 
             # Reload systemd and stop services
-            systemctl disable filebrowser nhscraper-dashboard || true
-            systemctl stop filebrowser nhscraper-dashboard || true
+            systemctl disable filebrowser mangascraper-dashboard || true
+            systemctl stop filebrowser mangascraper-dashboard || true
 
             # Remove systemd services with status reporting
-            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/nhscraper-dashboard.service; do
+            for svc in /etc/systemd/system/filebrowser.service /etc/systemd/system/mangascraper-dashboard.service; do
                 if [ -e "$svc" ]; then
                     rm -f "$svc" && echo "Removed: $svc" || echo "Failed to remove: $svc"
                 else
@@ -300,7 +300,7 @@ start_uninstall() {
 
             echo -e "\nStopped and disabled services:"
             echo "    filebrowser"
-            echo "    nhscraper-dashboard"
+            echo "    mangascraper-dashboard"
 
             # Reload systemd
             systemctl daemon-reload
@@ -318,7 +318,7 @@ start_uninstall() {
 start_update() {
     echo ""
     echo "===================================================="
-    echo "           nhentai-scraper UPDATER                  "
+    echo "           manga-scraper UPDATER                  "
     echo "===================================================="
     read -p "Are you sure you want to update? (y/N): " confirm
     confirm=${confirm,,}  # lowercase input
@@ -356,7 +356,7 @@ start_update() {
 update_env_file() {
     echo ""
     echo "===================================================="
-    echo "           nhentai-scraper .ENV UPDATER             "
+    echo "           manga-scraper .ENV UPDATER             "
     echo "===================================================="
     read -p "Are you sure you want to update the .env file? (y/N): " confirm
     confirm=${confirm,,}  # lowercase input
@@ -371,7 +371,7 @@ update_env_file() {
 
 start_install() {
     echo ""
-    echo "This will install nhentai-scraper, FileBrowser, and set up the API as a service."
+    echo "This will install manga-scraper, FileBrowser, and set up the API as a service."
     read -p "    Do you want to continue? (y/n): " choice
     case "$choice" in
         y|Y)
@@ -385,8 +385,8 @@ start_install() {
             print_links
             echo -e "\nInstallation complete!"
 
-            # Run nhentai-scraper commands after installation to initialise config, files, etc
-            #nhentai-scraper --help
+            # Run manga-scraper commands after installation to initialise config, files, etc
+            #manga-scraper --help
 
             exit 0
             ;;
@@ -401,7 +401,7 @@ start_install() {
 # MAIN
 # ===============================
 echo "===================================================="
-echo "           nhentai-scraper INSTALLER               "
+echo "           manga-scraper INSTALLER               "
 echo "===================================================="
 
 case "$1" in

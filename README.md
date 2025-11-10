@@ -1,4 +1,4 @@
-# nhentai-scraper
+# manga-scraper
 
 - [**Overview and Disclaimer**](#overview-and-disclaimer)
 - [**Features**](#features)
@@ -13,15 +13,13 @@
   - [Examples](#examples)
 - [**Documentation**](#documentation)
 ## Overview and Disclaimer
-nhentai-scraper is a fully-featured Python scraper for **nhentai**, with extensions to extend functionality. Uses **[Filebrowser](https://github.com/filebrowser/filebrowser)** for remote file access from your browser! **Please go support them!**
+manga-scraper is a Python scraper for a range of manga / doujin sites (such as Mangadex, nhentai), with extensions to extend functionality. Uses **[Filebrowser](https://github.com/filebrowser/filebrowser)** for remote file access from your browser! **Please go support them!**
 
-The Suwayomi Extension automatically creates **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)** a category for scraped galleries and adds them to it.
+The **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)** Extension automatically installs Suwayomi, creates a category for scraped galleries and adds them to it.
 
 **DISCLAIMERS:**
-- This is for local use ONLY. These scripts run as root and with the exception of the installer, nhentai's API, and Suwayomi, doesn't reach out to the internet. **Use at your own risk.**
-- A lot of this code was originally written by ChatGPT because the original project was supposed to be just for me (I was lazy) and I started this at 2am on some fuckoff Friday night.
-However, now that I am releasing this to the public, I have gone over the code line by line myself and have checked it thoroughly. Still, use this at your own discretion.
-- I will ***NEVER*** make a version for Windows (unless someone joins in to do the development for it) so don't even bother asking lmfao
+- This is for local use ONLY. Do NOT try to forward this over the internet. **These scripts run as root, so use at your own risk.**
+- A windows version is ***probably*** never going to happen, I'll be so honest
 
 ## Features
 - [Filebrowser Features](https://github.com/filebrowser/filebrowser)
@@ -42,24 +40,24 @@ However, now that I am releasing this to the public, I have gone over the code l
 - Storage: **`1 Doujin is ~16MB, so you do the math.`**
 
 ### Installation Commands
-One Line Install: `wget -O nhscraper-install.sh https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper/raw/branch/main/nhscraper-install.sh && sudo bash ./nhscraper-install.sh --install`
+One Line Install: `wget -O mangascraper-install.sh https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper/raw/branch/main/mangascraper-install.sh && sudo bash ./mangascraper-install.sh --install`
 
 Alternative Install: Clone Repository.
 ```bash
 # Clone the repository
-git clone https://git.zenithnetwork.online/C7YPT0N1C/nhentai-scraper.git
-cd nhentai-scraper
+git clone https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper.git
+cd manga-scraper
 
 # Run the installer script
-chmod +x nhscraper-install.sh
-./nhscraper-install.sh
+chmod +x mangascraper-install.sh
+./mangascraper-install.sh
 
 ```
 
-- Install: `nhscraper-install.sh (--install is optional)`
-- Update Environment Variables: `nhscraper-install.sh --update-env` (lowk idk why this is still here, please **don't** use this command or edit the .env file manually.)
-- Update: `nhscraper-install.sh --update`
-- Uninstall: `nhscraper-install.sh --uninstall (or --remove)`
+- Install: `mangascraper-install.sh (--install is optional)`
+- Update Environment Variables: `mangascraper-install.sh --update-env` (lowk idk why this is still here, please **don't** use this command or edit the .env file manually.)
+- Update: `mangascraper-install.sh --update`
+- Uninstall: `mangascraper-install.sh --uninstall (or --remove)`
 
 ## Post Install
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
@@ -71,9 +69,9 @@ chmod +x nhscraper-install.sh
 
 ## Usage
 ### CLI Arguments
-- An environemt file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/nhentai-scraper/config.env`.
+- An environemt file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/manga-scraper/config.env`.
 ```bash
-usage: nhentai-scraper [-h] [--install] [--update] [--update-env] [--uninstall] [--install-extension INSTALL_EXTENSION]
+usage: manga-scraper [-h] [--install] [--update] [--update-env] [--uninstall] [--install-extension INSTALL_EXTENSION]
                        [--uninstall-extension UNINSTALL_EXTENSION] [--extension EXTENSION] [--mirrors MIRRORS] [--file [FILE]] [--range START END]
                        [--galleries GALLERIES] [--homepage ARGS [ARGS ...]] [--artist ARGS [ARGS ...]] [--group ARGS [ARGS ...]] [--tag ARGS [ARGS ...]]
                        [--character ARGS [ARGS ...]] [--parody ARGS [ARGS ...]] [--search ARGS [ARGS ...]] [--archive-all] [--excluded-tags EXCLUDED_TAGS]
@@ -81,15 +79,15 @@ usage: nhentai-scraper [-h] [--install] [--update] [--update-env] [--uninstall] 
                        [--threads-images THREADS_IMAGES] [--max-retries MAX_RETRIES] [--min-sleep MIN_SLEEP] [--max-sleep MAX_SLEEP] [--use-tor]
                        [--skip-post-batch] [--skip-post-run] [--dry-run] [--calm | --debug]
 
-NHentai scraper CLI
+Manga scraper CLI
 
 options:
   -h, --help            show this help message and exit
-  --install             Install nhentai-scraper and dependencies
-  --update              Update nhentai-scraper
+  --install             Install manga-scraper and dependencies
+  --update              Update manga-scraper
   --update-env          Update the .env file
   --uninstall, --remove
-                        Uninstall nhentai-scraper
+                        Uninstall manga-scraper
   --install-extension INSTALL_EXTENSION
                         Install an extension by name
   --uninstall-extension UNINSTALL_EXTENSION
@@ -162,16 +160,16 @@ options:
 ### Examples
 ```bash
 # Default run (latest galleries)
-nhentai-scraper
+manga-scraper
 
 # Specify a gallery range
-nhentai-scraper --range 500000 500100
+manga-scraper --range 500000 500100
 
 # Custom thread count
-nhentai-scraper --range 600000 600050 --threads-galleries 5 --threads-images 10
+manga-scraper --range 600000 600050 --threads-galleries 5 --threads-images 10
 
 # Use the Suwayoi Extension, download galleries from artist "XYZ" (default page range, 1 - 10) and of tag "uncensored" from pages 1 - 10 (explicitly declared), excluding certain tags, using a certain language and using Tor
-nhentai-scraper --extension suwayomi --artist "XYZ" --tag "uncensored" 1 10 --exclude-tags "snuff, lolicon, shotacon" --use-tor
+manga-scraper --extension suwayomi --artist "XYZ" --tag "uncensored" 1 10 --exclude-tags "snuff, lolicon, shotacon" --use-tor
 ```
 
 ## Documentation

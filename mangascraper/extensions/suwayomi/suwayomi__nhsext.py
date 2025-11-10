@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-# nhscraper/extensions/suwayomi/suwayomi__nhsext.py
-# ENSURE THAT THIS FILE IS THE *EXACT SAME* IN BOTH THE NHENTAI-SCRAPER REPO AND THE NHENTAI-SCRAPER-EXTENSIONS REPO.
-# PLEASE UPDATE THIS FILE IN THE NHENTAI-SCRAPER REPO FIRST, THEN COPY IT OVER TO THE NHENTAI-SCRAPER-EXTENSIONS REPO.
+# mangascraper/extensions/suwayomi/suwayomi__nhsext.py
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile, math
 
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.core.api import get_session, get_meta_tags, make_filesystem_safe, clean_title, dynamic_sleep
 
 ####################################################################################################################
 # Global variables
@@ -52,7 +50,7 @@ RUNS_PER_X_BATCHES = 1
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
 
 LOCAL_SOURCE_ID = None  # Local source is usually "0"
-SUWAYOMI_CATEGORY_NAME = "NHentai Scraped"
+SUWAYOMI_CATEGORY_NAME = "ScrapedMangas"
 CATEGORY_ID = None
 SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every ~2 secs.
 

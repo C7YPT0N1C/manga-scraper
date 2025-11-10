@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# nhscraper/core/database.py
+# mangascraper/core/database.py
 
 import os, sqlite3, threading
 
 from datetime import datetime, timezone
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
 
-DB_PATH = os.path.join(SCRAPER_DIR, "nhscraper/core/nhscraper.db")
+DB_PATH = os.path.join(SCRAPER_DIR, "mangascraper/core/mangascraper.db")
 lock = threading.Lock()
 
 # ===============================

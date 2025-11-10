@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# nhscraper/dashboard/routes/gallery_routes.py
+# mangascraper/dashboard/routes/gallery_routes.py
 
 import os, time, random
 
 from flask import Blueprint, jsonify, send_from_directory, abort
 
-from nhscraper.core.orchestrator import DEFAULT_DOWNLOAD_PATH
+from mangascraper.core.orchestrator import DEFAULT_DOWNLOAD_PATH
 
 gallery_bp = Blueprint("gallery", __name__)
 

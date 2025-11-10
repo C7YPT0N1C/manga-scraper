@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# nhscraper/cli.py
+# mangascraper/cli.py
 
 import os, time, sys, argparse, re, subprocess, urllib.parse
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.core.downloader import start_downloader
-from nhscraper.core.api import get_session, fetch_gallery_ids
-from nhscraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.core.downloader import start_downloader
+from mangascraper.core.api import get_session, fetch_gallery_ids
+from mangascraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
 
-INSTALLER_PATH = "/opt/nhentai-scraper/nhscraper-install.sh"
+INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
 # ------------------------------------------------------------
 # Delegate to installer
@@ -44,13 +44,13 @@ def run_installer(flag: str):
     sys.exit(0)  # Exit after running installer
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="NHentai scraper CLI")
+    parser = argparse.ArgumentParser(description="Manga scraper CLI")
 
     # Installer / Updater flags
-    parser.add_argument("--install", action="store_true", help="Install nhentai-scraper and dependencies")
-    parser.add_argument("--update", action="store_true", help="Update nhentai-scraper")
+    parser.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
+    parser.add_argument("--update", action="store_true", help="Update manga-scraper")
     parser.add_argument("--update-env", action="store_true", help="Update the .env file")
-    parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall nhentai-scraper")
+    parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall manga-scraper")
 
     # Extension selection / management
     parser.add_argument("--install-extension", type=str, help="Install an extension by name")
@@ -538,7 +538,7 @@ def main():
     
     log_clarification()
     log("====================================================")
-    log("                  nhentai-scraper                   ")
+    log("                  manga-scraper                   ")
     log("====================================================")
     
     # ------------------------------------------------------------

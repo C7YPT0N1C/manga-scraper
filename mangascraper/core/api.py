@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nhscraper/core/api.py
+# mangascraper/core/api.py
 
 import os, time, random, cloudscraper, requests, re, json, threading, socket, urllib.parse
 
@@ -7,9 +7,9 @@ from datetime import datetime
 from urllib.parse import urljoin
 from pathlib import Path
 
-from nhscraper.core import orchestrator
-from nhscraper.core.orchestrator import *
-from nhscraper.core import database
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
+from mangascraper.core import database
 
 ################################################################################################################
 # GLOBAL VARIABLES
