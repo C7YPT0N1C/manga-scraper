@@ -98,28 +98,7 @@ def save_creators_metadata(metadata: dict):
         except Exception as e:
             logger.warning(f"Could not save creators_metadata.json: {e}")
         
-# ---- Global deferred list ----
-_deferred_creators_lock = threading.Lock()
-
-def load_deferred_creators() -> set[str]:
-    with _deferred_creators_lock:
-        metadata = load_creators_metadata()
-        return set(metadata.get("deferred_creators", []))
-
-def save_deferred_creators(creators: set[str]):
-    metadata = load_creators_metadata()
-    metadata["deferred_creators"] = sorted(creators)
-    save_creators_metadata(metadata)
-
-# ---- Collected manga IDs ----
-def load_collected_manga_ids() -> set[int]:
-    metadata = load_creators_metadata()
-    return set(metadata.get("collected_manga_ids", []))
-
-def save_collected_manga_ids(ids: set[int]):
-    metadata = load_creators_metadata()
-    metadata["collected_manga_ids"] = sorted(ids)
-    save_creators_metadata(metadata)
+# Optimisation #6: Removed redundant wrapper functions. Code now works directly with metadata dict.
 
 ####################################################################################################################
 # CORE
@@ -292,48 +271,44 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
+    broken_symlinks_removed = 0
+    
+    # Combined single walk for both directory cleanup and symlink removal
+    for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+        if dirpath == DEDICATED_DOWNLOAD_PATH:
+            continue
+        
+        # Remove empty directories
+        try:
+            if RemoveEmptyArtistFolder:
                 if not os.listdir(dirpath):
                     os.rmdir(dirpath)
                     logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
+            else:
+                if not dirnames and not filenames:
                     os.rmdir(dirpath)
                     logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    logger.info(f"Removed empty directories.")
-    
-    log_clarification()
-    
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
-        return
-    
-    removed = 0
-    for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
+        except Exception as e:
+            logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+        
+        # Check and remove broken symlinks
         for fname in filenames:
             full_path = os.path.join(dirpath, fname)
             if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
                 try:
                     os.unlink(full_path)
                     logger.info(f"Removed broken symlink: {full_path}")
-                    removed += 1
+                    broken_symlinks_removed += 1
                 except Exception as e:
                     logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
     
-    logger.info(f"Fixed {removed} broken symlink(s).")
+    logger.info(f"Removed empty directories.")
+    log_clarification()
+    
+    if broken_symlinks_removed > 0:
+        logger.info(f"Fixed {broken_symlinks_removed} broken symlink(s).")
+    
+    logger.info("Scan complete.")
 
 ############################################
 
@@ -360,11 +335,14 @@ def graphql_request(request: str, variables: dict = None, gql_debugging: bool = 
         return None
 
     try:
+        # Optimisation #7: Serialise payload once, reuse for both debug logging and request
+        payload_json = json.dumps(payload)
+        
         if debug == True:
             log_clarification("debug")
             log(f"GraphQL Request Payload:\n{json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
-        response = requests.post(GRAPHQL_URL, headers=headers, data=json.dumps(payload))
+        response = requests.post(GRAPHQL_URL, headers=headers, data=payload_json)
         response.raise_for_status()
         result = response.json()
         
@@ -428,6 +406,7 @@ def new_graphql_request(request: str, variables: dict = None, gql_debugging: boo
             log_clarification("debug")
             log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
+        # Optimisation #7: Use json parameter (requests serializes internally, no manual serialisation needed)
         response = graphql_session.post(
             GRAPHQL_URL,
             headers=headers,
@@ -793,19 +772,23 @@ def fetch_creators_suwayomi_metadata(creator_name: str):
         return []
     return result.get("data", {}).get("mangas", {}).get("nodes", [])
 
-def remove_from_deferred(creator_name: str):
+def remove_from_deferred(creator_name: str, metadata: dict = None):
     """
-    Remove a creator from the global deferred_creators list in creators_metadata.json.
+    Remove a creator from the deferred_creators list in metadata.
+    Accept optional metadata parameter to avoid redundant file I/O.
     """
     
-    metadata = load_creators_metadata()
+    if metadata is None:
+        metadata = load_creators_metadata()
+    
     deferred_creators = set(metadata.get("deferred_creators", []))
 
     if creator_name in deferred_creators:
         deferred_creators.discard(creator_name)
         logger.info(f"Removed '{creator_name}' from deferred creators.")
         metadata["deferred_creators"] = sorted(deferred_creators)
-        save_creators_metadata(metadata)
+    
+    return metadata
     
 # ------------------------------------------------------------
 # Update creator mangas and ensure they are added to Suwayomi
@@ -854,8 +837,8 @@ def update_creator_manga(meta):
                 add_mangas_to_suwayomi([suwayomi_id], CATEGORY_ID)
                 collected_ids.discard(suwayomi_id)
 
-                # Use helper instead of manual discard
-                remove_from_deferred(creator_name)
+                # Pass metadata to avoid redundant I/O
+                metadata = remove_from_deferred(creator_name, metadata)
 
             except Exception as e:
                 logger.warning(f"Failed to update manga {suwayomi_id} for {creator_name}: {e}")
@@ -870,20 +853,23 @@ def update_creator_manga(meta):
         genre_counts = entry.get("genre_counts", {})
         for genre in gallery_genres:
             genre_counts[genre] = genre_counts.get(genre, 0) + 1
-        entry["genre_counts"] = dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_PARSED])
+        
+        # Single sort with reuse for MAX_GENRES_PARSED
+        sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
+        entry["genre_counts"] = dict(sorted_genres[:MAX_GENRES_PARSED])
 
         # --- Update details.json ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
 
-        most_popular = sorted(entry["genre_counts"].items(), key=lambda x: x[1], reverse=True)[:MAX_GENRES_STORED]
+        # Reuse sorted_genres for MAX_GENRES_STORED slice
         details = {
             "title": creator_name,
             "author": creator_name,
             "artist": creator_name,
             "description": f"Latest Doujin: {gallery_title}",
-            "genre": [g for g, _ in most_popular],
+            "genre": [g for g, _ in sorted_genres[:MAX_GENRES_STORED]],
             "status": "1",
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
@@ -895,61 +881,6 @@ def update_creator_manga(meta):
     metadata["collected_manga_ids"] = sorted(collected_ids)
     metadata["deferred_creators"] = sorted(deferred_creators)
     save_creators_metadata(metadata)
-
-    # --- Update manga cover ---
-    if not orchestrator.dry_run:
-        try:
-            for creator_name in creators:
-                creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-
-                # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
-                gallery_folders = [
-                    f for f in os.listdir(creator_folder)
-                    if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
-                ]
-                if not gallery_folders:
-                    logger.info(f"No gallery folders found for {creator_name}")
-                    continue
-
-                # Sort folders by numeric GALLERY_ID descending
-                def extract_id(folder_name):
-                    try:
-                        return int(folder_name.split(")")[0].strip("("))
-                    except ValueError:
-                        return -1
-
-                gallery_folders.sort(key=extract_id, reverse=True)
-                latest_gallery = gallery_folders[0]
-                gallery_folder = os.path.join(creator_folder, latest_gallery)
-
-                # Find the first image (e.g., 1.jpg, 1.png, etc.)
-                candidates = [f for f in os.listdir(gallery_folder) if f.startswith("1.")]
-                if not candidates:
-                    logger.info(f"Skipping manga cover update: No 'page 1' found in Gallery: {gallery_folder}")
-                    continue
-
-                page1_file = os.path.join(gallery_folder, candidates[0])
-                _, ext = os.path.splitext(page1_file)
-
-                # Remove old cover files
-                for f in os.listdir(creator_folder):
-                    if f.startswith("cover."):
-                        try:
-                            os.remove(os.path.join(creator_folder, f))
-                            logger.info(f"Removed old cover file: {os.path.join(creator_folder, f)}")
-                        except Exception as e:
-                            logger.info(f"Failed to remove old cover file for {creator_folder}: {e}")
-                            logger.info("You can safely ignore this. Suwayomi will generate it automatically.")
-
-                # Copy the new cover
-                cover_file = os.path.join(creator_folder, f"cover{ext}")
-                shutil.copy2(page1_file, cover_file)
-                logger.info(f"Updated manga cover for {creator_name}: {cover_file}")
-
-        except Exception as e:
-            logger.error(f"Failed to update manga cover for Gallery {meta['id']}: {e}")
-    else:
-        log(f"[DRY RUN] Would update manga cover for creators: {creators}", "debug")
 
 def process_deferred_creators(populate: bool = True):
     """
@@ -1009,7 +940,9 @@ def process_deferred_creators(populate: bool = True):
         # ----------------------------
         log_clarification()
 
-        deferred_creators = load_deferred_creators()
+        # Optimisation #6: Load metadata directly instead of using wrapper function
+        metadata = load_creators_metadata()
+        deferred_creators = set(metadata.get("deferred_creators", []))
 
         if not deferred_creators:
             logger.info("GraphQL: No deferred creators to process.")
@@ -1078,7 +1011,10 @@ def process_deferred_creators(populate: bool = True):
         process_creators_attempt += 1
 
     # After max retries, keep creators still deferred
-    save_deferred_creators(still_deferred)
+    # Optimisation #6: Save metadata directly instead of using wrapper function
+    metadata = load_creators_metadata()
+    metadata["deferred_creators"] = sorted(still_deferred)
+    save_creators_metadata(metadata)
     logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
 
 ####################################################################################################################
@@ -1231,6 +1167,71 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Update creator's popular genres
     update_creator_manga(meta)
+    
+    # Extract cover and delete original gallery folder after archiving
+    try:
+        gallery_meta = return_gallery_metas(meta)
+        creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        
+        for creator_name in creators:
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            
+            # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
+            gallery_items = [
+                f for f in os.listdir(creator_folder)
+                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
+            ]
+            if not gallery_items:
+                continue
+            
+            # Sort items by numeric GALLERY_ID descending
+            def extract_id(item_name):
+                try:
+                    return int(item_name.split(")")[0].strip("("))
+                except ValueError:
+                    return -1
+            
+            gallery_items.sort(key=extract_id, reverse=True)
+            latest_gallery = gallery_items[0]
+            gallery_path = os.path.join(creator_folder, latest_gallery)
+            
+            # Only process if it's still a directory (not yet archived)
+            if not os.path.isdir(gallery_path):
+                logger.debug(f"Gallery {latest_gallery} is already archived or not a directory, skipping")
+                continue
+            
+            # Extract cover from first image
+            try:
+                candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+                
+                if candidates:
+                    page1_file = os.path.join(gallery_path, candidates[0])
+                    _, ext = os.path.splitext(page1_file)
+                    
+                    # Remove old cover files
+                    for f in os.listdir(creator_folder):
+                        if f.startswith("cover."):
+                            try:
+                                os.remove(os.path.join(creator_folder, f))
+                            except Exception as e:
+                                logger.debug(f"Could not remove old cover: {e}")
+                    
+                    # Copy new cover
+                    cover_file = os.path.join(creator_folder, f"cover{ext}")
+                    shutil.copy2(page1_file, cover_file)
+                    logger.info(f"Extracted cover for {creator_name}: {cover_file}")
+            except Exception as e:
+                logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
+            
+            # Delete original gallery folder
+            try:
+                shutil.rmtree(gallery_path)
+                logger.info(f"Deleted original gallery folder: {gallery_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete gallery folder {gallery_path}: {e}")
+    
+    except Exception as e:
+        logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
 
 # Hook for cleaning after downloads
 def cleanup_hook():

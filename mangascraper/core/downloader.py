@@ -273,6 +273,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
 def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: str):
     """
     Convert downloaded gallery folder to specified format (zip or cbz).
+    Cover extraction is handled by extension hooks.
     
     Args:
         gallery_id: ID of the gallery (for logging)
@@ -316,8 +317,6 @@ def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: s
                 arcname = os.path.join(folder_name, img_file)  # Keep folder structure in archive
                 zf.write(img_path, arcname=arcname)
         
-        # Remove original folder after successful archive creation
-        shutil.rmtree(gallery_folder)
         logger.info(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
         
         return archive_path
@@ -392,24 +391,6 @@ def process_galleries(batch_ids):
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
 
-                # --- Symlink all additional creators to the primary folder ---
-                for extra_creator in creators[1:]:
-                    extra_creator_safe = make_filesystem_safe(extra_creator)
-                    extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
-                    parent_dir = os.path.dirname(extra_folder)
-                    os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
-
-                    if orchestrator.dry_run:
-                        log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {primary_folder}", "debug")
-                    else:
-                        if os.path.islink(extra_folder):
-                            os.unlink(extra_folder)  # remove old symlink only
-                        elif os.path.exists(extra_folder):
-                            logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
-                            continue  # skip creating symlink if real folder exists
-                        os.symlink(primary_folder, extra_folder)
-                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe}")
-
                 # --- Prepare download tasks (only once, for primary creator) ---
                 tasks = []
                 for i in range(num_pages):
@@ -434,13 +415,34 @@ def process_galleries(batch_ids):
                             for _ in tasks:
                                 time.sleep(0.1)  # fake delay
 
+                # --- Finalise gallery format (archive) BEFORE creating symlinks ---
+                finalised_path = primary_folder
+                if not orchestrator.dry_run:
+                    if orchestrator.gallery_format != "directory":
+                        finalised_path = finalise_gallery_format(gallery_id, primary_folder, orchestrator.gallery_format)
+
+                # --- Symlink all additional creators to the finalised path (archive or folder) ---
+                for extra_creator in creators[1:]:
+                    extra_creator_safe = make_filesystem_safe(extra_creator)
+                    extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
+                    parent_dir = os.path.dirname(extra_folder)
+                    os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
+
+                    if orchestrator.dry_run:
+                        target_name = "archive" if orchestrator.gallery_format != "directory" else "primary folder"
+                        log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {target_name}", "debug")
+                    else:
+                        if os.path.islink(extra_folder):
+                            os.unlink(extra_folder)  # remove old symlink only
+                        elif os.path.exists(extra_folder):
+                            logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
+                            continue  # skip creating symlink if real folder exists
+                        os.symlink(finalised_path, extra_folder)
+                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
+
                 if not orchestrator.dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
-                    
-                    # Final gallery format (convert to zip/cbz if requested)
-                    if orchestrator.gallery_format != "directory":
-                        finalise_gallery_format(gallery_id, primary_folder, orchestrator.gallery_format)
 
                 log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")

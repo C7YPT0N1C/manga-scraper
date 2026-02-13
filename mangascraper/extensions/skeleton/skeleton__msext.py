@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/skeleton/skeleton__msext.py
 
-import os, time, json, requests, math
+import os, time, json, requests, math, shutil
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
@@ -182,48 +182,39 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
         logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
         return
 
-    if RemoveEmptyArtistFolder:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            try:
+    broken_symlinks_removed = 0
+    
+    # Combined single walk for both directory cleanup and symlink removal
+    for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
+        if dirpath == DEDICATED_DOWNLOAD_PATH:
+            continue
+        
+        # Remove empty directories
+        try:
+            if RemoveEmptyArtistFolder:
                 if not os.listdir(dirpath):
                     os.rmdir(dirpath)
                     logger.info(f"Removed empty directory: {dirpath}")
-            except Exception as e:
-                logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-    else:
-        for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-            if dirpath == DEDICATED_DOWNLOAD_PATH:
-                continue
-            if not dirnames and not filenames:
-                try:
+            else:
+                if not dirnames and not filenames:
                     os.rmdir(dirpath)
                     logger.info(f"Removed empty directory: {dirpath}")
-                except Exception as e:
-                    logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-
-    logger.info(f"Removed empty directories.")
-    
-    log_clarification()
-    
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        logger.warning("No valid DEDICATED_DOWNLOAD_PATH for symlink check.")
-        return
-
-    removed = 0
-    for dirpath, _, filenames in os.walk(DEDICATED_DOWNLOAD_PATH):
+        except Exception as e:
+            logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+        
+        # Check and remove broken symlinks
         for fname in filenames:
             full_path = os.path.join(dirpath, fname)
             if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
                 try:
                     os.unlink(full_path)
                     logger.info(f"Removed broken symlink: {full_path}")
-                    removed += 1
+                    broken_symlinks_removed += 1
                 except Exception as e:
                     logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
-    
-    logger.info(f"Fixed {removed} broken symlink(s).")
+
+    if broken_symlinks_removed > 0:
+        logger.info(f"Fixed {broken_symlinks_removed} broken symlink(s).")
 
 ####################################################################################################################
 # CORE HOOKS (Please add to the functions, try not to change or remove anything)
@@ -372,8 +363,43 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
-    #log_clarification("debug")
-    #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
+    # Delete original gallery folder after archiving
+    try:
+        gallery_meta = return_gallery_metas(meta)
+        creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        
+        for creator_name in creators:
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            
+            # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
+            gallery_items = [
+                f for f in os.listdir(creator_folder)
+                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
+            ]
+            if not gallery_items:
+                continue
+            
+            # Sort items by numeric GALLERY_ID descending
+            def extract_id(item_name):
+                try:
+                    return int(item_name.split(")")[0].strip("("))
+                except ValueError:
+                    return -1
+            
+            gallery_items.sort(key=extract_id, reverse=True)
+            latest_gallery = gallery_items[0]
+            gallery_path = os.path.join(creator_folder, latest_gallery)
+            
+            # Only delete if it's still a directory (not yet deleted)
+            if os.path.isdir(gallery_path):
+                try:
+                    shutil.rmtree(gallery_path)
+                    logger.info(f"Deleted gallery folder: {gallery_path}")
+                except Exception as e:
+                    logger.error(f"Failed to delete gallery folder {gallery_path}: {e}")
+    
+    except Exception as e:
+        logger.debug(f"Error in post-download processing for Gallery {gallery_id}: {e}")
 
 # Hook for cleaning after downloads
 def cleanup_hook():
