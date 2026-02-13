@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/extensions/skeleton/skeleton__nhsext.py
+# mangascraper/extensions/skeleton/skeleton__msext.py
 
 import os, time, json, requests, math
 

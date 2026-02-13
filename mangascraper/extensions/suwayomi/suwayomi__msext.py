@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/extensions/suwayomi/suwayomi__nhsext.py
+# mangascraper/extensions/suwayomi/suwayomi__msext.py
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile, math
 

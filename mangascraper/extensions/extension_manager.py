@@ -371,7 +371,7 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
 
     # Find and return the module
     for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__nhsext"):
+        if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__msext"):
             #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
             #    ext.install_extension()
             if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
