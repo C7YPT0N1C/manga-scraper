@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/extension_loader.py
 
-import os, json, importlib, shutil, subprocess
+import os, json, importlib, shutil, subprocess, sys
 
 from urllib.request import urlopen
 
@@ -85,15 +85,40 @@ def update_local_manifest_from_remote():
         with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
             local_manifest = json.load(f)
 
-    local_names = [ext["name"] for ext in local_manifest.get("extensions", [])]
+    local_by_name = {
+        ext.get("name"): ext for ext in local_manifest.get("extensions", [])
+        if ext.get("name")
+    }
+    merged_extensions = []
 
     for remote_ext in remote_manifest.get("extensions", []):
-        if remote_ext["name"] not in local_names:
-            remote_ext["installed"] = False  # new extension default
-            local_manifest["extensions"].append(remote_ext)
-            log_clarification("debug")
-            log(f"Added new extension to local manifest: {remote_ext['name']}", "debug")
+        remote_name = remote_ext.get("name")
+        if not remote_name:
+            continue
 
+        local_ext = local_by_name.get(remote_name)
+        if local_ext:
+            installed = local_ext.get("installed", False)
+            merged = {**local_ext, **remote_ext}
+            merged["installed"] = installed
+            if installed:
+                merged["version"] = local_ext.get("version")
+        else:
+            merged = dict(remote_ext)
+            merged["installed"] = False
+            log_clarification("debug")
+            log(f"Added new extension to local manifest: {remote_name}", "debug")
+
+        merged_extensions.append(merged)
+
+    # Preserve local-only entries that are not in remote manifest
+    remote_names = {ext.get("name") for ext in merged_extensions}
+    for local_ext in local_manifest.get("extensions", []):
+        local_name = local_ext.get("name")
+        if local_name and local_name not in remote_names:
+            merged_extensions.append(local_ext)
+
+    local_manifest["extensions"] = merged_extensions
     save_local_manifest(local_manifest)
     return local_manifest
 
@@ -153,6 +178,32 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
     
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
+
+    remote_manifest = fetch_remote_manifest()
+    remote_by_name = {
+        ext.get("name"): ext for ext in remote_manifest.get("extensions", [])
+        if ext.get("name")
+    }
+    updates_requested = []
+    for ext in manifest.get("extensions", []):
+        if not ext.get("installed", False):
+            continue
+
+        remote_entry = remote_by_name.get(ext.get("name"))
+        if not remote_entry:
+            continue
+
+        local_version = ext.get("version")
+        remote_version = remote_entry.get("version")
+        if remote_version and is_remote_version_newer(local_version, remote_version):
+            if _prompt_extension_update(ext.get("name"), local_version, remote_version):
+                updates_requested.append(ext.get("name"))
+
+    for extension_name in updates_requested:
+        install_selected_extension(extension_name, reinstall=True, prompt_for_update=False)
+
+    if updates_requested:
+        manifest = load_local_manifest()
     
     for ext in manifest.get("extensions", []):
         ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
@@ -197,13 +248,66 @@ def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     rv += [0] * (length - len(rv))
     return rv > lv
 
-def install_selected_extension(extension_name: str, reinstall: bool = False):
+def _prompt_extension_update(extension_name: str, local_version: str, remote_version: str) -> bool:
+    if not sys.stdin.isatty():
+        logger.warning(
+            "Non-interactive session: skipping update prompt for "
+            f"'{extension_name}' ({local_version} -> {remote_version})."
+        )
+        return False
+
+    prompt = (
+        f"Update extension '{extension_name}' from {local_version} to {remote_version}? "
+        "[y/N]: "
+    )
+    response = input(prompt).strip().lower()
+    return response in ("y", "yes")
+
+def install_selected_extension(extension_name: str, reinstall: bool = False, prompt_for_update: bool = True):
     """
     Installs an extension. If reinstall is True, forces reinstallation. Runs install hook if available.
     """
-    
+    local_manifest = load_local_manifest()
+    local_entry = next((ext for ext in local_manifest.get("extensions", []) if ext.get("name") == extension_name), None)
+    local_version = local_entry.get("version") if local_entry else None
+    locally_installed = local_entry.get("installed", False) if local_entry else False
+
+    remote_manifest = fetch_remote_manifest()
+    remote_entry = next((ext for ext in remote_manifest.get("extensions", []) if ext.get("name") == extension_name), None)
+    remote_version = remote_entry.get("version") if remote_entry else None
+
+    if local_entry is None:
+        update_local_manifest_from_remote()
+        local_manifest = load_local_manifest()
+        local_entry = next((ext for ext in local_manifest.get("extensions", []) if ext.get("name") == extension_name), None)
+        if local_entry is None:
+            logger.error(f"Extension '{extension_name}': Not found in remote manifest")
+            return
+
+    update_needed = False
+    if locally_installed:
+        if remote_version and is_remote_version_newer(local_version, remote_version):
+            if prompt_for_update:
+                if _prompt_extension_update(extension_name, local_version, remote_version):
+                    update_needed = True
+                else:
+                    logger.warning(
+                        f"Extension '{extension_name}': Update skipped (local {local_version}, remote {remote_version})."
+                    )
+                    return
+            else:
+                update_needed = True
+        elif reinstall:
+            update_needed = True
+    else:
+        update_needed = True
+
+    if not update_needed:
+        logger.warning(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
+        return
+
     manifest = update_local_manifest_from_remote()
-    ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
+    ext_entry = next((ext for ext in manifest["extensions"] if ext.get("name") == extension_name), None)
     if not ext_entry:
         logger.error(f"Extension '{extension_name}': Not found in remote manifest")
         return
@@ -213,26 +317,6 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
     # Remove old folder if reinstalling
     if reinstall and os.path.exists(ext_folder):
         shutil.rmtree(ext_folder)
-
-    # Determine if we should update based on remote version
-    update_needed = False
-    local_version = ext_entry.get("version")  # Version in local manifest
-    remote_manifest = fetch_remote_manifest()
-    remote_entry = next((e for e in remote_manifest.get("extensions", []) if e["name"] == extension_name), {})
-    remote_version = remote_entry.get("version")
-
-    if ext_entry.get("installed", False):
-        if remote_version and is_remote_version_newer(local_version, remote_version):
-            logger.warning(f"Extension '{extension_name}': Remote version {remote_version} is newer than local {local_version}, updating...")
-            update_needed = True
-        elif reinstall:
-            update_needed = True
-    else:
-        update_needed = True  # Not installed, must install
-
-    if not update_needed:
-        logger.warning(f"Extension '{extension_name}': Already installed and up-to-date (version {local_version})")
-        return
 
     repo_url = ext_entry.get("repo_url", "")
     if not os.path.exists(ext_folder):
@@ -292,6 +376,8 @@ def install_selected_extension(extension_name: str, reinstall: bool = False):
 
     # Update manifest
     ext_entry["installed"] = True
+    if remote_version:
+        ext_entry["version"] = remote_version
     save_local_manifest(manifest)
 
 def uninstall_selected_extension(extension_name: str):
@@ -358,6 +444,11 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
 
     # Ensure the requested extension is installed
     ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
+    if ext_entry is None:
+        update_local_manifest_from_remote()
+        manifest = load_local_manifest()
+        ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
+
     if ext_entry is None:
         logger.warning(f"Extension '{original_name}' not found in manifest, falling back to skeleton")
         name = "skeleton"

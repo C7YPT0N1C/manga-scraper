@@ -20,6 +20,9 @@ FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
 ENV_FILE="$SCRAPER_DIR/manga-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9"
+DEFAULT_BRANCH="main"
+SCRAPER_PRIMARY_REPO="https://github.com/C7YPT0N1C/manga-scraper.git"
+SCRAPER_BACKUP_REPO="https://git.anthrosys.online/C7YPT0N1C/manga-scraper.git"
 
 # ===============================
 # FUNCTIONS
@@ -40,6 +43,41 @@ install_system_packages() {
     apt update -y && apt full-upgrade -y && apt autoremove -y && apt clean -y
     apt-get install -y python3 python3-pip python3-venv git build-essential curl wget dnsutils tor torsocks
     echo "System packages installed."
+}
+
+fetch_remote_branches() {
+    local branches
+    branches=$(git ls-remote --heads "$SCRAPER_PRIMARY_REPO" 2>/dev/null | awk '{print $2}' | sed 's#refs/heads/##')
+    if [ -z "$branches" ]; then
+        branches=$(git ls-remote --heads "$SCRAPER_BACKUP_REPO" 2>/dev/null | awk '{print $2}' | sed 's#refs/heads/##')
+    fi
+    echo "$branches"
+}
+
+select_install_branch() {
+    local branches
+    local prompt
+
+    branches=$(fetch_remote_branches)
+    if [ -n "$branches" ]; then
+        echo "Available branches: $branches"
+        prompt="Enter branch name (default: $DEFAULT_BRANCH): "
+    else
+        branches="main dev nightly"
+        echo "Available branches (fallback): $branches"
+        prompt="Enter branch name (default: $DEFAULT_BRANCH): "
+    fi
+
+    read -p "$prompt" INSTALL_BRANCH
+    INSTALL_BRANCH=${INSTALL_BRANCH:-$DEFAULT_BRANCH}
+
+    if ! echo "$branches" | tr ' ' '\n' | grep -qx "$INSTALL_BRANCH"; then
+        read -p "Branch '$INSTALL_BRANCH' not in list. Continue anyway? (y/N): " confirm_branch
+        confirm_branch=${confirm_branch,,}
+        if [[ "$confirm_branch" != "y" && "$confirm_branch" != "yes" ]]; then
+            INSTALL_BRANCH="$DEFAULT_BRANCH"
+        fi
+    fi
 }
 
 install_python_packages() {
@@ -98,13 +136,12 @@ install_filebrowser() {
 
 install_scraper() {
     echo -e "\nInstalling manga-scraper..."
-    #branch="main"
-    branch="nightly"  # Change to 'dev' for testing latest features
+    branch="${INSTALL_BRANCH:-$DEFAULT_BRANCH}"
 
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning manga-scraper repo (branch: $branch)..."
-        git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || \
-        git clone --depth 1 --branch "$branch" https://git.anthrosys.online/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || {
+        git clone --depth 1 --branch "$branch" "$SCRAPER_PRIMARY_REPO" "$SCRAPER_DIR" || \
+        git clone --depth 1 --branch "$branch" "$SCRAPER_BACKUP_REPO" "$SCRAPER_DIR" || {
             echo "Failed to clone manga-scraper repo."
             exit 1
         }
@@ -328,9 +365,8 @@ start_update() {
         return
     fi
 
-    echo "Which branch would you like to update to? (default: main)"
-    read -p "Enter branch name: " branch
-    branch=${branch:-main}  # default to main if empty
+    select_install_branch
+    branch=${INSTALL_BRANCH:-$DEFAULT_BRANCH}
 
     echo "Updating repository to branch '$branch'..."
     cd "$SCRAPER_DIR" || { echo "Error: could not cd into $SCRAPER_DIR"; return 1; }
@@ -378,6 +414,7 @@ start_install() {
             echo -e "\nStarting installation..."
             check_python_version
             install_system_packages
+            select_install_branch
             install_filebrowser
             install_scraper
             create_env_file
