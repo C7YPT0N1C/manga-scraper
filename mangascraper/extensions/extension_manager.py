@@ -101,8 +101,6 @@ def update_local_manifest_from_remote():
             installed = local_ext.get("installed", False)
             merged = {**local_ext, **remote_ext}
             merged["installed"] = installed
-            if installed:
-                merged["version"] = local_ext.get("version")
         else:
             merged = dict(remote_ext)
             merged["installed"] = False

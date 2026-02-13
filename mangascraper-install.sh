@@ -163,9 +163,6 @@ install_scraper() {
     # Symlink CLI
     ln -sf "$SCRAPER_DIR/venv/bin/manga-scraper" /usr/local/bin/manga-scraper
 
-    # Symlink Local Manifest
-    ln -sf "$SCRAPER_DIR/mangascraper/extensions/local_manifest.json" $SCRAPER_DIR/local_manifest.json
-
     echo -e "\nmanga-scraper (branch: $branch) installed at $SCRAPER_DIR"
 }
 
