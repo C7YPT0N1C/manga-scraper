@@ -104,7 +104,7 @@ install_scraper() {
     if [ ! -d "$SCRAPER_DIR/.git" ]; then
         echo "Cloning manga-scraper repo (branch: $branch)..."
         git clone --depth 1 --branch "$branch" https://github.com/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || \
-        git clone --depth 1 --branch "$branch" https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || {
+        git clone --depth 1 --branch "$branch" https://git.anthrosys.online/C7YPT0N1C/manga-scraper.git "$SCRAPER_DIR" || {
             echo "Failed to clone manga-scraper repo."
             exit 1
         }

@@ -22,9 +22,9 @@ PRIMARY_REMOTE_MANIFEST_URL = (
     "raw/main/master_manifest.json"
 )
 
-BACKUP_BASE_REPO_URL = "https://git.zenithnetwork.online/C7YPT0N1C/manga-scraper-extensions/"
+BACKUP_BASE_REPO_URL = "https://git.anthrosys.online/C7YPT0N1C/manga-scraper-extensions/"
 BACKUP_REMOTE_MANIFEST_URL = (
-    "https://git.zenithnetwork.online/C7YPT0N1C/"
+    "https://git.anthrosys.online/C7YPT0N1C/"
     "manga-scraper-extensions/raw/branch/main/master_manifest.json"
 )
 
