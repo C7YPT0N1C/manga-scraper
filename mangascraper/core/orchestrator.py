@@ -241,6 +241,11 @@ language = [DEFAULT_LANGUAGE.lower()]
 DEFAULT_TITLE_TYPE = "english"
 title_type = DEFAULT_TITLE_TYPE.lower()
 
+# ------------------------------------------------------------
+# Gallery Format
+# ------------------------------------------------------------
+DEFAULT_GALLERY_FORMAT = "directory"
+gallery_format = DEFAULT_GALLERY_FORMAT
 
 # ------------------------------------------------------------
 # Threads
@@ -339,6 +344,7 @@ config = {
     "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
     "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
+    "GALLERY_FORMAT": os.getenv("GALLERY_FORMAT", DEFAULT_GALLERY_FORMAT),
     "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
@@ -363,7 +369,7 @@ def refresh_globals():
     def _update_globals():
         global download_path, doujin_txt_path, extension, extension_download_path
         global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
-        global range_start, range_end, galleries, excluded_tags, language, title_type
+        global range_start, range_end, galleries, excluded_tags, language, title_type, gallery_format
         global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
         global use_tor, skip_post_batch, skip_post_run, dry_run, calm, debug
 
@@ -383,6 +389,7 @@ def refresh_globals():
             "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
             "LANGUAGE": DEFAULT_LANGUAGE,
             "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+            "GALLERY_FORMAT": DEFAULT_GALLERY_FORMAT,
             "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
             "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
             "MAX_RETRIES": DEFAULT_MAX_RETRIES,
@@ -422,6 +429,7 @@ def normalise_config():
         "EXCLUDED_TAGS": DEFAULT_EXCLUDED_TAGS,
         "LANGUAGE": DEFAULT_LANGUAGE,
         "TITLE_TYPE": DEFAULT_TITLE_TYPE,
+        "GALLERY_FORMAT": DEFAULT_GALLERY_FORMAT,
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
@@ -449,14 +457,6 @@ def normalise_value(key: str, value):
     Normalise values from .env/config to consistent runtime types.
     """
     
-    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
-        if isinstance(value, str):
-            return [v.strip().lower() for v in value.split(",") if v.strip()]
-        elif isinstance(value, list):
-            return [str(v).lower() for v in value]
-        else:
-            return []
-    
     if key == "NHENTAI_MIRRORS":
         if isinstance(value, str):
             mirrors = [m.strip() for m in value.split(",") if m.strip()]
@@ -466,7 +466,21 @@ def normalise_value(key: str, value):
             mirrors = [DEFAULT_NHENTAI_MIRRORS]
         # Ensure default mirror is first
         return [DEFAULT_NHENTAI_MIRRORS] + [m for m in mirrors if m != DEFAULT_NHENTAI_MIRRORS]
+    
+    if key in ("EXCLUDED_TAGS", "LANGUAGE"):
+        if isinstance(value, str):
+            return [v.strip().lower() for v in value.split(",") if v.strip()]
+        elif isinstance(value, list):
+            return [str(v).lower() for v in value]
+        else:
+            return []
 
+    if key == "GALLERY_FORMAT":
+        fmt = str(value).lower()
+        if fmt not in ("directory", "zip", "cbz"):
+            return DEFAULT_GALLERY_FORMAT
+        return fmt
+    
     if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
         return str(value).lower() == "true"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, time, random, concurrent.futures, math
+import os, time, random, concurrent.futures, math, zipfile, shutil
 
 from tqdm.contrib.concurrent import thread_map
 
@@ -267,6 +267,66 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
         pass
 
 ####################################################################################################
+# ARCHIVE CONVERSION
+####################################################################################################
+
+def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: str):
+    """
+    Convert downloaded gallery folder to specified format (zip or cbz).
+    
+    Args:
+        gallery_id: ID of the gallery (for logging)
+        gallery_folder: Path to the folder containing downloaded images
+        format_type: One of "directory" (no-op), "zip", or "cbz"
+    
+    Returns:
+        str: Path to the final archive or folder
+    """
+    
+    if format_type == "directory":
+        return gallery_folder
+    
+    if not os.path.exists(gallery_folder):
+        logger.warning(f"Downloader: Gallery folder not found: {gallery_folder}")
+        return gallery_folder
+    
+    # Get base path and create archive path
+    parent_dir = os.path.dirname(gallery_folder)
+    folder_name = os.path.basename(gallery_folder)
+    archive_ext = ".cbz" if format_type == "cbz" else ".zip"
+    archive_path = os.path.join(parent_dir, folder_name + archive_ext)
+    
+    try:
+        # Get list of image files sorted for proper reading order
+        image_files = sorted([
+            f for f in os.listdir(gallery_folder)
+            if os.path.isfile(os.path.join(gallery_folder, f))
+        ])
+        
+        if not image_files:
+            logger.warning(f"Downloader: No images found in {gallery_folder}")
+            return gallery_folder
+        
+        logger.debug(f"Downloader: Creating {format_type} archive for Gallery {gallery_id}: {archive_path}")
+        
+        # Create zip/cbz archive with images in sorted order
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for img_file in image_files:
+                img_path = os.path.join(gallery_folder, img_file)
+                arcname = os.path.join(folder_name, img_file)  # Keep folder structure in archive
+                zf.write(img_path, arcname=arcname)
+        
+        # Remove original folder after successful archive creation
+        shutil.rmtree(gallery_folder)
+        logger.info(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
+        
+        return archive_path
+        
+    except Exception as e:
+        logger.error(f"Downloader: Failed to create {format_type} archive for Gallery {gallery_id}: {e}")
+        return gallery_folder
+
+####################################################################################################
 # CORE
 ####################################################################################################
 def process_galleries(batch_ids):
@@ -377,6 +437,10 @@ def process_galleries(batch_ids):
                 if not orchestrator.dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
+                    
+                    # Final gallery format (convert to zip/cbz if requested)
+                    if orchestrator.gallery_format != "directory":
+                        finalise_gallery_format(gallery_id, primary_folder, orchestrator.gallery_format)
 
                 log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")

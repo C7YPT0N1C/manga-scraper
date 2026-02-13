@@ -186,6 +186,18 @@ def parse_args():
             "Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be filesystem compatible, although titles are cleaned to try and avoid this."
         )
     )
+    
+    # Output format
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="directory",
+        choices=["directory", "zip", "cbz"],
+        help=(
+            "Output format for downloaded galleries (default: directory). "
+            "'zip' creates a .zip archive, 'cbz' creates a Comic Book Archive (.cbz) file."
+        )
+    )
 
     # Threads / concurrency
     parser.add_argument(
@@ -505,6 +517,7 @@ def update_config(args, archive_all: bool = False):
     
     update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
     update_env("TITLE_TYPE", args.title_type)
+    update_env("GALLERY_FORMAT", args.format)
     update_env("THREADS_GALLERIES", args.threads_galleries)
     update_env("THREADS_IMAGES", args.threads_images)
     update_env("MAX_RETRIES", args.max_retries)

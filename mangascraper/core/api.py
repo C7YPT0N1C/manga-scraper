@@ -12,17 +12,31 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core import database
 
 ################################################################################################################
-# GLOBAL VARIABLES
+# GLOBAL VARIABLES & CACHING
 ################################################################################################################
 
 possible_broken_symbols_lock = threading.Lock()
 
-################################################################################################################
-# HTTP SESSION
-################################################################################################################
+# Pre-compile regex patterns for title cleaning (avoid recompilation on every call)
+_BRACKET_PATTERN = re.compile(r"(\[.*?\]|\{.*?\})")
+_DASH_PATTERN = re.compile(r"\s*[–—-]\s*")
+_UNDERSCORE_PATTERN = re.compile(r"_+")
+
+# Pre-build symbol translation table for faster replacements
+_SYMBOL_TRANSLATION_TABLE = None
+
+def _build_symbol_translation_table():
+    """Build a translation table for symbol replacements (called once at module load)."""
+    global _SYMBOL_TRANSLATION_TABLE
+    trans_dict = {ord(symbol): replacement for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items()}
+    _SYMBOL_TRANSLATION_TABLE = trans_dict
 
 session = None
 session_lock = threading.Lock()
+
+################################################################################################################
+# HTTP SESSION
+################################################################################################################
 
 def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
     """
@@ -126,7 +140,10 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         #logger.debug(f"Session ready: {session}") # NOTE: DEBUGGING, not really needed.
 
         return session # Return the current session
-    
+
+# Initial symbol translation table at module load
+_build_symbol_translation_table()
+
 ################################################################################################################
 # METADATA CLEANING
 ################################################################################################################
@@ -166,14 +183,7 @@ def clean_title(meta_or_title):
         str: Sanitised title.
     """
     
-    orchestrator.refresh_globals()
-    
-    # Ensure global broken symbols file path is set
-    #broken_symbols_file = os.path.join(orchestrator.extension_download_path, "possible_broken_symbols.json")
-    #log_clarification("debug")
-    #log(f"Broken Symbols File at {broken_symbols_file}", "debug")
-
-    def is_cjk(char: str) -> bool: # NOTE: TEST: Add a flag for this?
+    def is_cjk(char: str) -> bool:
         """Return True if char is a Chinese/Japanese/Korean character."""
         code = ord(char)
         return (
@@ -211,8 +221,7 @@ def clean_title(meta_or_title):
     else:
         title = meta_or_title
 
-    # Detect non-ASCII symbols in the current title that aren't Japanese Characters, Chinese Characters, Korean Characters
-    # or in ALLOWED_SYMBOLS, BROKEN_SYMBOL_BLACKLIST, BROKEN_SYMBOL_REPLACEMENTS
+    # Detect non-ASCII symbols - cache the known_symbols set to avoid rebuilding
     symbols = {c for c in title if ord(c) > 127 and not is_cjk(c)}
     known_symbols = set(ALLOWED_SYMBOLS).union(
         BROKEN_SYMBOL_REPLACEMENTS.keys(),
@@ -224,72 +233,96 @@ def clean_title(meta_or_title):
     # Add new symbols to the Database
     if new_broken:
         for s in new_broken:
-            possible_broken_symbols[s] = "_"  # maintain the mapping for this session
-        database.save_broken_symbols(possible_broken_symbols)  # persist mapping to DB
-        #log(f"New broken symbols detected in '{title}': {new_broken}", "info")
+            possible_broken_symbols[s] = "_"
+        database.save_broken_symbols(possible_broken_symbols)
 
-    # Remove content inside [] or {} brackets
-    title = re.sub(r"(\[.*?\]|\{.*?\})", "", title)
+    # Remove content inside [] or {} brackets (use pre-compiled regex)
+    title = _BRACKET_PATTERN.sub("", title)
 
-    # Apply explicit replacements
-    for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items():
-        title = title.replace(symbol, replacement)
+    # Apply explicit replacements using optimd translation (faster than loops)
+    if _SYMBOL_TRANSLATION_TABLE is None:
+        _build_symbol_translation_table()
+    title = title.translate(_SYMBOL_TRANSLATION_TABLE)
 
     # Apply persisted broken symbol replacements
     for symbol, replacement in possible_broken_symbols.items():
         title = title.replace(symbol, replacement)
 
-    # Normalise dashes
-    title = re.sub(r"\s*[–—-]\s*", "-", title)
+    # Normalise dashes (use pre-compiled regex)
+    title = _DASH_PATTERN.sub("-", title)
 
     # Replace blacklisted characters
     for symbol in BROKEN_SYMBOL_BLACKLIST:
         title = title.replace(symbol, "_")
 
-    # Collapse multiple underscores/spaces
-    title = re.sub(r"_+", "_", title)
+    # Collapse multiple underscores/spaces (use pre-compiled regex)
+    title = _UNDERSCORE_PATTERN.sub("_", title)
     title = " ".join(title.split())
     title = title.strip(" _")
 
     if not title:
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
-    # Persist updated broken symbols mapping (always save to guarantee file exists)
-    database.save_broken_symbols(possible_broken_symbols)
-
     return make_filesystem_safe(title)
 
 ################################################################################################################
 #  NHentai API Handling
 ################################################################################################################
+def _calculate_thread_load_sleep(stage: str, num_items: int, attempt: int, gallery_cap: int = 3750) -> float:
+    """
+    Helper function to calculate sleep time based on thread load.
+    """
+    if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
+        gallery_threads = max(2, int(num_items / BATCH_SIZE) + 1) if stage == "gallery" else DEFAULT_THREADS_GALLERIES
+        image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES)
+        log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
+    else:
+        gallery_threads = orchestrator.threads_galleries
+        image_threads = orchestrator.threads_images
+        log(f"→ Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
+        log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
+
+    concurrency = (gallery_threads * image_threads) + gallery_threads
+    current_load = (concurrency * attempt) * num_items
+    log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
+    log(f"→ Current Load = (Concurrency * Attempt) * Num Of {stage.capitalize()}s = ({concurrency} * {attempt}) * {num_items} = {current_load:.2f} Units Of Work", "debug")
+
+    unit_factor = current_load / gallery_cap
+    log_clarification("debug")
+    log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
+    
+    BASE_GALLERY_THREADS = 2
+    BASE_IMAGE_THREADS = 10
+    gallery_thread_damper = 0.9
+    image_thread_damper = 0.9
+
+    thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
+    scaled_sleep = max(unit_factor / thread_factor, orchestrator.min_retry_sleep)
+    
+    log(f"→ Thread factor = (({gallery_threads}/{BASE_GALLERY_THREADS})^{gallery_thread_damper}) * (({image_threads}/{BASE_IMAGE_THREADS})^{image_thread_damper}) = {thread_factor:.2f}", "debug")
+    log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
+    
+    jitter_min, jitter_max = 0.9, 1.1
+    sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_retry_sleep)
+    
+    log(f"→ Sleep after jitter (Capped at {orchestrator.max_retry_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
+    
+    return sleep_time, current_load, gallery_threads, image_threads, concurrency
+
 def dynamic_sleep(stage, attempt: int = 1):
     """
     Adaptive sleep timing based on load and stage, 
     including dynamic thread optimisation with anchor + units scaling.
     """
     
-    # Forcefully enable or disable detailed debug logs
-    dynamic_sleep_debug = True 
-
-    # ------------------------------------------------------------
-    # Configurable parameters
-    # ------------------------------------------------------------
-    gallery_cap = 3750 # Maximum Number of Galleries considered for scaling (~150 pages)
-    
-    # orchestrator.min_api_sleep = Minimum API sleep time
-    # orchestrator.max_api_sleep = Maximum API sleep time
-    
-    # orchestrator.min_retry_sleep = Minimum Gallery sleep time
-    # orchestrator.max_retry_sleep = Maximum Gallery sleep time
+    gallery_cap = 3750
 
     log_clarification("debug")
     log("------------------------------", "debug")
     log(f"{stage.capitalize()} Attempt: {attempt}", "debug")
     log_clarification("debug")
 
-    # ------------------------------------------------------------
-    # API STAGE
-    # ------------------------------------------------------------
+    # API stage - simpler calculation
     if stage == "api":
         attempt_scale = attempt ** 2
         base_min, base_max = orchestrator.min_api_sleep * attempt_scale, orchestrator.max_api_sleep * attempt_scale
@@ -299,166 +332,18 @@ def dynamic_sleep(stage, attempt: int = 1):
         log_clarification()
         return sleep_time
 
-    # ------------------------------------------------------------
-    # GALLERY STAGE
-    # ------------------------------------------------------------
-    if stage == "gallery":
-        # --------------------------------------------------------
-        # 1. Calculate Galleries / Threads
-        # --------------------------------------------------------
-        #num_of_galleries = max(1, len(id_list)) # NOTE: ID List isn't showing up properly, fix this later
-        num_of_galleries = 1
+    # Gallery and Image stages - use unified calculation
+    if stage in ("gallery", "image"):
+        num_items = 1 if stage == "gallery" else max(1, orchestrator.total_gallery_images)
+        log(f"→ Number of {stage.capitalize()}s: {num_items} (Capped at {gallery_cap})", "debug")
+        sleep_time, current_load, gallery_threads, image_threads, concurrency = _calculate_thread_load_sleep(stage, num_items, attempt, gallery_cap)
         
-        if dynamic_sleep_debug:
-            log(f"→ Number of Galleries: {num_of_galleries} (Capped at {gallery_cap})", "debug")
-
-        if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
-            # Base gallery threads = 2, scale with Number of Galleries
-            gallery_threads = max(2, int(num_of_galleries / BATCH_SIZE) + 1) # 500 galleries per thread baseline
-            image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
-            if dynamic_sleep_debug:
-                log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
-        else:
-            gallery_threads = orchestrator.threads_galleries
-            image_threads = orchestrator.threads_images
-            if dynamic_sleep_debug:
-                log(f"→ Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
-                log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
-
-        # --------------------------------------------------------
-        # 2. Calculate total load (Units Of Work)
-        # --------------------------------------------------------        
-        concurrency = (gallery_threads * image_threads) + gallery_threads
-        current_load = (concurrency * attempt) * num_of_galleries
-        if dynamic_sleep_debug:
-            log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
-            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Galleries = ({concurrency} * {attempt}) * {num_of_galleries} = {current_load:.2f} Units Of Work", "debug")
-
-        # --------------------------------------------------------
-        # 3. Unit-based scaling
-        # --------------------------------------------------------
-        unit_factor = (current_load) / gallery_cap
-        if dynamic_sleep_debug:
-            log_clarification("debug")
-            log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
-
-        # --------------------------------------------------------
-        # 4. Thread factor, attempt scaling, and load factor
-        # --------------------------------------------------------
-        BASE_GALLERY_THREADS = 2
-        BASE_IMAGE_THREADS = 10
-        
-        gallery_thread_damper = 0.9
-        image_thread_damper = 0.9
-
-        thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
-
-        scaled_sleep = unit_factor / thread_factor
-        
-        # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, orchestrator.min_retry_sleep)
-        
-        if dynamic_sleep_debug:
-            log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
-            log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
-
-        # --------------------------------------------------------
-        # 5. Add jitter to avoid predictable timing
-        # --------------------------------------------------------
-        jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_retry_sleep)
-        
-        if dynamic_sleep_debug:
-            log(f"→ Sleep after jitter (Capped at {orchestrator.max_retry_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
-
-        # --------------------------------------------------------
-        # 6. Final result
-        # --------------------------------------------------------
         log_clarification("debug")
         log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
         log("------------------------------", "debug")
         log_clarification()
         return sleep_time
-    
-    # ------------------------------------------------------------
-    # IMAGE STAGE
-    # ------------------------------------------------------------
-    if stage == "image":
-        # --------------------------------------------------------
-        # 1. Calculate Galleries / Threads
-        # --------------------------------------------------------
-        num_of_images = max(1, orchestrator.total_gallery_images) # NOTE: Values aren't showing up properly, fix this later
-        
-        if dynamic_sleep_debug:
-            log(f"→ Number of Images: {num_of_images}", "debug")
 
-        if orchestrator.threads_galleries is None or orchestrator.threads_images is None:
-            # Base gallery threads = 2, scale with Number of Galleries
-            gallery_threads = DEFAULT_THREADS_GALLERIES
-            image_threads = gallery_threads * (DEFAULT_THREADS_IMAGES / DEFAULT_THREADS_GALLERIES) # Keep default ratio
-            if dynamic_sleep_debug:
-                log(f"→ Optimised Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
-        else:
-            gallery_threads = orchestrator.threads_galleries
-            image_threads = orchestrator.threads_images
-            if dynamic_sleep_debug:
-                log(f"→ Threads: {gallery_threads} Gallery, {image_threads} Image", "debug")
-                log(f"→ Configured Threads: Gallery = {gallery_threads}, Image = {image_threads}", "debug")
-
-        # --------------------------------------------------------
-        # 2. Calculate total load (Units Of Work)
-        # --------------------------------------------------------        
-        concurrency = (gallery_threads * image_threads) + gallery_threads
-        current_load = (concurrency * attempt) * num_of_images
-        if dynamic_sleep_debug:
-            log(f"→ Concurrency = {gallery_threads} Gallery Threads * {image_threads} Image Threads = {concurrency}", "debug")
-            log(f"→ Current Load = (Concurrency * Attempt) * Num Of Images = ({concurrency} * {attempt}) * {num_of_images} = {current_load:.2f} Units Of Work", "debug")
-
-        # --------------------------------------------------------
-        # 3. Unit-based scaling
-        # --------------------------------------------------------
-        unit_factor = (current_load) / gallery_cap
-        if dynamic_sleep_debug:
-            log_clarification("debug")
-            log(f"→ Unit Factor = {current_load} (Current Load) / {gallery_cap} (Gallery Cap) = {unit_factor:.2f} Units Per Capped Gallery", "debug")
-
-        # --------------------------------------------------------
-        # 4. Thread factor, attempt scaling, and load factor
-        # --------------------------------------------------------
-        BASE_GALLERY_THREADS = 2
-        BASE_IMAGE_THREADS = 10
-        
-        gallery_thread_damper = 0.9
-        image_thread_damper = 0.9
-
-        thread_factor = ((gallery_threads / BASE_GALLERY_THREADS) ** gallery_thread_damper) * ((image_threads / BASE_IMAGE_THREADS) ** image_thread_damper)
-
-        scaled_sleep = unit_factor / thread_factor
-        
-        # Enforce the minimum sleep time
-        scaled_sleep = max(scaled_sleep, orchestrator.min_retry_sleep)
-        
-        if dynamic_sleep_debug:
-            log(f"→ Thread factor = (1 + ({gallery_threads}-2)*0.25)*(1 + ({image_threads}-10)*0.05) = {thread_factor:.2f}", "debug")
-            log(f"→ Scaled sleep = Unit Factor / Thread Factor = {unit_factor:.2f} / {thread_factor:.2f} = {scaled_sleep:.2f}s", "debug")
-
-        # --------------------------------------------------------
-        # 5. Add jitter to avoid predictable timing
-        # --------------------------------------------------------
-        jitter_min, jitter_max = 0.9, 1.1
-        sleep_time = min(random.uniform(scaled_sleep * jitter_min, scaled_sleep * jitter_max), orchestrator.max_retry_sleep)
-        
-        if dynamic_sleep_debug:
-            log(f"→ Sleep after jitter (Capped at {orchestrator.max_retry_sleep}s) = Random({scaled_sleep:.2f}*{jitter_min}, {scaled_sleep:.2f}*{jitter_max}) = {sleep_time:.2f}s", "debug")
-
-        # --------------------------------------------------------
-        # 6. Final result
-        # --------------------------------------------------------
-        log_clarification("debug")
-        log(f"{stage.capitalize()}: Sleep: {sleep_time:.2f}s (Load: {current_load:.2f} Units)", "debug")
-        log("------------------------------", "debug")
-        log_clarification()
-        return sleep_time
 
 #####################################################################################################################################################################
 
