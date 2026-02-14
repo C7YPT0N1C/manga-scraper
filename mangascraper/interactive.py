@@ -1087,7 +1087,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
                 DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
                 DEFAULT_NHENTAI_MIRRORS, DEFAULT_DOWNLOAD_PATH, DEFAULT_MAX_RETRIES,
-                config, update_env, refresh_globals
+                DEFAULT_CALM, config, update_env, refresh_globals
             )
             from mangascraper.interactive import interactive_config_menu
             
@@ -1104,6 +1104,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 'mirrors': config.get('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS),
                 'output_folder': config.get('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH),
                 'max_retries': config.get('MAX_RETRIES', DEFAULT_MAX_RETRIES),
+                'calm': config.get('CALM', DEFAULT_CALM),
             }
             
             modified_config = interactive_config_menu(current_config)
@@ -1121,6 +1122,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             update_env('NHENTAI_MIRRORS', modified_config.get('mirrors'))
             update_env('DOWNLOAD_PATH', modified_config.get('output_folder'))
             update_env('MAX_RETRIES', modified_config.get('max_retries'))
+            update_env('CALM', modified_config.get('calm'))
             refresh_globals()
             
             logger.info("Configuration updated.")

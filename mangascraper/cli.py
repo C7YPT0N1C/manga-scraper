@@ -207,13 +207,13 @@ def parse_args():
     filters_group.add_argument(
         "--language",
         type=str,
-        default=DEFAULT_LANGUAGE,
+        default=argparse.SUPPRESS,
         help="Comma-separated list of languages to include",
     )
     filters_group.add_argument(
         "--title-type",
         choices=["english", "japanese", "pretty"],
-        default=DEFAULT_TITLE_TYPE,
+        default=argparse.SUPPRESS,
         help="Title type to use",
     )
     
@@ -229,7 +229,7 @@ def parse_args():
         "--output-format",
         dest="format",
         type=str,
-        default=DEFAULT_GALLERY_FORMAT,
+        default=argparse.SUPPRESS,
         choices=["directory", "zip", "cbz"],
         help="Output format for downloaded galleries",
     )
@@ -238,21 +238,21 @@ def parse_args():
     perf_group.add_argument(
         "--threads-galleries",
         type=int,
-        default=DEFAULT_THREADS_GALLERIES,
+        default=argparse.SUPPRESS,
         help="Number of concurrent gallery downloads",
     )
     
     perf_group.add_argument(
         "--threads-images",
         type=int,
-        default=DEFAULT_THREADS_IMAGES,
+        default=argparse.SUPPRESS,
         help="Number of concurrent image downloads per gallery",
     )
     
     perf_group.add_argument(
         "--max-retries",
         type=int,
-        default=DEFAULT_MAX_RETRIES,
+        default=argparse.SUPPRESS,
         help="Maximum retry attempts for failed downloads",
     )
     perf_group.add_argument(
@@ -279,25 +279,25 @@ def parse_args():
     runtime_group.add_argument(
         "--use-tor",
         action="store_true",
-        default=DEFAULT_USE_TOR,
+        default=argparse.SUPPRESS,
         help="Use TOR network for downloads",
     )
     runtime_group.add_argument(
         "--skip-post-batch",
         action="store_true",
-        default=DEFAULT_SKIP_POST_BATCH,
+        default=argparse.SUPPRESS,
         help="Skip periodic post-batch actions",
     )
     runtime_group.add_argument(
         "--skip-post-run",
         action="store_true",
-        default=DEFAULT_SKIP_POST_RUN,
+        default=argparse.SUPPRESS,
         help="Skip post-run actions",
     )
     runtime_group.add_argument(
         "--dry-run",
         action="store_true",
-        default=DEFAULT_DRY_RUN,
+        default=argparse.SUPPRESS,
         help="Simulate downloads without saving files",
     )
     runtime_group.add_argument(
@@ -315,8 +315,8 @@ def parse_args():
     
     # Make calm/debug mutually exclusive
     log_group = logging_group.add_mutually_exclusive_group()
-    log_group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help="Enable calm logging")
-    log_group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging")
+    log_group.add_argument("--calm", action="store_true", default=argparse.SUPPRESS, help="Enable calm logging")
+    log_group.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help="Enable debug logging")
 
     return parser.parse_args()
 
@@ -788,44 +788,66 @@ def update_config(args):
     log_clarification("debug")
     log("Updating Config...", "debug")
     
+    # Only update .env for values explicitly provided via CLI flags
+    # If flag not provided, use value already loaded from .env (or default)
+    
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
     
     # Handle mirrors (from CLI or interactive menu)
-    mirrors = getattr(args, "mirrors", None) or DEFAULT_NHENTAI_MIRRORS
-    if mirrors:
-        update_env("NHENTAI_MIRRORS", mirrors)
+    if hasattr(args, 'mirrors') and args.mirrors:
+        update_env("NHENTAI_MIRRORS", args.mirrors)
 
     # Handle output folder (from CLI or interactive menu)
-    output_folder = args.output_folder
-    if output_folder:
-        update_env("DOWNLOAD_PATH", output_folder)
-        update_env("EXTENSION_DOWNLOAD_PATH", output_folder)
+    if args.output_folder:
+        update_env("DOWNLOAD_PATH", args.output_folder)
+        update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
     
     # Handle max retries (from CLI or interactive menu)
-    if hasattr(args, 'max_retries') and args.max_retries is not None:
+    if hasattr(args, 'max_retries'):
         update_env("MAX_RETRIES", args.max_retries)
     
-    if args.excluded_tags is not None: # Use new excluded tags.
+    # Handle excluded tags
+    if args.excluded_tags is not None:
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
-    else:
-        # Use whatever excluded tags were already in config (env or default)
-        if isinstance(excluded_tags, str):
-            update_env("EXCLUDED_TAGS", [t.strip().lower() for t in orchestrator.excluded_tags.split(",")])
     
-    update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
-    update_env("TITLE_TYPE", args.title_type)
-    update_env("GALLERY_FORMAT", args.format)
-    update_env("THREADS_GALLERIES", args.threads_galleries)
-    update_env("THREADS_IMAGES", args.threads_images)
-    update_env("DRY_RUN", args.dry_run)
-    update_env("USE_TOR", args.use_tor)
-    update_env("SKIP_POST_BATCH", args.skip_post_batch)
-    update_env("SKIP_POST_RUN", args.skip_post_run)
-    update_env("CALM", args.calm)
-    update_env("DEBUG", args.debug)
+    # Only update if explicitly provided
+    if hasattr(args, 'language'):
+        update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
+    
+    if hasattr(args, 'title_type'):
+        update_env("TITLE_TYPE", args.title_type)
+    
+    if hasattr(args, 'format'):
+        update_env("GALLERY_FORMAT", args.format)
+    
+    if hasattr(args, 'threads_galleries'):
+        update_env("THREADS_GALLERIES", args.threads_galleries)
+    
+    if hasattr(args, 'threads_images'):
+        update_env("THREADS_IMAGES", args.threads_images)
+    
+    if hasattr(args, 'dry_run'):
+        update_env("DRY_RUN", args.dry_run)
+    
+    if hasattr(args, 'use_tor'):
+        update_env("USE_TOR", args.use_tor)
+    
+    if hasattr(args, 'skip_post_batch'):
+        update_env("SKIP_POST_BATCH", args.skip_post_batch)
+    
+    if hasattr(args, 'skip_post_run'):
+        update_env("SKIP_POST_RUN", args.skip_post_run)
+    
+    if hasattr(args, 'calm'):
+        update_env("CALM", args.calm)
+    
+    if hasattr(args, 'debug'):
+        update_env("DEBUG", args.debug)
+    
     # SSL verification: --disable-ssl-verify flag sets VERIFY_SSL to False
-    update_env("VERIFY_SSL", not args.disable_ssl_verify)
+    if args.disable_ssl_verify:
+        update_env("VERIFY_SSL", False)
     
     orchestrator.refresh_globals()
     
@@ -850,7 +872,10 @@ def main():
         sys.exit(2)
 
     # Overwrite placeholder logger with real one
-    logger = setup_logger(calm=args.calm, debug=args.debug)
+    # Use orchestrator values (from .env or defaults) if flags not provided
+    calm = getattr(args, 'calm', orchestrator.calm)
+    debug = getattr(args, 'debug', orchestrator.debug)
+    logger = setup_logger(calm=calm, debug=debug)
     
     normalise_config() # Populate config immediately.
     
@@ -916,39 +941,39 @@ def main():
         logger.info("Entering interactive mode...")
         log_clarification()
         
-        # Show config menu
+        # Show config menu - read from orchestrator to preserve .env values
         current_config = {
-            'extension': args.extension,
-            'use_tor': args.use_tor,
-            'dry_run': args.dry_run,
-            'threads_galleries': args.threads_galleries,
-            'threads_images': args.threads_images,
-            'format': args.format,
-            'language': args.language,
-            'title_type': args.title_type,
-            'excluded_tags': args.excluded_tags,
-            'mirrors': getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS),
-            'output_folder': args.output_folder,
-            'max_retries': args.max_retries,
-            'calm': args.calm,
+            'extension': orchestrator.extension,
+            'use_tor': orchestrator.use_tor,
+            'dry_run': orchestrator.dry_run,
+            'threads_galleries': orchestrator.threads_galleries,
+            'threads_images': orchestrator.threads_images,
+            'format': orchestrator.gallery_format,
+            'language': ','.join(orchestrator.language) if isinstance(orchestrator.language, list) else orchestrator.language,
+            'title_type': orchestrator.title_type,
+            'excluded_tags': ','.join(orchestrator.excluded_tags) if isinstance(orchestrator.excluded_tags, list) else orchestrator.excluded_tags,
+            'mirrors': ','.join(orchestrator.nhentai_mirrors) if isinstance(orchestrator.nhentai_mirrors, list) else orchestrator.nhentai_mirrors,
+            'output_folder': orchestrator.download_path,
+            'max_retries': orchestrator.max_retries,
+            'calm': orchestrator.calm,
         }
         
         modified_config = interactive_config_menu(current_config)
         
-        # Update args with modified config
-        args.extension = modified_config.get('extension', args.extension)
-        args.use_tor = modified_config.get('use_tor', args.use_tor)
-        args.dry_run = modified_config.get('dry_run', args.dry_run)
-        args.threads_galleries = modified_config.get('threads_galleries', args.threads_galleries)
-        args.threads_images = modified_config.get('threads_images', args.threads_images)
-        args.format = modified_config.get('format', args.format)
-        args.language = modified_config.get('language', args.language)
-        args.title_type = modified_config.get('title_type', args.title_type)
-        args.excluded_tags = modified_config.get('excluded_tags', args.excluded_tags)
+        # Update args with modified config (use getattr with orchestrator defaults for suppressed flags)
+        args.extension = modified_config.get('extension', getattr(args, 'extension', orchestrator.extension))
+        args.use_tor = modified_config.get('use_tor', getattr(args, 'use_tor', orchestrator.use_tor))
+        args.dry_run = modified_config.get('dry_run', getattr(args, 'dry_run', orchestrator.dry_run))
+        args.threads_galleries = modified_config.get('threads_galleries', getattr(args, 'threads_galleries', orchestrator.threads_galleries))
+        args.threads_images = modified_config.get('threads_images', getattr(args, 'threads_images', orchestrator.threads_images))
+        args.format = modified_config.get('format', getattr(args, 'format', orchestrator.gallery_format))
+        args.language = modified_config.get('language', getattr(args, 'language', ','.join(orchestrator.language) if isinstance(orchestrator.language, list) else orchestrator.language))
+        args.title_type = modified_config.get('title_type', getattr(args, 'title_type', orchestrator.title_type))
+        args.excluded_tags = modified_config.get('excluded_tags', getattr(args, 'excluded_tags', ','.join(orchestrator.excluded_tags) if isinstance(orchestrator.excluded_tags, list) else orchestrator.excluded_tags))
         args.mirrors = modified_config.get('mirrors', getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS))
         args.output_folder = modified_config.get('output_folder', args.output_folder)
-        args.max_retries = modified_config.get('max_retries', args.max_retries)
-        args.calm = modified_config.get('calm', args.calm)
+        args.max_retries = modified_config.get('max_retries', getattr(args, 'max_retries', orchestrator.max_retries))
+        args.calm = modified_config.get('calm', getattr(args, 'calm', orchestrator.calm))
         
         # Re-update config with modified values
         update_config(args)
