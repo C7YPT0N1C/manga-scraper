@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/database.py
 
-import os, sqlite3, threading
+import os, sqlite3, threading, atexit
 
 from datetime import datetime, timezone
 
@@ -10,6 +10,26 @@ from mangascraper.core.orchestrator import *
 
 DB_PATH = os.path.join(SCRAPER_DIR, "mangascraper/core/mangascraper.db")
 lock = threading.Lock()
+_thread_local = threading.local()
+
+
+def _connect():
+    conn = getattr(_thread_local, "connection", None)
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("PRAGMA foreign_keys = ON")
+        _thread_local.connection = conn
+    return conn
+
+
+def close_connection():
+    conn = getattr(_thread_local, "connection", None)
+    if conn is not None:
+        conn.close()
+        _thread_local.connection = None
+
+
+atexit.register(close_connection)
 
 # ===============================
 # DB INITIALISATION
@@ -18,7 +38,7 @@ def init_db():
     orchestrator.refresh_globals()
     
     os.makedirs(SCRAPER_DIR, exist_ok=True)
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         c = conn.cursor()
 
         c.executescript("""
@@ -84,8 +104,8 @@ def init_db():
 # ===============================
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
-    now = datetime.utcnow().isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
@@ -101,7 +121,7 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
 def mark_gallery_skipped(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         UPDATE Galleries
@@ -113,7 +133,7 @@ def mark_gallery_skipped(gallery_id):
 def mark_gallery_failed(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         UPDATE Galleries
@@ -125,7 +145,7 @@ def mark_gallery_failed(gallery_id):
 def mark_gallery_completed(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         UPDATE Galleries
@@ -136,7 +156,7 @@ def mark_gallery_completed(gallery_id):
 
 def get_gallery_status(gallery_id):
     init_db()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
         row = cursor.fetchone()
@@ -144,7 +164,7 @@ def get_gallery_status(gallery_id):
 
 def list_galleries(status=None):
     init_db()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         cursor = conn.cursor()
         if status:
             cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries WHERE status=?", (status,))
@@ -158,7 +178,7 @@ def list_galleries(status=None):
 def load_broken_symbols() -> dict[str, str]:
     """Load all detected broken symbols as { symbol: '_' }."""
     init_db()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    with lock, _connect() as conn:
         c = conn.cursor()
         c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
         rows = c.fetchall()
@@ -169,10 +189,10 @@ def save_broken_symbols(symbol_map: dict[str, str]):
     if not symbol_map:
         return
     init_db()
-    now = datetime.utcnow().isoformat()
-    with lock, sqlite3.connect(DB_PATH) as conn:
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, _connect() as conn:
         c = conn.cursor()
-        for symbol, replacement in symbol_map.items():
+        for symbol in symbol_map.keys():
             c.execute("""
                 INSERT INTO BrokenSymbols (symbol, example_occurrences, date_detected)
                 VALUES (?, ?, ?)
