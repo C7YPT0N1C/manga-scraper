@@ -66,6 +66,10 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         logger.debug(f"{referrer}: Requesting to {status} session.")
 
     with session_lock:
+        # Refresh SSL verification setting on every session access
+        if session is not None:
+            session.verify = orchestrator.verify_ssl
+        
         # Return current session if no build requested
         if status not in ["build", "rebuild"]:
             return session

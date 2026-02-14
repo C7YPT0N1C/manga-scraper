@@ -278,9 +278,9 @@ threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THR
 # ------------------------------------------------------------
 # Thread Management
 # ------------------------------------------------------------
-# Allow Background Processing: If True (daemon mode), program exits immediately even if downloads continue
-# If False (default - safe mode), program waits for all downloads to complete before exiting
-DEFAULT_USE_DAEMON_THREADS = False
+# Allow Background Processing: If True (default - daemon mode), program exits immediately even if downloads continue
+# If False (safe mode), program waits for all downloads to complete before exiting
+DEFAULT_USE_DAEMON_THREADS = True
 use_daemon_threads = DEFAULT_USE_DAEMON_THREADS
 
 DEFAULT_MAX_RETRIES = 3
