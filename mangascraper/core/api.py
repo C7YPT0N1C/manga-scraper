@@ -624,17 +624,13 @@ def fetch_gallery_ids(
 
                 # --- Language filter ---
                 if allowed_gallery_language:
-                    # If gallery is marked as 'translated', allow it through
-                    if "translated" in gallery_langs:
-                        # Translated galleries pass the filter
-                        pass
-                    else:
-                        # Non-translated galleries must have an allowed language
-                        has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
-                        if not has_allowed:
-                            blocked_langs = gallery_langs[:]
-                            log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
-                            continue
+                    has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
+                    has_translated = "translated" in gallery_langs
+                    allow_translated = "translated" in allowed_gallery_language
+                    if not (has_allowed or (has_translated and allow_translated)):
+                        blocked_langs = gallery_langs[:]
+                        log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
+                        continue
 
                 # If passed filters → keep
                 batch.append(int(g["id"]))
@@ -923,7 +919,15 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
         return {}
     
     # Deduplicate gallery IDs to prevent redundant API calls
-    gallery_ids = list(dict.fromkeys(gallery_ids))
+    normalized_ids = []
+    for gid in gallery_ids:
+        try:
+            gid_int = int(gid)
+        except (TypeError, ValueError):
+            logger.warning(f"Skipping gallery with invalid ID: {gid}")
+            continue
+        normalized_ids.append(gid_int)
+    gallery_ids = list(dict.fromkeys(normalized_ids))
     
     # Try loading from cache first if cache_key provided
     cached_metadata = {}
@@ -938,7 +942,18 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     if cache_key:
         cached_metadata = load_cache(cache_key)
         if cached_metadata:
+            normalized_cached = {}
+            for gid, meta in cached_metadata.items():
+                try:
+                    gid_int = int(gid)
+                except (TypeError, ValueError):
+                    continue
+                normalized_cached[gid_int] = meta
+            cached_metadata = normalized_cached
+        if cached_metadata:
             incomplete = [gid for gid, meta in cached_metadata.items() if not _is_complete_cached_meta(meta)]
+            if incomplete:
+                logger.debug(f"Dropping {len(incomplete)} cached galleries due to incomplete metadata")
             for gid in incomplete:
                 cached_metadata.pop(gid, None)
             if incomplete:
@@ -956,7 +971,7 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     
     logger.info(f"Fetching metadata for {len(ids_to_fetch)} new galleries...")
     if cache_key:
-        logger.info(f"(Cached {len(cached_metadata)} galleries, fetching {len(ids_to_fetch)} new)")
+        logger.info(f"({len(cached_metadata)} Cached galleries, fetching {len(ids_to_fetch)} new)")
     log_clarification()
     
     metadata = dict(cached_metadata)  # Start with cached results

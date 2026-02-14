@@ -243,7 +243,15 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
 
         selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
         selected = _select_by_index(metadata_items, selection)
-        return selected, {gid: metadata[str(gid)] for gid in selected if str(gid) in metadata}
+        selected_metadata = {}
+        for gid in selected:
+            if gid in metadata:
+                selected_metadata[gid] = metadata[gid]
+            else:
+                gid_str = str(gid)
+                if gid_str in metadata:
+                    selected_metadata[gid] = metadata[gid_str]
+        return selected, selected_metadata
     else:
         logger.warning("Invalid choice. Returning without selection.")
         return [], {}

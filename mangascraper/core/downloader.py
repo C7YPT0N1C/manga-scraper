@@ -269,8 +269,9 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     if allowed_gallery_language:
         has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
-        has_translated = "translated" in gallery_langs and has_allowed
-        if not (has_allowed or has_translated):
+        has_translated = "translated" in gallery_langs
+        allow_translated = "translated" in allowed_gallery_language
+        if not (has_allowed or (has_translated and allow_translated)):
             blocked_langs = gallery_langs[:]
 
     #log_clarification("debug") # NOTE: DEBUGGING
