@@ -762,8 +762,8 @@ def interactive_config_menu(current_config: dict) -> dict:
         
         # Determine if output folder is default or custom
         current_extension = config.get('extension', DEFAULT_EXTENSION)
-        current_output = config.get('output_folder', DEFAULT_DOWNLOAD_PATH)
         default_output = get_extension_download_path(current_extension)
+        current_output = config.get('output_folder') or default_output or DEFAULT_DOWNLOAD_PATH
         output_status = "(Default)" if current_output == default_output else "(Custom)"
         
         print(
@@ -776,7 +776,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             f"  [3] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
             f"  [4] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
             f"  [5] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
-            f"  [6] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)} {output_status}\n"
+            f"  [6] Output Folder: {current_output} {output_status}\n"
             f"  [7] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
             f"  [8] Use Tor: {config.get('use_tor', DEFAULT_USE_TOR)}\n"
             f"  [9] Dry Run: {config.get('dry_run', DEFAULT_DRY_RUN)}\n"
