@@ -199,6 +199,12 @@ DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"
 # normalised into a list at import
 nhentai_mirrors = [DEFAULT_NHENTAI_MIRRORS]
 
+# ------------------------------------------------------------
+# SSL/Certificate Verification
+# ------------------------------------------------------------
+DEFAULT_VERIFY_SSL = True
+verify_ssl = DEFAULT_VERIFY_SSL
+
 
 # ------------------------------------------------------------
 # Gallery ID selection
@@ -268,6 +274,14 @@ MAX_THREADS_IMAGES = 1000
 DEFAULT_THREADS_IMAGES = 10
 calculated_threads_images = round(((MAX_ALLOWED_API_HITS / BATCH_SIZE) - threads_galleries) / threads_galleries)
 threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THREADS_IMAGES)
+
+# ------------------------------------------------------------
+# Thread Management
+# ------------------------------------------------------------
+# Allow Background Processing: If True (daemon mode), program exits immediately even if downloads continue
+# If False (default - safe mode), program waits for all downloads to complete before exiting
+DEFAULT_USE_DAEMON_THREADS = False
+use_daemon_threads = DEFAULT_USE_DAEMON_THREADS
 
 DEFAULT_MAX_RETRIES = 3
 max_retries = DEFAULT_MAX_RETRIES
@@ -347,7 +361,9 @@ config = {
     "GALLERY_FORMAT": os.getenv("GALLERY_FORMAT", DEFAULT_GALLERY_FORMAT),
     "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
+    "USE_DAEMON_THREADS": str(os.getenv("USE_DAEMON_THREADS", DEFAULT_USE_DAEMON_THREADS)).lower() == "true",
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
+    "VERIFY_SSL": str(os.getenv("VERIFY_SSL", DEFAULT_VERIFY_SSL)).lower() == "true",
     "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
     "SKIP_POST_BATCH": str(os.getenv("SKIP_POST_BATCH", DEFAULT_SKIP_POST_BATCH)).lower() == "true",
     "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
@@ -371,7 +387,7 @@ def refresh_globals():
         global nhentai_api_base, nhentai_mirrors, page_sort, page_range_start, page_range_end
         global range_start, range_end, galleries, excluded_tags, language, title_type, gallery_format
         global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
-        global use_tor, skip_post_batch, skip_post_run, dry_run, calm, debug
+        global use_tor, skip_post_batch, skip_post_run, dry_run, calm, debug, verify_ssl, use_daemon_threads
 
         for key, default in {
             "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -392,7 +408,7 @@ def refresh_globals():
             "GALLERY_FORMAT": DEFAULT_GALLERY_FORMAT,
             "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
             "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
-            "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+            "VERIFY_SSL": DEFAULT_VERIFY_SSL,
             "USE_TOR": DEFAULT_USE_TOR,
             "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
             "SKIP_POST_RUN": DEFAULT_SKIP_POST_RUN,
@@ -420,6 +436,7 @@ def normalise_config():
         "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
+        "VERIFY_SSL": DEFAULT_VERIFY_SSL,
         "PAGE_SORT": DEFAULT_PAGE_SORT,
         "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
         "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
@@ -432,6 +449,7 @@ def normalise_config():
         "GALLERY_FORMAT": DEFAULT_GALLERY_FORMAT,
         "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
         "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+        "USE_DAEMON_THREADS": DEFAULT_USE_DAEMON_THREADS,
         "MAX_RETRIES": DEFAULT_MAX_RETRIES,
         "USE_TOR": DEFAULT_USE_TOR,
         "SKIP_POST_BATCH": DEFAULT_SKIP_POST_BATCH,
@@ -481,7 +499,7 @@ def normalise_value(key: str, value):
             return DEFAULT_GALLERY_FORMAT
         return fmt
     
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG"):
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
         return str(value).lower() == "true"
 
     if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):

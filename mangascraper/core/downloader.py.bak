@@ -1,5 +1,0 @@
-# BACKUP OF downloader.py - CREATED BEFORE PHASE 3C/3D INTEGRATION
-# This file was modified to include space estimation and monitoring functionality
-# Previous versions: estimate_total_download_size(), space_monitor dict, _format_bytes()
-# Created when: Space checking and graceful exit features were added
-# See: d:\Repositories\manga-scraper\mangascraper\core\downloader.py for current version  

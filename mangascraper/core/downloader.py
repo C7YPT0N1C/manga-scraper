@@ -30,6 +30,29 @@ space_monitor = {
     "galleries_processed": 0,
 }
 
+# Thread pool management for graceful shutdown
+_active_executors = []
+_shutdown_event = None
+
+def _register_executor(executor):
+    """Register a ThreadPoolExecutor for graceful shutdown."""
+    _active_executors.append(executor)
+
+def _shutdown_all_executors(wait=True):
+    """Shutdown all registered executors gracefully."""
+    for executor in _active_executors:
+        try:
+            executor.shutdown(wait=wait)
+        except Exception as e:
+            logger.warning(f"Error shutting down executor: {e}")
+    _active_executors.clear()
+
+def _signal_handler(signum, frame):
+    """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
+    logger.warning(f"\nReceived signal {signum}, shutting down gracefully...")
+    _shutdown_all_executors(wait=True)
+    raise KeyboardInterrupt("Graceful shutdown initiated")
+
 def _format_bytes(bytes_val: int) -> str:
     """Format bytes to human-readable size."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -436,12 +459,16 @@ def process_galleries(batch_ids):
                 # --- Download images (once, in primary creator's folder) ---
                 if tasks:
                     with concurrent.futures.ThreadPoolExecutor(max_workers=threads_images) as executor:
-                        if not orchestrator.dry_run:
-                            local_session = get_session(referrer="Downloader", status="return")
-                            submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
-                        else:
-                            for _ in tasks:
-                                time.sleep(0.1)  # fake delay
+                        _register_executor(executor)
+                        try:
+                            if not orchestrator.dry_run:
+                                local_session = get_session(referrer="Downloader", status="return")
+                                submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
+                            else:
+                                for _ in tasks:
+                                    time.sleep(0.1)  # fake delay
+                        finally:
+                            _active_executors.remove(executor)
 
                 # --- Finalise gallery format (archive) BEFORE creating symlinks ---
                 finalised_path = primary_folder
@@ -617,6 +644,10 @@ def start_downloader(gallery_list=None):
     log_clarification("debug")
     logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
+    
+    # Setup signal handlers for graceful shutdown (Ctrl+C, SIGTERM)
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
     
     orchestrator.refresh_globals()
     

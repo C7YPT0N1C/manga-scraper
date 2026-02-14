@@ -94,6 +94,9 @@ def get_session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         # Create or rebuild session if needed
         if session is None or status == "rebuild":
             session = cloudscraper.create_scraper(browser=browser_profile)
+        
+        # Set SSL certificate verification based on config
+        session.verify = orchestrator.verify_ssl
 
         # Random User-Agents (only randomised if flag is True)
         DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"

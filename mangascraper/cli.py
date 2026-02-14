@@ -300,6 +300,12 @@ def parse_args():
         default=DEFAULT_DRY_RUN,
         help="Simulate downloads without saving files",
     )
+    runtime_group.add_argument(
+        "--disable-ssl-verify",
+        action="store_true",
+        default=not DEFAULT_VERIFY_SSL,
+        help="Disable SSL certificate verification for downloads (use only if mirrors have expired certs)",
+    )
     interactive_mode_group.add_argument(
         "--unattended",
         action="store_true",
@@ -818,6 +824,8 @@ def update_config(args):
     update_env("SKIP_POST_RUN", args.skip_post_run)
     update_env("CALM", args.calm)
     update_env("DEBUG", args.debug)
+    # SSL verification: --disable-ssl-verify flag sets VERIFY_SSL to False
+    update_env("VERIFY_SSL", not args.disable_ssl_verify)
     
     orchestrator.refresh_globals()
     
