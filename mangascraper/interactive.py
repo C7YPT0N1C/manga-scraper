@@ -759,29 +759,36 @@ def interactive_config_menu(current_config: dict) -> dict:
     while True:
         clear_screen()
         log_clarification()
+        
+        # Determine if output folder is default or custom
+        current_extension = config.get('extension', DEFAULT_EXTENSION)
+        current_output = config.get('output_folder', DEFAULT_DOWNLOAD_PATH)
+        default_output = get_extension_download_path(current_extension)
+        output_status = "(Default)" if current_output == default_output else "(Custom)"
+        
         print(
             "╔════════════════════════════════════════════════════════╗\n"
             "║        Interactive Configuration Menu                  ║\n"
             "╚════════════════════════════════════════════════════════╝\n"
             "Current Settings:\n"
             f"  [1] Extension: {config.get('extension', DEFAULT_EXTENSION)}\n"
-            f"  [a] Mirrors: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}\n"
-            f"  [7] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
-            f"  [8] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
-            f"  [9] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
-            f"  [b] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}\n"
-            f"  [6] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
-            f"  [2] Use Tor: {config.get('use_tor', DEFAULT_USE_TOR)}\n"
-            f"  [3] Dry Run: {config.get('dry_run', DEFAULT_DRY_RUN)}\n"
-            f"  [4] Gallery Threads: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}\n"
-            f"  [5] Image Threads: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}\n"
-            f"  [c] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
+            f"  [2] Mirrors: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}\n"
+            f"  [3] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
+            f"  [4] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
+            f"  [5] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
+            f"  [6] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)} {output_status}\n"
+            f"  [7] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
+            f"  [8] Use Tor: {config.get('use_tor', DEFAULT_USE_TOR)}\n"
+            f"  [9] Dry Run: {config.get('dry_run', DEFAULT_DRY_RUN)}\n"
+            f"  [q] Gallery Threads: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}\n"
+            f"  [w] Image Threads: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}\n"
+            f"  [e] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
             "\nOptions:\n"
             "  [r] Clear cache\n"
             "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9,a-c,r]: ").strip().lower()
+        choice = input("Enter choice [0-9,q,w,e,r]: ").strip().lower()
         
         if choice == "0":
             break
@@ -835,32 +842,31 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.info(f"Extension updated to {config['extension']}.")
                     logger.info(f"Output Folder set to: {ext_download_path}")
         elif choice == "2":
-            val = input(f"Use Tor? (y/n, current: {config.get('use_tor', DEFAULT_USE_TOR)}): ").strip().lower()
-            if val in ('y', 'n'):
-                config['use_tor'] = val == 'y'
+            mirrors = input(f"Mirrors (comma-separated URLs, current: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}): ").strip()
+            if mirrors:
+                config['mirrors'] = mirrors
         elif choice == "3":
-            val = input(f"Dry Run? (y/n, current: {config.get('dry_run', DEFAULT_DRY_RUN)}): ").strip().lower()
-            if val in ('y', 'n'):
-                config['dry_run'] = val == 'y'
+            langs = input(f"Language(s) (comma-separated, current: {config.get('language', DEFAULT_LANGUAGE)}): ").strip()
+            if langs:
+                config['language'] = langs
         elif choice == "4":
-            try:
-                val = int(input(f"Gallery threads (current: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}): ").strip())
-                if val > 0:
-                    config['threads_galleries'] = val
-                else:
-                    logger.warning("Must be greater than 0")
-            except ValueError:
-                logger.warning("Invalid number")
+            ttype = input(f"Title type (english/japanese/pretty, current: {config.get('title_type', DEFAULT_TITLE_TYPE)}): ").strip().lower()
+            if ttype in ('english', 'japanese', 'pretty'):
+                config['title_type'] = ttype
+            else:
+                logger.warning("Invalid title type")
         elif choice == "5":
-            try:
-                val = int(input(f"Image threads (current: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}): ").strip())
-                if val > 0:
-                    config['threads_images'] = val
-                else:
-                    logger.warning("Must be greater than 0")
-            except ValueError:
-                logger.warning("Invalid number")
+            current_tags = config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS)
+            tags = input(f"Excluded tags (comma-separated, current: {current_tags}): ").strip()
+            if tags:
+                config['excluded_tags'] = tags
+            elif not current_tags:
+                config['excluded_tags'] = DEFAULT_EXCLUDED_TAGS
         elif choice == "6":
+            output_folder = input(f"Output folder path (current: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}): ").strip()
+            if output_folder:
+                config['output_folder'] = output_folder
+        elif choice == "7":
             log_clarification()
             print(
                 "╔════════════════════════════════════════════════════════╗\n"
@@ -874,32 +880,33 @@ def interactive_config_menu(current_config: dict) -> dict:
                 config['format'] = fmt_map[fmt_choice]
             else:
                 logger.warning("Invalid format")
-        elif choice == "7":
-            langs = input(f"Language(s) (comma-separated, current: {config.get('language', DEFAULT_LANGUAGE)}): ").strip()
-            if langs:
-                config['language'] = langs
         elif choice == "8":
-            ttype = input(f"Title type (english/japanese/pretty, current: {config.get('title_type', DEFAULT_TITLE_TYPE)}): ").strip().lower()
-            if ttype in ('english', 'japanese', 'pretty'):
-                config['title_type'] = ttype
-            else:
-                logger.warning("Invalid title type")
+            val = input(f"Use Tor? (y/n, current: {config.get('use_tor', DEFAULT_USE_TOR)}): ").strip().lower()
+            if val in ('y', 'n'):
+                config['use_tor'] = val == 'y'
         elif choice == "9":
-            current_tags = config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS)
-            tags = input(f"Excluded tags (comma-separated, current: {current_tags}): ").strip()
-            if tags:
-                config['excluded_tags'] = tags
-            elif not current_tags:
-                config['excluded_tags'] = DEFAULT_EXCLUDED_TAGS
-        elif choice == "a":
-            mirrors = input(f"Mirrors (comma-separated URLs, current: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}): ").strip()
-            if mirrors:
-                config['mirrors'] = mirrors
-        elif choice == "b":
-            output_folder = input(f"Output folder path (current: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}): ").strip()
-            if output_folder:
-                config['output_folder'] = output_folder
-        elif choice == "c":
+            val = input(f"Dry Run? (y/n, current: {config.get('dry_run', DEFAULT_DRY_RUN)}): ").strip().lower()
+            if val in ('y', 'n'):
+                config['dry_run'] = val == 'y'
+        elif choice == "q":
+            try:
+                val = int(input(f"Gallery threads (current: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}): ").strip())
+                if val > 0:
+                    config['threads_galleries'] = val
+                else:
+                    logger.warning("Must be greater than 0")
+            except ValueError:
+                logger.warning("Invalid number")
+        elif choice == "w":
+            try:
+                val = int(input(f"Image threads (current: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}): ").strip())
+                if val > 0:
+                    config['threads_images'] = val
+                else:
+                    logger.warning("Must be greater than 0")
+            except ValueError:
+                logger.warning("Invalid number")
+        elif choice == "e":
             try:
                 val = int(input(f"Max retries (current: {config.get('max_retries', DEFAULT_MAX_RETRIES)}): ").strip())
                 if val >= 0:
@@ -916,7 +923,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             else:
                 logger.info("Cache clear cancelled.")
         else:
-            logger.warning("Invalid choice. Enter 0-9, a-c, or r.")
+            logger.warning("Invalid choice. Enter 0-9, q, w, e, or r.")
         
         log_clarification()
     
