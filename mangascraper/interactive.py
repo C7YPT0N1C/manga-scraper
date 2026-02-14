@@ -9,7 +9,7 @@ import sys, os, shutil, json, re
 from collections import deque
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
-from mangascraper.core.api import fetch_all_metadata_for_galleries, get_metadata_summary
+from mangascraper.core.api import fetch_all_metadata_for_galleries, get_metadata_summary, fetch_gallery_ids
 from mangascraper.core.cache import get_cache_key, load_cache, clear_cache
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -21,6 +21,28 @@ def clear_screen():
     """Clear the terminal screen using ANSI escape codes."""
     # \033[2J clears the entire screen, \033[H moves cursor to home position
     print("\033[2J\033[H", end="", flush=True)
+
+def get_latest_gallery_id(timeout: int = 5) -> int | None:
+    """Fetch the latest gallery ID from nhentai by fetching the homepage (newest galleries)."""
+    try:
+        log_clarification("debug")
+        log(f"Fetching latest gallery ID from nhentai homepage...", "debug")
+        latest_ids = fetch_gallery_ids(
+            query_type="Homepage",
+            query_value=None,
+            sort_value="date",
+            start_page=1,
+            end_page=1
+        )
+        if latest_ids:
+            latest_id = max(latest_ids)
+            log_clarification("debug")
+            log(f"Latest gallery ID fetched: {latest_id}", "debug")
+            return latest_id
+    except Exception as e:
+        log_clarification("debug")
+        logger.warning(f"Could not fetch latest gallery ID: {e}")
+    return None
 
 ####################################################################################################
 # METADATA UTILITIES
@@ -1225,17 +1247,36 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         elif choice == "2":
             # Browse by ID range
             try:
-                range_input = input(f"Enter ID range (start end): ").strip()
-                if range_input:
-                    start, end = map(int, range_input.split())
-                    ids = list(range(start, end + 1))
-                    new_ids, new_metadata = display_gallery_results(ids)
-                    if new_ids:
-                        selected_ids.extend(new_ids)
-                        selected_metadata.update(new_metadata)
-                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                start_input = input(f"Enter start ID: ").strip()
+                if not start_input.isdigit():
+                    logger.warning("Invalid start ID. Please enter a number.")
+                    continue
+                
+                start_id = int(start_input)
+                
+                # Fetch latest ID if user doesn't specify end ID
+                logger.info("Fetching latest gallery ID from nhentai...")
+                latest_id = get_latest_gallery_id()
+                if latest_id is None:
+                    logger.warning("Could not fetch latest ID. Please enter end ID manually.")
+                    default_end = f"(manual entry required)"
+                    end_input = input(f"Enter end ID {default_end}: ").strip()
+                    if not end_input.isdigit():
+                        logger.warning("Invalid end ID. Skipping.")
+                        continue
+                    end_id = int(end_input)
+                else:
+                    end_input = input(f"Enter end ID (default: {latest_id}): ").strip()
+                    end_id = int(end_input) if end_input.isdigit() else latest_id
+                
+                ids = list(range(start_id, end_id + 1))
+                new_ids, new_metadata = display_gallery_results(ids)
+                if new_ids:
+                    selected_ids.extend(new_ids)
+                    selected_metadata.update(new_metadata)
+                    logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
             except ValueError:
-                logger.warning("Invalid format. Use: start end")
+                logger.warning("Invalid format. Please enter valid numbers for start and end IDs.")
         
         elif choice == "3":
             # Explicit gallery IDs
