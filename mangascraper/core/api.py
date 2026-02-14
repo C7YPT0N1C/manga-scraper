@@ -994,3 +994,51 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
         save_cache(cache_key, metadata)
     
     return metadata
+
+
+def get_metadata_summary(metadata: dict) -> dict:
+    """
+    Generate a summary of metadata statistics.
+    
+    Returns:
+        dict with counts of artists, groups, tags, languages, min/max pages, etc.
+    """
+    
+    if not metadata:
+        return {}
+    
+    all_artists = set()
+    all_groups = set()
+    all_tags = set()
+    all_characters = set()
+    all_parodies = set()
+    all_languages = set()
+    pages_list = []
+    
+    for meta in metadata.values():
+        all_artists.update(meta.get("artists", []))
+        all_groups.update(meta.get("groups", []))
+        all_tags.update(meta.get("tags", []))
+        all_characters.update(meta.get("characters", []))
+        all_parodies.update(meta.get("parodies", []))
+        all_languages.update(meta.get("languages", []))
+        pages_list.append(meta.get("pages", 0))
+    
+    return {
+        "total_galleries": len(metadata),
+        "unique_artists": len(all_artists),
+        "unique_groups": len(all_groups),
+        "unique_tags": len(all_tags),
+        "unique_characters": len(all_characters),
+        "unique_parodies": len(all_parodies),
+        "unique_languages": len(all_languages),
+        "artists": sorted(all_artists),
+        "groups": sorted(all_groups),
+        "tags": sorted(all_tags),
+        "characters": sorted(all_characters),
+        "parodies": sorted(all_parodies),
+        "languages": sorted(all_languages),
+        "min_pages": min(pages_list) if pages_list else 0,
+        "max_pages": max(pages_list) if pages_list else 0,
+        "avg_pages": sum(pages_list) / len(pages_list) if pages_list else 0,
+    }

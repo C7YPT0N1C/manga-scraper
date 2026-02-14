@@ -8,8 +8,8 @@ Handles pre-fetching metadata, displaying summaries, and allowing users to filte
 import sys, os, shutil, json, re
 from collections import deque
 from mangascraper.core import orchestrator
-from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals
-from mangascraper.core.api import fetch_all_metadata_for_galleries
+from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
+from mangascraper.core.api import fetch_all_metadata_for_galleries, get_metadata_summary
 from mangascraper.core.cache import get_cache_key, load_cache, clear_cache
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -25,53 +25,6 @@ def clear_screen():
 ####################################################################################################
 # METADATA UTILITIES
 ####################################################################################################
-
-def get_metadata_summary(metadata: dict) -> dict:
-    """
-    Generate a summary of metadata statistics.
-    
-    Returns:
-        dict with counts of artists, groups, tags, languages, min/max pages, etc.
-    """
-    
-    if not metadata:
-        return {}
-    
-    all_artists = set()
-    all_groups = set()
-    all_tags = set()
-    all_characters = set()
-    all_parodies = set()
-    all_languages = set()
-    pages_list = []
-    
-    for meta in metadata.values():
-        all_artists.update(meta.get("artists", []))
-        all_groups.update(meta.get("groups", []))
-        all_tags.update(meta.get("tags", []))
-        all_characters.update(meta.get("characters", []))
-        all_parodies.update(meta.get("parodies", []))
-        all_languages.update(meta.get("languages", []))
-        pages_list.append(meta.get("pages", 0))
-    
-    return {
-        "total_galleries": len(metadata),
-        "unique_artists": len(all_artists),
-        "unique_groups": len(all_groups),
-        "unique_tags": len(all_tags),
-        "unique_characters": len(all_characters),
-        "unique_parodies": len(all_parodies),
-        "unique_languages": len(all_languages),
-        "artists": sorted(all_artists),
-        "groups": sorted(all_groups),
-        "tags": sorted(all_tags),
-        "characters": sorted(all_characters),
-        "parodies": sorted(all_parodies),
-        "languages": sorted(all_languages),
-        "min_pages": min(pages_list) if pages_list else 0,
-        "max_pages": max(pages_list) if pages_list else 0,
-        "avg_pages": sum(pages_list) / len(pages_list) if pages_list else 0,
-    }
 
 def display_metadata_summary(summary: dict):
     """Display a formatted summary of gallery metadata."""
@@ -120,7 +73,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         try:
             gid_int = int(gid)
         except (TypeError, ValueError):
-            logger.warning(f"Skipping gallery with invalid ID: {gid}")
+            log(f"Skipping gallery with invalid ID: {gid}", "warning")
             continue
         if gid_int not in unique_metadata:
             unique_metadata[gid_int] = meta
@@ -243,7 +196,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
             elif nav_choice == "q" or nav_choice == "quit":
                 return []
             else:
-                logger.warning("Invalid choice. Use p/previous, n/next, d/details, s/select, or q/quit.")
+                log("Invalid choice. Use p/previous, n/next, d/details, s/select, or q/quit.", "warning")
                 continue
         else:
             # Single page - show navigation options
@@ -1023,6 +976,24 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
 # INTERACTIVE SEARCH MODE
 ####################################################################################################
 
+def _handle_search_error(search_type: str, search_value: str = ""):
+    """
+    Handle search errors consistently and return user to config menu.
+    
+    Args:
+        search_type: Type of search that failed
+        search_value: Optional search value for more specific error messages
+    """
+    log_clarification()
+    logger.error(
+        f"An error occurred during {search_type} search"
+        f"{f' for {search_value}' if search_value else ''}.\n"
+        f"Please check the log file for details: {RUNTIME_LOG_FILE}\n"
+        f"The search menu will now return to the configuration menu to prevent further issues."
+    )
+    log_clarification()
+    return True  # Signal to return to config menu
+
 def interactive_gallery_search(initial_ids: list | None = None, unattended: bool = False):
     """
     Interactive menu for searching and browsing galleries when no CLI flags are provided.
@@ -1189,6 +1160,16 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
             ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
             
+            # Check for search errors
+            if cache_key is None:
+                logger.error(
+                    f"Failed to fetch homepage.\n"
+                    f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                )
+                logger.info("Returning to menu. Please try a different search or check your connection.")
+                log_clarification()
+                continue
+            
             if ids and cache_key:
                 cache_key = get_cache_key("homepage", sort_val)
                 search_history.append(("homepage", sort_val, cache_key))
@@ -1196,6 +1177,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if new_ids:
                     selected_ids.extend(new_ids)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+            else:
+                logger.info("No galleries found on homepage")
 
         elif choice == "2":
             # Browse by ID range
@@ -1260,8 +1243,18 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         logger.info("Search cancelled.")
                         continue
                 
-                logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page}...")
+                logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 ids, cache_key = fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page)
+                
+                # Check for search errors
+                if cache_key is None:
+                    logger.error(
+                        f"Failed to fetch search results for '{search_query}'.\n"
+                        f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                    )
+                    logger.info("Returning to menu. Please try a different search or check your connection.")
+                    log_clarification()
+                    continue
                 
                 if ids and cache_key:
                     cache_key = get_cache_key("search", search_query)
@@ -1270,6 +1263,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     if new_ids:
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                else:
+                    logger.info(f"No galleries found for search: {search_query}")
         
         elif choice in ("5", "6", "7", "8", "9"):
             query_map = {
@@ -1307,8 +1302,18 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         logger.info("Search cancelled.")
                         continue
                 
-                logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page}...")
+                logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page)
+                
+                # Check for search errors
+                if cache_key is None:
+                    logger.error(
+                        f"Failed to fetch {query_type}={query_value}.\n"
+                        f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                    )
+                    logger.info("Returning to menu. Please try a different search or check your connection.")
+                    log_clarification()
+                    continue
                 
                 if ids and cache_key:
                     cache_key = get_cache_key(query_type, query_value)
@@ -1317,6 +1322,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     if new_ids:
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                else:
+                    logger.info(f"No galleries found for {query_type}={query_value}")
 
         elif choice == "w":
             # View recent searches
@@ -1339,12 +1346,25 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                         logger.info(f"Re-running search: {search_type}={search_value}...")
                         ids, rerun_cache_key = fetch_gallery_ids_with_fallback(search_type, search_value, sort_val, start_page, end_page)
+                        
+                        # Check for search errors
+                        if rerun_cache_key is None:
+                            logger.error(
+                                f"Failed to fetch {search_type}={search_value}.\n"
+                                f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                            )
+                            logger.info("Returning to menu. Please try a different search or check your connection.")
+                            log_clarification()
+                            continue
+                        
                         if ids:
                             use_cache_key = rerun_cache_key or cache_key
                             new_ids = display_gallery_results(ids, use_cache_key)
                             if new_ids:
                                 selected_ids.extend(new_ids)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        else:
+                            logger.info(f"No galleries found for {search_type}={search_value}")
                 except ValueError:
                     logger.warning("Invalid selection")
             else:
@@ -1396,6 +1416,16 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 logger.info(f"Archiving homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
                 ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
                 
+                # Check for search errors
+                if cache_key is None:
+                    logger.error(
+                        f"Failed to archive homepage.\n"
+                        f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                    )
+                    logger.info("Returning to menu. Please try a different search or check your connection.")
+                    log_clarification()
+                    continue
+                
                 if ids and cache_key:
                     cache_key = get_cache_key("archive", "all" if fetch_all else sort_val)
                     search_history.append(("archive", sort_val, cache_key))
@@ -1403,6 +1433,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     if new_ids:
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                else:
+                    logger.info("No galleries found for archive")
             else:
                 query_type_map = {
                     "1": "artist",
@@ -1467,6 +1499,16 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         logger.info(f"Archiving {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                         ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
                         
+                        # Check for search errors
+                        if cache_key is None:
+                            logger.error(
+                                f"Failed to archive {query_type}={query_value}.\n"
+                                f"Check the log file for details: {RUNTIME_LOG_FILE}"
+                            )
+                            logger.info("Returning to menu. Please try a different search or check your connection.")
+                            log_clarification()
+                            continue
+                        
                         if ids and cache_key:
                             cache_key = get_cache_key("archive", query_value)
                             search_history.append(("archive", query_value, cache_key))
@@ -1474,6 +1516,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                             if new_ids:
                                 selected_ids.extend(new_ids)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        else:
+                            logger.info(f"No galleries found for archive: {query_type}={query_value}")
                 else:
                     logger.warning("Invalid archive query type.")
         
