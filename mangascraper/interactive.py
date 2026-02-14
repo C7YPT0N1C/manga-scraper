@@ -44,7 +44,7 @@ def display_metadata_summary(summary: dict):
     )
     log_clarification()
 
-def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
+def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[list, dict]:
     """
     Display found galleries in a paginated table with titles, offer detail view, and collect user selection.
     Uses dynamic terminal size to determine how many galleries fit per page.
@@ -54,18 +54,18 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         cache_key: Optional cache key for metadata (e.g., "artist_john")
     
     Returns:
-        list: Selected gallery IDs to add to collection (empty if user declines)
+        tuple: (selected_gallery_ids, metadata_dict) where metadata_dict maps gid to metadata
     """
     
     if not gallery_ids:
-        return []
+        return [], {}
     
     # Fetch metadata for all found galleries (uses cache if available)
     metadata = fetch_all_metadata_for_galleries(gallery_ids, cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata for any galleries")
-        return []
+        return [], {}
     
     # Deduplicate by ID and convert to sorted list for pagination (highest ID first)
     unique_metadata = {}
@@ -224,10 +224,10 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
     select_choice = input("Choice (a/s/n): ").strip().lower()
     
     if select_choice in ("n", "none"):
-        return []
+        return [], {}
     elif select_choice in ("a", "all"):
         # Select all galleries
-        return [gid for gid, _ in metadata_items]
+        return [gid for gid, _ in metadata_items], metadata
     elif select_choice in ("s", "specific"):
         # Offer to apply filters before final selection
         if input("\nApply filters to refine results? (y/n): ").strip().lower() == "y":
@@ -237,22 +237,25 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
                 logger.info(f"Filtered results: {len(filtered_ids)} galleries")
                 filtered_items = sorted(filtered_metadata.items(), key=lambda x: x[0], reverse=True)
                 selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
-                return _select_by_index(filtered_items, selection)
-            return []
+                selected = _select_by_index(filtered_items, selection)
+                return selected, {gid: filtered_metadata[gid] for gid in selected}
+            return [], {}
 
         selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
-        return _select_by_index(metadata_items, selection)
+        selected = _select_by_index(metadata_items, selection)
+        return selected, {gid: metadata[str(gid)] for gid in selected if str(gid) in metadata}
     else:
         logger.warning("Invalid choice. Returning without selection.")
-        return []
+        return [], {}
 
 
-def view_selected_galleries(selected_ids: list) -> list:
+def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
     """
     Display selected galleries in paginated format with removal capability.
     
     Args:
         selected_ids: List of selected gallery IDs
+        cached_metadata: Optional pre-fetched metadata to avoid redundant API calls
     
     Returns:
         list: Updated list of selected IDs (after any removals)
@@ -276,8 +279,18 @@ def view_selected_galleries(selected_ids: list) -> list:
             print(f"  {idx}. ID: {gid}")
         return unique_ids
     
-    # Fetch metadata
-    metadata = fetch_all_metadata_for_galleries(unique_ids)
+    # Use cached metadata if provided, otherwise fetch
+    if cached_metadata:
+        metadata = {gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata}
+        # Fetch any missing galleries not in cache
+        missing_ids = [gid for gid in unique_ids if gid not in cached_metadata]
+        if missing_ids:
+            logger.info(f"Fetching metadata for {len(missing_ids)} galleries not in cache...")
+            missing_metadata = fetch_all_metadata_for_galleries(missing_ids)
+            metadata.update(missing_metadata)
+    else:
+        # Fetch metadata
+        metadata = fetch_all_metadata_for_galleries(unique_ids)
     
     if not metadata:
         logger.warning("Could not fetch metadata for selected galleries")
@@ -1040,6 +1053,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     if selected_ids:
         logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
     search_history = deque(maxlen=10)  # Track last 10 searches: (search_type, search_value, cache_key)
+    selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
     
     while True:
         clear_screen()
@@ -1188,9 +1202,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             if ids and cache_key:
                 cache_key = get_cache_key("homepage", sort_val)
                 search_history.append(("homepage", sort_val, cache_key))
-                new_ids = display_gallery_results(ids, cache_key)
+                new_ids, new_metadata = display_gallery_results(ids, cache_key)
                 if new_ids:
                     selected_ids.extend(new_ids)
+                    selected_metadata.update(new_metadata)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
             else:
                 if not ids:
@@ -1206,9 +1221,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if range_input:
                     start, end = map(int, range_input.split())
                     ids = list(range(start, end + 1))
-                    new_ids = display_gallery_results(ids)
+                    new_ids, new_metadata = display_gallery_results(ids)
                     if new_ids:
                         selected_ids.extend(new_ids)
+                        selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
             except ValueError:
                 logger.warning("Invalid format. Use: start end")
@@ -1230,9 +1246,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if invalid:
                     logger.warning(f"Ignoring invalid gallery IDs: {', '.join(invalid)}")
                 if ids:
-                    new_ids = display_gallery_results(ids)
+                    new_ids, new_metadata = display_gallery_results(ids)
                     if new_ids:
                         selected_ids.extend(new_ids)
+                        selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
         
         elif choice == "4":
@@ -1278,9 +1295,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if ids and cache_key:
                     cache_key = get_cache_key("search", search_query)
                     search_history.append(("search", search_query, cache_key))
-                    new_ids = display_gallery_results(ids, cache_key)
+                    new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
+                        selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
                     if not ids:
@@ -1341,9 +1359,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if ids and cache_key:
                     cache_key = get_cache_key(query_type, query_value)
                     search_history.append((query_type, query_value, cache_key))
-                    new_ids = display_gallery_results(ids, cache_key)
+                    new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
+                        selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
                     if not ids:
@@ -1386,9 +1405,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         
                         if ids:
                             use_cache_key = rerun_cache_key or cache_key
-                            new_ids = display_gallery_results(ids, use_cache_key)
+                            new_ids, new_metadata = display_gallery_results(ids, use_cache_key)
                             if new_ids:
                                 selected_ids.extend(new_ids)
+                                selected_metadata.update(new_metadata)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                         else:
                             if _check_no_results_and_prompt_filters():
@@ -1459,9 +1479,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if ids and cache_key:
                     cache_key = get_cache_key("archive", "all" if fetch_all else sort_val)
                     search_history.append(("archive", sort_val, cache_key))
-                    new_ids = display_gallery_results(ids, cache_key)
+                    new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
+                        selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
                     if not ids:
@@ -1546,9 +1567,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         if ids and cache_key:
                             cache_key = get_cache_key("archive", query_value)
                             search_history.append(("archive", query_value, cache_key))
-                            new_ids = display_gallery_results(ids, cache_key)
+                            new_ids, new_metadata = display_gallery_results(ids, cache_key)
                             if new_ids:
                                 selected_ids.extend(new_ids)
+                                selected_metadata.update(new_metadata)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                         else:
                             if not ids:
@@ -1563,7 +1585,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            selected_ids = view_selected_galleries(selected_ids)
+            selected_ids = view_selected_galleries(selected_ids, selected_metadata)
             continue
         
         else:
