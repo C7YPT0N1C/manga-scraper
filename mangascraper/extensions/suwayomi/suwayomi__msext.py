@@ -1282,12 +1282,16 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     shutil.copy2(page1_file, cover_in_subfolder)
                     logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
                     
-                    # Create or update symlink in creator root pointing to latest cover
+                    # Remove any existing cover files (regardless of extension)
+                    for f in os.listdir(creator_folder):
+                        if f.startswith("cover") and f != "covers" and f != ".covers":
+                            try:
+                                os.unlink(os.path.join(creator_folder, f))
+                            except Exception as e:
+                                logger.debug(f"Could not remove old cover file {f}: {e}")
+                    
+                    # Create symlink in creator root pointing to latest cover
                     cover_link = os.path.join(creator_folder, f"cover{ext}")
-                    # Remove old symlink/file if it exists
-                    if os.path.lexists(cover_link):
-                        os.unlink(cover_link)
-                    # Create new symlink
                     os.symlink(cover_in_subfolder, cover_link)
                     logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
             except Exception as e:
