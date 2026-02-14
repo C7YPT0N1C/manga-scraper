@@ -640,16 +640,16 @@ def get_valid_sort_value(sort_value):
     
     valid_sort_value = DEFAULT_PAGE_SORT # Set to default.
     
-    if sort_value in ("date", "recent"):
+    if sort_value in ("date", "recent", "1"):
         valid_sort_value = "date"       
     
-    elif sort_value in ("popular-today", "popular_today", "today"):
+    elif sort_value in ("popular-today", "popular_today", "today", "2"):
         valid_sort_value = "popular-today"
     
-    elif sort_value in ("popular-week", "popular_week", "week"):
+    elif sort_value in ("popular-week", "popular_week", "week", "3"):
         valid_sort_value = "popular-week"       
     
-    elif sort_value in ("popular", "all_time"):
+    elif sort_value in ("popular", "all_time", "all-time", "4"):
         valid_sort_value = "popular"
     
     else:

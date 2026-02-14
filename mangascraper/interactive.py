@@ -1264,7 +1264,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             # General search
             search_query = input("Enter search query (or press Enter to go back): ").strip()
             if search_query:
-                sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                 end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
@@ -1328,7 +1328,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             query_value = input(f"Enter {query_type} (or press Enter to go back): ").strip()
             
             if query_value:
-                sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                 end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
@@ -1392,7 +1392,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     if 1 <= selection <= len(search_history):
                         selected_search = list(reversed(list(search_history)))[selection - 1]
                         search_type, search_value, cache_key = selected_search
-                        sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                        sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                         end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
@@ -1522,7 +1522,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if query_type:
                     query_value = input(f"Enter {query_type} (or press Enter to go back): ").strip()
                     if query_value:
-                        sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                        sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
