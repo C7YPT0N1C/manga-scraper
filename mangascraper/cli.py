@@ -348,11 +348,12 @@ def _validate_args(args):
         if start > end:
             raise ValueError("--id-range START must be <= END.")
 
-    if args.threads_galleries <= 0:
+    # Only validate attributes that were explicitly provided (exist on args)
+    if hasattr(args, 'threads_galleries') and args.threads_galleries <= 0:
         raise ValueError("--threads-galleries must be greater than zero.")
-    if args.threads_images <= 0:
+    if hasattr(args, 'threads_images') and args.threads_images <= 0:
         raise ValueError("--threads-images must be greater than zero.")
-    if args.max_retries < 0:
+    if hasattr(args, 'max_retries') and args.max_retries < 0:
         raise ValueError("--max-retries must be zero or greater.")
     if args.min_sleep < 0 or args.max_sleep < 0:
         raise ValueError("--min-sleep and --max-sleep must be zero or greater.")
