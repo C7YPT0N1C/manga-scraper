@@ -914,9 +914,21 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     # Try loading from cache first if cache_key provided
     cached_metadata = {}
     ids_to_fetch = []
-    
+
+    def _is_complete_cached_meta(meta: dict) -> bool:
+        if not isinstance(meta, dict):
+            return False
+        required_keys = {"title", "artists", "tags", "languages", "pages"}
+        return required_keys.issubset(meta.keys())
+
     if cache_key:
         cached_metadata = load_cache(cache_key)
+        if cached_metadata:
+            incomplete = [gid for gid, meta in cached_metadata.items() if not _is_complete_cached_meta(meta)]
+            for gid in incomplete:
+                cached_metadata.pop(gid, None)
+            if incomplete:
+                logger.info(f"Refreshing {len(incomplete)} cached galleries with incomplete metadata")
         ids_to_fetch = [gid for gid in gallery_ids if gid not in cached_metadata]
         if cached_metadata:
             logger.info(f"Using {len(cached_metadata)} galleries from cache")

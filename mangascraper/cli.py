@@ -861,29 +861,8 @@ def main():
     logger.debug("CLI: Ready.")
     log("CLI: Debugging Started.", "debug")
     
-    # --- Handle --interactive flag (cannot be combined with other gallery-selection flags) ---
-    if args.interactive:
-        conflict_flags = {
-            "--file": "file",
-            "--range": "range",
-            "--galleries": "galleries",
-            "--homepage": "homepage",
-            "--artist": "artist",
-            "--group": "group",
-            "--tag": "tag",
-            "--character": "character",
-            "--parody": "parody",
-            "--search": "search",
-            "--archive": "archive",
-        }
-
-        # Check for conflicting flags
-        used_conflicts = [flag for flag, attr in conflict_flags.items() if getattr(args, attr)]
-        if used_conflicts:
-            print(f"[ERROR] --interactive cannot be combined with other gallery-selection flags:", file=sys.stderr)
-            print(f"        {', '.join(used_conflicts)}", file=sys.stderr)
-            sys.exit(2)
-    else:
+    # --- Handle --interactive flag (allow with other gallery-selection flags) ---
+    if not args.interactive:
         # If no gallery input is provided, default to homepage
         gallery_args = [
             args.file,
@@ -942,9 +921,28 @@ def main():
         # Re-update config with modified values
         update_config(args)
         
+        # Seed interactive selections from CLI gallery flags if provided
+        gallery_args = [
+            args.file,
+            args.homepage,
+            args.range,
+            args.galleries,
+            args.artist,
+            args.group,
+            args.tag,
+            args.character,
+            args.parody,
+            args.search,
+            args.archive,
+        ]
+        initial_gallery_list = []
+        if any(gallery_args):
+            get_session(referrer="CLI", status="build")
+            initial_gallery_list = build_gallery_list(args)
+
         # Enter gallery search mode
         log_clarification()
-        gallery_list = interactive_gallery_search()
+        gallery_list = interactive_gallery_search(initial_gallery_list)
         if not gallery_list:
             logger.warning("No galleries selected. Exiting.")
             sys.exit(0)

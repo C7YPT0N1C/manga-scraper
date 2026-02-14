@@ -5,7 +5,7 @@ Interactive gallery selection and filtering system.
 Handles pre-fetching metadata, displaying summaries, and allowing users to filter results.
 """
 
-import sys, os, shutil, json
+import sys, os, shutil, json, re
 from collections import deque
 from mangascraper.core.orchestrator import logger, log_clarification, log
 from mangascraper.core.api import fetch_all_metadata_for_galleries
@@ -103,8 +103,8 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         logger.warning("Could not fetch metadata for any galleries")
         return []
     
-    # Convert to sorted list for pagination
-    metadata_items = sorted(metadata.items(), key=lambda x: x[0])
+    # Convert to sorted list for pagination (highest ID first)
+    metadata_items = sorted(metadata.items(), key=lambda x: x[0], reverse=True)
     
     # Get terminal size and calculate rows per page
     terminal_size = shutil.get_terminal_size(fallback=(80, 24))
@@ -117,6 +117,45 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
     current_page = 0
     total_pages = (len(metadata_items) + rows_per_page - 1) // rows_per_page
     
+    def _parse_index_selection(selection: str, max_index: int):
+        if not selection:
+            return []
+        selection = selection.strip().lower()
+        if selection in ("all", "a", "*"):
+            return list(range(1, max_index + 1))
+        if selection in ("none", "n", "0"):
+            return []
+        indices = set()
+        for part in selection.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                start_s, end_s = part.split("-", 1)
+                if not (start_s.strip().isdigit() and end_s.strip().isdigit()):
+                    return None
+                start_i = int(start_s)
+                end_i = int(end_s)
+                if start_i > end_i:
+                    start_i, end_i = end_i, start_i
+                for i in range(start_i, end_i + 1):
+                    if 1 <= i <= max_index:
+                        indices.add(i)
+            elif part.isdigit():
+                idx = int(part)
+                if 1 <= idx <= max_index:
+                    indices.add(idx)
+            else:
+                return None
+        return sorted(indices)
+
+    def _select_by_index(ordered_items: list, selection: str) -> list:
+        indices = _parse_index_selection(selection, len(ordered_items))
+        if indices is None:
+            logger.warning("Invalid selection. Use numbers like 1,3-5 or 'all'.")
+            return []
+        return [ordered_items[i - 1][0] for i in indices]
+
     while True:
         log_clarification()
         
@@ -191,11 +230,13 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
             filtered_ids, filtered_metadata = show_filter_menu(summary, metadata)
             if filtered_ids:
                 logger.info(f"Filtered results: {len(filtered_ids)} galleries")
-                if input(f"Add these {len(filtered_ids)} filtered galleries? (y/n): ").strip().lower() == "y":
-                    return filtered_ids
+                filtered_items = sorted(filtered_metadata.items(), key=lambda x: x[0], reverse=True)
+                selection = input("Select filtered galleries by index (e.g. 1,3-5), 'all' for all, or 0 to cancel: ").strip()
+                return _select_by_index(filtered_items, selection)
             return []
-        
-        return [gid for gid, _ in metadata_items]
+
+        selection = input("Select galleries by index (e.g. 1,3-5), 'all' for all, or 0 to cancel: ").strip()
+        return _select_by_index(metadata_items, selection)
     
     return []
 
@@ -385,6 +426,14 @@ def interactive_config_menu(current_config: dict) -> dict:
     )
     
     config = current_config.copy()
+    if not config.get("excluded_tags"):
+        config["excluded_tags"] = DEFAULT_EXCLUDED_TAGS
+
+    def _version_key(value: str) -> tuple:
+        parts = re.findall(r"\d+", str(value))
+        if not parts:
+            return (0,)
+        return tuple(int(p) for p in parts)
     
     def _load_extensions_from_manifest(path: str, source_label: str) -> list:
         if not os.path.exists(path):
@@ -408,13 +457,26 @@ def interactive_config_menu(current_config: dict) -> dict:
         local_exts = _load_extensions_from_manifest(local_manifest, "local")
         master_exts = _load_extensions_from_manifest(master_manifest, "remote")
 
-        merged = {}
-        for ext in master_exts + local_exts:
-            name = ext.get("name")
-            if not name:
-                continue
-            merged[name] = ext
-        return [merged[name] for name in sorted(merged.keys())]
+        local_map = {ext.get("name"): ext for ext in local_exts if ext.get("name")}
+        remote_map = {ext.get("name"): ext for ext in master_exts if ext.get("name")}
+
+        choices = []
+        for name in sorted(set(local_map.keys()) | set(remote_map.keys())):
+            local_ext = local_map.get(name)
+            remote_ext = remote_map.get(name)
+            if local_ext and remote_ext:
+                local_v = _version_key(local_ext.get("version", "0"))
+                remote_v = _version_key(remote_ext.get("version", "0"))
+                if remote_v > local_v:
+                    choices.append(local_ext)
+                    choices.append(remote_ext)
+                else:
+                    choices.append(local_ext)
+            elif local_ext:
+                choices.append(local_ext)
+            elif remote_ext:
+                choices.append(remote_ext)
+        return choices
 
     while True:
         log_clarification()
@@ -589,7 +651,7 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
 # INTERACTIVE SEARCH MODE
 ####################################################################################################
 
-def interactive_gallery_search():
+def interactive_gallery_search(initial_ids: list | None = None):
     """
     Interactive menu for searching and browsing galleries when no CLI flags are provided.
     Returns gallery_ids to download.
@@ -605,7 +667,9 @@ def interactive_gallery_search():
 
     get_session(referrer="Interactive", status="build")
     
-    selected_ids = []
+    selected_ids = list(dict.fromkeys(initial_ids)) if initial_ids else []
+    if selected_ids:
+        logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
     search_history = deque(maxlen=10)  # Track last 10 searches: (search_type, search_value, cache_key)
     
     while True:
@@ -681,11 +745,11 @@ def interactive_gallery_search():
             sort_val = get_valid_sort_value(sort_val)
             start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
             start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            
+            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+            end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
             fetch_all = input("Fetch all pages? (y/n): ").strip().lower() == "y"
-            end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            if not fetch_all:
-                end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+            if fetch_all:
+                end_page = None
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
             ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
@@ -741,11 +805,11 @@ def interactive_gallery_search():
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                
+                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
                 fetch_all = input("Archive all pages? (y/n): ").strip().lower() == "y"
-                end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-                if not fetch_all:
-                    end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                if fetch_all:
+                    end_page = None
                 
                 logger.info(f"Archiving homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
                 ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
@@ -785,11 +849,11 @@ def interactive_gallery_search():
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                        
+                        end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                        end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
                         fetch_all = input("Archive all pages? (y/n): ").strip().lower() == "y"
-                        end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-                        if not fetch_all:
-                            end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                        if fetch_all:
+                            end_page = None
                         
                         logger.info(f"Archiving {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                         ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
