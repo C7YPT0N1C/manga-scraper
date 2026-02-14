@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/suwayomi/suwayomi__msext.py
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile, math
+import os, time, json, requests, threading, subprocess, shutil, tarfile, math, re
 
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
@@ -151,6 +151,28 @@ def return_gallery_metas(meta):
         "id": id,
         "language": gallery_language,
     }
+
+def _extract_gallery_id(text: str) -> int | None:
+    if not text:
+        return None
+    match = re.search(r"\((\d+)\)", str(text))
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+def _get_latest_id_from_details(creator_folder: str) -> int | None:
+    details_file = os.path.join(creator_folder, "details.json")
+    if not os.path.exists(details_file):
+        return None
+    try:
+        with open(details_file, "r", encoding="utf-8") as f:
+            details = json.load(f)
+        return _extract_gallery_id(details.get("description", ""))
+    except Exception:
+        return None
 
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
@@ -818,6 +840,7 @@ def update_creator_manga(meta):
         return
 
     gallery_title = gallery_meta["title"]
+    current_gallery_id = _extract_gallery_id(gallery_title) or int(meta.get("id", 0))
     gallery_tags = meta.get("tags", [])
     gallery_genres = [
         tag["name"] for tag in gallery_tags
@@ -868,12 +891,26 @@ def update_creator_manga(meta):
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
 
+        existing_details = {}
+        existing_latest_id = _get_latest_id_from_details(creator_folder)
+        if os.path.exists(details_file):
+            try:
+                with open(details_file, "r", encoding="utf-8") as f:
+                    existing_details = json.load(f)
+            except Exception:
+                existing_details = {}
+
+        if existing_latest_id is not None and existing_latest_id >= current_gallery_id:
+            description = existing_details.get("description", f"Latest Doujin: {gallery_title}")
+        else:
+            description = f"Latest Doujin: {gallery_title}"
+
         # Reuse sorted_genres for MAX_GENRES_STORED slice
         details = {
             "title": creator_name,
             "author": creator_name,
             "artist": creator_name,
-            "description": f"Latest Doujin: {gallery_title}",
+            "description": description,
             "genre": [g for g, _ in sorted_genres[:MAX_GENRES_STORED]],
             "status": "1",
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
@@ -1189,39 +1226,40 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            
-            # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
+            if not os.path.isdir(creator_folder):
+                continue
+
+            existing_latest_id = _get_latest_id_from_details(creator_folder)
+            if existing_latest_id is not None and existing_latest_id > int(gallery_id):
+                logger.debug(
+                    f"Skipping cover update for {creator_name}: existing latest ID {existing_latest_id} is newer than {gallery_id}"
+                )
+                continue
+
+            gallery_prefix = f"({gallery_id})"
             gallery_items = [
                 f for f in os.listdir(creator_folder)
-                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
+                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith(gallery_prefix)
             ]
             if not gallery_items:
                 continue
-            
-            # Sort items by numeric GALLERY_ID descending
-            def extract_id(item_name):
-                try:
-                    return int(item_name.split(")")[0].strip("("))
-                except ValueError:
-                    return -1
-            
-            gallery_items.sort(key=extract_id, reverse=True)
-            latest_gallery = gallery_items[0]
-            gallery_path = os.path.join(creator_folder, latest_gallery)
-            
+
+            gallery_items.sort()
+            gallery_path = os.path.join(creator_folder, gallery_items[0])
+
             # Only process if it's still a directory (not yet archived)
             if not os.path.isdir(gallery_path):
-                logger.debug(f"Gallery {latest_gallery} is already archived or not a directory, skipping")
+                logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
                 continue
-            
+
             # Extract cover from first image
             try:
                 candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
-                
+
                 if candidates:
                     page1_file = os.path.join(gallery_path, candidates[0])
                     _, ext = os.path.splitext(page1_file)
-                    
+
                     # Remove old cover files
                     for f in os.listdir(creator_folder):
                         if f.startswith("cover."):
@@ -1229,17 +1267,25 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                                 os.remove(os.path.join(creator_folder, f))
                             except Exception as e:
                                 logger.debug(f"Could not remove old cover: {e}")
-                    
+
                     # Copy new cover
                     cover_file = os.path.join(creator_folder, f"cover{ext}")
                     shutil.copy2(page1_file, cover_file)
                     logger.debug(f"Extracted cover for {creator_name}: {cover_file}")
             except Exception as e:
                 logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
-            
+
             if gallery_format == "directory":
                 logger.debug(
                     f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                )
+                continue
+
+            archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
+            expected_archive = os.path.join(creator_folder, f"{gallery_items[0]}{archive_ext}")
+            if not os.path.exists(expected_archive):
+                logger.warning(
+                    f"Archive not found for Gallery {gallery_id}: expected {expected_archive}; skipping deletion"
                 )
                 continue
 
