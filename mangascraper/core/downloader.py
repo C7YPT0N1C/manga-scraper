@@ -155,19 +155,13 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
         ) / effective_parallelism
     
     best_case = compute_case(orchestrator.min_api_sleep, orchestrator.min_retry_sleep)
-    median_case = compute_case(
-        (orchestrator.min_api_sleep + orchestrator.max_api_sleep) / 2,
-        (orchestrator.min_retry_sleep + orchestrator.max_retry_sleep) / 2
-    )
     worst_case = compute_case(orchestrator.max_api_sleep, orchestrator.max_retry_sleep)
 
     # --- Output ---
     log_clarification("warning")
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
-    log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}):")
-    log(f"Best Time Estimate:    {fmt_time(best_case)}")
-    log(f"Average Time Estimate: {fmt_time(median_case)}")
-    log(f"Worst Time Estimate:   {fmt_time(worst_case)}", "info")
+    log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
+    log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}", "info")
 
 def build_gallery_path(meta, iteration: dict = None):
     """
@@ -364,7 +358,7 @@ def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: s
                 arcname = os.path.join(folder_name, img_file)  # Keep folder structure in archive
                 zf.write(img_path, arcname=arcname)
         
-        logger.info(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
+        logger.debug(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
         
         return archive_path
         
@@ -516,8 +510,8 @@ def process_galleries(batch_ids):
                     space_monitor["total_actual_bytes"] += actual_bytes
                     space_monitor["galleries_processed"] += 1
 
-                log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")
+                log_clarification()
                 break  # exit retry loop on success
 
             except Exception as e:

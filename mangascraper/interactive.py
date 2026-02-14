@@ -186,7 +186,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         page_items = metadata_items[start_idx:end_idx]
         
         # Display header
-        print(f"Found {len(metadata)} galleries (Page {current_page + 1}/{total_pages}):\n")
+        print(f"Found {len(metadata_items)} galleries (Page {current_page + 1}/{total_pages}):\n")
         print(f"{'#':<4} {'ID':<8} {'Title':<60} {'Pages':<6}")
         print("-" * 80)
         

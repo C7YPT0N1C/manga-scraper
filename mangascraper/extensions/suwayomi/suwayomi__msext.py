@@ -689,8 +689,7 @@ def populate_suwayomi(category_id: int, attempt: int, update_library: bool = Tru
                 continue
 
             if not is_running:
-                log("GraphQL: Suwayomi Update has either finished before GraphQL could check, or has been stopped either by the user or Suwayomi.", "info")
-                log("Exiting Update Loop.", "info")
+                log("GraphQL: Suwayomi Update has finished before GraphQL could check. Exiting Update Loop.", "info")
                 break  # Immediate exit if update stopped
 
             # Set total if available
@@ -1234,7 +1233,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     # Copy new cover
                     cover_file = os.path.join(creator_folder, f"cover{ext}")
                     shutil.copy2(page1_file, cover_file)
-                    logger.info(f"Extracted cover for {creator_name}: {cover_file}")
+                    logger.debug(f"Extracted cover for {creator_name}: {cover_file}")
             except Exception as e:
                 logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
             
@@ -1247,7 +1246,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             # Delete original gallery folder
             try:
                 shutil.rmtree(gallery_path)
-                logger.info(f"Deleted original gallery folder: {gallery_path}")
+                logger.debug(f"Deleted original gallery folder: {gallery_path}")
             except Exception as e:
                 logger.error(f"Failed to delete gallery folder {gallery_path}: {e}")
     

@@ -955,11 +955,31 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     metadata = dict(cached_metadata)  # Start with cached results
     failed_ids = []
     
+    # Apply filters (same as fetch_gallery_ids)
+    excluded_tags = [tag.lower() for tag in orchestrator.excluded_tags]
+    allowed_languages = [lang.lower() for lang in orchestrator.language]
+    
     # Fetch missing galleries with progress bar
     for gallery_id in tqdm(ids_to_fetch, desc="Fetching gallery metadata", unit="gallery"):
         try:
             meta = fetch_gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
+                # Apply tag filter
+                gallery_tags = [t["name"].lower() for t in meta.get("tags", []) if t.get("type") == "tag"]
+                blocked_tags = [t for t in gallery_tags if t in excluded_tags]
+                if blocked_tags:
+                    log(f"Skipping Gallery {gallery_id} due to excluded tags: {blocked_tags}", "debug")
+                    continue
+                
+                # Apply language filter
+                gallery_langs = [t["name"].lower() for t in meta.get("tags", []) if t.get("type") == "language"]
+                if allowed_languages:
+                    has_allowed = any(lang in allowed_languages for lang in gallery_langs)
+                    has_translated = ("translated" in gallery_langs) and has_allowed
+                    if not (has_allowed or has_translated):
+                        log(f"Skipping Gallery {gallery_id} due to blocked languages: {gallery_langs}", "debug")
+                        continue
+                
                 # Extract relevant fields
                 metadata[gallery_id] = {
                     "id": gallery_id,
