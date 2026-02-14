@@ -9,7 +9,7 @@ import sys, os, shutil, json, re
 from collections import deque
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
-from mangascraper.core.api import fetch_all_metadata_for_galleries, get_metadata_summary, fetch_gallery_ids
+from mangascraper.core.api import fetch_all_metadata_for_galleries, get_metadata_summary, fetch_gallery_ids, get_session
 from mangascraper.core.cache import get_cache_key, load_cache, clear_cache
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -23,19 +23,23 @@ def clear_screen():
     print("\033[2J\033[H", end="", flush=True)
 
 def get_latest_gallery_id(timeout: int = 5) -> int | None:
-    """Fetch the latest gallery ID from nhentai by fetching the homepage (newest galleries)."""
+    """Fetch the latest gallery ID directly from nhentai API without affecting application state."""
     try:
         log_clarification("debug")
         log(f"Fetching latest gallery ID from nhentai homepage...", "debug")
-        latest_ids = fetch_gallery_ids(
-            query_type="Homepage",
-            query_value=None,
-            sort_value="date",
-            start_page=1,
-            end_page=1
-        )
-        if latest_ids:
-            latest_id = max(latest_ids)
+        
+        # Request homepage directly from API without using fetch_gallery_ids to avoid state pollution
+        session = get_session(referrer="Latest ID Fetch", status="return")
+        url = f"{orchestrator.nhentai_api_base}/galleries/all?page=1"
+        
+        resp = session.get(url, timeout=(10, 10))
+        resp.raise_for_status()
+        data = resp.json()
+        
+        results = data.get("result", [])
+        if results:
+            # Get the first (newest) gallery's ID
+            latest_id = int(results[0]["id"])
             log_clarification("debug")
             log(f"Latest gallery ID fetched: {latest_id}", "debug")
             return latest_id
