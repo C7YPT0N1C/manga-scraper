@@ -784,13 +784,21 @@ def update_config(args):
     
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
-        
-    if getattr(args, "mirrors", None):
-        update_env("NHENTAI_MIRRORS", args.mirrors)
+    
+    # Handle mirrors (from CLI or interactive menu)
+    mirrors = getattr(args, "mirrors", None) or DEFAULT_NHENTAI_MIRRORS
+    if mirrors:
+        update_env("NHENTAI_MIRRORS", mirrors)
 
-    if args.output_folder:
-        update_env("DOWNLOAD_PATH", args.output_folder)
-        update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
+    # Handle output folder (from CLI or interactive menu)
+    output_folder = args.output_folder
+    if output_folder:
+        update_env("DOWNLOAD_PATH", output_folder)
+        update_env("EXTENSION_DOWNLOAD_PATH", output_folder)
+    
+    # Handle max retries (from CLI or interactive menu)
+    if hasattr(args, 'max_retries') and args.max_retries is not None:
+        update_env("MAX_RETRIES", args.max_retries)
     
     if args.excluded_tags is not None: # Use new excluded tags.
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
@@ -804,7 +812,6 @@ def update_config(args):
     update_env("GALLERY_FORMAT", args.format)
     update_env("THREADS_GALLERIES", args.threads_galleries)
     update_env("THREADS_IMAGES", args.threads_images)
-    update_env("MAX_RETRIES", args.max_retries)
     update_env("DRY_RUN", args.dry_run)
     update_env("USE_TOR", args.use_tor)
     update_env("SKIP_POST_BATCH", args.skip_post_batch)
@@ -912,6 +919,9 @@ def main():
             'language': args.language,
             'title_type': args.title_type,
             'excluded_tags': args.excluded_tags,
+            'mirrors': getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS),
+            'output_folder': args.output_folder,
+            'max_retries': args.max_retries,
         }
         
         modified_config = interactive_config_menu(current_config)
@@ -926,6 +936,9 @@ def main():
         args.language = modified_config.get('language', args.language)
         args.title_type = modified_config.get('title_type', args.title_type)
         args.excluded_tags = modified_config.get('excluded_tags', args.excluded_tags)
+        args.mirrors = modified_config.get('mirrors', getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS))
+        args.output_folder = modified_config.get('output_folder', args.output_folder)
+        args.max_retries = modified_config.get('max_retries', args.max_retries)
         
         # Re-update config with modified values
         update_config(args)

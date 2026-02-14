@@ -132,6 +132,96 @@ def _reload_extensions():
     load_installed_extensions()
     return load_local_manifest()
 
+def get_extension_download_path(extension_name: str) -> str:
+    """
+    Get the appropriate download path for an extension.
+    
+    Priority:
+    1. If orchestrator has a custom extension_download_path (from CLI or config), use it
+    2. Else, use the extension's manifest image_download_path
+    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
+    
+    Args:
+        extension_name: Name of the extension (lowercase)
+        
+    Returns:
+        str: The download path for the extension
+    """
+    orchestrator.refresh_globals()
+    override_download_path = getattr(orchestrator, "extension_download_path", None)
+    
+    # If a custom path was set via CLI or config, use it
+    if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
+        return override_download_path
+    
+    # Get the extension's default from manifest
+    manifest = load_local_manifest()
+    for ext in manifest.get("extensions", []):
+        if ext.get("name") == extension_name.lower():
+            manifest_path = ext.get("image_download_path")
+            if manifest_path:
+                return manifest_path
+    
+    # Fall back to default
+    return DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+def get_extension_manifest_info(extension_name: str) -> dict | None:
+    """
+    Get manifest entry for an extension.
+    
+    Args:
+        extension_name: Name of the extension (lowercase)
+        
+    Returns:
+        dict: The extension's manifest entry, or None if not found
+    """
+    manifest = load_local_manifest()
+    for ext in manifest.get("extensions", []):
+        if ext.get("name") == extension_name.lower():
+            return ext
+    return None
+
+def calculate_extension_download_path(extension_name: str) -> str:
+    """
+    Calculate the DEDICATED_DOWNLOAD_PATH for an extension.
+    This helper function removes code duplication from skeleton and suwayomi extensions.
+    
+    Priority:
+    1. If orchestrator has a custom extension_download_path (not the default), use it
+    2. Else, use the extension's manifest image_download_path
+    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
+    
+    Args:
+        extension_name: Name of the extension (lowercase, e.g., "skeleton", "suwayomi")
+        
+    Returns:
+        str: The DEDICATED_DOWNLOAD_PATH for the extension
+        
+    Usage in extensions:
+        from mangascraper.extensions.extension_manager import calculate_extension_download_path
+        DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
+    """
+    from mangascraper.core.orchestrator import (
+        DEFAULT_EXTENSION_DOWNLOAD_PATH, extension_download_path
+    )
+    
+    orchestrator.refresh_globals()
+    override_download_path = getattr(orchestrator, "extension_download_path", None)
+    
+    # If a custom path was set via CLI or config (and it's not the default), use it
+    if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
+        return override_download_path
+    
+    # Get the extension's default from manifest
+    ext_info = get_extension_manifest_info(extension_name)
+    if ext_info:
+        manifest_path = ext_info.get("image_download_path")
+        if manifest_path:
+            return manifest_path
+    
+    # Fall back to default
+    return DEFAULT_EXTENSION_DOWNLOAD_PATH
+
 # ------------------------------------------------------------
 # Sparse clone repo
 # ------------------------------------------------------------

@@ -7,9 +7,11 @@ Handles pre-fetching metadata, displaying summaries, and allowing users to filte
 
 import sys, os, shutil, json, re
 from collections import deque
-from mangascraper.core.orchestrator import logger, log_clarification, log
+from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals
 from mangascraper.core.api import fetch_all_metadata_for_galleries
-from mangascraper.core.cache import get_cache_key, load_cache
+from mangascraper.core.cache import get_cache_key, load_cache, clear_cache
+from mangascraper.extensions.extension_manager import get_extension_download_path
 
 ####################################################################################################
 # DISPLAY UTILITIES
@@ -189,9 +191,17 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         print("-" * 80)
         
         # Display galleries for this page
+        title_type = orchestrator.title_type  # Get current title type setting
         for page_idx, (gid, meta) in enumerate(page_items, 1):
             global_idx = start_idx + page_idx
-            title = meta.get("title", f"Gallery {gid}")[:57]
+            # Use appropriate title based on title_type setting
+            if title_type == "english":
+                title = meta.get("title_english") or meta.get("title", f"Gallery {gid}")
+            elif title_type == "japanese":
+                title = meta.get("title_japanese") or meta.get("title", f"Gallery {gid}")
+            else:  # pretty (default)
+                title = meta.get("title", f"Gallery {gid}")
+            title = title[:57]
             pages = meta.get("pages", 0)
             print(f"{global_idx:<4} {gid:<8} {title:<60} {pages:<6}")
         
@@ -385,9 +395,17 @@ def view_selected_galleries(selected_ids: list) -> list:
         print("-" * 80)
         
         # Display galleries for this page
+        title_type = orchestrator.title_type  # Get current title type setting
         for page_idx, (gid, meta) in enumerate(page_items, 1):
             global_idx = start_idx + page_idx
-            title = meta.get("title", f"Gallery {gid}")[:57]
+            # Use appropriate title based on title_type setting
+            if title_type == "english":
+                title = meta.get("title_english") or meta.get("title", f"Gallery {gid}")
+            elif title_type == "japanese":
+                title = meta.get("title_japanese") or meta.get("title", f"Gallery {gid}")
+            else:  # pretty (default)
+                title = meta.get("title", f"Gallery {gid}")
+            title = title[:57]
             pages = meta.get("pages", 0)
             print(f"{global_idx:<4} {gid:<8} {title:<60} {pages:<6}")
         
@@ -425,7 +443,7 @@ def view_selected_galleries(selected_ids: list) -> list:
             continue
         elif nav_choice == "r" or nav_choice == "remove":
             # Ask which galleries to remove
-            selection = input("Remove galleries by list index (e.g. 1,3-5), 'all' to remove all, or 0 to cancel: ").strip()
+            selection = input("Remove galleries by index (comma-separated list, e.g. 1,3-5, 'all' to remove all, or 0 to cancel): ").strip()
             indices = _parse_index_selection(selection, len(active_items))
             if indices is None:
                 logger.warning("Invalid selection. Use numbers like 1,3-5 or 'all'.")
@@ -747,22 +765,23 @@ def interactive_config_menu(current_config: dict) -> dict:
             "╚════════════════════════════════════════════════════════╝\n"
             "Current Settings:\n"
             f"  [1] Extension: {config.get('extension', DEFAULT_EXTENSION)}\n"
+            f"  [a] Mirrors: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}\n"
+            f"  [7] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
+            f"  [8] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
+            f"  [9] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
+            f"  [b] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}\n"
+            f"  [6] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
             f"  [2] Use Tor: {config.get('use_tor', DEFAULT_USE_TOR)}\n"
             f"  [3] Dry Run: {config.get('dry_run', DEFAULT_DRY_RUN)}\n"
             f"  [4] Gallery Threads: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}\n"
             f"  [5] Image Threads: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}\n"
-            f"  [6] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
-            f"  [7] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
-            f"  [8] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
-            f"  [9] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
-            f"  [a] Mirrors: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}\n"
-            f"  [b] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}\n"
-            f"  [c] Max Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
+            f"  [c] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
             "\nOptions:\n"
+            "  [r] Clear cache\n"
             "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9,a-c]: ").strip().lower()
+        choice = input("Enter choice [0-9,a-c,r]: ").strip().lower()
         
         if choice == "0":
             break
@@ -770,7 +789,12 @@ def interactive_config_menu(current_config: dict) -> dict:
             extensions = _get_extension_choices()
             if extensions:
                 log_clarification()
-                print("Available extensions:\n")
+                print(
+                    "╔════════════════════════════════════════════════════════╗\n"
+                    "║        Interactive Configuration Menu                  ║\n"
+                    "╚════════════════════════════════════════════════════════╝\n"
+                    "Available extensions:\n"
+                )
                 for idx, ext in enumerate(extensions, 1):
                     source = ext.get("_source", "unknown")
                     version = ext.get("version", "?")
@@ -786,6 +810,14 @@ def interactive_config_menu(current_config: dict) -> dict:
                             config['extension'] = ext
                     elif 1 <= selection <= len(extensions):
                         config['extension'] = extensions[selection - 1].get("name")
+                        # Update extension and get its default output folder
+                        update_env('EXTENSION', config['extension'])
+                        refresh_globals()
+                        # Update output folder to the extension's default
+                        ext_download_path = get_extension_download_path(config['extension'])
+                        config['output_folder'] = ext_download_path
+                        logger.info(f"Extension updated to {config['extension']}.")
+                        logger.info(f"Output Folder set to: {ext_download_path}")
                     else:
                         logger.warning("Invalid selection")
                 else:
@@ -794,6 +826,14 @@ def interactive_config_menu(current_config: dict) -> dict:
                 ext = input(f"Enter extension (current: {config.get('extension', DEFAULT_EXTENSION)}): ").strip()
                 if ext:
                     config['extension'] = ext
+                    # Update extension and get its default output folder
+                    update_env('EXTENSION', config['extension'])
+                    refresh_globals()
+                    # Update output folder to the extension's default
+                    ext_download_path = get_extension_download_path(config['extension'])
+                    config['output_folder'] = ext_download_path
+                    logger.info(f"Extension updated to {config['extension']}.")
+                    logger.info(f"Output Folder set to: {ext_download_path}")
         elif choice == "2":
             val = input(f"Use Tor? (y/n, current: {config.get('use_tor', DEFAULT_USE_TOR)}): ").strip().lower()
             if val in ('y', 'n'):
@@ -822,7 +862,12 @@ def interactive_config_menu(current_config: dict) -> dict:
                 logger.warning("Invalid number")
         elif choice == "6":
             log_clarification()
-            print("Output formats:\n  [1] directory\n  [2] zip\n  [3] cbz")
+            print(
+                "╔════════════════════════════════════════════════════════╗\n"
+                "║        Interactive Configuration Menu                  ║\n"
+                "╚════════════════════════════════════════════════════════╝\n"
+                "Output formats:\n  [1] directory\n  [2] zip\n  [3] cbz"
+            )
             fmt_choice = input(f"Select format (current: {config.get('format', DEFAULT_GALLERY_FORMAT)}): ").strip()
             fmt_map = {"1": "directory", "2": "zip", "3": "cbz"}
             if fmt_choice in fmt_map:
@@ -863,8 +908,15 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be 0 or greater")
             except ValueError:
                 logger.warning("Invalid number")
+        elif choice == "r":
+            confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
+            if confirm == 'y':
+                clear_cache()
+                logger.info("Cache cleared successfully.")
+            else:
+                logger.info("Cache clear cancelled.")
         else:
-            logger.warning("Invalid choice. Enter 0-9 or a-c.")
+            logger.warning("Invalid choice. Enter 0-9, a-c, or r.")
         
         log_clarification()
     
@@ -960,20 +1012,23 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     while True:
         clear_screen()
         print(
+            "╔════════════════════════════════════════════════════════╗\n"
+            "║        Interactive Configuration Menu                  ║\n"
+            "╚════════════════════════════════════════════════════════╝\n"
             "Search Options:\n"
-            "  [1] View recent searches\n"
-            "  [2] Homepage\n"
-            "  [3] Browse by ID range\n"
-            "  [4] Explicit gallery IDs\n"
-            "  [5] General search\n"
-            "  [6] Search by artist\n"
-            "  [7] Search by group\n"
-            "  [8] Search by tag\n"
-            "  [9] Search by character\n"
-            "  [q] Search by parody\n"
-            "  [w] Archive\n"
+            "  [1] Homepage\n"
+            "  [2] Browse by ID range\n"
+            "  [3] Explicit gallery IDs\n"
+            "  [4] General search\n"
+            "  [5] Search by artist\n"
+            "  [6] Search by group\n"
+            "  [7] Search by tag\n"
+            "  [8] Search by character\n"
+            "  [9] Search by parody\n"
+            "  [q] Archive\n"
             "\n"
             "Options:\n"
+            "  [w] View recent searches\n"
             "  [e] View selected galleries\n"
             "  [r] Return to configuration menu\n"
             "  [0] Proceed with selected galleries\n"
@@ -1035,8 +1090,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             logger.info("Configuration updated.")
             continue
         
-        elif choice == "1":
-            # View recent searches
+        elif choice == "2":
+            # Homepage
             if search_history:
                 log_clarification()
                 print("Recent searches (most recent first):\n")
@@ -1122,7 +1177,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
 
         elif choice == "3":
-            # Browse by ID range
+            # Explicit gallery IDs
             try:
                 range_input = input(f"Enter ID range (start end): ").strip()
                 if range_input:
@@ -1136,7 +1191,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 logger.warning("Invalid format. Use: start end")
         
         elif choice == "4":
-            # Explicit gallery IDs
+            # General search
             ids_input = input("Enter gallery IDs (comma-separated): ").strip()
             if ids_input:
                 ids = []
@@ -1206,7 +1261,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
 
         elif choice == "w":
-            # Archive
+            # View recent searches
             archive_homepage = input("Archive homepage instead of a query? (y/n): ").strip().lower() == "y"
             if archive_homepage:
                 homepage_sorts = ["date", "popular-today", "popular-week", "popular"]
@@ -1342,4 +1397,3 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         log_clarification()
     
     return list(dict.fromkeys(selected_ids))  # Return unique gallery IDs, preserving insertion order
-

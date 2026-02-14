@@ -9,6 +9,9 @@ import json
 import time
 from pathlib import Path
 
+# Cache TTL: 3 hours
+TTL = 3 * 60 * 60
+
 
 def get_cache_dir() -> Path:
     """
@@ -59,8 +62,8 @@ def load_cache(cache_key: str) -> dict:
         try:
             with open(cache_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Check if cache is fresh (within 7 days)
-                if time.time() - data.get('timestamp', 0) < 7 * 24 * 3600:
+                # Check if cache is fresh (within TTL)
+                if time.time() - data.get('timestamp', 0) < TTL:
                     return data.get('metadata', {})
         except Exception as e:
             pass  # Silently fail, return empty dict
