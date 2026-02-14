@@ -88,7 +88,7 @@ def parse_args():
         "--extension",
         dest="extension",
         type=str,
-        default=DEFAULT_EXTENSION,
+        default=None,
         help="Extension to use",
     )
     
@@ -97,8 +97,14 @@ def parse_args():
         "--mirrors",
         dest="mirrors",
         type=str,
-        default=DEFAULT_NHENTAI_MIRRORS,
+        default=None,
         help="Comma-separated list of NHentai mirror URLs",
+    )
+    source_group.add_argument(
+        "--disable-ssl-verify",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Disable SSL certificate verification for downloads (use only if mirrors have expired certs)",
     )
     
     # Gallery selection
@@ -299,12 +305,6 @@ def parse_args():
         action="store_true",
         default=argparse.SUPPRESS,
         help="Simulate downloads without saving files",
-    )
-    runtime_group.add_argument(
-        "--disable-ssl-verify",
-        action="store_true",
-        default=not DEFAULT_VERIFY_SSL,
-        help="Disable SSL certificate verification for downloads (use only if mirrors have expired certs)",
     )
     interactive_mode_group.add_argument(
         "--unattended",
@@ -796,7 +796,7 @@ def update_config(args):
         update_env("EXTENSION", args.extension)
     
     # Handle mirrors (from CLI or interactive menu)
-    if hasattr(args, 'mirrors') and args.mirrors:
+    if args.mirrors is not None:
         update_env("NHENTAI_MIRRORS", args.mirrors)
 
     # Handle output folder (from CLI or interactive menu)
@@ -847,7 +847,7 @@ def update_config(args):
         update_env("DEBUG", args.debug)
     
     # SSL verification: --disable-ssl-verify flag sets VERIFY_SSL to False
-    if args.disable_ssl_verify:
+    if hasattr(args, 'disable_ssl_verify'):
         update_env("VERIFY_SSL", False)
     
     orchestrator.refresh_globals()
@@ -957,27 +957,47 @@ def main():
             'output_folder': orchestrator.download_path,
             'max_retries': orchestrator.max_retries,
             'calm': orchestrator.calm,
+            'verify_ssl': orchestrator.verify_ssl,
+            'use_daemon_threads': orchestrator.use_daemon_threads,
         }
         
         modified_config = interactive_config_menu(current_config)
         
-        # Update args with modified config (use getattr with orchestrator defaults for suppressed flags)
-        args.extension = modified_config.get('extension', getattr(args, 'extension', orchestrator.extension))
-        args.use_tor = modified_config.get('use_tor', getattr(args, 'use_tor', orchestrator.use_tor))
-        args.dry_run = modified_config.get('dry_run', getattr(args, 'dry_run', orchestrator.dry_run))
-        args.threads_galleries = modified_config.get('threads_galleries', getattr(args, 'threads_galleries', orchestrator.threads_galleries))
-        args.threads_images = modified_config.get('threads_images', getattr(args, 'threads_images', orchestrator.threads_images))
-        args.format = modified_config.get('format', getattr(args, 'format', orchestrator.gallery_format))
-        args.language = modified_config.get('language', getattr(args, 'language', ','.join(orchestrator.language) if isinstance(orchestrator.language, list) else orchestrator.language))
-        args.title_type = modified_config.get('title_type', getattr(args, 'title_type', orchestrator.title_type))
-        args.excluded_tags = modified_config.get('excluded_tags', getattr(args, 'excluded_tags', ','.join(orchestrator.excluded_tags) if isinstance(orchestrator.excluded_tags, list) else orchestrator.excluded_tags))
-        args.mirrors = modified_config.get('mirrors', getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS))
-        args.output_folder = modified_config.get('output_folder', args.output_folder)
-        args.max_retries = modified_config.get('max_retries', getattr(args, 'max_retries', orchestrator.max_retries))
-        args.calm = modified_config.get('calm', getattr(args, 'calm', orchestrator.calm))
+        # Only update .env for values that actually changed in the interactive menu
+        # This prevents overwriting .env with unchanged values
+        if modified_config.get('extension') != current_config.get('extension'):
+            update_env('EXTENSION', modified_config['extension'])
+        if modified_config.get('mirrors') != current_config.get('mirrors'):
+            update_env('NHENTAI_MIRRORS', modified_config['mirrors'])
+        if modified_config.get('verify_ssl') != current_config.get('verify_ssl'):
+            update_env('VERIFY_SSL', modified_config['verify_ssl'])
+        if modified_config.get('language') != current_config.get('language'):
+            update_env('LANGUAGE', modified_config['language'])
+        if modified_config.get('title_type') != current_config.get('title_type'):
+            update_env('TITLE_TYPE', modified_config['title_type'])
+        if modified_config.get('excluded_tags') != current_config.get('excluded_tags'):
+            update_env('EXCLUDED_TAGS', modified_config['excluded_tags'])
+        if modified_config.get('output_folder') != current_config.get('output_folder'):
+            update_env('DOWNLOAD_PATH', modified_config['output_folder'])
+            update_env('EXTENSION_DOWNLOAD_PATH', modified_config['output_folder'])
+        if modified_config.get('format') != current_config.get('format'):
+            update_env('GALLERY_FORMAT', modified_config['format'])
+        if modified_config.get('use_tor') != current_config.get('use_tor'):
+            update_env('USE_TOR', modified_config['use_tor'])
+        if modified_config.get('dry_run') != current_config.get('dry_run'):
+            update_env('DRY_RUN', modified_config['dry_run'])
+        if modified_config.get('threads_galleries') != current_config.get('threads_galleries'):
+            update_env('THREADS_GALLERIES', modified_config['threads_galleries'])
+        if modified_config.get('threads_images') != current_config.get('threads_images'):
+            update_env('THREADS_IMAGES', modified_config['threads_images'])
+        if modified_config.get('use_daemon_threads') != current_config.get('use_daemon_threads'):
+            update_env('USE_DAEMON_THREADS', modified_config['use_daemon_threads'])
+        if modified_config.get('max_retries') != current_config.get('max_retries'):
+            update_env('MAX_RETRIES', modified_config['max_retries'])
+        if modified_config.get('calm') != current_config.get('calm'):
+            update_env('CALM', modified_config['calm'])
         
-        # Re-update config with modified values
-        update_config(args)
+        orchestrator.refresh_globals()
         
         # Seed interactive selections from CLI gallery flags if provided
         gallery_args = [
