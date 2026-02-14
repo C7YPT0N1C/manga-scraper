@@ -308,10 +308,20 @@ def view_selected_galleries(selected_ids: list) -> list:
         logger.info("No galleries selected yet.")
         return []
     
-    # Get unique IDs
-    unique_ids = list(dict.fromkeys(selected_ids))
+    # Ask if user wants to fetch metadata
+    log_clarification()
+    show_metadata = input("Display metadata for selected galleries? (y/n): ").strip().lower() == "y"
     
+    unique_ids = list(dict.fromkeys(selected_ids))
     logger.info(f"Currently selected: {len(unique_ids)} unique galleries")
+    
+    if not show_metadata:
+        # Just show the IDs without metadata
+        log_clarification()
+        print(f"Selected {len(unique_ids)} galleries (ID view):")
+        for idx, gid in enumerate(unique_ids, 1):
+            print(f"  {idx}. ID: {gid}")
+        return unique_ids
     
     # Fetch metadata
     metadata = fetch_all_metadata_for_galleries(unique_ids)
@@ -784,15 +794,15 @@ def interactive_config_menu(current_config: dict) -> dict:
             f"  [q] Dry Run: {config.get('dry_run', DEFAULT_DRY_RUN)}\n"
             f"  [w] Gallery Threads: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}\n"
             f"  [e] Image Threads: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}\n"
-            f"  [a] Allow Background Processing: {config.get('use_daemon_threads', DEFAULT_USE_DAEMON_THREADS)}\n"
-            f"  [s] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
-            f"  [d] Reduce Logs: {config.get('calm', DEFAULT_CALM)}\n"
+            f"  [r] Allow Background Processing: {config.get('use_daemon_threads', DEFAULT_USE_DAEMON_THREADS)}\n"
+            f"  [t] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
             "\nOptions:\n"
-            "  [r] Clear cache\n"
+            f"  [y] Reduce Logs: {config.get('calm', DEFAULT_CALM)}\n"
+            "  [a] Clear cache\n"
             "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9,q,w,e,a,s,d,r]: ").strip().lower()
+        choice = input("Enter choice [0-9,q,w,e,r,t,y,a]: ").strip().lower()
         
         if choice == "0":
             break
@@ -916,13 +926,13 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be greater than 0")
             except ValueError:
                 logger.warning("Invalid number")
-        elif choice == "a":
+        elif choice == "r":
             val = input(f"Allow Background Processing? (y/n, current: {config.get('use_daemon_threads', DEFAULT_USE_DAEMON_THREADS)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['use_daemon_threads'] = val == 'y'
             else:
                 logger.warning("Invalid input")
-        elif choice == "s":
+        elif choice == "t":
             try:
                 val = int(input(f"Max retries (current: {config.get('max_retries', DEFAULT_MAX_RETRIES)}): ").strip())
                 if val >= 0:
@@ -931,13 +941,13 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be 0 or greater")
             except ValueError:
                 logger.warning("Invalid number")
-        elif choice == "d":
+        elif choice == "y":
             val = input(f"Reduce Logs? (y/n, current: {config.get('calm', DEFAULT_CALM)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['calm'] = val == 'y'
             else:
                 logger.warning("Invalid input")
-        elif choice == "r":
+        elif choice == "a":
             confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
             if confirm == 'y':
                 clear_cache()
@@ -945,7 +955,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             else:
                 logger.info("Cache clear cancelled.")
         else:
-            logger.warning("Invalid choice. Enter 0-9, q, w, e, a, s, d, or r.")
+            logger.warning("Invalid choice. Enter 0-9, q, w, e, r, t, y, or a.")
         
         log_clarification()
     
@@ -1087,7 +1097,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
                 DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
                 DEFAULT_NHENTAI_MIRRORS, DEFAULT_DOWNLOAD_PATH, DEFAULT_MAX_RETRIES,
-                DEFAULT_CALM, config, update_env, refresh_globals
+                DEFAULT_CALM, DEFAULT_VERIFY_SSL, DEFAULT_USE_DAEMON_THREADS,
+                config, update_env, refresh_globals
             )
             from mangascraper.interactive import interactive_config_menu
             
@@ -1105,6 +1116,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 'output_folder': config.get('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH),
                 'max_retries': config.get('MAX_RETRIES', DEFAULT_MAX_RETRIES),
                 'calm': config.get('CALM', DEFAULT_CALM),
+                'verify_ssl': config.get('VERIFY_SSL', DEFAULT_VERIFY_SSL),
+                'use_daemon_threads': config.get('USE_DAEMON_THREADS', DEFAULT_USE_DAEMON_THREADS),
             }
             
             modified_config = interactive_config_menu(current_config)
@@ -1123,6 +1136,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             update_env('DOWNLOAD_PATH', modified_config.get('output_folder'))
             update_env('MAX_RETRIES', modified_config.get('max_retries'))
             update_env('CALM', modified_config.get('calm'))
+            update_env('VERIFY_SSL', modified_config.get('verify_ssl'))
+            update_env('USE_DAEMON_THREADS', modified_config.get('use_daemon_threads'))
             refresh_globals()
             
             logger.info("Configuration updated.")
@@ -1465,6 +1480,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         elif choice == "e":
             # View selected galleries
             selected_ids = view_selected_galleries(selected_ids)
+            continue
         
         else:
             logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
