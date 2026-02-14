@@ -981,15 +981,19 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
                         continue
                 
                 # Extract relevant fields
+                artists = get_meta_tags("api", meta, "artist")
+                groups = get_meta_tags("api", meta, "group")
+                languages = get_meta_tags("api", meta, "language")
+                
                 metadata[gallery_id] = {
                     "id": gallery_id,
                     "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
-                    "artists": get_meta_tags("api", meta, "artist"),
-                    "groups": get_meta_tags("api", meta, "group"),
+                    "artists": artists or ["Unknown Artist"],
+                    "groups": groups or ["Unknown Group"],
                     "tags": get_meta_tags("api", meta, "tag"),
                     "characters": get_meta_tags("api", meta, "character"),
                     "parodies": get_meta_tags("api", meta, "parody"),
-                    "languages": get_meta_tags("api", meta, "language"),
+                    "languages": languages or ["Unknown Language"],
                     "pages": len(meta.get("images", {}).get("pages", [])),
                 }
             else:
