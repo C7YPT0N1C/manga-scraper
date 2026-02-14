@@ -162,8 +162,8 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         
         # Display header
         print(f"Found {len(metadata_items)} galleries (Page {current_page + 1}/{total_pages}):\n")
-        print(f"{'#':<4} {'ID':<8} {'Title':<60} {'Pages':<6}")
-        print("-" * 80)
+        print(f"{'#':<4} {'ID':<7} {'Title':<55} {'Pages':<5}")
+        print("-" * 75)
         
         # Display galleries for this page
         title_type = orchestrator.title_type  # Get current title type setting
@@ -176,9 +176,9 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
                 title = meta.get("title_japanese") or meta.get("title", f"Gallery {gid}")
             else:  # pretty (default)
                 title = meta.get("title", f"Gallery {gid}")
-            title = title[:57]
+            title = title[:52]
             pages = meta.get("pages", 0)
-            print(f"{global_idx:<4} {gid:<8} {title:<60} {pages:<6}")
+            print(f"{global_idx:<4} {gid:<7} {title:<55} {pages:<5}")
         
         print()
         
@@ -397,8 +397,8 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         
         # Display header
         print(f"Selected Galleries ({len(active_items)} total, Page {current_page + 1}/{total_pages}):\n")
-        print(f"{'#':<4} {'ID':<8} {'Title':<60} {'Pages':<6}")
-        print("-" * 80)
+        print(f"{'#':<4} {'ID':<7} {'Title':<55} {'Pages':<5}")
+        print("-" * 75)
         
         # Display galleries for this page
         title_type = orchestrator.title_type  # Get current title type setting
@@ -411,9 +411,9 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
                 title = meta.get("title_japanese") or meta.get("title", f"Gallery {gid}")
             else:  # pretty (default)
                 title = meta.get("title", f"Gallery {gid}")
-            title = title[:57]
+            title = title[:52]
             pages = meta.get("pages", 0)
-            print(f"{global_idx:<4} {gid:<8} {title:<60} {pages:<6}")
+            print(f"{global_idx:<4} {gid:<7} {title:<55} {pages:<5}")
         
         print()
         
@@ -1175,9 +1175,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "1":
             # Homepage
-            homepage_sorts = ["date", "popular-today", "popular-week", "popular"]
-            print("Homepage sort options: " + ", ".join(homepage_sorts))
-            sort_val = input("Enter sort (default: date): ").strip() or DEFAULT_PAGE_SORT
+            sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
             sort_val = get_valid_sort_value(sort_val)
             start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
             start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
@@ -1247,36 +1245,57 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         elif choice == "2":
             # Browse by ID range
             try:
-                start_input = input(f"Enter start ID: ").strip()
-                if not start_input.isdigit():
-                    logger.warning("Invalid start ID. Please enter a number.")
-                    continue
-                
-                start_id = int(start_input)
+                while True:
+                    start_input = input(f"Enter start ID (numbers only): ").strip()
+                    if not start_input:
+                        logger.warning("Start ID cannot be empty.")
+                        continue
+                    if not start_input.isdigit():
+                        logger.warning(f"Invalid input '{start_input}'. Please enter only numbers (0-9).")
+                        continue
+                    
+                    start_id = int(start_input)
+                    break
                 
                 # Fetch latest ID if user doesn't specify end ID
                 logger.info("Fetching latest gallery ID from nhentai...")
                 latest_id = get_latest_gallery_id()
-                if latest_id is None:
-                    logger.warning("Could not fetch latest ID. Please enter end ID manually.")
-                    default_end = f"(manual entry required)"
-                    end_input = input(f"Enter end ID {default_end}: ").strip()
-                    if not end_input.isdigit():
-                        logger.warning("Invalid end ID. Skipping.")
-                        continue
-                    end_id = int(end_input)
-                else:
-                    end_input = input(f"Enter end ID (default: {latest_id}): ").strip()
-                    end_id = int(end_input) if end_input.isdigit() else latest_id
+                
+                while True:
+                    if latest_id is None:
+                        default_text = "(manual entry required)"
+                        end_input = input(f"Enter end ID {default_text}: ").strip()
+                        if not end_input:
+                            logger.warning("End ID cannot be empty.")
+                            continue
+                        if not end_input.isdigit():
+                            logger.warning(f"Invalid input '{end_input}'. Please enter only numbers (0-9).")
+                            continue
+                        end_id = int(end_input)
+                    else:
+                        end_input = input(f"Enter end ID (default: {latest_id}): ").strip()
+                        if not end_input:
+                            end_id = latest_id
+                        elif not end_input.isdigit():
+                            logger.warning(f"Invalid input '{end_input}'. Using default {latest_id}.")
+                            end_id = latest_id
+                        else:
+                            end_id = int(end_input)
+                    break
+                
+                if start_id > end_id:
+                    logger.warning(f"Start ID ({start_id}) is greater than end ID ({end_id}). Swapping...")
+                    start_id, end_id = end_id, start_id
                 
                 ids = list(range(start_id, end_id + 1))
+                logger.info(f"Fetching {len(ids)} galleries (IDs {start_id} to {end_id})...")
                 new_ids, new_metadata = display_gallery_results(ids)
                 if new_ids:
                     selected_ids.extend(new_ids)
                     selected_metadata.update(new_metadata)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-            except ValueError:
-                logger.warning("Invalid format. Please enter valid numbers for start and end IDs.")
+            except ValueError as e:
+                logger.warning(f"Error processing ID range: {e}")
         
         elif choice == "3":
             # Explicit gallery IDs
