@@ -104,7 +104,16 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         return []
     
     # Convert to sorted list for pagination (highest ID first)
-    metadata_items = sorted(metadata.items(), key=lambda x: x[0], reverse=True)
+    normalized_items = []
+    for gid, meta in metadata.items():
+        try:
+            gid_int = int(gid)
+        except (TypeError, ValueError):
+            logger.warning(f"Skipping gallery with invalid ID: {gid}")
+            continue
+        normalized_items.append((gid_int, meta))
+
+    metadata_items = sorted(normalized_items, key=lambda x: x[0], reverse=True)
     
     # Get terminal size and calculate rows per page
     terminal_size = shutil.get_terminal_size(fallback=(80, 24))
@@ -674,7 +683,7 @@ def interactive_gallery_search(initial_ids: list | None = None):
     
     while True:
         print(
-            "Search Options (QWERTY layout):\n"
+            "Search Options:\n"
             "  [1] Browse by ID range\n"
             "  [2] Explicit gallery IDs\n"
             "  [3] Homepage\n"
