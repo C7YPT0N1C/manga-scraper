@@ -214,7 +214,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
                 nav_options.append("[p]revious")
             if current_page < total_pages - 1:
                 nav_options.append("[n]ext")
-            nav_options.extend(["[d]etails", "[a]dd/cancel"])
+            nav_options.extend(["[d]etails", "[s]elect galleries", "[q]uit"])
             
             print("Options: " + " | ".join(nav_options))
             nav_choice = input("Choice: ").strip().lower()
@@ -228,18 +228,29 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
             elif nav_choice == "d" or nav_choice == "details":
                 show_gallery_details(dict(metadata_items))
                 continue
-            elif nav_choice == "a" or nav_choice == "add":
+            elif nav_choice == "s" or nav_choice == "select":
                 break
-            elif nav_choice == "cancel":
+            elif nav_choice == "q" or nav_choice == "quit":
                 return []
             else:
-                logger.warning("Invalid choice. Use p/previous, n/next, d/details, or a/add/cancel.")
+                logger.warning("Invalid choice. Use p/previous, n/next, d/details, s/select, or q/quit.")
                 continue
         else:
-            # Single page - show detail and confirm options
-            if input("\nView detailed metadata? (y/n): ").strip().lower() == "y":
+            # Single page - show navigation options
+            print()
+            print("Options: [d]etails | [s]elect galleries | [q]uit")
+            nav_choice = input("Choice: ").strip().lower()
+            
+            if nav_choice == "d" or nav_choice == "details":
                 show_gallery_details(dict(metadata_items))
-            break
+                continue
+            elif nav_choice == "q" or nav_choice == "quit":
+                return []
+            elif nav_choice == "s" or nav_choice == "select":
+                break
+            else:
+                logger.warning("Invalid choice. Use d/details, s/select, or q/quit.")
+                continue
     
     # Ask if user wants to add to selection
     if input("\nAdd these galleries to selection? (y/n): ").strip().lower() == "y":
@@ -291,7 +302,6 @@ def show_gallery_details(metadata: dict):
             global_idx = start_idx + page_idx
             print(f"\n[{global_idx}] Gallery {gid}")
             print(f"  Title: {meta.get('title', f'Gallery {gid}')}")
-            print(f"  Pages: {meta.get('pages', 0)}")
             if meta.get("artists"):
                 print(f"  Artists: {', '.join(meta['artists'])}")
             if meta.get("groups"):
@@ -304,6 +314,7 @@ def show_gallery_details(metadata: dict):
                 print(f"  Parodies: {', '.join(meta['parodies'][:5])}" + (" ..." if len(meta['parodies']) > 5 else ""))
             if meta.get("languages"):
                 print(f"  Languages: {', '.join(meta['languages'])}")
+            print(f"  Pages: {meta.get('pages', 0)}")
         
         # Show pagination menu if needed
         if total_pages > 1:
@@ -766,19 +777,58 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [q] Search by parody\n"
             "  [w] Archive\n"
             "  [e] View selected galleries\n"
+            "  [r] Return to configuration menu\n"
             "  [0] Proceed with selected galleries\n"
             "\n"
             "Tip: Press Enter without input to cancel/go back during prompts\n"
         )
         
-        choice = input("Enter choice [1-9,q,w,e,0]: ").strip().lower()
+        choice = input("Enter choice [1-9,q,w,e,r,0]: ").strip().lower()
         
         if choice == "0":
             if selected_ids:
                 break
             else:
                 logger.warning("No galleries selected yet.")
-                continue
+        
+        elif choice == "r":
+            # Return to config menu
+            from mangascraper.core.orchestrator import (
+                DEFAULT_USE_TOR, DEFAULT_DRY_RUN, DEFAULT_THREADS_GALLERIES,
+                DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
+                DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
+                config, update_env, refresh_globals
+            )
+            from mangascraper.interactive import interactive_config_menu
+            
+            current_config = {
+                'extension': config.get('EXTENSION', DEFAULT_EXTENSION),
+                'use_tor': config.get('USE_TOR', DEFAULT_USE_TOR),
+                'dry_run': config.get('DRY_RUN', DEFAULT_DRY_RUN),
+                'threads_galleries': config.get('THREADS_GALLERIES', DEFAULT_THREADS_GALLERIES),
+                'threads_images': config.get('THREADS_IMAGES', DEFAULT_THREADS_IMAGES),
+                'format': config.get('GALLERY_FORMAT', DEFAULT_GALLERY_FORMAT),
+                'language': config.get('LANGUAGE', DEFAULT_LANGUAGE),
+                'title_type': config.get('TITLE_TYPE', DEFAULT_TITLE_TYPE),
+                'excluded_tags': config.get('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS),
+            }
+            
+            modified_config = interactive_config_menu(current_config)
+            
+            # Update orchestrator config
+            update_env('EXTENSION', modified_config.get('extension'))
+            update_env('USE_TOR', modified_config.get('use_tor'))
+            update_env('DRY_RUN', modified_config.get('dry_run'))
+            update_env('THREADS_GALLERIES', modified_config.get('threads_galleries'))
+            update_env('THREADS_IMAGES', modified_config.get('threads_images'))
+            update_env('GALLERY_FORMAT', modified_config.get('format'))
+            update_env('LANGUAGE', modified_config.get('language'))
+            update_env('TITLE_TYPE', modified_config.get('title_type'))
+            update_env('EXCLUDED_TAGS', modified_config.get('excluded_tags'))
+            refresh_globals()
+            
+            logger.info("Configuration updated.")
+            continue
         
         elif choice == "1":
             # View recent searches
@@ -838,7 +888,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     logger.info("Search cancelled.")
                     continue
             
-            fetch_all = input("Skip viewing results and fetch all pages? (y/n): ").strip().lower() == "y"
+            fetch_all = input("Skip viewing results and download all pages? (y/n): ").strip().lower() == "y"
             if fetch_all:
                 if not unattended:
                     log_clarification()
@@ -1033,7 +1083,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
                         end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
                         end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
-                        fetch_all = input("Skip viewing results and archive all pages? (y/n): ").strip().lower() == "y"
+                        fetch_all = input("Skip viewing results and download all pages? (y/n): ").strip().lower() == "y"
                         if fetch_all:
                             if not unattended:
                                 log_clarification()
