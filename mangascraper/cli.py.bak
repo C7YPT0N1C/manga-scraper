@@ -1,5 +1,0 @@
-# BACKUP OF cli.py - CREATED BEFORE PHASE 3C/3D INTEGRATION
-# This file was modified to remove --min-free-space/--check-space-before-download flags
-# Needs modification for: Interactive mode detection when no gallery flags provided
-# Created when: Space checking was refactored from per-flag to upfront total estimation
-# See: d:\Repositories\manga-scraper\mangascraper\cli.py for current version

@@ -930,6 +930,7 @@ def main():
             'mirrors': getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS),
             'output_folder': args.output_folder,
             'max_retries': args.max_retries,
+            'calm': args.calm,
         }
         
         modified_config = interactive_config_menu(current_config)
@@ -947,6 +948,7 @@ def main():
         args.mirrors = modified_config.get('mirrors', getattr(args, 'mirrors', DEFAULT_NHENTAI_MIRRORS))
         args.output_folder = modified_config.get('output_folder', args.output_folder)
         args.max_retries = modified_config.get('max_retries', args.max_retries)
+        args.calm = modified_config.get('calm', args.calm)
         
         # Re-update config with modified values
         update_config(args)

@@ -701,7 +701,7 @@ def interactive_config_menu(current_config: dict) -> dict:
         DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
         DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
         DEFAULT_NHENTAI_MIRRORS, DEFAULT_DOWNLOAD_PATH, DEFAULT_MAX_RETRIES,
-        DEFAULT_VERIFY_SSL, DEFAULT_USE_DAEMON_THREADS
+        DEFAULT_VERIFY_SSL, DEFAULT_USE_DAEMON_THREADS, DEFAULT_CALM
     )
     
     config = current_config.copy()
@@ -786,12 +786,13 @@ def interactive_config_menu(current_config: dict) -> dict:
             f"  [e] Image Threads: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}\n"
             f"  [a] Allow Background Processing: {config.get('use_daemon_threads', DEFAULT_USE_DAEMON_THREADS)}\n"
             f"  [s] Max Download Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
+            f"  [d] Reduce Logs: {config.get('calm', DEFAULT_CALM)}\n"
             "\nOptions:\n"
             "  [r] Clear cache\n"
             "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9,q,w,e,a,s,r]: ").strip().lower()
+        choice = input("Enter choice [0-9,q,w,e,a,s,d,r]: ").strip().lower()
         
         if choice == "0":
             break
@@ -930,6 +931,12 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be 0 or greater")
             except ValueError:
                 logger.warning("Invalid number")
+        elif choice == "d":
+            val = input(f"Reduce Logs? (y/n, current: {config.get('calm', DEFAULT_CALM)}): ").strip().lower()
+            if val in ('y', 'n'):
+                config['calm'] = val == 'y'
+            else:
+                logger.warning("Invalid input")
         elif choice == "r":
             confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
             if confirm == 'y':
@@ -938,7 +945,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             else:
                 logger.info("Cache clear cancelled.")
         else:
-            logger.warning("Invalid choice. Enter 0-9, q, w, e, a, s, or r.")
+            logger.warning("Invalid choice. Enter 0-9, q, w, e, a, s, d, or r.")
         
         log_clarification()
     
