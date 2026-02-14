@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, time, random, concurrent.futures, math, zipfile, shutil
+import os, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal
 
 from tqdm.contrib.concurrent import thread_map
 
@@ -10,7 +10,7 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core import database as db
 from mangascraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
-    fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title
+    fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
 )
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
 
@@ -22,6 +22,30 @@ active_extension = "skeleton"
 download_location = ""
 
 skipped_galleries = []
+
+# Space monitoring for progress display
+space_monitor = {
+    "total_estimated_bytes": 0,
+    "total_actual_bytes": 0,
+    "galleries_processed": 0,
+}
+
+def _format_bytes(bytes_val: int) -> str:
+    """Format bytes to human-readable size."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_val < 1024:
+            return f"{bytes_val:.2f} {unit}"
+        bytes_val /= 1024
+    return f"{bytes_val:.2f} PB"
+
+def get_available_disk_space(path: str) -> int:
+    """Get available disk space in bytes at the given path."""
+    try:
+        stat = os.statvfs(path)
+        return stat.f_bavail * stat.f_frsize
+    except Exception as e:
+        logger.warning(f"Failed to check disk space: {e}")
+        return -1  # Return -1 if we can't check
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -363,6 +387,10 @@ def process_galleries(batch_ids):
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 
+                # Estimate size for progress tracking
+                estimated_size, _, img_count = estimate_gallery_size(meta, use_head_requests=False)
+                space_monitor["total_estimated_bytes"] += estimated_size
+                
                 time.sleep(dynamic_sleep("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
@@ -443,6 +471,23 @@ def process_galleries(batch_ids):
                 if not orchestrator.dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     db.mark_gallery_completed(gallery_id)
+                    
+                    # Track actual size downloaded
+                    actual_bytes = 0
+                    try:
+                        if orchestrator.gallery_format != "directory":
+                            # Count archive size
+                            actual_bytes = os.path.getsize(finalised_path)
+                        else:
+                            # Sum all downloaded files
+                            for root, dirs, files in os.walk(primary_folder):
+                                for f in files:
+                                    actual_bytes += os.path.getsize(os.path.join(root, f))
+                    except Exception:
+                        actual_bytes = estimated_size  # Use estimate if we can't measure
+                    
+                    space_monitor["total_actual_bytes"] += actual_bytes
+                    space_monitor["galleries_processed"] += 1
 
                 log_clarification()
                 logger.info(f"Downloader: Completed Gallery: {gallery_id}")
@@ -457,6 +502,80 @@ def process_galleries(batch_ids):
 # MAIN
 ####################################################################################################
 
+def estimate_total_download_size(gallery_ids: list) -> tuple:
+    """
+    Estimate total download size for all galleries.
+    Returns (total_estimated_bytes, galleries_list_to_download).
+    
+    If insufficient space, prompts user to download as many as fit.
+    """
+    logger.info(f"Estimating download size for {len(gallery_ids)} galleries...")
+    
+    total_estimated = 0
+    gallery_sizes = []  # List of (gallery_id, estimated_bytes)
+    
+    # Estimate size for each gallery
+    for gallery_id in gallery_ids:
+        try:
+            meta = fetch_gallery_metadata(gallery_id)
+            if meta and isinstance(meta, dict):
+                estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
+                gallery_sizes.append((gallery_id, estimated_size))
+                total_estimated += estimated_size
+        except Exception as e:
+            logger.debug(f"Failed to estimate size for Gallery {gallery_id}: {e}")
+            # Use a default estimate if we can't fetch metadata
+            default_size = 1024 * 1024 * 16  # ~16 MB default
+            gallery_sizes.append((gallery_id, default_size))
+            total_estimated += default_size
+    
+    # Check available space
+    available = get_available_disk_space(download_location)
+    
+    log_clarification()
+    logger.info(f"Total download size estimate: {_format_bytes(total_estimated)}")
+    logger.info(f"Available disk space: {_format_bytes(available)}")
+    
+    # If sufficient space, return all galleries
+    if available < 0 or available >= total_estimated:
+        logger.info("Sufficient space available. Proceeding with download.")
+        return total_estimated, gallery_ids
+    
+    # Insufficient space - ask user if they want to download as many as fit
+    log_clarification()
+    logger.warning(
+        f"Insufficient space for all galleries!\n"
+        f"  Required: {_format_bytes(total_estimated)}\n"
+        f"  Available: {_format_bytes(available)}"
+    )
+    
+    # Calculate how many galleries can fit
+    running_total = 0
+    galleries_that_fit = []
+    
+    for gallery_id, size in gallery_sizes:
+        if running_total + size <= available:
+            galleries_that_fit.append(gallery_id)
+            running_total += size
+        else:
+            break
+    
+    log_clarification()
+    logger.info(
+        f"You can download {len(galleries_that_fit)} out of {len(gallery_ids)} galleries "
+        f"({_format_bytes(running_total)} total)"
+    )
+    
+    # Prompt user
+    user_input = input(f"\nDownload {len(galleries_that_fit)} galleries that fit? (y/n): ").strip().lower()
+    
+    if user_input == 'y':
+        logger.info(f"Proceeding with {len(galleries_that_fit)} galleries.")
+        return running_total, galleries_that_fit
+    else:
+        logger.info("Download cancelled by user.")
+        return 0, []
+
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
@@ -470,8 +589,15 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     )
     log_clarification()
 
+    # Create custom description with space info
+    def postfix_func():
+        """Generate postfix showing space usage."""
+        if space_monitor["galleries_processed"] > 0:
+            return f"Est: {_format_bytes(space_monitor['total_estimated_bytes'])}, Act: {_format_bytes(space_monitor['total_actual_bytes'])}"
+        return ""
+    
     # Each gallery is processed in parallel with its own thread
-    thread_map(
+    pbar = thread_map(
         lambda gid: process_galleries([gid]),
         batch_list,
         max_workers=orchestrator.threads_galleries,
@@ -501,6 +627,13 @@ def start_downloader(gallery_list=None):
     time_estimate(f"Run", gallery_list)
     
     load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
+    
+    # Estimate total download size and prompt if space insufficient
+    if not orchestrator.dry_run:
+        _, gallery_list = estimate_total_download_size(gallery_list)
+        if not gallery_list:
+            logger.warning("No galleries to download. Exiting.")
+            return
     
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
@@ -536,6 +669,17 @@ def start_downloader(gallery_list=None):
     hours, rem = divmod(runtime, 3600)
     minutes, seconds = divmod(rem, 60)
     human_runtime = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s" if hours else f"{int(minutes)}m {seconds:.2f}s" if minutes else f"{seconds:.2f}s"
+    
+    # Report space usage statistics
+    log_clarification()
+    if space_monitor["galleries_processed"] > 0:
+        logger.info(
+            f"Space Usage Summary:\n"
+            f"  Galleries processed: {space_monitor['galleries_processed']}\n"
+            f"  Total estimated: {_format_bytes(space_monitor['total_estimated_bytes'])}\n"
+            f"  Total actual: {_format_bytes(space_monitor['total_actual_bytes'])}\n"
+            f"  Average per gallery: {_format_bytes(space_monitor['total_actual_bytes'] // space_monitor['galleries_processed'])}"
+        )
     
     #update_skipped_galleries(True) # Report all skipped galleries at end
     log_clarification()

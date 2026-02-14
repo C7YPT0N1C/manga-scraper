@@ -6,14 +6,15 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.downloader import start_downloader
-from mangascraper.core.api import get_session, fetch_gallery_ids
+from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
+from mangascraper.core.cache import get_cache_key, load_cache
 from mangascraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
 
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
 EPILOG = """Examples:
     manga-scraper --homepage 1 3
-    manga-scraper --latest 1 5
+    manga-scraper --homepage recent 1 5
     manga-scraper --artist "some artist" popular 1 2
     manga-scraper --search "\"big breasts\" -yaoi" popular
     manga-scraper --output-folder /mnt/storage --ids "123456,654321" --output-format cbz
@@ -81,7 +82,6 @@ def parse_args():
     extension_group.add_argument("--install-extension", type=str, help="Install an extension by name")
     extension_group.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
     extension_group.add_argument(
-        "--ext",
         "--extension",
         dest="extension",
         type=str,
@@ -91,7 +91,6 @@ def parse_args():
     
     # NHentai mirror URLs
     source_group.add_argument(
-        "--mirror-urls",
         "--mirrors",
         dest="mirrors",
         type=str,
@@ -101,7 +100,13 @@ def parse_args():
     
     # Gallery selection
     source_group.add_argument(
-        "--input",
+        "--interactive",
+        action="store_true",
+        default=False,
+        help="Enter interactive mode to search/browse galleries and configure settings",
+    )
+    
+    source_group.add_argument(
         "--file",
         dest="file",
         type=str,
@@ -112,7 +117,6 @@ def parse_args():
     
     source_group.add_argument(
         "--id-range",
-        "--range",
         dest="range",
         nargs=2,
         type=int,
@@ -135,35 +139,6 @@ def parse_args():
             "Homepage selection: [SORT] [START] [END]. "
             "SORT: date|recent|popular_today|popular_week|popular|all_time."
         )
-    )
-
-    source_group.add_argument(
-        "--latest",
-        nargs="*",
-        metavar=("START", "END"),
-        default=None,
-        help="Homepage latest (recent). Optional START END or END only.",
-    )
-    source_group.add_argument(
-        "--popular",
-        nargs="*",
-        metavar=("START", "END"),
-        default=None,
-        help="Homepage popular (all time). Optional START END or END only.",
-    )
-    source_group.add_argument(
-        "--popular-today",
-        nargs="*",
-        metavar=("START", "END"),
-        default=None,
-        help="Homepage popular today. Optional START END or END only.",
-    )
-    source_group.add_argument(
-        "--popular-week",
-        nargs="*",
-        metavar=("START", "END"),
-        default=None,
-        help="Homepage popular this week. Optional START END or END only.",
     )
 
     # Allow multiple --artist, --group, etc. each with their own arguments
@@ -216,12 +191,7 @@ def parse_args():
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Like --search, but downloads every gallery in the results.",
-    )
-    source_group.add_argument(
-        "--archive-all",
-        action="store_true",
-        help="Archive everything from NHentai (all homepage pages).",
+        help="Archive results. Use: --archive QUERY [SORT] [START] [END] [ARCHIVE] or --archive all",
     )
 
     # Filters
@@ -254,7 +224,6 @@ def parse_args():
     )
     output_group.add_argument(
         "--output-format",
-        "--format",
         dest="format",
         type=str,
         default=DEFAULT_GALLERY_FORMAT,
@@ -296,6 +265,13 @@ def parse_args():
         help="Maximum sleep before starting a new download",
     )
     
+    runtime_group.add_argument(
+        "--show-summary",
+        action="store_true",
+        default=False,
+        help="Fetch metadata and show gallery summary with size estimate before downloading",
+    )
+    
     # Download / runtime options
     runtime_group.add_argument(
         "--use-tor",
@@ -330,14 +306,7 @@ def parse_args():
     return parser.parse_args()
 
 
-_DEPRECATED_FLAGS = {
-    "--file": "--input",
-    "--range": "--id-range",
-    "--galleries": "--ids",
-    "--format": "--output-format",
-    "--mirrors": "--mirror-urls",
-    "--extension": "--ext",
-}
+_DEPRECATED_FLAGS = {}
 
 
 def _warn_deprecated_flags(argv: list[str]):
@@ -354,47 +323,6 @@ def _parse_positive_int(value: str, label: str) -> int:
     if parsed <= 0:
         raise ValueError(f"{label} must be greater than zero.")
     return parsed
-
-
-def _parse_optional_page_range(values: list[str] | None, label: str) -> list[int] | None:
-    if values is None:
-        return None
-    if len(values) == 0:
-        start_page = DEFAULT_PAGE_RANGE_START
-        end_page = DEFAULT_PAGE_RANGE_END
-    elif len(values) == 1:
-        start_page = DEFAULT_PAGE_RANGE_START
-        end_page = _parse_positive_int(values[0], f"{label} END")
-    elif len(values) == 2:
-        start_page = _parse_positive_int(values[0], f"{label} START")
-        end_page = _parse_positive_int(values[1], f"{label} END")
-    else:
-        raise ValueError(f"{label} accepts at most 2 values (START END).")
-
-    if start_page > end_page:
-        raise ValueError(f"{label} START must be <= END.")
-    return [start_page, end_page]
-
-
-def _apply_homepage_shortcuts(args):
-    shortcuts = {
-        "--latest": ("recent", args.latest),
-        "--popular": ("popular", args.popular),
-        "--popular-today": ("popular_today", args.popular_today),
-        "--popular-week": ("popular_week", args.popular_week),
-    }
-
-    used = [(flag, sort, values) for flag, (sort, values) in shortcuts.items() if values is not None]
-    if args.homepage and used:
-        raise ValueError("Use only one homepage selector: --homepage or a shortcut flag.")
-    if len(used) > 1:
-        flags = ", ".join(flag for flag, _, _ in used)
-        raise ValueError(f"Use only one homepage shortcut flag. Provided: {flags}.")
-
-    if used:
-        flag, sort, values = used[0]
-        page_range = _parse_optional_page_range(values, flag)
-        args.homepage = [sort] + page_range
 
 
 def _validate_args(args):
@@ -434,6 +362,128 @@ def _parse_galleries_arg(galleries_value: str) -> list[int]:
     if invalid:
         print(f"[WARN] Ignoring invalid gallery IDs: {', '.join(invalid)}", file=sys.stderr)
     return ids
+
+####################################################################################################
+# CLI Helper Functions
+####################################################################################################
+
+def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> list[int]:
+    """
+    Fetch gallery IDs with error handling and fallback to cached results.
+    """
+    cache_key = get_cache_key(query_type, query_value) if query_value else None
+    max_retries = 2
+    attempt = 0
+    
+    while attempt < max_retries:
+        try:
+            ids = fetch_gallery_ids(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival)
+            return ids or []
+        except Exception as e:
+            attempt += 1
+            logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
+            
+            if attempt < max_retries:
+                logger.info("Retrying...")
+                time.sleep(2)
+                continue
+            
+            # Try to fallback to cached results
+            if cache_key:
+                try:
+                    logger.info("Attempting to use cached results...")
+                    cached_metadata = load_cache(cache_key)
+                    if cached_metadata:
+                        cached_ids = list(cached_metadata.keys())
+                        logger.warning(f"Using {len(cached_ids)} galleries from cache")
+                        return cached_ids
+                except:
+                    pass
+            
+            logger.warning(f"Failed to fetch galleries for {query_type}={query_value}. Skipping.")
+            return []
+
+def estimate_download_size(metadata: dict) -> tuple[int, str]:
+    """
+    Estimate total download size in bytes from metadata.
+    Returns: (total_bytes, human_readable_string)
+    """
+    if not metadata:
+        return 0, "0 B"
+    
+    total_bytes = 0
+    avg_bytes_per_page = 150000  # ~150KB per page average estimate
+    
+    for gid, meta in metadata.items():
+        pages = meta.get("pages", 0)
+        total_bytes += pages * avg_bytes_per_page
+    
+    # Convert to human readable
+    for unit in ["B", "KB", "MB", "GB"]:
+        if total_bytes < 1024:
+            return total_bytes, f"{total_bytes:.0f} {unit}"
+        total_bytes /= 1024
+    
+    return total_bytes, f"{total_bytes:.2f} TB"
+
+def display_download_summary(gallery_ids: list, show_summary: bool = False, cache_key: str | None = None) -> bool:
+    """
+    Display gallery summary with size estimate and get confirmation.
+    Returns True if user wants to proceed, False otherwise.
+    """
+    if not show_summary:
+        return True
+    
+    if not gallery_ids:
+        logger.warning("No galleries to display summary for.")
+        return False
+    
+    log_clarification()
+    logger.info(f"Fetching metadata for {len(gallery_ids)} galleries (this may take a moment)...")
+    
+    # Fetch metadata
+    metadata = fetch_all_metadata_for_galleries(gallery_ids, cache_key=cache_key)
+    
+    if not metadata:
+        logger.warning("Could not fetch metadata. Proceed without summary? (y/n): ", end="")
+        return input().strip().lower() == "y"
+    
+    # Calculate summary statistics
+    all_artists = set()
+    all_groups = set()
+    all_tags = set()
+    all_languages = set()
+    pages_list = []
+    
+    for gid, meta in metadata.items():
+        all_artists.update(meta.get("artists", []))
+        all_groups.update(meta.get("groups", []))
+        all_tags.update(meta.get("tags", []))
+        all_languages.update(meta.get("languages", []))
+        pages_list.append(meta.get("pages", 0))
+    
+    total_size_bytes, size_str = estimate_download_size(metadata)
+    min_pages = min(pages_list) if pages_list else 0
+    max_pages = max(pages_list) if pages_list else 0
+    avg_pages = sum(pages_list) / len(pages_list) if pages_list else 0
+    
+    # Display summary
+    log_clarification()
+    print(
+        f"Gallery Summary:\n"
+        f"  Total galleries: {len(metadata)}\n"
+        f"  Unique artists: {len(all_artists)}\n"
+        f"  Unique groups: {len(all_groups)}\n"
+        f"  Unique tags: {len(all_tags)}\n"
+        f"  Languages: {len(all_languages)}\n"
+        f"  Pages: {min_pages}-{max_pages} (avg: {avg_pages:.0f})\n"
+        f"  Estimated size: {size_str}\n"
+    )
+    
+    # Get confirmation
+    log_clarification()
+    response = input("Proceed with download? (y/n): ").strip().lower()
+    return response == "y"
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     """
@@ -490,7 +540,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
                     end_page = int(m_homepage.group(1))
-                    gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page, file_used=True))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -507,7 +557,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page, file_used=True))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback(qtype, qvalue, sort_val, start_page, end_page))
                     continue
 
                 elif m_search:
@@ -516,7 +566,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page, file_used=True))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page))
                     continue
 
                 else:
@@ -544,7 +594,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(fetch_gallery_ids("homepage", None, sort_val, start_page, end_page))
+        gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page))
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -579,9 +629,65 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 end_page = int(entry[2])
 
         archival_flag = archive_mode or force_archive
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
+        gallery_ids.update(fetch_gallery_ids_with_fallback(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
 
     return gallery_ids
+
+def _get_summary_cache_key(args) -> str | None:
+    """Return a cache key when a single search source is used, else None."""
+    if args.file or args.range or args.galleries:
+        return None
+
+    source_flags = [
+        bool(args.homepage),
+        bool(args.artist),
+        bool(args.group),
+        bool(args.tag),
+        bool(args.character),
+        bool(args.parody),
+        bool(args.search),
+        bool(args.archive),
+    ]
+    if sum(source_flags) != 1:
+        return None
+
+    valid_sorts = ("date", "recent", "popular_today", "today", "popular_week", "week", "popular", "all_time")
+
+    if args.homepage:
+        sort_val = DEFAULT_PAGE_SORT
+        if args.homepage:
+            first = str(args.homepage[0]).lower()
+            if first in valid_sorts:
+                sort_val = first
+        return get_cache_key("homepage", sort_val)
+
+    if args.artist and len(args.artist) == 1:
+        return get_cache_key("artist", str(args.artist[0][0]))
+
+    if args.group and len(args.group) == 1:
+        return get_cache_key("group", str(args.group[0][0]))
+
+    if args.tag and len(args.tag) == 1:
+        return get_cache_key("tag", str(args.tag[0][0]))
+
+    if args.character and len(args.character) == 1:
+        return get_cache_key("character", str(args.character[0][0]))
+
+    if args.parody and len(args.parody) == 1:
+        return get_cache_key("parody", str(args.parody[0][0]))
+
+    if args.search and len(args.search) == 1:
+        return get_cache_key("search", str(args.search[0][0]))
+
+    if args.archive and len(args.archive) == 1:
+        entry = args.archive[0]
+        if isinstance(entry, str):
+            entry = [entry]
+        if len(entry) == 1 and str(entry[0]).lower() == "all":
+            return get_cache_key("archive", "all")
+        return get_cache_key("archive", str(entry[0]))
+
+    return None
 
 def build_gallery_list(args):
     
@@ -641,31 +747,29 @@ def build_gallery_list(args):
     # ------------------------------------------------------------
     if args.archive:
         # Same as search crawl but infinite
-        gallery_ids.update(_handle_gallery_args(args.archive, "archive"))
-    
-    if args.archive_all:
-        # Same as homepage crawl but infinite
-        gallery_ids.update(fetch_gallery_ids("homepage", None, DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
+        archive_entries = []
+        archive_all = False
+        for entry in args.archive:
+            if isinstance(entry, str):
+                entry = [entry]
+            if len(entry) == 1 and str(entry[0]).lower() == "all":
+                archive_all = True
+                continue
+            archive_entries.append(entry)
+        if archive_entries:
+            gallery_ids.update(_handle_gallery_args(archive_entries, "archive"))
+        if archive_all:
+            # Same as homepage crawl but infinite
+            gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
 
-    # ------------------------------------------------------------
-    # Final sorted list (Processes highest gallery ID (latest gallery) first.)
-    # ------------------------------------------------------------
-    gallery_list = list( # Convert to list
-        reversed( # Highest ID first
-            sorted( # Sort list so it can be reversed.
-                map( # Make sure Gallery IDs processed as integers
-                    int, gallery_ids
-                    )
-                )
-            )
-        )
-    
-    #log_clarification("debug")
-    #log(f"Gallery List: {gallery_list}", "debug")
+    # --- Final sorted list (Processes highest gallery ID (latest gallery) first.) ---
+    # Deduplicate while preserving highest-ID-first order
+    sorted_ids = sorted(map(int, gallery_ids), reverse=True)
+    gallery_list = list(dict.fromkeys(sorted_ids))  # Removes duplicates while preserving order
     
     return gallery_list
 
-def update_config(args, archive_all: bool = False):
+def update_config(args):
     log_clarification("debug")
     log("Updating Config...", "debug")
     
@@ -716,7 +820,6 @@ def main():
     args = parse_args()
     _warn_deprecated_flags(sys.argv[1:])
     try:
-        _apply_homepage_shortcuts(args)
         _validate_args(args)
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -758,17 +861,13 @@ def main():
     logger.debug("CLI: Ready.")
     log("CLI: Debugging Started.", "debug")
     
-    # --- Handle --archive-all conflicts by overriding other gallery-selection flags ---
-    if args.archive_all:
+    # --- Handle --interactive flag (cannot be combined with other gallery-selection flags) ---
+    if args.interactive:
         conflict_flags = {
             "--file": "file",
             "--range": "range",
             "--galleries": "galleries",
             "--homepage": "homepage",
-            "--latest": "latest",
-            "--popular": "popular",
-            "--popular-today": "popular_today",
-            "--popular-week": "popular_week",
             "--artist": "artist",
             "--group": "group",
             "--tag": "tag",
@@ -778,22 +877,17 @@ def main():
             "--archive": "archive",
         }
 
-        # Detect and clear conflicting flags
+        # Check for conflicting flags
         used_conflicts = [flag for flag, attr in conflict_flags.items() if getattr(args, attr)]
         if used_conflicts:
-            print(f"[INFO] --archive-all detected. Ignoring conflicting gallery-selection flags:")
-            print(f"       {', '.join(used_conflicts)}")
-            for attr in conflict_flags.values():
-                setattr(args, attr, None)
+            print(f"[ERROR] --interactive cannot be combined with other gallery-selection flags:", file=sys.stderr)
+            print(f"        {', '.join(used_conflicts)}", file=sys.stderr)
+            sys.exit(2)
     else:
         # If no gallery input is provided, default to homepage
         gallery_args = [
             args.file,
             args.homepage,
-            args.latest,
-            args.popular,
-            args.popular_today,
-            args.popular_week,
             args.range,
             args.galleries,
             args.artist,
@@ -803,7 +897,6 @@ def main():
             args.parody,
             args.search,
             args.archive,
-            args.archive_all,
         ]
         if not any(gallery_args):
             args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
@@ -812,14 +905,65 @@ def main():
     # Allows session to use correct config values on creation
     update_config(args)
     
-    # Build initial session.
-    get_session(referrer="CLI", status="build")
+    # --- Handle --interactive mode (before building gallery list) ---
+    if args.interactive:
+        from mangascraper.interactive import interactive_config_menu, interactive_gallery_search
+        
+        log_clarification()
+        logger.info("Entering interactive mode...")
+        log_clarification()
+        
+        # Show config menu
+        current_config = {
+            'extension': args.extension,
+            'use_tor': args.use_tor,
+            'dry_run': args.dry_run,
+            'threads_galleries': args.threads_galleries,
+            'threads_images': args.threads_images,
+            'format': args.format,
+            'language': args.language,
+            'title_type': args.title_type,
+            'excluded_tags': args.excluded_tags,
+        }
+        
+        modified_config = interactive_config_menu(current_config)
+        
+        # Update args with modified config
+        args.extension = modified_config.get('extension', args.extension)
+        args.use_tor = modified_config.get('use_tor', args.use_tor)
+        args.dry_run = modified_config.get('dry_run', args.dry_run)
+        args.threads_galleries = modified_config.get('threads_galleries', args.threads_galleries)
+        args.threads_images = modified_config.get('threads_images', args.threads_images)
+        args.format = modified_config.get('format', args.format)
+        args.language = modified_config.get('language', args.language)
+        args.title_type = modified_config.get('title_type', args.title_type)
+        args.excluded_tags = modified_config.get('excluded_tags', args.excluded_tags)
+        
+        # Re-update config with modified values
+        update_config(args)
+        
+        # Enter gallery search mode
+        log_clarification()
+        gallery_list = interactive_gallery_search()
+        if not gallery_list:
+            logger.warning("No galleries selected. Exiting.")
+            sys.exit(0)
+    else:
+        # Build initial session.
+        get_session(referrer="CLI", status="build")
+        
+        # Build Gallery List (make sure not empty.)
+        gallery_list = build_gallery_list(args)
+        if not gallery_list:
+            logger.warning("No galleries provided. Exiting.")
+            sys.exit(0)  # Or just return
     
-    # Build Gallery List (make sure not empty.)
-    gallery_list = build_gallery_list(args)
-    if not gallery_list:
-        logger.warning("No galleries provided. Exiting.")
-        sys.exit(0)  # Or just return
+    # --- Show summary before downloading (if requested) ---
+    if args.show_summary:
+        summary_cache_key = _get_summary_cache_key(args)
+        if not display_download_summary(gallery_list, show_summary=True, cache_key=summary_cache_key):
+            logger.info("Download cancelled.")
+            sys.exit(0)
     
     # Update Config with Built Gallery List
     update_env("GALLERIES", gallery_list)

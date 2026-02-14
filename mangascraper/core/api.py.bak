@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/api.py
+# BACKUP CREATED BEFORE PHASE 3C/3D INTEGRATION
+# Created: When batch metadata fetching and interactive mode were added
 
 import os, time, random, cloudscraper, requests, re, json, threading, socket, urllib.parse
 
@@ -10,8 +12,6 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database
-from mangascraper.core.cache import load_cache, save_cache
-from tqdm import tqdm
 
 ################################################################################################################
 # GLOBAL VARIABLES & CACHING
@@ -849,121 +849,3 @@ def fetch_gallery_metadata(gallery_id: int):
             wait = dynamic_sleep("api", attempt=(attempt))
             logger.warning(f"Attempt {attempt} failed for Gallery: {gallery_id}: {e}, retrying in {wait:.2f}s")
             time.sleep(wait)
-
-################################################################################################################
-# BATCH METADATA FETCHING (for pre-filtering)
-################################################################################################################
-
-def fetch_metadata_batch(gallery_ids: list) -> dict:
-    """
-    Fetch metadata for multiple galleries efficiently using threading.
-    Used for pre-fetching before filtering/sizing.
-    
-    Returns:
-        dict: {gallery_id: metadata_dict}
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    
-    if not gallery_ids:
-        return {}
-    
-    metadata = {}
-    failed_ids = []
-    
-    # Use thread pool for parallel fetching
-    max_workers = min(10, len(gallery_ids))  # Cap at 10 parallel requests
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(fetch_gallery_metadata, gid): gid for gid in gallery_ids}
-        
-        # Use tqdm for progress
-        from tqdm import tqdm
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching metadata", unit="gallery"):
-            gallery_id = futures[future]
-            try:
-                meta = future.result()
-                if meta and isinstance(meta, dict):
-                    metadata[gallery_id] = meta
-            except Exception as e:
-                logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {e}")
-                failed_ids.append(gallery_id)
-    
-    if failed_ids:
-        logger.warning(f"Failed to fetch metadata for {len(failed_ids)}/{len(gallery_ids)} galleries")
-    
-    return metadata
-
-
-def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -> dict:
-    """
-    Fetch metadata for all galleries with caching support.
-    Uses caching to avoid repeated API calls for the same search criteria.
-    Extracts relevant fields (title, artists, tags, etc.) for display/filtering.
-    
-    Args:
-        gallery_ids: List of gallery IDs to fetch
-        cache_key: Optional cache key for storing results by search criteria (e.g., "artist_john")
-    
-    Returns:
-        dict: {gallery_id: metadata_dict with title, artists, tags, language, pages}
-    """
-    
-    if not gallery_ids:
-        return {}
-    
-    # Try loading from cache first if cache_key provided
-    cached_metadata = {}
-    ids_to_fetch = []
-    
-    if cache_key:
-        cached_metadata = load_cache(cache_key)
-        ids_to_fetch = [gid for gid in gallery_ids if gid not in cached_metadata]
-        if cached_metadata:
-            logger.info(f"Using {len(cached_metadata)} galleries from cache")
-    else:
-        ids_to_fetch = gallery_ids
-    
-    # If all galleries are cached, return immediately
-    if not ids_to_fetch:
-        logger.info(f"All {len(cached_metadata)} galleries loaded from cache")
-        return cached_metadata
-    
-    logger.info(f"Fetching metadata for {len(ids_to_fetch)} new galleries...")
-    if cache_key:
-        logger.info(f"(Cached {len(cached_metadata)} galleries, fetching {len(ids_to_fetch)} new)")
-    log_clarification()
-    
-    metadata = dict(cached_metadata)  # Start with cached results
-    failed_ids = []
-    
-    # Fetch missing galleries with progress bar
-    for gallery_id in tqdm(ids_to_fetch, desc="Fetching gallery metadata", unit="gallery"):
-        try:
-            meta = fetch_gallery_metadata(gallery_id)
-            if meta and isinstance(meta, dict):
-                # Extract relevant fields
-                metadata[gallery_id] = {
-                    "id": gallery_id,
-                    "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
-                    "artists": get_meta_tags("api", meta, "artist"),
-                    "groups": get_meta_tags("api", meta, "group"),
-                    "tags": get_meta_tags("api", meta, "tag"),
-                    "characters": get_meta_tags("api", meta, "character"),
-                    "parodies": get_meta_tags("api", meta, "parody"),
-                    "languages": get_meta_tags("api", meta, "language"),
-                    "pages": len(meta.get("images", {}).get("pages", [])),
-                }
-            else:
-                failed_ids.append(gallery_id)
-        except Exception as e:
-            logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {e}")
-            failed_ids.append(gallery_id)
-    
-    if failed_ids:
-        logger.warning(f"Failed to fetch metadata for {len(failed_ids)} galleries (they will be skipped)")
-    
-    # Save to cache if cache_key provided
-    if cache_key and metadata:
-        save_cache(cache_key, metadata)
-    
-    return metadata
