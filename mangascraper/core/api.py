@@ -919,15 +919,15 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
         return {}
     
     # Deduplicate gallery IDs to prevent redundant API calls
-    normalized_ids = []
+    normalised_ids = []
     for gid in gallery_ids:
         try:
             gid_int = int(gid)
         except (TypeError, ValueError):
             logger.warning(f"Skipping gallery with invalid ID: {gid}")
             continue
-        normalized_ids.append(gid_int)
-    gallery_ids = list(dict.fromkeys(normalized_ids))
+        normalised_ids.append(gid_int)
+    gallery_ids = list(dict.fromkeys(normalised_ids))
     
     # Try loading from cache first if cache_key provided
     cached_metadata = {}
@@ -942,14 +942,14 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     if cache_key:
         cached_metadata = load_cache(cache_key)
         if cached_metadata:
-            normalized_cached = {}
+            normalised_cached = {}
             for gid, meta in cached_metadata.items():
                 try:
                     gid_int = int(gid)
                 except (TypeError, ValueError):
                     continue
-                normalized_cached[gid_int] = meta
-            cached_metadata = normalized_cached
+                normalised_cached[gid_int] = meta
+            cached_metadata = normalised_cached
         if cached_metadata:
             incomplete = [gid for gid, meta in cached_metadata.items() if not _is_complete_cached_meta(meta)]
             if incomplete:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/orchestrator.py
 
-import os, sys, logging, math, threading
+import os, sys, logging, math, threading, ast
 
 from datetime import datetime
 from dotenv import load_dotenv, set_key
@@ -430,6 +430,8 @@ def normalise_config():
     """
     log_clarification("debug")
     log("Populating Config...", "debug")
+
+    ensure_env_file()
     
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
@@ -486,11 +488,57 @@ def normalise_value(key: str, value):
     
     if key in ("EXCLUDED_TAGS", "LANGUAGE"):
         if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                try:
+                    parsed = ast.literal_eval(stripped)
+                except (ValueError, SyntaxError):
+                    parsed = None
+                if isinstance(parsed, (list, tuple)):
+                    return [str(v).strip().lower() for v in parsed if str(v).strip()]
             return [v.strip().lower() for v in value.split(",") if v.strip()]
         elif isinstance(value, list):
             return [str(v).lower() for v in value]
         else:
             return []
+
+    if key == "GALLERIES":
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("[") and stripped.endswith("]"):
+                try:
+                    parsed = ast.literal_eval(stripped)
+                except (ValueError, SyntaxError):
+                    parsed = None
+                if isinstance(parsed, (list, tuple)):
+                    ids = []
+                    for v in parsed:
+                        try:
+                            ids.append(int(v))
+                        except (TypeError, ValueError):
+                            continue
+                    return ids
+            ids = []
+            for v in stripped.split(","):
+                v = v.strip()
+                if not v:
+                    continue
+                try:
+                    ids.append(int(v))
+                except (TypeError, ValueError):
+                    continue
+            return ids
+        if isinstance(value, (list, tuple)):
+            ids = []
+            for v in value:
+                try:
+                    ids.append(int(v))
+                except (TypeError, ValueError):
+                    continue
+            return ids
+        return []
 
     if key == "GALLERY_FORMAT":
         fmt = str(value).lower()
@@ -507,6 +555,65 @@ def normalise_value(key: str, value):
     # Default: return as string
     return str(value)
 
+def _format_env_value(key: str, value) -> str:
+    if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS", "GALLERIES"):
+        if isinstance(value, (list, tuple, set)):
+            return ",".join(str(v).strip() for v in value if str(v).strip())
+    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
+        return "true" if str(value).lower() == "true" else "false"
+    return str(value)
+
+def _build_env_template() -> str:
+    return (
+        "# Manga Scraper Configuration\n\n"
+        "# Custom (Username and Password must be manually set for now)\n"
+        "AUTH_USERNAME=\n"
+        "AUTH_PASSWORD=\n\n"
+        "# Directories\n"
+        f"SCRAPER_DIR={SCRAPER_DIR}\n\n"
+        "# Default Paths\n"
+        f"DOWNLOAD_PATH={_format_env_value('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH)}\n"
+        f"DOUJIN_TXT_PATH={_format_env_value('DOUJIN_TXT_PATH', DEFAULT_DOUJIN_TXT_PATH)}\n\n"
+        "# Extensions\n"
+        f"EXTENSION={_format_env_value('EXTENSION', DEFAULT_EXTENSION)}\n"
+        f"EXTENSION_DOWNLOAD_PATH={_format_env_value('EXTENSION_DOWNLOAD_PATH', DEFAULT_EXTENSION_DOWNLOAD_PATH)}\n\n"
+        "# APIs and Mirrors\n"
+        f"NHENTAI_API_BASE={_format_env_value('NHENTAI_API_BASE', DEFAULT_NHENTAI_API_BASE)}\n"
+        f"NHENTAI_MIRRORS={_format_env_value('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS)}\n\n"
+        "# Gallery ID selection\n"
+        f"PAGE_SORT={_format_env_value('PAGE_SORT', DEFAULT_PAGE_SORT)}\n"
+        f"PAGE_RANGE_START={_format_env_value('PAGE_RANGE_START', DEFAULT_PAGE_RANGE_START)}\n"
+        f"PAGE_RANGE_END={_format_env_value('PAGE_RANGE_END', DEFAULT_PAGE_RANGE_END)}\n"
+        f"RANGE_START={_format_env_value('RANGE_START', DEFAULT_RANGE_START)}\n"
+        f"RANGE_END={_format_env_value('RANGE_END', DEFAULT_RANGE_END)}\n"
+        f"GALLERIES={_format_env_value('GALLERIES', DEFAULT_GALLERIES)}\n\n"
+        "# Filters\n"
+        f"EXCLUDED_TAGS={_format_env_value('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS)}\n"
+        f"LANGUAGE={_format_env_value('LANGUAGE', DEFAULT_LANGUAGE)}\n"
+        f"TITLE_TYPE={_format_env_value('TITLE_TYPE', DEFAULT_TITLE_TYPE)}\n\n"
+        "# Threads\n"
+        f"THREADS_GALLERIES={_format_env_value('THREADS_GALLERIES', DEFAULT_THREADS_GALLERIES)}\n"
+        f"THREADS_IMAGES={_format_env_value('THREADS_IMAGES', DEFAULT_THREADS_IMAGES)}\n"
+        f"MAX_RETRIES={_format_env_value('MAX_RETRIES', DEFAULT_MAX_RETRIES)}\n"
+        f"USE_DAEMON_THREADS={_format_env_value('USE_DAEMON_THREADS', DEFAULT_USE_DAEMON_THREADS)}\n\n"
+        "# Download Options\n"
+        f"USE_TOR={_format_env_value('USE_TOR', DEFAULT_USE_TOR)}\n"
+        f"SKIP_POST_BATCH={_format_env_value('SKIP_POST_BATCH', DEFAULT_SKIP_POST_BATCH)}\n"
+        f"SKIP_POST_RUN={_format_env_value('SKIP_POST_RUN', DEFAULT_SKIP_POST_RUN)}\n"
+        f"DRY_RUN={_format_env_value('DRY_RUN', DEFAULT_DRY_RUN)}\n"
+        f"CALM={_format_env_value('CALM', DEFAULT_CALM)}\n"
+        f"DEBUG={_format_env_value('DEBUG', DEFAULT_DEBUG)}\n"
+        f"GALLERY_FORMAT={_format_env_value('GALLERY_FORMAT', DEFAULT_GALLERY_FORMAT)}\n"
+        f"VERIFY_SSL={_format_env_value('VERIFY_SSL', DEFAULT_VERIFY_SSL)}\n"
+    )
+
+def ensure_env_file(overwrite: bool = False):
+    def _ensure():
+        if overwrite or not os.path.exists(ENV_FILE):
+            with open(ENV_FILE, "w", encoding="utf-8") as f:
+                f.write(_build_env_template())
+    with_env_lock(_ensure)
+
 def update_env(key, value):
     """
     Update a single variable in the .env file safely under lock.
@@ -520,7 +627,7 @@ def update_env(key, value):
                 f.write("")
 
         # Safely update .env
-        set_key(ENV_FILE, key, str(value))
+        set_key(ENV_FILE, key, _format_env_value(key, value))
         
         # Update runtime config
         config[key] = normalise_value(key, value)

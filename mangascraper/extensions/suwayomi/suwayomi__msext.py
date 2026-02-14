@@ -412,7 +412,7 @@ def new_graphql_request(request: str, variables: dict = None, gql_debugging: boo
             log_clarification("debug")
             log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
-        # Use json parameter (requests serializes internally, no manual serialisation needed)
+        # Use json parameter (requests serialises internally, no manual serialisation needed)
         response = graphql_session.post(
             GRAPHQL_URL,
             headers=headers,
