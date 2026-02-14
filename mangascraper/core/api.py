@@ -624,13 +624,17 @@ def fetch_gallery_ids(
 
                 # --- Language filter ---
                 if allowed_gallery_language:
-                    has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
-                    has_translated = ("translated" in gallery_langs) and has_allowed
-
-                    if not (has_allowed or has_translated):
-                        blocked_langs = gallery_langs[:]
-                        log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
-                        continue
+                    # If gallery is marked as 'translated', allow it through
+                    if "translated" in gallery_langs:
+                        # Translated galleries pass the filter
+                        pass
+                    else:
+                        # Non-translated galleries must have an allowed language
+                        has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
+                        if not has_allowed:
+                            blocked_langs = gallery_langs[:]
+                            log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
+                            continue
 
                 # If passed filters → keep
                 batch.append(int(g["id"]))

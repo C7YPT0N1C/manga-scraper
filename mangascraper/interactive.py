@@ -994,6 +994,21 @@ def _handle_search_error(search_type: str, search_value: str = ""):
     log_clarification()
     return True  # Signal to return to config menu
 
+def _check_no_results_and_prompt_filters():
+    """
+    Helper function to prompt user when a search returns no results.
+    Asks if they want to adjust their language/tag filters.
+    Returns True if user wants to change filters, False otherwise.
+    """
+    log_clarification()
+    logger.warning("No galleries found with current filters.")
+    response = input("\nWould you like to change your filters? (y/n): ").strip().lower()
+    if response == "y":
+        logger.info("Returning to configuration menu to adjust filters...")
+        log_clarification()
+        return True
+    return False
+
 def interactive_gallery_search(initial_ids: list | None = None, unattended: bool = False):
     """
     Interactive menu for searching and browsing galleries when no CLI flags are provided.
@@ -1178,7 +1193,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     selected_ids.extend(new_ids)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
             else:
-                logger.info("No galleries found on homepage")
+                if not ids:
+                    if _check_no_results_and_prompt_filters():
+                        break  # Break out to config menu
+                else:
+                    logger.info("No galleries found on homepage")
 
         elif choice == "2":
             # Browse by ID range
@@ -1264,7 +1283,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
-                    logger.info(f"No galleries found for search: {search_query}")
+                    if not ids:
+                        if _check_no_results_and_prompt_filters():
+                            break  # Break out to config menu
+                    else:
+                        logger.info(f"No galleries found for search: {search_query}")
         
         elif choice in ("5", "6", "7", "8", "9"):
             query_map = {
@@ -1323,7 +1346,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
-                    logger.info(f"No galleries found for {query_type}={query_value}")
+                    if not ids:
+                        if _check_no_results_and_prompt_filters():
+                            break  # Break out to config menu
+                    else:
+                        logger.info(f"No galleries found for {query_type}={query_value}")
 
         elif choice == "w":
             # View recent searches
@@ -1364,7 +1391,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                                 selected_ids.extend(new_ids)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                         else:
-                            logger.info(f"No galleries found for {search_type}={search_value}")
+                            if _check_no_results_and_prompt_filters():
+                                break  # Break out to config menu
+                            else:
+                                logger.info(f"No galleries found for {search_type}={search_value}")
                 except ValueError:
                     logger.warning("Invalid selection")
             else:
@@ -1434,7 +1464,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                 else:
-                    logger.info("No galleries found for archive")
+                    if not ids:
+                        if _check_no_results_and_prompt_filters():
+                            break  # Break out to config menu
+                    else:
+                        logger.info("No galleries found for archive")
             else:
                 query_type_map = {
                     "1": "artist",
@@ -1517,7 +1551,13 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                                 selected_ids.extend(new_ids)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                         else:
-                            logger.info(f"No galleries found for archive: {query_type}={query_value}")
+                            if not ids:
+                                if _check_no_results_and_prompt_filters():
+                                    break  # Break out to config menu
+                                else:
+                                    logger.info(f"No galleries found for archive: {query_type}={query_value}")
+                            else:
+                                logger.info(f"No galleries found for archive: {query_type}={query_value}")
                 else:
                     logger.warning("Invalid archive query type.")
         
