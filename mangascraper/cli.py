@@ -71,6 +71,9 @@ def parse_args():
     perf_group = parser.add_argument_group("Performance")
     runtime_group = parser.add_argument_group("Runtime")
     logging_group = parser.add_argument_group("Logging")
+    
+    # Mutually exclusive groups
+    interactive_mode_group = parser.add_mutually_exclusive_group()
 
     # Installer / Updater flags
     installer_group.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
@@ -99,11 +102,11 @@ def parse_args():
     )
     
     # Gallery selection
-    source_group.add_argument(
+    interactive_mode_group.add_argument(
         "--interactive",
         action="store_true",
         default=False,
-        help="Enter interactive mode to search/browse galleries and configure settings",
+        help="Enter interactive mode to search/browse galleries and configure settings (mutually exclusive with --unattended)",
     )
     
     source_group.add_argument(
@@ -296,6 +299,12 @@ def parse_args():
         action="store_true",
         default=DEFAULT_DRY_RUN,
         help="Simulate downloads without saving files",
+    )
+    interactive_mode_group.add_argument(
+        "--unattended",
+        action="store_true",
+        default=False,
+        help="Skip all confirmation prompts and warnings (use with caution, mutually exclusive with --interactive)",
     )
     
     # Make calm/debug mutually exclusive
@@ -942,7 +951,7 @@ def main():
 
         # Enter gallery search mode
         log_clarification()
-        gallery_list = interactive_gallery_search(initial_gallery_list)
+        gallery_list = interactive_gallery_search(initial_gallery_list, unattended=args.unattended)
         if not gallery_list:
             logger.warning("No galleries selected. Exiting.")
             sys.exit(0)
@@ -968,6 +977,23 @@ def main():
     
     log_clarification("debug")
     log(f"Final Config:\n{config}", "debug")
+    
+    # ------------------------------------------------------------
+    # Warn about large download operations
+    # ------------------------------------------------------------
+    if len(gallery_list) >= 300 and not args.unattended:
+        log_clarification()
+        logger.warning(
+            f"WARNING: Downloading {len(gallery_list)} galleries will:\n"
+            f"  • Consume significant disk space (tens of GB)\n"
+            f"  • Take hours or days to complete\n"
+            f"  • Risk rate limiting (403 errors, temporary bans)\n"
+            f"Recommended: Download in smaller batches (<300 galleries)."
+        )
+        confirm = input("Continue with download? (yes/no): ").strip().lower()
+        if confirm != "yes":
+            logger.info("Download cancelled.")
+            sys.exit(0)
     
     # ------------------------------------------------------------
     # Download galleries
