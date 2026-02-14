@@ -60,6 +60,9 @@ SUWAYOMI_CATEGORY_NAME = "ScrapedMangas"
 CATEGORY_ID = None
 SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every ~2 secs.
 
+ARCHIVE_WAIT_SECONDS = 120
+ARCHIVE_POLL_INTERVAL = 1.0
+
 # NOTE: TEST
 AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
 AUTH_PASSWORD = config.get("BASIC_AUTH_PASSWORD", None) # Must be manually set for now.
@@ -1284,10 +1287,20 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
             expected_archive = os.path.join(creator_folder, f"{gallery_items[0]}{archive_ext}")
             if not os.path.exists(expected_archive):
-                logger.warning(
-                    f"Archive not found for Gallery {gallery_id}: expected {expected_archive}; skipping deletion"
-                )
-                continue
+                max_checks = max(1, int(ARCHIVE_WAIT_SECONDS / ARCHIVE_POLL_INTERVAL))
+                for _ in range(max_checks):
+                    time.sleep(ARCHIVE_POLL_INTERVAL)
+                    if os.path.exists(expected_archive):
+                        break
+                if not os.path.exists(expected_archive):
+                    logger.warning(
+                        f"Archive not found for Gallery {gallery_id} after {ARCHIVE_WAIT_SECONDS}s: "
+                        f"expected {expected_archive}; leaving folder undeleted"
+                    )
+                    logger.info(
+                        f"Leaving original folder in place: {gallery_path}"
+                    )
+                    continue
 
             # Delete original gallery folder
             try:
