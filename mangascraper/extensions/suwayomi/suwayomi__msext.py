@@ -61,7 +61,7 @@ CATEGORY_ID = None
 SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every ~2 secs.
 
 ARCHIVE_WAIT_SECONDS = 120
-ARCHIVE_POLL_INTERVAL = 1.0
+ARCHIVE_POLL_INTERVAL = 0.5
 
 # NOTE: TEST
 AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
@@ -176,6 +176,33 @@ def _get_latest_id_from_details(creator_folder: str) -> int | None:
         return _extract_gallery_id(details.get("description", ""))
     except Exception:
         return None
+
+def _get_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | None, bool]:
+    if not os.path.isdir(creator_folder):
+        return None, None, False
+
+    entries = []
+    for name in os.listdir(creator_folder):
+        if not name.startswith("("):
+            continue
+        full_path = os.path.join(creator_folder, name)
+        is_dir = os.path.isdir(full_path)
+        is_archive = name.endswith(".cbz") or name.endswith(".zip")
+        if not (is_dir or is_archive):
+            continue
+        entry_id = _extract_gallery_id(name)
+        if entry_id is None:
+            continue
+        entry_name = name
+        if is_archive:
+            entry_name = os.path.splitext(name)[0]
+        entries.append((entry_id, entry_name, is_dir))
+
+    if not entries:
+        return None, None, False
+
+    entries.sort(key=lambda item: item[0], reverse=True)
+    return entries[0]
 
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
@@ -894,19 +921,11 @@ def update_creator_manga(meta):
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
 
-        existing_details = {}
-        existing_latest_id = _get_latest_id_from_details(creator_folder)
-        if os.path.exists(details_file):
-            try:
-                with open(details_file, "r", encoding="utf-8") as f:
-                    existing_details = json.load(f)
-            except Exception:
-                existing_details = {}
-
-        if existing_latest_id is not None and existing_latest_id >= current_gallery_id:
-            description = existing_details.get("description", f"Latest Doujin: {gallery_title}")
-        else:
+        latest_id, latest_name, _ = _get_latest_gallery_entry(creator_folder)
+        if latest_id is None or latest_name is None:
             description = f"Latest Doujin: {gallery_title}"
+        else:
+            description = f"Latest Doujin: {latest_name}"
 
         # Reuse sorted_genres for MAX_GENRES_STORED slice
         details = {
@@ -1232,13 +1251,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             if not os.path.isdir(creator_folder):
                 continue
 
-            existing_latest_id = _get_latest_id_from_details(creator_folder)
-            if existing_latest_id is not None and existing_latest_id > int(gallery_id):
-                logger.debug(
-                    f"Skipping cover update for {creator_name}: existing latest ID {existing_latest_id} is newer than {gallery_id}"
-                )
-                continue
-
             gallery_prefix = f"({gallery_id})"
             gallery_items = [
                 f for f in os.listdir(creator_folder)
@@ -1255,26 +1267,29 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                 logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
                 continue
 
-            # Extract cover from first image
+            # Extract cover from the downloaded gallery and store in hidden covers subfolder
+            covers_folder = os.path.join(creator_folder, ".covers")
             try:
+                os.makedirs(covers_folder, exist_ok=True)
                 candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
 
                 if candidates:
                     page1_file = os.path.join(gallery_path, candidates[0])
                     _, ext = os.path.splitext(page1_file)
-
-                    # Remove old cover files
-                    for f in os.listdir(creator_folder):
-                        if f.startswith("cover."):
-                            try:
-                                os.remove(os.path.join(creator_folder, f))
-                            except Exception as e:
-                                logger.debug(f"Could not remove old cover: {e}")
-
-                    # Copy new cover
-                    cover_file = os.path.join(creator_folder, f"cover{ext}")
-                    shutil.copy2(page1_file, cover_file)
-                    logger.debug(f"Extracted cover for {creator_name}: {cover_file}")
+                    
+                    # Copy cover to covers subfolder with gallery name
+                    cover_in_subfolder = os.path.join(covers_folder, f"{gallery_items[0]}{ext}")
+                    shutil.copy2(page1_file, cover_in_subfolder)
+                    logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
+                    
+                    # Create or update symlink in creator root pointing to latest cover
+                    cover_link = os.path.join(creator_folder, f"cover{ext}")
+                    # Remove old symlink/file if it exists
+                    if os.path.lexists(cover_link):
+                        os.unlink(cover_link)
+                    # Create new symlink
+                    os.symlink(cover_in_subfolder, cover_link)
+                    logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
             except Exception as e:
                 logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
 

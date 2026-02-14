@@ -52,6 +52,9 @@ MAX_X_BATCHES = 1000
 EVERY_X_BATCHES = 5
 RUNS_PER_X_BATCHES = 2
 
+ARCHIVE_WAIT_SECONDS = 120
+ARCHIVE_POLL_INTERVAL = 0.5
+
 ####################################################################
 
 # PUT YOUR VARIABLES HERE
@@ -369,9 +372,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
-    # Delete original gallery folder after archiving
+    # Extract cover and delete original gallery folder after archiving
     try:
-        
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
@@ -386,42 +388,91 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            
-            # Find all gallery folders matching "(GALLERY_ID) GALLERY_NAME"
+            if not os.path.isdir(creator_folder):
+                continue
+
+            gallery_prefix = f"({gallery_id})"
             gallery_items = [
                 f for f in os.listdir(creator_folder)
-                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith("(")
+                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith(gallery_prefix)
             ]
             if not gallery_items:
                 continue
-            
-            # Sort items by numeric GALLERY_ID descending
-            def extract_id(item_name):
-                try:
-                    return int(item_name.split(")")[0].strip("("))
-                except ValueError:
-                    return -1
-            
-            gallery_items.sort(key=extract_id, reverse=True)
-            latest_gallery = gallery_items[0]
-            gallery_path = os.path.join(creator_folder, latest_gallery)
-            
-            # Only delete if it's still a directory (not yet deleted)
-            if os.path.isdir(gallery_path):
-                if gallery_format == "directory":
-                    logger.debug(
-                        f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+
+            gallery_items.sort()
+            gallery_path = os.path.join(creator_folder, gallery_items[0])
+
+            # Only process if it's still a directory (not yet archived)
+            if not os.path.isdir(gallery_path):
+                logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
+                continue
+
+            # Extract cover from the downloaded gallery and store in hidden covers subfolder
+            covers_folder = os.path.join(creator_folder, ".covers")
+            try:
+                os.makedirs(covers_folder, exist_ok=True)
+                candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+
+                if candidates:
+                    page1_file = os.path.join(gallery_path, candidates[0])
+                    _, ext = os.path.splitext(page1_file)
+                    
+                    # Copy cover to covers subfolder with gallery name
+                    cover_in_subfolder = os.path.join(covers_folder, f"{gallery_items[0]}{ext}")
+                    shutil.copy2(page1_file, cover_in_subfolder)
+                    logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
+                    
+                    # Create or update symlink in creator root pointing to latest cover
+                    try:
+                        cover_link = os.path.join(creator_folder, f"cover{ext}")
+                        # Remove old symlink/file if it exists
+                        if os.path.lexists(cover_link):
+                            os.unlink(cover_link)
+                        # Create new symlink
+                        os.symlink(cover_in_subfolder, cover_link)
+                        logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
+                    except OSError as e:
+                        logger.warning(f"Could not create symlink for {creator_name}: {e}. Copying cover directly instead.")
+                        # Fallback: copy directly if symlink fails (e.g., on Windows without developer mode)
+                        cover_link = os.path.join(creator_folder, f"cover{ext}")
+                        shutil.copy2(cover_in_subfolder, cover_link)
+                        logger.debug(f"Copied cover directly for {creator_name}: {cover_link}")
+            except Exception as e:
+                logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
+
+            if gallery_format == "directory":
+                logger.debug(
+                    f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                )
+                continue
+
+            archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
+            expected_archive = os.path.join(creator_folder, f"{gallery_items[0]}{archive_ext}")
+            if not os.path.exists(expected_archive):
+                max_checks = max(1, int(ARCHIVE_WAIT_SECONDS / ARCHIVE_POLL_INTERVAL))
+                for _ in range(max_checks):
+                    time.sleep(ARCHIVE_POLL_INTERVAL)
+                    if os.path.exists(expected_archive):
+                        break
+                if not os.path.exists(expected_archive):
+                    logger.warning(
+                        f"Archive not found for Gallery {gallery_id} after {ARCHIVE_WAIT_SECONDS}s: "
+                        f"expected {expected_archive}; leaving folder undeleted"
+                    )
+                    logger.info(
+                        f"Leaving original folder in place: {gallery_path}"
                     )
                     continue
 
-                try:
-                    shutil.rmtree(gallery_path)
-                    logger.info(f"Deleted gallery folder: {gallery_path}")
-                except Exception as e:
-                    logger.error(f"Failed to delete gallery folder {gallery_path}: {e}")
+            # Delete original gallery folder
+            try:
+                shutil.rmtree(gallery_path)
+                logger.debug(f"Deleted original gallery folder: {gallery_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete gallery folder {gallery_path}: {e}")
     
     except Exception as e:
-        logger.debug(f"Error in post-download processing for Gallery {gallery_id}: {e}")
+        logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
 
 # Hook for cleaning after downloads
 def cleanup_hook():
