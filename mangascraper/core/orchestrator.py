@@ -459,14 +459,11 @@ def normalise_config():
         "DEBUG": DEFAULT_DEBUG,
     }
 
-    #for key, default_val in defaults.items():
-    #    val = config.get(key)
-    #    if val is None or (isinstance(val, str) and val.strip() == ""):
-    #        config[key] = default_val
-    #        update_env(key, default_val)
-            
     for key, default_val in defaults.items():
-        update_env(key, default_val)
+        val = config.get(key)
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            config[key] = default_val
+            update_env(key, default_val)
     
     refresh_globals()
 
