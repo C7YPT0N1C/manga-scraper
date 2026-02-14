@@ -11,6 +11,18 @@ from mangascraper.extensions.extension_manager import install_selected_extension
 
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
+EPILOG = """Examples:
+    manga-scraper --homepage 1 3
+    manga-scraper --latest 1 5
+    manga-scraper --artist "some artist" popular 1 2
+    manga-scraper --search "\"big breasts\" -yaoi" popular
+    manga-scraper --output-folder /mnt/storage --ids "123456,654321" --output-format cbz
+"""
+
+
+class _HelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    pass
+
 # ------------------------------------------------------------
 # Delegate to installer
 # ------------------------------------------------------------
@@ -44,231 +56,384 @@ def run_installer(flag: str):
     sys.exit(0)  # Exit after running installer
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Manga scraper CLI")
+    parser = argparse.ArgumentParser(
+        description="Manga scraper CLI",
+        formatter_class=_HelpFormatter,
+        epilog=EPILOG,
+    )
+
+    installer_group = parser.add_argument_group("Installer / updater")
+    extension_group = parser.add_argument_group("Extensions")
+    source_group = parser.add_argument_group("Gallery selection")
+    filters_group = parser.add_argument_group("Filters")
+    output_group = parser.add_argument_group("Output")
+    perf_group = parser.add_argument_group("Performance")
+    runtime_group = parser.add_argument_group("Runtime")
+    logging_group = parser.add_argument_group("Logging")
 
     # Installer / Updater flags
-    parser.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
-    parser.add_argument("--update", action="store_true", help="Update manga-scraper")
-    parser.add_argument("--update-env", action="store_true", help="Update the .env file")
-    parser.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall manga-scraper")
+    installer_group.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
+    installer_group.add_argument("--update", action="store_true", help="Update manga-scraper")
+    installer_group.add_argument("--update-env", action="store_true", help="Update the .env file")
+    installer_group.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall manga-scraper")
 
     # Extension selection / management
-    parser.add_argument("--install-extension", type=str, help="Install an extension by name")
-    parser.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
-    parser.add_argument("--extension", type=str, default=DEFAULT_EXTENSION, help=f"Extension to use (default: {DEFAULT_EXTENSION})")
+    extension_group.add_argument("--install-extension", type=str, help="Install an extension by name")
+    extension_group.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
+    extension_group.add_argument(
+        "--ext",
+        "--extension",
+        dest="extension",
+        type=str,
+        default=DEFAULT_EXTENSION,
+        help="Extension to use",
+    )
     
     # NHentai mirror URLs
-    parser.add_argument(
+    source_group.add_argument(
+        "--mirror-urls",
         "--mirrors",
+        dest="mirrors",
         type=str,
         default=DEFAULT_NHENTAI_MIRRORS,
-        help=(
-            f"Comma-separated list of NHentai mirror URLs (default: {DEFAULT_NHENTAI_MIRRORS}). "
-            "Use this if the main site is down or to rotate mirrors."
-        )
+        help="Comma-separated list of NHentai mirror URLs",
     )
     
     # Gallery selection
-    parser.add_argument(
+    source_group.add_argument(
+        "--input",
         "--file",
+        dest="file",
         type=str,
         nargs="?",                  # Makes the argument optional
         const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
-        help=(
-            "Path to a file containing gallery URLs or IDs (one per line)."
-            "If no path is given, uses the default file."
-        )
+        help="Path to a file containing gallery URLs or IDs (one per line)",
     )
     
-    parser.add_argument("--range", nargs=2, type=int, metavar=("START","END"), help=f"Gallery ID range to download (default: {DEFAULT_RANGE_START}-{DEFAULT_RANGE_END})")
-    parser.add_argument("--galleries", type=str, help="Comma-separated gallery IDs to download. Must be incased in quotes if multiple. (e.g. '123456, 654321')")
+    source_group.add_argument(
+        "--id-range",
+        "--range",
+        dest="range",
+        nargs=2,
+        type=int,
+        metavar=("START", "END"),
+        help="Gallery ID range to download",
+    )
+    source_group.add_argument(
+        "--ids",
+        "--galleries",
+        dest="galleries",
+        type=str,
+        help="Comma-separated gallery IDs to download",
+    )
     
-    parser.add_argument(
+    source_group.add_argument(
         "--homepage",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
         help=(
-            f"Page range or sort type of galleries to download from NHentai Homepage (default: {DEFAULT_PAGE_RANGE_START} - {DEFAULT_PAGE_RANGE_END})"
+            "Homepage selection: [SORT] [START] [END]. "
+            "SORT: date|recent|popular_today|popular_week|popular|all_time."
         )
     )
 
+    source_group.add_argument(
+        "--latest",
+        nargs="*",
+        metavar=("START", "END"),
+        default=None,
+        help="Homepage latest (recent). Optional START END or END only.",
+    )
+    source_group.add_argument(
+        "--popular",
+        nargs="*",
+        metavar=("START", "END"),
+        default=None,
+        help="Homepage popular (all time). Optional START END or END only.",
+    )
+    source_group.add_argument(
+        "--popular-today",
+        nargs="*",
+        metavar=("START", "END"),
+        default=None,
+        help="Homepage popular today. Optional START END or END only.",
+    )
+    source_group.add_argument(
+        "--popular-week",
+        nargs="*",
+        metavar=("START", "END"),
+        default=None,
+        help="Homepage popular this week. Optional START END or END only.",
+    )
+
     # Allow multiple --artist, --group, etc. each with their own arguments
-    parser.add_argument(
+    source_group.add_argument(
         "--artist",
         action="append",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
-        help=(
-            f"Download galleries by artist. "
-            f"Usage: --artist ARTIST_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
-        )
+        help="Download by artist. Usage: --artist NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--group",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=(
-            f"Download galleries by group. "
-            f"Usage: --group GROUP_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
-        )
+        help="Download by group. Usage: --group NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--tag",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=(
-            f"Download galleries by tag. "
-            f"Usage: --tag TAG_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
-        )
+        help="Download by tag. Usage: --tag NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--character",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help= (
-            f"Download galleries by character. "
-            f"Usage: --character CHARACTER_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
-        )
+        help="Download by character. Usage: --character NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--parody",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=(
-            f"Download galleries by parody. "
-            f"Usage: --parody PARODY_NAME [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated."
-        )
+        help="Download by parody. Usage: --parody NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--search",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=(
-            f"Download galleries by search. "
-            f"Usage: --search SEARCH_QUERY [SORT_TYPE (default: {DEFAULT_PAGE_SORT})] [START_PAGE (default: {DEFAULT_PAGE_RANGE_START})] [END_PAGE (default: {DEFAULT_PAGE_RANGE_END})] [ARCHIVAL_BOOL (default: {DEFAULT_ARCHIVING})] Can be repeated. "
-            f"You can search for multiple terms at the same time, and this will return only galleries that contain both terms. For example, \"anal tanlines\" finds all galleries that contain both \"anal\" and \"tanlines\". "
-            f"You can exclude terms by prefixing them with \"-\". For example, \"anal tanlines -yaoi\" matches all galleries matching \"anal\" and \"tanlines\" but not \"yaoi\". "
-            f"Exact searches can be performed by wrapping terms in double quotes. For example, \"big breasts\" only matches galleries with \"big breasts\" somewhere in the title or in tags. "
-            f"These can be combined with tag namespaces for finer control over the query: \" parodies:railgun -tag:'big breasts'\". "
-            f"You can search for galleries with a specific number of pages with \"pages:20\", or with a page range: \"pages:>20 pages:<=30\". "
-            f"You can search for galleries uploaded within some timeframe with \"uploaded:20d\". Valid units are \"h\", \"d\", \"w\", \"m\", \"y\". You can use ranges as well: \"uploaded:>20d uploaded:<30d\"."
-        )
+        help="Download by search query. Usage: --search QUERY [SORT] [START] [END] [ARCHIVE]. Repeatable.",
     )
     
     # NHentai Archival
-    parser.add_argument(
+    source_group.add_argument(
         "--archive",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help=f"The same as --search, but downloads every gallery from the results."
+        help="Like --search, but downloads every gallery in the results.",
     )
-    parser.add_argument(
+    source_group.add_argument(
         "--archive-all",
         action="store_true",
-        help="Archive EVERYTHING from NHentai (all pages of homepage)."
+        help="Archive everything from NHentai (all homepage pages).",
     )
 
     # Filters
-    parser.add_argument("--excluded-tags", type=str, default=None, help=f"Comma-separated list of tags to exclude galleries (default: '{DEFAULT_EXCLUDED_TAGS}')")
-    parser.add_argument("--language", type=str, default=DEFAULT_LANGUAGE, help=f"Comma-separated list of languages to include (default: '{DEFAULT_LANGUAGE}')")
-    parser.add_argument(
+    filters_group.add_argument(
+        "--excluded-tags",
+        type=str,
+        default=None,
+        help="Comma-separated list of tags to exclude galleries",
+    )
+    filters_group.add_argument(
+        "--language",
+        type=str,
+        default=DEFAULT_LANGUAGE,
+        help="Comma-separated list of languages to include",
+    )
+    filters_group.add_argument(
         "--title-type",
-        choices=["english","japanese","pretty"],
+        choices=["english", "japanese", "pretty"],
         default=DEFAULT_TITLE_TYPE,
-        help=(
-            f"What title type to use (default: {DEFAULT_TITLE_TYPE}). "
-            "Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be filesystem compatible, although titles are cleaned to try and avoid this."
-        )
+        help="Title type to use",
     )
     
     # Output format
-    parser.add_argument(
-        "--format",
+    output_group.add_argument(
+        "--output-folder",
+        dest="output_folder",
         type=str,
-        default="directory",
+        default=None,
+        help="Override the download folder for this run",
+    )
+    output_group.add_argument(
+        "--output-format",
+        "--format",
+        dest="format",
+        type=str,
+        default=DEFAULT_GALLERY_FORMAT,
         choices=["directory", "zip", "cbz"],
-        help=(
-            "Output format for downloaded galleries (default: directory). "
-            "'zip' creates a .zip archive, 'cbz' creates a Comic Book Archive (.cbz) file."
-        )
+        help="Output format for downloaded galleries",
     )
 
     # Threads / concurrency
-    parser.add_argument(
+    perf_group.add_argument(
         "--threads-galleries",
         type=int,
         default=DEFAULT_THREADS_GALLERIES,
-        help=(
-            f"Number of threads downloading galleries at once (default: {DEFAULT_THREADS_GALLERIES}). "
-            f"Be careful setting this any higher than {DEFAULT_THREADS_GALLERIES}. You'll be better off increasing the number of image threads."
-        )
+        help="Number of concurrent gallery downloads",
     )
     
-    parser.add_argument(
+    perf_group.add_argument(
         "--threads-images",
         type=int,
         default=DEFAULT_THREADS_IMAGES,
-        help=(
-            f"Number of threads per gallery downloading images at once (default: {DEFAULT_THREADS_IMAGES}). "
-            f"You're better off increasing this value than increasing the number of gallery threads. "
-            f"There isn't really a limit, but still be careful setting this any higher than {DEFAULT_THREADS_IMAGES}"
-        )
+        help="Number of concurrent image downloads per gallery",
     )
     
-    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES, help=f"Maximum number of retry attempts for failed downloads (default: {DEFAULT_MAX_RETRIES})")
-    parser.add_argument(
+    perf_group.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help="Maximum retry attempts for failed downloads",
+    )
+    perf_group.add_argument(
         "--min-sleep",
         type=int,
         default=DEFAULT_MIN_RETRY_SLEEP,
-        help=(
-            f"Minimum amount of time each thread should sleep before starting a new download (default: {DEFAULT_MIN_RETRY_SLEEP}). "
-            f"Set this to a higher number if you are hitting API limits."
-        )
+        help="Minimum sleep before starting a new download",
     )
-    parser.add_argument(
+    perf_group.add_argument(
         "--max-sleep",
         type=int,
         default=DEFAULT_MAX_RETRY_SLEEP,
-        help=(
-            f"Maximum amount of time each thread can sleep before starting a new download (default: {DEFAULT_MAX_RETRY_SLEEP}). "
-            f"Setting this to a number lower than {DEFAULT_MAX_RETRY_SLEEP}, may result in hitting API limits."
-        )
+        help="Maximum sleep before starting a new download",
     )
     
     # Download / runtime options
-    parser.add_argument("--use-tor", action="store_true", default=DEFAULT_USE_TOR, help=f"Use TOR network for downloads (default: {DEFAULT_USE_TOR})")
-    parser.add_argument(
+    runtime_group.add_argument(
+        "--use-tor",
+        action="store_true",
+        default=DEFAULT_USE_TOR,
+        help="Use TOR network for downloads",
+    )
+    runtime_group.add_argument(
         "--skip-post-batch",
         action="store_true",
         default=DEFAULT_SKIP_POST_BATCH,
-        help=(
-            f"Skips the extra post batch actions that run occassionally during scrapes (default: {DEFAULT_SKIP_POST_BATCH}). "
-            "Turning this off will make the scrape complete quicker (depending on Extension used, number of galleries, etc)."
-        )
+        help="Skip periodic post-batch actions",
     )
-    parser.add_argument(
+    runtime_group.add_argument(
         "--skip-post-run",
         action="store_true",
         default=DEFAULT_SKIP_POST_RUN,
-        help=(
-            f"Skips the post download actions (default: {DEFAULT_SKIP_POST_RUN}). "
-            "For example, if you're using the Suwayomi extension, the download directory is still cleaned, but things like updating Suwayomi are skipped."
-        )
+        help="Skip post-run actions",
     )
-    parser.add_argument("--dry-run", action="store_true", default=DEFAULT_DRY_RUN, help=f"Simulate downloads without saving files (default: {DEFAULT_DRY_RUN})")
+    runtime_group.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=DEFAULT_DRY_RUN,
+        help="Simulate downloads without saving files",
+    )
     
     # Make calm/debug mutually exclusive
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help=f"Enable calm logging (warnings and higher) (default: {DEFAULT_CALM})")
-    group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help=f"Enable debug logging (critical errors and lower) (default: {DEFAULT_DEBUG})")
+    log_group = logging_group.add_mutually_exclusive_group()
+    log_group.add_argument("--calm", action="store_true", default=DEFAULT_CALM, help="Enable calm logging")
+    log_group.add_argument("--debug", action="store_true", default=DEFAULT_DEBUG, help="Enable debug logging")
 
     return parser.parse_args()
+
+
+_DEPRECATED_FLAGS = {
+    "--file": "--input",
+    "--range": "--id-range",
+    "--galleries": "--ids",
+    "--format": "--output-format",
+    "--mirrors": "--mirror-urls",
+    "--extension": "--ext",
+}
+
+
+def _warn_deprecated_flags(argv: list[str]):
+    for old_flag, new_flag in _DEPRECATED_FLAGS.items():
+        if old_flag in argv:
+            print(f"[WARN] {old_flag} is deprecated; use {new_flag}.", file=sys.stderr)
+
+
+def _parse_positive_int(value: str, label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be an integer.")
+    if parsed <= 0:
+        raise ValueError(f"{label} must be greater than zero.")
+    return parsed
+
+
+def _parse_optional_page_range(values: list[str] | None, label: str) -> list[int] | None:
+    if values is None:
+        return None
+    if len(values) == 0:
+        start_page = DEFAULT_PAGE_RANGE_START
+        end_page = DEFAULT_PAGE_RANGE_END
+    elif len(values) == 1:
+        start_page = DEFAULT_PAGE_RANGE_START
+        end_page = _parse_positive_int(values[0], f"{label} END")
+    elif len(values) == 2:
+        start_page = _parse_positive_int(values[0], f"{label} START")
+        end_page = _parse_positive_int(values[1], f"{label} END")
+    else:
+        raise ValueError(f"{label} accepts at most 2 values (START END).")
+
+    if start_page > end_page:
+        raise ValueError(f"{label} START must be <= END.")
+    return [start_page, end_page]
+
+
+def _apply_homepage_shortcuts(args):
+    shortcuts = {
+        "--latest": ("recent", args.latest),
+        "--popular": ("popular", args.popular),
+        "--popular-today": ("popular_today", args.popular_today),
+        "--popular-week": ("popular_week", args.popular_week),
+    }
+
+    used = [(flag, sort, values) for flag, (sort, values) in shortcuts.items() if values is not None]
+    if args.homepage and used:
+        raise ValueError("Use only one homepage selector: --homepage or a shortcut flag.")
+    if len(used) > 1:
+        flags = ", ".join(flag for flag, _, _ in used)
+        raise ValueError(f"Use only one homepage shortcut flag. Provided: {flags}.")
+
+    if used:
+        flag, sort, values = used[0]
+        page_range = _parse_optional_page_range(values, flag)
+        args.homepage = [sort] + page_range
+
+
+def _validate_args(args):
+    if args.range:
+        start, end = args.range
+        if start <= 0 or end <= 0:
+            raise ValueError("--id-range values must be greater than zero.")
+        if start > end:
+            raise ValueError("--id-range START must be <= END.")
+
+    if args.threads_galleries <= 0:
+        raise ValueError("--threads-galleries must be greater than zero.")
+    if args.threads_images <= 0:
+        raise ValueError("--threads-images must be greater than zero.")
+    if args.max_retries < 0:
+        raise ValueError("--max-retries must be zero or greater.")
+    if args.min_sleep < 0 or args.max_sleep < 0:
+        raise ValueError("--min-sleep and --max-sleep must be zero or greater.")
+    if args.min_sleep > args.max_sleep:
+        raise ValueError("--min-sleep must be <= --max-sleep.")
+    if args.output_folder is not None and not str(args.output_folder).strip():
+        raise ValueError("--output-folder must be a non-empty path.")
+
+
+def _parse_galleries_arg(galleries_value: str) -> list[int]:
+    ids = []
+    invalid = []
+    for part in galleries_value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part.isdigit():
+            ids.append(int(part))
+        else:
+            invalid.append(part)
+
+    if invalid:
+        print(f"[WARN] Ignoring invalid gallery IDs: {', '.join(invalid)}", file=sys.stderr)
+    return ids
 
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     """
@@ -442,7 +607,9 @@ def build_gallery_list(args):
     # Explicit galleries
     # ------------------------------------------------------------
     if args.galleries:
-        ids = [int(x.strip()) for x in args.galleries.split(",") if x.strip().isdigit()]
+        ids = _parse_galleries_arg(args.galleries)
+        if not ids:
+            logger.warning("No valid gallery IDs provided in --ids.")
         gallery_ids.update(ids)
     
     # ------------------------------------------------------------
@@ -507,6 +674,10 @@ def update_config(args, archive_all: bool = False):
         
     if getattr(args, "mirrors", None):
         update_env("NHENTAI_MIRRORS", args.mirrors)
+
+    if args.output_folder:
+        update_env("DOWNLOAD_PATH", args.output_folder)
+        update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
     
     if args.excluded_tags is not None: # Use new excluded tags.
         update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
@@ -543,6 +714,13 @@ def main():
     """
     
     args = parse_args()
+    _warn_deprecated_flags(sys.argv[1:])
+    try:
+        _apply_homepage_shortcuts(args)
+        _validate_args(args)
+    except ValueError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(2)
 
     # Overwrite placeholder logger with real one
     logger = setup_logger(calm=args.calm, debug=args.debug)
@@ -587,6 +765,10 @@ def main():
             "--range": "range",
             "--galleries": "galleries",
             "--homepage": "homepage",
+            "--latest": "latest",
+            "--popular": "popular",
+            "--popular-today": "popular_today",
+            "--popular-week": "popular_week",
             "--artist": "artist",
             "--group": "group",
             "--tag": "tag",
@@ -605,8 +787,24 @@ def main():
                 setattr(args, attr, None)
     else:
         # If no gallery input is provided, default to homepage
-        gallery_args = [args.file, args.homepage, args.range, args.galleries, args.artist,
-                        args.group, args.tag, args.character, args.parody, args.search, args.archive, args.archive_all]
+        gallery_args = [
+            args.file,
+            args.homepage,
+            args.latest,
+            args.popular,
+            args.popular_today,
+            args.popular_week,
+            args.range,
+            args.galleries,
+            args.artist,
+            args.group,
+            args.tag,
+            args.character,
+            args.parody,
+            args.search,
+            args.archive,
+            args.archive_all,
+        ]
         if not any(gallery_args):
             args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
         

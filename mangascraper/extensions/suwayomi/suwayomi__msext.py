@@ -19,7 +19,6 @@ EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
 EXTENSION_INSTALL_PATH = "/opt/suwayomi-server/" # Use this if extension installs external programs (like Suwayomi-Server)
-REQUESTED_DOWNLOAD_PATH = "/opt/suwayomi-server/local/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -28,14 +27,21 @@ LOCAL_MANIFEST_PATH = os.path.join(
 with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
     manifest = json.load(f)
 
+DEDICATED_DOWNLOAD_PATH = None
+manifest_download_path = None
 for ext in manifest.get("extensions", []):
     if ext.get("name") == EXTENSION_NAME:
-        DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
+        manifest_download_path = ext.get("image_download_path")
         break
 
-# Optional fallback
-if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
-    DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+orchestrator.refresh_globals()
+override_download_path = getattr(orchestrator, "extension_download_path", None)
+if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
+    DEDICATED_DOWNLOAD_PATH = override_download_path
+elif manifest_download_path:
+    DEDICATED_DOWNLOAD_PATH = manifest_download_path
+else:
+    DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
@@ -98,7 +104,7 @@ def save_creators_metadata(metadata: dict):
         except Exception as e:
             logger.warning(f"Could not save creators_metadata.json: {e}")
         
-# Optimisation #6: Removed redundant wrapper functions. Code now works directly with metadata dict.
+# Removed redundant wrapper functions. Code now works directly with metadata dict.
 
 ####################################################################################################################
 # CORE
@@ -155,7 +161,7 @@ def install_extension():
     orchestrator.refresh_globals()
 
     if not DEDICATED_DOWNLOAD_PATH:
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+        DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
@@ -335,7 +341,7 @@ def graphql_request(request: str, variables: dict = None, gql_debugging: bool = 
         return None
 
     try:
-        # Optimisation #7: Serialise payload once, reuse for both debug logging and request
+        # Serialise payload once, reuse for both debug logging and request
         payload_json = json.dumps(payload)
         
         if debug == True:
@@ -406,7 +412,7 @@ def new_graphql_request(request: str, variables: dict = None, gql_debugging: boo
             log_clarification("debug")
             log(f"GraphQL Request Payload: {json.dumps(payload, indent=2)}", "debug") # NOTE: DEBUGGING
         
-        # Optimisation #7: Use json parameter (requests serializes internally, no manual serialisation needed)
+        # Use json parameter (requests serializes internally, no manual serialisation needed)
         response = graphql_session.post(
             GRAPHQL_URL,
             headers=headers,
@@ -940,7 +946,7 @@ def process_deferred_creators(populate: bool = True):
         # ----------------------------
         log_clarification()
 
-        # Optimisation #6: Load metadata directly instead of using wrapper function
+        # Load metadata directly instead of using wrapper function
         metadata = load_creators_metadata()
         deferred_creators = set(metadata.get("deferred_creators", []))
 
@@ -1011,7 +1017,7 @@ def process_deferred_creators(populate: bool = True):
         process_creators_attempt += 1
 
     # After max retries, keep creators still deferred
-    # Optimisation #6: Save metadata directly instead of using wrapper function
+    # Save metadata directly instead of using wrapper function
     metadata = load_creators_metadata()
     metadata["deferred_creators"] = sorted(still_deferred)
     save_creators_metadata(metadata)
@@ -1170,7 +1176,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
-        gallery_format = str(orchestrator.gallery_format).lower()
+        gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
             logger.warning(

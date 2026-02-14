@@ -69,92 +69,135 @@ chmod +x mangascraper-install.sh
 
 ## Usage
 ### CLI Arguments
-- An environemt file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/manga-scraper/config.env`.
-```bash
-usage: manga-scraper [-h] [--install] [--update] [--update-env] [--uninstall] [--install-extension INSTALL_EXTENSION]
-                       [--uninstall-extension UNINSTALL_EXTENSION] [--extension EXTENSION] [--mirrors MIRRORS] [--file [FILE]] [--range START END]
-                       [--galleries GALLERIES] [--homepage ARGS [ARGS ...]] [--artist ARGS [ARGS ...]] [--group ARGS [ARGS ...]] [--tag ARGS [ARGS ...]]
-                       [--character ARGS [ARGS ...]] [--parody ARGS [ARGS ...]] [--search ARGS [ARGS ...]] [--archive-all] [--excluded-tags EXCLUDED_TAGS]
-                       [--language LANGUAGE] [--title-type {english,japanese,pretty}] [--threads-galleries THREADS_GALLERIES]
-                       [--threads-images THREADS_IMAGES] [--max-retries MAX_RETRIES] [--min-sleep MIN_SLEEP] [--max-sleep MAX_SLEEP] [--use-tor]
-                       [--skip-post-batch] [--skip-post-run] [--dry-run] [--calm | --debug]
+- An environment file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/manga-scraper/config.env`.
+- Some flags now have prettier aliases. Old flags still work, but show a deprecation warning.
+
+Quick overview of common flags:
+- Installer: `--install`, `--update`, `--update-env`, `--uninstall`
+- Extensions: `--ext`, `--install-extension`, `--uninstall-extension`
+- Sources: `--input`, `--id-range`, `--ids`, `--homepage`, `--latest`, `--popular`, `--popular-today`, `--popular-week`
+- Filters: `--excluded-tags`, `--language`, `--title-type`
+- Output: `--output-format`
+- Runtime: `--use-tor`, `--skip-post-batch`, `--skip-post-run`, `--dry-run`, `--calm`, `--debug`
+
+Deprecated aliases:
+- `--file` -> `--input`
+- `--range` -> `--id-range`
+- `--galleries` -> `--ids`
+- `--format` -> `--output-format`
+- `--mirrors` -> `--mirror-urls`
+- `--extension` -> `--ext`
+
+Full `--help` output:
+```text
+usage: manga-scraper [-h] [--install] [--update] [--update-env] [--uninstall]
+                     [--install-extension INSTALL_EXTENSION]
+                     [--uninstall-extension UNINSTALL_EXTENSION]
+                     [--ext EXTENSION] [--mirror-urls MIRRORS] [--input [FILE]]
+                     [--id-range START END] [--ids GALLERIES]
+                     [--homepage ARGS [ARGS ...]] [--latest [START [END]]]
+                     [--popular [START [END]]] [--popular-today [START [END]]]
+                     [--popular-week [START [END]]]
+                     [--artist ARGS [ARGS ...]] [--group ARGS [ARGS ...]]
+                     [--tag ARGS [ARGS ...]] [--character ARGS [ARGS ...]]
+                     [--parody ARGS [ARGS ...]] [--search ARGS [ARGS ...]]
+                     [--archive ARGS [ARGS ...]] [--archive-all]
+                     [--excluded-tags EXCLUDED_TAGS] [--language LANGUAGE]
+                     [--title-type {english,japanese,pretty}]
+                     [--output-folder OUTPUT_FOLDER]
+                     [--output-format {directory,zip,cbz}]
+                     [--threads-galleries THREADS_GALLERIES]
+                     [--threads-images THREADS_IMAGES] [--max-retries MAX_RETRIES]
+                     [--min-sleep MIN_SLEEP] [--max-sleep MAX_SLEEP] [--use-tor]
+                     [--skip-post-batch] [--skip-post-run] [--dry-run]
+                     [--calm | --debug]
 
 Manga scraper CLI
 
 options:
   -h, --help            show this help message and exit
-  --install             Install manga-scraper and dependencies
-  --update              Update manga-scraper
-  --update-env          Update the .env file
+
+Installer / updater:
+  --install             Install manga-scraper and dependencies (default: False)
+  --update              Update manga-scraper (default: False)
+  --update-env          Update the .env file (default: False)
   --uninstall, --remove
-                        Uninstall manga-scraper
+                        Uninstall manga-scraper (default: False)
+
+Extensions:
   --install-extension INSTALL_EXTENSION
-                        Install an extension by name
+                        Install an extension by name (default: None)
   --uninstall-extension UNINSTALL_EXTENSION
-                        Uninstall an extension by name
-  --extension EXTENSION
-                        Extension to use (default: skeleton)
-  --mirrors MIRRORS     Comma-separated list of NHentai mirror URLs (default: https://i.nhentai.net). Use this if the main site is down or to rotate mirrors.
-  --file [FILE]         Path to a file containing gallery URLs or IDs (one per line).If no path is given, uses the default file.
-  --range START END     Gallery ID range to download (default: 500000-600000)
-  --galleries GALLERIES
-                        Comma-separated gallery IDs to download. Must be incased in quotes if multiple. (e.g. '123456, 654321')
+                        Uninstall an extension by name (default: None)
+  --ext EXTENSION       Extension to use (default: skeleton)
+
+Gallery selection:
+  --mirror-urls MIRRORS
+                        Comma-separated list of NHentai mirror URLs (default: https://i.nhentai.net)
+  --input [FILE]        Path to a file containing gallery URLs or IDs (one per line)
+                        (default: /root/Doujinshi_IDs.txt)
+  --id-range START END  Gallery ID range to download (default: None)
+  --ids GALLERIES       Comma-separated gallery IDs to download (default: None)
   --homepage ARGS [ARGS ...]
-                        Page range or sort type of galleries to download from NHentai Homepage (default: 1 - 10)
+                        Homepage selection: [SORT] [START] [END]. SORT: date|recent|popular_today|popular_week|popular|all_time. (default: None)
+  --latest [START [END]]
+                        Homepage latest (recent). Optional START END or END only. (default: None)
+  --popular [START [END]]
+                        Homepage popular (all time). Optional START END or END only. (default: None)
+  --popular-today [START [END]]
+                        Homepage popular today. Optional START END or END only. (default: None)
+  --popular-week [START [END]]
+                        Homepage popular this week. Optional START END or END only. (default: None)
   --artist ARGS [ARGS ...]
-                        Download galleries by artist. Usage: --artist ARTIST_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
-                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
+                        Download by artist. Usage: --artist NAME [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
   --group ARGS [ARGS ...]
-                        Download galleries by group. Usage: --group GROUP_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default: 10)]
-                        [ARCHIVAL_BOOL (default: False)] Can be repeated.
+                        Download by group. Usage: --group NAME [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
   --tag ARGS [ARGS ...]
-                        Download galleries by tag. Usage: --tag TAG_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default: 10)]
-                        [ARCHIVAL_BOOL (default: False)] Can be repeated.
+                        Download by tag. Usage: --tag NAME [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
   --character ARGS [ARGS ...]
-                        Download galleries by character. Usage: --character CHARACTER_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE
-                        (default: 10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
+                        Download by character. Usage: --character NAME [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
   --parody ARGS [ARGS ...]
-                        Download galleries by parody. Usage: --parody PARODY_NAME [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
-                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated.
+                        Download by parody. Usage: --parody NAME [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
   --search ARGS [ARGS ...]
-                        Download galleries by search. Usage: --search SEARCH_QUERY [SORT_TYPE (default: date)] [START_PAGE (default: 1)] [END_PAGE (default:
-                        10)] [ARCHIVAL_BOOL (default: False)] Can be repeated. You can search for multiple terms at the same time, and this will return only
-                        galleries that contain both terms. For example, "anal tanlines" finds all galleries that contain both "anal" and "tanlines". You can
-                        exclude terms by prefixing them with "-". For example, "anal tanlines -yaoi" matches all galleries matching "anal" and "tanlines" but
-                        not "yaoi". Exact searches can be performed by wrapping terms in double quotes. For example, "big breasts" only matches galleries with
-                        "big breasts" somewhere in the title or in tags. These can be combined with tag namespaces for finer control over the query: "
-                        parodies:railgun -tag:'big breasts'". You can search for galleries with a specific number of pages with "pages:20", or with a page
-                        range: "pages:>20 pages:<=30". You can search for galleries uploaded within some timeframe with "uploaded:20d". Valid units are "h",
-                        "d", "w", "m", "y". You can use ranges as well: "uploaded:>20d uploaded:<30d".
-  --archive-all         Archive EVERYTHING from NHentai (all pages of homepage).
+                        Download by search query. Usage: --search QUERY [SORT] [START] [END] [ARCHIVE]. Repeatable. (default: None)
+  --archive ARGS [ARGS ...]
+                        Like --search, but downloads every gallery in the results. (default: None)
+  --archive-all         Archive everything from NHentai (all homepage pages). (default: False)
+
+Filters:
   --excluded-tags EXCLUDED_TAGS
-                        Comma-separated list of tags to exclude galleries (default: 'snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore')
-  --language LANGUAGE   Comma-separated list of languages to include (default: 'english')
+                        Comma-separated list of tags to exclude galleries (default: snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore,miniguy)
+  --language LANGUAGE   Comma-separated list of languages to include (default: english)
   --title-type {english,japanese,pretty}
-                        What title type to use (default: english). Not using 'pretty' may lead to unsupported symbols in gallery names being replaced to be
-                        filesystem compatible, although titles are cleaned to try and avoid this.
+                        Title type to use (default: english)
+
+Output:
+  --output-folder OUTPUT_FOLDER
+                        Override the download folder for this run (default: None)
+  --output-format {directory,zip,cbz}
+                        Output format for downloaded galleries (default: directory)
+
+Performance:
   --threads-galleries THREADS_GALLERIES
-                        Number of threads downloading galleries at once (default: 2). Be careful setting this any higher than 2. You'll be better off
-                        increasing the number of image threads.
+                        Number of concurrent gallery downloads (default: 2)
   --threads-images THREADS_IMAGES
-                        Number of threads per gallery downloading images at once (default: 10). You're better off increasing this value than increasing the
-                        number of gallery threads. There isn't really a limit, but still be careful setting this any higher than 10
+                        Number of concurrent image downloads per gallery (default: 10)
   --max-retries MAX_RETRIES
-                        Maximum number of retry attempts for failed downloads (default: 3)
+                        Maximum retry attempts for failed downloads (default: 3)
   --min-sleep MIN_SLEEP
-                        Minimum amount of time each thread should sleep before starting a new download (default: 0.5). Set this to a higher number if you are
-                        hitting API limits.
+                        Minimum sleep before starting a new download (default: 0.5)
   --max-sleep MAX_SLEEP
-                        Maximum amount of time each thread can sleep before starting a new download (default: 50.0). Setting this to a number lower than 50.0,
-                        may result in hitting API limits.
+                        Maximum sleep before starting a new download (default: 50.0)
+
+Runtime:
   --use-tor             Use TOR network for downloads (default: True)
-  --skip-post-batch     Skips the extra post batch actions that run occassionally during scrapes (default: False). Turning this off will make the scrape
-                        complete quicker (depending on Extension used, number of galleries, etc).
-  --skip-post-run       Skips the post download actions (default: False). For example, if you're using the Suwayomi extension, the download directory is still
-                        cleaned, but things like updating Suwayomi are skipped.
+  --skip-post-batch     Skip periodic post-batch actions (default: False)
+  --skip-post-run       Skip post-run actions (default: False)
   --dry-run             Simulate downloads without saving files (default: False)
-  --calm                Enable calm logging (warnings and higher) (default: False)
-  --debug               Enable debug logging (critical errors and lower) (default: False)
+
+Logging:
+  --calm                Enable calm logging (default: False)
+  --debug               Enable debug logging (default: False)
 ```
 
 ### Examples
@@ -163,14 +206,49 @@ options:
 manga-scraper
 
 # Specify a gallery range
-manga-scraper --range 500000 500100
+manga-scraper --id-range 500000 500100
 
 # Custom thread count
-manga-scraper --range 600000 600050 --threads-galleries 5 --threads-images 10
+manga-scraper --id-range 600000 600050 --threads-galleries 5 --threads-images 10
 
-# Use the Suwayoi Extension, download galleries from artist "XYZ" (default page range, 1 - 10) and of tag "uncensored" from pages 1 - 10 (explicitly declared), excluding certain tags, using a certain language and using Tor
-manga-scraper --extension suwayomi --artist "XYZ" --tag "uncensored" 1 10 --exclude-tags "snuff, lolicon, shotacon" --use-tor
+# Homepage shortcuts
+manga-scraper --latest 1 3
+manga-scraper --popular-week 1 2
+
+# Use the Suwayomi Extension, download galleries from artist "XYZ" (default page range, 1 - 10) and of tag "uncensored" from pages 1 - 10 (explicitly declared), excluding certain tags, using a certain language and using Tor
+manga-scraper --ext suwayomi --artist "XYZ" --tag "uncensored" 1 10 --excluded-tags "snuff, lolicon, shotacon" --use-tor
+
+# Output format
+manga-scraper --ids "123456,654321" --output-format cbz
+
+# Override output folder
+manga-scraper --output-folder /mnt/storage --ids "123456,654321"
 ```
 
 ## Documentation
-Some dickhead said he'd do this later (I am the dickhead)
+### Quickstart
+- Install with the script, then run `manga-scraper` to fetch the default homepage range.
+- Downloads go to `/opt/manga-scraper/downloads` unless your extension overrides the path.
+
+### Configuration
+- The config file is `/opt/manga-scraper/manga-scraper.env`.
+- CLI flags override config values for that run and update the env file.
+- Common keys: `EXTENSION`, `NHENTAI_MIRRORS`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
+
+### Gallery Selection
+- Use `--input` with a file containing IDs or NHentai URLs (one per line).
+- Use `--homepage` or the shortcut flags (`--latest`, `--popular`, `--popular-today`, `--popular-week`).
+- Query flags (`--artist`, `--group`, `--tag`, `--character`, `--parody`, `--search`) accept an optional sort and page range.
+
+### Output Formats
+- `directory`: keeps the gallery as a folder of images.
+- `zip` or `cbz`: archives the gallery and removes the original folder after post-processing.
+
+### Extensions
+- Install or remove extensions with `--install-extension` and `--uninstall-extension`.
+- Extensions live under `mangascraper/extensions/` and can define hooks like pre/post-download handlers.
+
+### Troubleshooting
+- Check logs in `/tmp/manga-scraper/logs` for detailed errors.
+- If downloads fail, try lowering threads or adding mirror URLs.
+- If you see permission errors, verify paths and run with appropriate privileges.

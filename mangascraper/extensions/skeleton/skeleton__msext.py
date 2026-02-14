@@ -20,7 +20,6 @@ EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
 EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
-REQUESTED_DOWNLOAD_PATH = "/opt/manga-scraper/downloads/"
 
 LOCAL_MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "local_manifest.json"
@@ -29,14 +28,21 @@ LOCAL_MANIFEST_PATH = os.path.join(
 with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
     manifest = json.load(f)
 
+DEDICATED_DOWNLOAD_PATH = None
+manifest_download_path = None
 for ext in manifest.get("extensions", []):
     if ext.get("name") == EXTENSION_NAME:
-        DEDICATED_DOWNLOAD_PATH = ext.get("image_download_path")
+        manifest_download_path = ext.get("image_download_path")
         break
 
-# Optional fallback
-if DEDICATED_DOWNLOAD_PATH is None: # Default download folder here.
-    DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+orchestrator.refresh_globals()
+override_download_path = getattr(orchestrator, "extension_download_path", None)
+if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
+    DEDICATED_DOWNLOAD_PATH = override_download_path
+elif manifest_download_path:
+    DEDICATED_DOWNLOAD_PATH = manifest_download_path
+else:
+    DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
@@ -107,7 +113,7 @@ def install_extension():
 
     if not DEDICATED_DOWNLOAD_PATH:
         # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = REQUESTED_DOWNLOAD_PATH
+        DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
@@ -365,7 +371,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Delete original gallery folder after archiving
     try:
-        gallery_format = str(orchestrator.gallery_format).lower()
+        
+        gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
             logger.warning(
