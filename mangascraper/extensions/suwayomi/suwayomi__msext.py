@@ -733,7 +733,7 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     """
     result = graphql_request(mutation, variables={"ids": ids}) 
     #log(f"GraphQL: updateMangas result: {result}", "debug")
-    logger.info(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
+    logger.debug(f"GraphQL: Updated {len(ids)} mangas as 'In Library'.")
     
     log(f"GraphQL: Adding mangas {ids} to category {category_id}", "debug")
     mutation = """
@@ -747,7 +747,7 @@ def add_mangas_to_suwayomi(ids: list[int], category_id: int):
     """
     result = graphql_request(mutation, variables={"ids": ids, "categoryId": category_id})
     #log(f"GraphQL: updateMangasCategories result: {result}", "debug")
-    logger.info(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
+    logger.debug(f"GraphQL: Added {len(ids)} mangas to category {category_id}.")
     
 def fetch_creators_suwayomi_metadata(creator_name: str):
     """

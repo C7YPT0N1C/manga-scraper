@@ -510,7 +510,7 @@ def process_galleries(batch_ids):
                     space_monitor["total_actual_bytes"] += actual_bytes
                     space_monitor["galleries_processed"] += 1
 
-                logger.info(f"Downloader: Completed Gallery: {gallery_id}")
+                logger.debug(f"Downloader: Completed Gallery: {gallery_id}")
                 log_clarification()
                 break  # exit retry loop on success
 

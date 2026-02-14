@@ -1021,6 +1021,13 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     from mangascraper.core.api import get_session, get_valid_sort_value
     from mangascraper.core.orchestrator import DEFAULT_PAGE_SORT, DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END
     
+    def parse_end_page(end_page_input: str, default: int) -> int | None:
+        """Parse end page input. Returns None for 'all' to fetch all pages, otherwise returns int."""
+        end_page_input = end_page_input.strip().lower()
+        if end_page_input == "all":
+            return None
+        return int(end_page_input) if end_page_input.isdigit() else default
+    
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
 
@@ -1120,11 +1127,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             sort_val = get_valid_sort_value(sort_val)
             start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
             start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+            end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+            end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
             
             # Warn about large page ranges
-            if end_page - start_page >= 20 and not unattended:
+            if end_page and end_page - start_page >= 20 and not unattended:
                 log_clarification()
                 logger.warning(
                     f"WARNING: Parsing {end_page - start_page + 1} pages will:\n"
@@ -1209,13 +1216,13 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
                 
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
+                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                 
                 # Warn about large page ranges
-                if end_page - start_page >= 20 and not unattended:
+                if end_page and end_page - start_page >= 20 and not unattended:
                     log_clarification()
                     logger.warning(
                         f"WARNING: Parsing {end_page - start_page + 1} pages will:\n"
@@ -1256,13 +1263,13 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
                 
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
+                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                 
                 # Warn about large page ranges
-                if end_page - start_page >= 20 and not unattended:
+                if end_page and end_page - start_page >= 20 and not unattended:
                     log_clarification()
                     logger.warning(
                         f"WARNING: Parsing {end_page - start_page + 1} pages will:\n"
@@ -1303,9 +1310,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                        end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                        end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                        end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
+                        end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                         logger.info(f"Re-running search: {search_type}={search_value}...")
                         ids, rerun_cache_key = fetch_gallery_ids_with_fallback(search_type, search_value, sort_val, start_page, end_page)
                         if ids:
@@ -1329,8 +1336,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-                end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                 fetch_all = input("Skip viewing results and archive all pages? (y/n): ").strip().lower() == "y"
                 if fetch_all:
                     if not unattended:
@@ -1400,8 +1407,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                        end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-                        end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                        end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+                        end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                         fetch_all = input("Skip viewing results and download all pages? (y/n): ").strip().lower() == "y"
                         if fetch_all:
                             if not unattended:
