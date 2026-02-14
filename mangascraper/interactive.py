@@ -5,7 +5,7 @@ Interactive gallery selection and filtering system.
 Handles pre-fetching metadata, displaying summaries, and allowing users to filter results.
 """
 
-import sys, os, shutil
+import sys, os, shutil, json
 from collections import deque
 from mangascraper.core.orchestrator import logger, log_clarification, log
 from mangascraper.core.api import fetch_all_metadata_for_galleries
@@ -381,11 +381,41 @@ def interactive_config_menu(current_config: dict) -> dict:
     from mangascraper.core.orchestrator import (
         DEFAULT_USE_TOR, DEFAULT_DRY_RUN, DEFAULT_THREADS_GALLERIES,
         DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
-        DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE
+        DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS
     )
     
     config = current_config.copy()
     
+    def _load_extensions_from_manifest(path: str, source_label: str) -> list:
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            extensions = data.get("extensions", []) if isinstance(data, dict) else []
+            for ext in extensions:
+                ext["_source"] = source_label
+            return extensions
+        except Exception as exc:
+            logger.warning(f"Failed to read extension manifest at {path}: {exc}")
+            return []
+
+    def _get_extension_choices() -> list:
+        local_manifest = os.path.join(os.path.dirname(__file__), "extensions", "local_manifest.json")
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        master_manifest = os.path.abspath(os.path.join(repo_root, "..", "manga-scraper-extensions", "master_manifest.json"))
+
+        local_exts = _load_extensions_from_manifest(local_manifest, "local")
+        master_exts = _load_extensions_from_manifest(master_manifest, "remote")
+
+        merged = {}
+        for ext in master_exts + local_exts:
+            name = ext.get("name")
+            if not name:
+                continue
+            merged[name] = ext
+        return [merged[name] for name in sorted(merged.keys())]
+
     while True:
         log_clarification()
         print(
@@ -401,7 +431,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             f"  [6] Output Format: {config.get('format', DEFAULT_GALLERY_FORMAT)}\n"
             f"  [7] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
             f"  [8] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
-            f"  [9] Excluded Tags: {str(config.get('excluded_tags', 'default'))[:50]}...\n"
+            f"  [9] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
             "\nOptions:\n"
             "  [0] Continue with these settings\n"
         )
@@ -411,9 +441,33 @@ def interactive_config_menu(current_config: dict) -> dict:
         if choice == "0":
             break
         elif choice == "1":
-            ext = input(f"Enter extension (current: {config.get('extension', DEFAULT_EXTENSION)}): ").strip()
-            if ext:
-                config['extension'] = ext
+            extensions = _get_extension_choices()
+            if extensions:
+                log_clarification()
+                print("Available extensions:\n")
+                for idx, ext in enumerate(extensions, 1):
+                    source = ext.get("_source", "unknown")
+                    version = ext.get("version", "?")
+                    print(f"  [{idx}] {ext.get('name')} (v{version}, {source})")
+                print("  [0] Enter manually")
+                
+                selection = input("Select extension: ").strip()
+                if selection.isdigit():
+                    selection = int(selection)
+                    if selection == 0:
+                        ext = input(f"Enter extension (current: {config.get('extension', DEFAULT_EXTENSION)}): ").strip()
+                        if ext:
+                            config['extension'] = ext
+                    elif 1 <= selection <= len(extensions):
+                        config['extension'] = extensions[selection - 1].get("name")
+                    else:
+                        logger.warning("Invalid selection")
+                else:
+                    logger.warning("Invalid selection")
+            else:
+                ext = input(f"Enter extension (current: {config.get('extension', DEFAULT_EXTENSION)}): ").strip()
+                if ext:
+                    config['extension'] = ext
         elif choice == "2":
             val = input(f"Use Tor? (y/n, current: {config.get('use_tor', DEFAULT_USE_TOR)}): ").strip().lower()
             if val in ('y', 'n'):
@@ -441,9 +495,12 @@ def interactive_config_menu(current_config: dict) -> dict:
             except ValueError:
                 logger.warning("Invalid number")
         elif choice == "6":
-            fmt = input(f"Output format (directory/zip/cbz, current: {config.get('format', DEFAULT_GALLERY_FORMAT)}): ").strip().lower()
-            if fmt in ('directory', 'zip', 'cbz'):
-                config['format'] = fmt
+            log_clarification()
+            print("Output formats:\n  [1] directory\n  [2] zip\n  [3] cbz")
+            fmt_choice = input(f"Select format (current: {config.get('format', DEFAULT_GALLERY_FORMAT)}): ").strip()
+            fmt_map = {"1": "directory", "2": "zip", "3": "cbz"}
+            if fmt_choice in fmt_map:
+                config['format'] = fmt_map[fmt_choice]
             else:
                 logger.warning("Invalid format")
         elif choice == "7":
@@ -457,9 +514,12 @@ def interactive_config_menu(current_config: dict) -> dict:
             else:
                 logger.warning("Invalid title type")
         elif choice == "9":
-            tags = input(f"Excluded tags (comma-separated): ").strip()
+            current_tags = config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS)
+            tags = input(f"Excluded tags (comma-separated, current: {current_tags}): ").strip()
             if tags:
                 config['excluded_tags'] = tags
+            elif not current_tags:
+                config['excluded_tags'] = DEFAULT_EXCLUDED_TAGS
         else:
             logger.warning("Invalid choice. Enter 0-9.")
         
@@ -537,39 +597,36 @@ def interactive_gallery_search():
     Menu options are ordered to match CLI flag order for easier maintenance.
     """
     
-    from mangascraper.core.api import fetch_gallery_ids, get_valid_sort_value
+    from mangascraper.core.api import get_session, get_valid_sort_value
     from mangascraper.core.orchestrator import DEFAULT_PAGE_SORT, DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END
     
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
+
+    get_session(referrer="Interactive", status="build")
     
     selected_ids = []
     search_history = deque(maxlen=10)  # Track last 10 searches: (search_type, search_value, cache_key)
     
     while True:
         print(
-            "Search Options (ordered by CLI flag order):\n"
+            "Search Options (QWERTY layout):\n"
             "  [1] Browse by ID range\n"
             "  [2] Explicit gallery IDs\n"
-            "  [3] Homepage (all, with sort options)\n"
-            "  [4] Latest galleries\n"
-            "  [5] Popular (all time)\n"
-            "  [6] Popular today\n"
-            "  [7] Popular this week\n"
-            "  [8] Search by artist\n"
-            "  [9] Search by group\n"
-            "  [a] Search by tag\n"
-            "  [b] Search by character\n"
-            "  [c] Search by parody\n"
-            "  [d] General search\n"
-            "  [e] Archive (search with no page limit)\n"
-            "  [f] Archive all (homepage with no limit)\n"
-            "  [g] View selected galleries\n"
-            "  [h] View recent searches\n"
+            "  [3] Homepage\n"
+            "  [4] Search by artist\n"
+            "  [5] Search by group\n"
+            "  [6] Search by tag\n"
+            "  [7] Search by character\n"
+            "  [8] Search by parody\n"
+            "  [9] General search\n"
             "  [0] Proceed with selected galleries\n"
+            "  [q] View selected galleries\n"
+            "  [w] View recent searches\n"
+            "  [e] Archive\n"
         )
         
-        choice = input("Enter choice [0-h]: ").strip().lower()
+        choice = input("Enter choice [1-0,q,w,e]: ").strip().lower()
         
         if choice == "0":
             if selected_ids:
@@ -588,7 +645,7 @@ def interactive_gallery_search():
                     new_ids = display_gallery_results(ids)
                     if new_ids:
                         selected_ids.extend(new_ids)
-                        logger.info(f"Total selected: {len(set(selected_ids))} unique galleries")
+                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
             except ValueError:
                 logger.warning("Invalid format. Use: start end")
         
@@ -617,114 +674,38 @@ def interactive_gallery_search():
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
         
         elif choice == "3":
-            # Homepage with sort options
+            # Homepage
             homepage_sorts = ["date", "popular-today", "popular-week", "popular"]
             print("Homepage sort options: " + ", ".join(homepage_sorts))
-            sort_val = input("Enter sort: ").strip()
-            if sort_val:
-                sort_val = get_valid_sort_value(sort_val)
-                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-                
-                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
-                
-                logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page})...")
-                ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page)
-                
-                if ids and cache_key:
-                    cache_key = get_cache_key("homepage", sort_val)
-                    new_ids = display_gallery_results(ids, cache_key)
-                    if new_ids:
-                        selected_ids.extend(new_ids)
-                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice == "4":
-            # Latest galleries
-            sort_val = get_valid_sort_value("recent")
+            sort_val = input("Enter sort (default: date): ").strip() or DEFAULT_PAGE_SORT
+            sort_val = get_valid_sort_value(sort_val)
             start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            
             start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
             
-            logger.info(f"Fetching latest (pages={start_page}-{end_page})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", "recent", sort_val, start_page, end_page)
+            fetch_all = input("Fetch all pages? (y/n): ").strip().lower() == "y"
+            end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+            if not fetch_all:
+                end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+            
+            logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
+            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
             
             if ids and cache_key:
-                cache_key = get_cache_key("homepage", "recent")
+                cache_key = get_cache_key("homepage", sort_val)
+                search_history.append(("homepage", sort_val, cache_key))
                 new_ids = display_gallery_results(ids, cache_key)
                 if new_ids:
                     selected_ids.extend(new_ids)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice == "5":
-            # Popular (all time)
-            sort_val = get_valid_sort_value("popular")
-            start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            
-            start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
-            
-            logger.info(f"Fetching popular (pages={start_page}-{end_page})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", "popular", sort_val, start_page, end_page)
-            
-            if ids and cache_key:
-                cache_key = get_cache_key("homepage", "popular")
-                new_ids = display_gallery_results(ids, cache_key)
-                if new_ids:
-                    selected_ids.extend(new_ids)
-                    logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice == "6":
-            # Popular today
-            sort_val = get_valid_sort_value("popular-today")
-            start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            
-            start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
-            
-            logger.info(f"Fetching popular-today (pages={start_page}-{end_page})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", "popular-today", sort_val, start_page, end_page)
-            
-            if ids and cache_key:
-                cache_key = get_cache_key("homepage", "popular-today")
-                new_ids = display_gallery_results(ids, cache_key)
-                if new_ids:
-                    selected_ids.extend(new_ids)
-                    logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice == "7":
-            # Popular this week
-            sort_val = get_valid_sort_value("popular-week")
-            start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-            end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
-            
-            start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
-            
-            logger.info(f"Fetching popular-week (pages={start_page}-{end_page})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", "popular-week", sort_val, start_page, end_page)
-            
-            if ids and cache_key:
-                cache_key = get_cache_key("homepage", "popular-week")
-                new_ids = display_gallery_results(ids, cache_key)
-                if new_ids:
-                    selected_ids.extend(new_ids)
-                    logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice in ("8", "9", "a", "b", "c", "d", "e"):
-            # Query-based searches (artist, group, tag, character, parody, search, archive)
+
+        elif choice in ("4", "5", "6", "7", "8", "9"):
             query_map = {
-                "8": "artist",
-                "9": "group",
-                "a": "tag",
-                "b": "character",
-                "c": "parody",
-                "d": "search",
-                "e": "archive",
+                "4": "artist",
+                "5": "group",
+                "6": "tag",
+                "7": "character",
+                "8": "parody",
+                "9": "search",
             }
             
             query_type = query_map[choice]
@@ -734,42 +715,96 @@ def interactive_gallery_search():
                 sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END} or ∞ for archive): ").strip()
+                end_page = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
                 
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
                 
-                # Archive mode has no page limit
-                if choice == "e":
-                    end_page = None
-                else:
-                    end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
-                
-                logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or '∞'}...")
+                logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page}...")
                 ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page)
                 
                 if ids and cache_key:
                     cache_key = get_cache_key(query_type, query_value)
-                    # Add to search history
                     search_history.append((query_type, query_value, cache_key))
                     new_ids = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-        
-        elif choice == "f":
-            # Archive all
-            logger.info("Fetching all galleries from homepage (this may take a LONG time)...")
-            if input("Are you sure? (y/n): ").strip().lower() == "y":
-                ids, cache_key = fetch_gallery_ids_with_fallback("homepage", "archive_all", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True)
+
+        elif choice == "e":
+            # Archive
+            archive_homepage = input("Archive homepage instead of a query? (y/n): ").strip().lower() == "y"
+            if archive_homepage:
+                homepage_sorts = ["date", "popular-today", "popular-week", "popular"]
+                print("Homepage sort options: " + ", ".join(homepage_sorts))
+                sort_val = input("Enter sort (default: date): ").strip() or DEFAULT_PAGE_SORT
+                sort_val = get_valid_sort_value(sort_val)
+                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
+                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                
+                fetch_all = input("Archive all pages? (y/n): ").strip().lower() == "y"
+                end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                if not fetch_all:
+                    end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                
+                logger.info(f"Archiving homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
+                ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
                 
                 if ids and cache_key:
-                    cache_key = get_cache_key("archive", "all")
+                    cache_key = get_cache_key("archive", "all" if fetch_all else sort_val)
+                    search_history.append(("archive", sort_val, cache_key))
                     new_ids = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+            else:
+                query_type_map = {
+                    "1": "artist",
+                    "2": "group",
+                    "3": "tag",
+                    "4": "character",
+                    "5": "parody",
+                    "6": "search",
+                }
+                log_clarification()
+                print(
+                    "Archive query types:\n"
+                    "  [1] Artist\n"
+                    "  [2] Group\n"
+                    "  [3] Tag\n"
+                    "  [4] Character\n"
+                    "  [5] Parody\n"
+                    "  [6] Search\n"
+                )
+                query_choice = input("Select query type: ").strip()
+                query_type = query_type_map.get(query_choice)
+                if query_type:
+                    query_value = input(f"Enter {query_type}: ").strip()
+                    if query_value:
+                        sort_val = input(f"Enter sort (date/popular-today/popular-week/popular, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                        sort_val = get_valid_sort_value(sort_val)
+                        start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
+                        start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                        
+                        fetch_all = input("Archive all pages? (y/n): ").strip().lower() == "y"
+                        end_page = None if fetch_all else input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}): ").strip()
+                        if not fetch_all:
+                            end_page = int(end_page) if str(end_page).isdigit() else DEFAULT_PAGE_RANGE_END
+                        
+                        logger.info(f"Archiving {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
+                        ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
+                        
+                        if ids and cache_key:
+                            cache_key = get_cache_key("archive", query_value)
+                            search_history.append(("archive", query_value, cache_key))
+                            new_ids = display_gallery_results(ids, cache_key)
+                            if new_ids:
+                                selected_ids.extend(new_ids)
+                                logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                else:
+                    logger.warning("Invalid archive query type.")
         
-        elif choice == "g":
+        elif choice == "q":
             # View selected galleries
             if selected_ids:
                 unique_ids = len(set(selected_ids))
@@ -779,7 +814,7 @@ def interactive_gallery_search():
             else:
                 logger.info("No galleries selected yet.")
         
-        elif choice == "h":
+        elif choice == "w":
             # View recent searches
             if search_history:
                 log_clarification()
@@ -804,10 +839,11 @@ def interactive_gallery_search():
                         end_page = int(end_page) if end_page.isdigit() else DEFAULT_PAGE_RANGE_END
                         
                         logger.info(f"Re-running search: {search_type}={search_value}...")
-                        ids = fetch_gallery_ids(search_type, search_value, sort_val, start_page, end_page)
+                        ids, rerun_cache_key = fetch_gallery_ids_with_fallback(search_type, search_value, sort_val, start_page, end_page)
                         
                         if ids:
-                            new_ids = display_gallery_results(ids, cache_key)
+                            use_cache_key = rerun_cache_key or cache_key
+                            new_ids = display_gallery_results(ids, use_cache_key)
                             if new_ids:
                                 selected_ids.extend(new_ids)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
@@ -817,7 +853,7 @@ def interactive_gallery_search():
                 logger.info("No recent searches yet.")
         
         else:
-            logger.warning("Invalid choice. Enter 0-g.")
+            logger.warning("Invalid choice. Enter 1-0, q, w, or e.")
         
         log_clarification()
     
