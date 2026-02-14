@@ -22,7 +22,7 @@ ENV_FILE="$SCRAPER_DIR/manga-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9"
 DEFAULT_BRANCH="main"
 SCRAPER_PRIMARY_REPO="https://github.com/C7YPT0N1C/manga-scraper.git"
-SCRAPER_BACKUP_REPO="https://git.anthrosys.online/C7YPT0N1C/manga-scraper.git"
+SCRAPER_BACKUP_REPO="https://git.anthrosys.uk/C7YPT0N1C/manga-scraper.git"
 
 # ===============================
 # FUNCTIONS
