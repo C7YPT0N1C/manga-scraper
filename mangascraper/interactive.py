@@ -176,7 +176,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
         return [ordered_items[i - 1][0] for i in indices]
 
     while True:
-        log_clarification()
+        clear_screen()
         
         # Calculate page bounds
         start_idx = current_page * rows_per_page
@@ -252,23 +252,198 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> list:
                 logger.warning("Invalid choice. Use d/details, s/select, or q/quit.")
                 continue
     
-    # Ask if user wants to add to selection
-    if input("\nAdd these galleries to selection? (y/n): ").strip().lower() == "y":
+    # Ask user how they want to select galleries
+    print("\nSelect galleries:")
+    print("  [a]ll - Add all displayed galleries to selection")
+    print("  [s]pecific - Choose specific galleries by index")
+    print("  [n]one - Return without selecting anything")
+    
+    select_choice = input("Choice (a/s/n): ").strip().lower()
+    
+    if select_choice in ("n", "none"):
+        return []
+    elif select_choice in ("a", "all"):
+        # Select all galleries
+        return [gid for gid, _ in metadata_items]
+    elif select_choice in ("s", "specific"):
         # Offer to apply filters before final selection
-        if input("Apply filters to refine results? (y/n): ").strip().lower() == "y":
+        if input("\nApply filters to refine results? (y/n): ").strip().lower() == "y":
             summary = get_metadata_summary(metadata)
             filtered_ids, filtered_metadata = show_filter_menu(summary, metadata)
             if filtered_ids:
                 logger.info(f"Filtered results: {len(filtered_ids)} galleries")
                 filtered_items = sorted(filtered_metadata.items(), key=lambda x: x[0], reverse=True)
-                selection = input("Select filtered galleries by index (e.g. 1,3-5), 'all' for all, or 0 to cancel: ").strip()
+                selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
                 return _select_by_index(filtered_items, selection)
             return []
 
-        selection = input("Select galleries by index (e.g. 1,3-5), 'all' for all, or 0 to cancel: ").strip()
+        selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
         return _select_by_index(metadata_items, selection)
+    else:
+        logger.warning("Invalid choice. Returning without selection.")
+        return []
+
+
+def view_selected_galleries(selected_ids: list) -> list:
+    """
+    Display selected galleries in paginated format with removal capability.
     
-    return []
+    Args:
+        selected_ids: List of selected gallery IDs
+    
+    Returns:
+        list: Updated list of selected IDs (after any removals)
+    """
+    if not selected_ids:
+        logger.info("No galleries selected yet.")
+        return []
+    
+    # Get unique IDs
+    unique_ids = list(dict.fromkeys(selected_ids))
+    
+    logger.info(f"Currently selected: {len(unique_ids)} unique galleries")
+    
+    # Fetch metadata
+    metadata = fetch_all_metadata_for_galleries(unique_ids)
+    
+    if not metadata:
+        logger.warning("Could not fetch metadata for selected galleries")
+        return unique_ids
+    
+    # Sort by ID (highest first)
+    metadata_items = sorted(metadata.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else x[0], reverse=True)
+    
+    # Get terminal size and calculate rows per page
+    terminal_size = shutil.get_terminal_size(fallback=(80, 24))
+    terminal_height = terminal_size.lines
+    
+    # Reserve 8 rows for header, footer, summary, and prompts
+    reserved_rows = 8
+    rows_per_page = max(5, terminal_height - reserved_rows)
+    
+    current_page = 0
+    total_pages = (len(metadata_items) + rows_per_page - 1) // rows_per_page
+    
+    # Track removed IDs
+    removed_ids = set()
+    
+    def _parse_index_selection(selection: str, max_index: int):
+        if not selection:
+            return []
+        selection = selection.strip().lower()
+        if selection in ("all", "a", "*"):
+            return list(range(1, max_index + 1))
+        if selection in ("none", "n", "0"):
+            return []
+        indices = set()
+        for part in selection.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                start_s, end_s = part.split("-", 1)
+                if not (start_s.strip().isdigit() and end_s.strip().isdigit()):
+                    return None
+                start_i = int(start_s)
+                end_i = int(end_s)
+                if start_i > end_i:
+                    start_i, end_i = end_i, start_i
+                for i in range(start_i, end_i + 1):
+                    if 1 <= i <= max_index:
+                        indices.add(i)
+            elif part.isdigit():
+                idx = int(part)
+                if 1 <= idx <= max_index:
+                    indices.add(idx)
+            else:
+                return None
+        return sorted(indices)
+
+    while True:
+        clear_screen()
+        
+        # Filter out removed galleries
+        active_items = [(gid, meta) for gid, meta in metadata_items if gid not in removed_ids]
+        
+        if not active_items:
+            logger.info("All galleries have been removed from selection.")
+            return []
+        
+        # Recalculate pagination for active items
+        total_pages = (len(active_items) + rows_per_page - 1) // rows_per_page
+        if current_page >= total_pages:
+            current_page = total_pages - 1
+        
+        # Calculate page bounds
+        start_idx = current_page * rows_per_page
+        end_idx = min(start_idx + rows_per_page, len(active_items))
+        page_items = active_items[start_idx:end_idx]
+        
+        # Display header
+        print(f"Selected Galleries ({len(active_items)} total, Page {current_page + 1}/{total_pages}):\n")
+        print(f"{'#':<4} {'ID':<8} {'Title':<60} {'Pages':<6}")
+        print("-" * 80)
+        
+        # Display galleries for this page
+        for page_idx, (gid, meta) in enumerate(page_items, 1):
+            global_idx = start_idx + page_idx
+            title = meta.get("title", f"Gallery {gid}")[:57]
+            pages = meta.get("pages", 0)
+            print(f"{global_idx:<4} {gid:<8} {title:<60} {pages:<6}")
+        
+        print()
+        
+        # Show summary for active items
+        summary = get_metadata_summary(dict(active_items))
+        logger.info(
+            f"Summary: {summary['total_galleries']} galleries, "
+            f"{summary['unique_artists']} artists, "
+            f"{summary['unique_tags']} tags, "
+            f"Pages: {summary['min_pages']}-{summary['max_pages']} (avg: {summary['avg_pages']:.0f})"
+        )
+        
+        # Show navigation menu
+        print()
+        nav_options = []
+        if current_page > 0:
+            nav_options.append("[p]revious")
+        if current_page < total_pages - 1:
+            nav_options.append("[n]ext")
+        nav_options.extend(["[d]etails", "[r]emove galleries", "[q]uit"])
+        
+        print("Options: " + " | ".join(nav_options))
+        nav_choice = input("Choice: ").strip().lower()
+        
+        if (nav_choice == "p" or nav_choice == "previous") and current_page > 0:
+            current_page -= 1
+            continue
+        elif (nav_choice == "n" or nav_choice == "next") and current_page < total_pages - 1:
+            current_page += 1
+            continue
+        elif nav_choice == "d" or nav_choice == "details":
+            show_gallery_details(dict(active_items))
+            continue
+        elif nav_choice == "r" or nav_choice == "remove":
+            # Ask which galleries to remove
+            selection = input("Remove galleries by list index (e.g. 1,3-5), 'all' to remove all, or 0 to cancel: ").strip()
+            indices = _parse_index_selection(selection, len(active_items))
+            if indices is None:
+                logger.warning("Invalid selection. Use numbers like 1,3-5 or 'all'.")
+                continue
+            elif indices:
+                gids_to_remove = [active_items[i - 1][0] for i in indices]
+                removed_ids.update(gids_to_remove)
+                logger.info(f"Removed {len(gids_to_remove)} galleries from selection")
+            continue
+        elif nav_choice == "q" or nav_choice == "quit":
+            break
+        else:
+            logger.warning("Invalid choice. Use p/previous, n/next, d/details, r/remove, or q/quit.")
+            continue
+    
+    # Return updated list (original order, minus removed IDs)
+    return [gid for gid in unique_ids if gid not in removed_ids]
+
 
 def show_gallery_details(metadata: dict):
     """Display detailed metadata for all galleries with pagination."""
@@ -289,7 +464,7 @@ def show_gallery_details(metadata: dict):
     total_pages = (len(items) + rows_per_page - 1) // rows_per_page
     
     while True:
-        log_clarification()
+        clear_screen()
         
         # Calculate page bounds
         start_idx = current_page * rows_per_page
@@ -506,7 +681,8 @@ def interactive_config_menu(current_config: dict) -> dict:
     from mangascraper.core.orchestrator import (
         DEFAULT_USE_TOR, DEFAULT_DRY_RUN, DEFAULT_THREADS_GALLERIES,
         DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
-        DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS
+        DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
+        DEFAULT_NHENTAI_MIRRORS, DEFAULT_DOWNLOAD_PATH, DEFAULT_MAX_RETRIES
     )
     
     config = current_config.copy()
@@ -579,11 +755,14 @@ def interactive_config_menu(current_config: dict) -> dict:
             f"  [7] Language: {config.get('language', DEFAULT_LANGUAGE)}\n"
             f"  [8] Title Type: {config.get('title_type', DEFAULT_TITLE_TYPE)}\n"
             f"  [9] Excluded Tags: {str(config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS))[:50]}...\n"
+            f"  [a] Mirrors: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}\n"
+            f"  [b] Output Folder: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}\n"
+            f"  [c] Max Retries: {config.get('max_retries', DEFAULT_MAX_RETRIES)}\n"
             "\nOptions:\n"
-            "  [0] Continue with these settings\n"
+            "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9]: ").strip()
+        choice = input("Enter choice [0-9,a-c]: ").strip().lower()
         
         if choice == "0":
             break
@@ -667,8 +846,25 @@ def interactive_config_menu(current_config: dict) -> dict:
                 config['excluded_tags'] = tags
             elif not current_tags:
                 config['excluded_tags'] = DEFAULT_EXCLUDED_TAGS
+        elif choice == "a":
+            mirrors = input(f"Mirrors (comma-separated URLs, current: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}): ").strip()
+            if mirrors:
+                config['mirrors'] = mirrors
+        elif choice == "b":
+            output_folder = input(f"Output folder path (current: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}): ").strip()
+            if output_folder:
+                config['output_folder'] = output_folder
+        elif choice == "c":
+            try:
+                val = int(input(f"Max retries (current: {config.get('max_retries', DEFAULT_MAX_RETRIES)}): ").strip())
+                if val >= 0:
+                    config['max_retries'] = val
+                else:
+                    logger.warning("Must be 0 or greater")
+            except ValueError:
+                logger.warning("Invalid number")
         else:
-            logger.warning("Invalid choice. Enter 0-9.")
+            logger.warning("Invalid choice. Enter 0-9 or a-c.")
         
         log_clarification()
     
@@ -776,6 +972,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [9] Search by character\n"
             "  [q] Search by parody\n"
             "  [w] Archive\n"
+            "\n"
+            "Options:\n"
             "  [e] View selected galleries\n"
             "  [r] Return to configuration menu\n"
             "  [0] Proceed with selected galleries\n"
@@ -797,6 +995,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 DEFAULT_USE_TOR, DEFAULT_DRY_RUN, DEFAULT_THREADS_GALLERIES,
                 DEFAULT_THREADS_IMAGES, DEFAULT_GALLERY_FORMAT, DEFAULT_EXTENSION,
                 DEFAULT_LANGUAGE, DEFAULT_TITLE_TYPE, DEFAULT_EXCLUDED_TAGS,
+                DEFAULT_NHENTAI_MIRRORS, DEFAULT_DOWNLOAD_PATH, DEFAULT_MAX_RETRIES,
                 config, update_env, refresh_globals
             )
             from mangascraper.interactive import interactive_config_menu
@@ -811,6 +1010,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 'language': config.get('LANGUAGE', DEFAULT_LANGUAGE),
                 'title_type': config.get('TITLE_TYPE', DEFAULT_TITLE_TYPE),
                 'excluded_tags': config.get('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS),
+                'mirrors': config.get('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS),
+                'output_folder': config.get('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH),
+                'max_retries': config.get('MAX_RETRIES', DEFAULT_MAX_RETRIES),
             }
             
             modified_config = interactive_config_menu(current_config)
@@ -825,6 +1027,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             update_env('LANGUAGE', modified_config.get('language'))
             update_env('TITLE_TYPE', modified_config.get('title_type'))
             update_env('EXCLUDED_TAGS', modified_config.get('excluded_tags'))
+            update_env('NHENTAI_MIRRORS', modified_config.get('mirrors'))
+            update_env('DOWNLOAD_PATH', modified_config.get('output_folder'))
+            update_env('MAX_RETRIES', modified_config.get('max_retries'))
             refresh_globals()
             
             logger.info("Configuration updated.")
@@ -1129,20 +1334,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            if selected_ids:
-                unique_ids = len(set(selected_ids))
-                logger.info(f"Currently selected: {unique_ids} unique galleries")
-                if unique_ids <= 50:
-                    logger.info(f"  IDs: {sorted(set(selected_ids))}")
-                
-                # Offer details view
-                if input("View details for selected galleries? (y/n): ").strip().lower() == "y":
-                    # Fetch metadata for selected IDs
-                    metadata = fetch_all_metadata_for_galleries(list(set(selected_ids)))
-                    if metadata:
-                        show_gallery_details(metadata)
-            else:
-                logger.info("No galleries selected yet.")
+            selected_ids = view_selected_galleries(selected_ids)
         
         else:
             logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
