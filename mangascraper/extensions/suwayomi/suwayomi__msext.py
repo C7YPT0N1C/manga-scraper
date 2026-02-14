@@ -1170,6 +1170,15 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
+        gallery_format = str(orchestrator.gallery_format).lower()
+        valid_formats = {"directory", "zip", "cbz"}
+        if gallery_format not in valid_formats:
+            logger.warning(
+                f"{EXTENSION_REFERRER}: Unknown GALLERY_FORMAT '{orchestrator.gallery_format}', "
+                "treating as 'directory' for safety."
+            )
+            gallery_format = "directory"
+
         gallery_meta = return_gallery_metas(meta)
         creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
         
@@ -1223,6 +1232,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             except Exception as e:
                 logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
             
+            if gallery_format == "directory":
+                logger.debug(
+                    f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                )
+                continue
+
             # Delete original gallery folder
             try:
                 shutil.rmtree(gallery_path)

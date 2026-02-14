@@ -365,6 +365,15 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Delete original gallery folder after archiving
     try:
+        gallery_format = str(orchestrator.gallery_format).lower()
+        valid_formats = {"directory", "zip", "cbz"}
+        if gallery_format not in valid_formats:
+            logger.warning(
+                f"{EXTENSION_REFERRER}: Unknown GALLERY_FORMAT '{orchestrator.gallery_format}', "
+                "treating as 'directory' for safety."
+            )
+            gallery_format = "directory"
+
         gallery_meta = return_gallery_metas(meta)
         creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
         
@@ -392,6 +401,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             
             # Only delete if it's still a directory (not yet deleted)
             if os.path.isdir(gallery_path):
+                if gallery_format == "directory":
+                    logger.debug(
+                        f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                    )
+                    continue
+
                 try:
                     shutil.rmtree(gallery_path)
                     logger.info(f"Deleted gallery folder: {gallery_path}")
