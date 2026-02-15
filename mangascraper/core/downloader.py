@@ -13,6 +13,7 @@ from mangascraper.core.api import (
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
 )
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
+from mangascraper.core.cache import load_selected_galleries
 
 ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
 
@@ -775,6 +776,14 @@ def start_downloader(gallery_list=None):
     
     orchestrator.refresh_globals()
     
+    selected_ids = load_selected_galleries()
+    if selected_ids:
+        gallery_list = selected_ids
+    elif gallery_list:
+        logger.warning(
+            "Selected galleries cache is empty; using in-memory gallery list."
+        )
+
     orchestrator.galleries = gallery_list
     
     start_time = time.perf_counter()  # Start timer
