@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # mangascraper/core/database.py
 
-import os, sqlite3, threading, atexit
+import os, sqlite3, threading, atexit, json
 
 from datetime import datetime, timezone
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 
-DB_PATH = os.path.join(SCRAPER_DIR, "mangascraper/core/mangascraper.db")
+DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core/data")
+DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 lock = threading.Lock()
 _thread_local = threading.local()
 
@@ -16,6 +17,7 @@ _thread_local = threading.local()
 def _connect():
     conn = getattr(_thread_local, "connection", None)
     if conn is None:
+        os.makedirs(DATA_DIR, exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
         conn.execute("PRAGMA foreign_keys = ON")
         _thread_local.connection = conn
@@ -37,7 +39,7 @@ atexit.register(close_connection)
 def init_db():
     orchestrator.refresh_globals()
     
-    os.makedirs(SCRAPER_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
     with lock, _connect() as conn:
         c = conn.cursor()
 
@@ -94,6 +96,26 @@ def init_db():
             example_occurrences TEXT,
             date_detected TEXT,
             fixed INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS CacheMetadata (
+            gallery_id TEXT PRIMARY KEY,
+            timestamp REAL,
+            clean_metadata TEXT,
+            raw_metadata TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS CacheReferences (
+            entry_key TEXT PRIMARY KEY,
+            cache_type TEXT,
+            cache_key TEXT,
+            path TEXT,
+            size INTEGER,
+            last_read REAL,
+            last_write REAL,
+            ttl INTEGER,
+            expires_at REAL,
+            ids TEXT
         );
         """)
 
@@ -200,4 +222,223 @@ def save_broken_symbols(symbol_map: dict[str, str]):
                     fixed=0,
                     date_detected=excluded.date_detected
             """, (symbol, "", now))
+        conn.commit()
+
+
+# ===============================
+# CACHE METADATA
+# ===============================
+def load_cache_metadata_all(cutoff: float | None = None) -> dict:
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        if cutoff is not None:
+            cursor.execute(
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+                "FROM CacheMetadata WHERE timestamp >= ?",
+                (cutoff,),
+            )
+        else:
+            cursor.execute(
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CacheMetadata"
+            )
+        rows = cursor.fetchall()
+    result = {}
+    for gallery_id, timestamp, clean_json, raw_json in rows:
+        clean = json.loads(clean_json) if clean_json else {}
+        raw = json.loads(raw_json) if raw_json else {}
+        result[str(gallery_id)] = {
+            "timestamp": timestamp,
+            "clean_metadata": clean,
+            "raw_metadata": raw,
+        }
+    return result
+
+
+def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
+    if not ids:
+        return {}
+    init_db()
+    ids = [str(gid) for gid in ids]
+    placeholders = ",".join("?" for _ in ids)
+    params = list(ids)
+    query = (
+        "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+        "FROM CacheMetadata WHERE gallery_id IN (" + placeholders + ")"
+    )
+    if cutoff is not None:
+        query += " AND timestamp >= ?"
+        params.append(cutoff)
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+    result = {}
+    for gallery_id, timestamp, clean_json, raw_json in rows:
+        clean = json.loads(clean_json) if clean_json else {}
+        raw = json.loads(raw_json) if raw_json else {}
+        result[str(gallery_id)] = {
+            "timestamp": timestamp,
+            "clean_metadata": clean,
+            "raw_metadata": raw,
+        }
+    return result
+
+
+def load_cache_metadata_entry(gallery_id: str) -> dict | None:
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT timestamp, clean_metadata, raw_metadata FROM CacheMetadata WHERE gallery_id = ?",
+            (str(gallery_id),),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    timestamp, clean_json, raw_json = row
+    clean = json.loads(clean_json) if clean_json else {}
+    raw = json.loads(raw_json) if raw_json else {}
+    return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
+
+
+def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
+    init_db()
+    entry = load_cache_metadata_entry(gallery_id) or {
+        "timestamp": None,
+        "clean_metadata": {},
+        "raw_metadata": {},
+    }
+    if isinstance(clean_metadata, dict):
+        entry["clean_metadata"].update(clean_metadata)
+    if raw_metadata is not None:
+        entry["raw_metadata"] = raw_metadata
+    entry["timestamp"] = timestamp
+
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO CacheMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(gallery_id) DO UPDATE SET "
+            "timestamp=excluded.timestamp, "
+            "clean_metadata=excluded.clean_metadata, "
+            "raw_metadata=excluded.raw_metadata",
+            (
+                str(gallery_id),
+                entry["timestamp"],
+                json.dumps(entry["clean_metadata"], ensure_ascii=False),
+                json.dumps(entry["raw_metadata"], ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+
+
+def prune_cache_metadata(cutoff: float):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM CacheMetadata WHERE timestamp IS NULL OR timestamp < ?",
+            (cutoff,),
+        )
+        conn.commit()
+
+
+# ===============================
+# CACHE REFERENCES
+# ===============================
+def load_cache_references() -> dict:
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
+            "FROM CacheReferences"
+        )
+        rows = cursor.fetchall()
+    result = {}
+    for row in rows:
+        (
+            entry_key,
+            cache_type,
+            cache_key,
+            path,
+            size,
+            last_read,
+            last_write,
+            ttl,
+            expires_at,
+            ids_json,
+        ) = row
+        entry = {
+            "type": cache_type,
+            "key": cache_key,
+            "path": path,
+            "size": size,
+            "last_read": last_read,
+            "last_write": last_write,
+            "ttl": ttl,
+            "expires_at": expires_at,
+        }
+        if ids_json:
+            try:
+                entry["ids"] = json.loads(ids_json)
+            except Exception:
+                entry["ids"] = []
+        result[str(entry_key)] = entry
+    return result
+
+
+def upsert_cache_reference(entry_key: str, entry: dict):
+    init_db()
+    ids = entry.get("ids")
+    ids_json = json.dumps(ids) if ids is not None else None
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(entry_key) DO UPDATE SET "
+            "cache_type=excluded.cache_type, "
+            "cache_key=excluded.cache_key, "
+            "path=excluded.path, "
+            "size=excluded.size, "
+            "last_read=excluded.last_read, "
+            "last_write=excluded.last_write, "
+            "ttl=excluded.ttl, "
+            "expires_at=excluded.expires_at, "
+            "ids=excluded.ids",
+            (
+                str(entry_key),
+                entry.get("type"),
+                entry.get("key"),
+                entry.get("path"),
+                entry.get("size"),
+                entry.get("last_read"),
+                entry.get("last_write"),
+                entry.get("ttl"),
+                entry.get("expires_at"),
+                ids_json,
+            ),
+        )
+        conn.commit()
+
+
+def delete_cache_reference(entry_key: str):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
+        conn.commit()
+
+
+def prune_cache_references(now: float):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now,),
+        )
         conn.commit()

@@ -9,29 +9,28 @@ import json
 import time
 from pathlib import Path
 
-from mangascraper.core import orchestrator
+from mangascraper.core import orchestrator, database
 
 # Cache TTL: 3 hours (runtime-configured)
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
 SEARCH_HISTORY_FILENAME = "(search_history).json"
 SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
-MASTER_CACHE_FILENAME = "(master_cache).json"
 
 
 def get_cache_dir() -> Path:
     """
     Get or create cache directory for metadata.
-    Uses /opt/manga-scraper/mangascraper/core/cache/ if available,
+    Uses /opt/manga-scraper/mangascraper/core/data/ if available,
     otherwise uses package-relative path as fallback.
     """
     # Try primary location
-    primary_cache = Path("/opt/manga-scraper/mangascraper/core/cache")
+    primary_cache = Path("/opt/manga-scraper/mangascraper/core/data")
     if primary_cache.parent.exists():
         primary_cache.mkdir(parents=True, exist_ok=True)
         return primary_cache
     
     # Fallback to package-relative path
-    fallback_cache = Path(__file__).parent / "cache"
+    fallback_cache = Path(__file__).parent / "data"
     fallback_cache.mkdir(parents=True, exist_ok=True)
     return fallback_cache
 
@@ -40,17 +39,12 @@ def ensure_cache_files_exist():
     """Ensure cache directory and core cache files exist."""
     cache_dir = get_cache_dir()
     _prune_cache_files(cache_dir)
-    for name in (SEARCH_HISTORY_FILENAME, MASTER_CACHE_FILENAME, SELECTED_GALLERIES_FILENAME):
+    for name in (SEARCH_HISTORY_FILENAME, SELECTED_GALLERIES_FILENAME):
         cache_file = cache_dir / name
         if cache_file.exists():
             continue
         try:
-            if name == MASTER_CACHE_FILENAME:
-                data = {
-                    "references": {},
-                    "metadata": {},
-                }
-            elif name == SEARCH_HISTORY_FILENAME:
+            if name == SEARCH_HISTORY_FILENAME:
                 data = {"saved_at": None, "items": []}
             elif name == SELECTED_GALLERIES_FILENAME:
                 data = {"saved_at": None, "ids": [], "csv": ""}
@@ -66,10 +60,15 @@ def _prune_cache_files(cache_dir: Path):
     now = time.time()
     protected = {
         SEARCH_HISTORY_FILENAME,
-        MASTER_CACHE_FILENAME,
         SELECTED_GALLERIES_FILENAME,
     }
     for cache_file in cache_dir.glob("*.json"):
+        if cache_file.name == "(master_cache).json":
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
+            continue
         if cache_file.name in protected:
             continue
         try:
@@ -105,87 +104,13 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
 
 
 def _load_master_cache() -> dict:
-    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-    if not cache_file.exists():
-        return {
-            "references": {},
-            "metadata": {},
-        }
+    cutoff = time.time() - TTL
     try:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {
-                "references": {},
-                "metadata": {},
-            }
-        references = data.get("references")
-        if references is None:
-            references = data.get("entries")
-        if not isinstance(references, dict):
-            references = {}
-
-        metadata_block = data.get("metadata")
-        if not isinstance(metadata_block, dict):
-            metadata_block = {}
-
-        def _ensure_entry(gid: str) -> dict:
-            entry = metadata_block.get(gid)
-            if not isinstance(entry, dict):
-                entry = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
-            if not isinstance(entry.get("clean_metadata"), dict):
-                entry["clean_metadata"] = {}
-            if not isinstance(entry.get("raw_metadata"), dict):
-                entry["raw_metadata"] = {}
-            metadata_block[gid] = entry
-            return entry
-
-        legacy_general = data.get("general_metadata")
-        legacy_raw = data.get("general_raw_metadata")
-        if isinstance(legacy_general, dict) and isinstance(legacy_general.get("metadata"), dict):
-            for gid, entry in legacy_general.get("metadata", {}).items():
-                if not isinstance(entry, dict):
-                    continue
-                target = _ensure_entry(str(gid))
-                target["clean_metadata"].update(entry)
-                if target.get("timestamp") is None:
-                    target["timestamp"] = legacy_general.get("timestamp")
-        if isinstance(legacy_raw, dict) and isinstance(legacy_raw.get("metadata"), dict):
-            for gid, entry in legacy_raw.get("metadata", {}).items():
-                target = _ensure_entry(str(gid))
-                target["raw_metadata"] = entry
-                if target.get("timestamp") is None:
-                    target["timestamp"] = legacy_raw.get("timestamp")
-
-        if isinstance(metadata_block.get("entries"), dict):
-            legacy_entries = metadata_block.pop("entries")
-            for gid, entry in legacy_entries.items():
-                if not isinstance(entry, dict):
-                    continue
-                target = _ensure_entry(str(gid))
-                target["clean_metadata"].update({k: v for k, v in entry.items() if k != "raw_metadata"})
-                if "raw_metadata" in entry:
-                    target["raw_metadata"] = entry.get("raw_metadata")
-
-        if isinstance(metadata_block.get("metadata"), dict):
-            legacy_summary = metadata_block.pop("metadata")
-            for gid, entry in legacy_summary.items():
-                if not isinstance(entry, dict):
-                    continue
-                target = _ensure_entry(str(gid))
-                target["clean_metadata"].update(entry)
-
-        if isinstance(metadata_block.get("raw_metadata"), dict):
-            legacy_raw_map = metadata_block.pop("raw_metadata")
-            for gid, entry in legacy_raw_map.items():
-                target = _ensure_entry(str(gid))
-                target["raw_metadata"] = entry
-
-        data = {
-            "references": references,
-            "metadata": metadata_block,
-        }
-        return _prune_master_cache(data, save_if_changed=True)
+        database.prune_cache_metadata(cutoff)
+        database.prune_cache_references(time.time())
+        metadata_block = database.load_cache_metadata_all(cutoff)
+        references = database.load_cache_references()
+        return {"references": references, "metadata": metadata_block}
     except Exception:
         return {
             "references": {},
@@ -196,52 +121,14 @@ def _load_master_cache() -> dict:
 def _prune_master_cache(data: dict, save_if_changed: bool = False) -> dict:
     if not isinstance(data, dict):
         return {"references": {}, "metadata": {}}
-
-    references = data.get("references")
-    metadata_block = data.get("metadata")
-    if not isinstance(references, dict):
-        references = {}
-    if not isinstance(metadata_block, dict):
-        metadata_block = {}
-
-    now = time.time()
-    changed = False
-
-    for gid in list(metadata_block.keys()):
-        entry = metadata_block.get(gid)
-        if not isinstance(entry, dict):
-            metadata_block.pop(gid, None)
-            changed = True
-            continue
-        timestamp = entry.get("timestamp") or 0
-        if (now - timestamp) >= TTL:
-            metadata_block.pop(gid, None)
-            changed = True
-
-    for key in list(references.keys()):
-        entry = references.get(key)
-        if not isinstance(entry, dict):
-            references.pop(key, None)
-            changed = True
-            continue
-        expires_at = entry.get("expires_at")
-        if expires_at and now >= expires_at:
-            references.pop(key, None)
-            changed = True
-
-    data["references"] = references
-    data["metadata"] = metadata_block
-
-    if changed and save_if_changed:
-        _save_master_cache(data)
+    if save_if_changed:
+        database.prune_cache_metadata(time.time() - TTL)
+        database.prune_cache_references(time.time())
     return data
 
 
 def load_all_cached_metadata() -> dict:
     """Load and merge all cached metadata entries from the master cache registry."""
-    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-    if not cache_file.exists():
-        return {}
     data = _load_master_cache()
     references = data.get("references", {})
     if not isinstance(references, dict):
@@ -281,32 +168,19 @@ def load_all_cached_metadata() -> dict:
 
 
 def _save_master_cache(data: dict):
-    try:
-        cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    return
 
 
 def _update_master_cache(entry_key: str, entry: dict):
-    data = _load_master_cache()
-    data["references"][entry_key] = entry
-    _save_master_cache(data)
+    database.upsert_cache_reference(entry_key, entry)
 
 
 def _remove_master_cache_entry(entry_key: str):
-    data = _load_master_cache()
-    if entry_key in data["references"]:
-        del data["references"][entry_key]
-        _save_master_cache(data)
+    database.delete_cache_reference(entry_key)
 
 
 def load_general_metadata_cache() -> dict:
     """Load general metadata stored inside master cache."""
-    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-    if not cache_file.exists():
-        return {}
     data = _load_master_cache()
     metadata = data.get("metadata", {})
     if not isinstance(metadata, dict):
@@ -330,30 +204,20 @@ def save_general_metadata_cache(metadata: dict):
         return
     data = _load_master_cache()
     safe_metadata = {str(k): v for k, v in metadata.items()}
-    metadata_block = data.get("metadata", {})
-    if not isinstance(metadata_block, dict):
-        metadata_block = {}
-    for gid, entry in safe_metadata.items():
-        current = metadata_block.get(gid)
-        if not isinstance(current, dict):
-            current = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
-        if not isinstance(current.get("clean_metadata"), dict):
-            current["clean_metadata"] = {}
-        if not isinstance(current.get("raw_metadata"), dict):
-            current["raw_metadata"] = {}
-        if isinstance(entry, dict):
-            current["clean_metadata"].update(entry)
-        current["timestamp"] = time.time()
-        metadata_block[gid] = current
-    data["metadata"] = metadata_block
-    _save_master_cache(data)
+    now = time.time()
+        for gid, entry in safe_metadata.items():
+            if not isinstance(entry, dict):
+                continue
+            database.upsert_cache_metadata(
+                gid,
+                now,
+                clean_metadata=entry,
+                raw_metadata=None,
+            )
 
 
 def load_general_raw_metadata_cache() -> dict:
     """Load raw metadata stored inside master cache."""
-    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-    if not cache_file.exists():
-        return {}
     data = _load_master_cache()
     raw_block = data.get("metadata", {})
     if not isinstance(raw_block, dict):
@@ -375,21 +239,14 @@ def save_general_raw_metadata_cache(metadata: dict):
     if not isinstance(metadata, dict):
         return
     data = _load_master_cache()
-    metadata_block = data.get("metadata", {})
-    if not isinstance(metadata_block, dict):
-        metadata_block = {}
-    for gid, entry in metadata.items():
-        key = str(gid)
-        current = metadata_block.get(key)
-        if not isinstance(current, dict):
-            current = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
-        if not isinstance(current.get("clean_metadata"), dict):
-            current["clean_metadata"] = {}
-        current["raw_metadata"] = entry
-        current["timestamp"] = time.time()
-        metadata_block[key] = current
-    data["metadata"] = metadata_block
-    _save_master_cache(data)
+    now = time.time()
+        for gid, entry in metadata.items():
+            database.upsert_cache_metadata(
+                str(gid),
+                now,
+                clean_metadata=None,
+                raw_metadata=entry,
+            )
 
 
 def _build_master_entry(
@@ -678,9 +535,6 @@ def save_selected_galleries(ids: list[int]):
 def load_cached_metadata_for_ids(ids: list[int]) -> dict:
     """Load cached metadata for a set of IDs from master cache entries."""
     if not ids:
-        return {}
-    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
-    if not cache_file.exists():
         return {}
     wanted = set()
     for gid in ids:
