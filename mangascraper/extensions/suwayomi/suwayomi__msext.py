@@ -363,8 +363,8 @@ WantedBy=multi-user.target
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "enable", "--now", "suwayomi-server"], check=True)
         logger.info("Suwayomi systemd service created and started")
-        log(f"\nSuwayomi Web: http://$IP:4567/", "debug")
-        log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "debug")
+        log(f"\nSuwayomi Web: http://$IP:4567/", "info")
+        log("Suwayomi GraphQL: http://$IP:4567/api/graphql", "info")
         
         pre_run_hook()
         logger.info(f"{EXTENSION_REFERRER}: Installed.")
