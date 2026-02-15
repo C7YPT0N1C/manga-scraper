@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/extension_loader.py
 
-import os, json, importlib, shutil, subprocess, sys
+import os, json, importlib, importlib.util, shutil, subprocess, sys
 
 from urllib.request import urlopen
 
@@ -238,10 +238,11 @@ def sparse_clone(extension_name: str, url: str):
     subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
     subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
 
-    # Configure sparse-checkout to fetch the top-level folder
+    # Configure sparse-checkout to fetch the extension folder and entry point
     sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
     with open(sparse_file, "w", encoding="utf-8") as f:
-        f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
+        f.write(f"/{extension_name}/\n")
+        f.write(f"/{extension_name}__msext.py\n")
 
     # Pull the branch (assumes 'main')
     subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
@@ -274,6 +275,15 @@ def sparse_clone(extension_name: str, url: str):
 # ------------------------------------------------------------
 # Extension Loader
 # ------------------------------------------------------------
+def _load_extension_module(module_name: str, entry_point: str):
+    spec = importlib.util.spec_from_file_location(module_name, entry_point)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load module spec for {entry_point}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
 def load_installed_extensions(suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
@@ -323,13 +333,12 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
             entry_point = os.path.join(ext_folder, ext["entry_point"])  # refresh path after install
 
         if os.path.exists(entry_point):
-            module_name = f"mangascraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"    
+            module_name = f"mangascraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
             try:
-                module = importlib.import_module(module_name)
+                module = _load_extension_module(module_name, entry_point)
                 INSTALLED_EXTENSIONS.append(module)
                 if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
                     log(f"Extension: {ext['name']}: Loaded.", "debug")
-            
             except Exception as e:
                 logger.warning(f"Extension: {ext['name']}: Failed to load: {e}. Is an external program managing it?")
         else:
@@ -447,8 +456,9 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
     module_name = f"mangascraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
+    entry_point_path = os.path.join(ext_folder, entry_point)
     try:
-        module = importlib.import_module(module_name)
+        module = _load_extension_module(module_name, entry_point_path)
     except Exception as e:
         logger.error(f"Extension '{extension_name}': Failed to load entry point after install: {e}")
         return
