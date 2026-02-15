@@ -22,7 +22,9 @@ from mangascraper.extensions.extension_manager import get_extension_download_pat
 
 READER_SETTINGS = {
     "quality": "ultra",
-    "render_scale": 4,
+    "colors": "full",
+    "symbols": "block",
+    "dither": "none",
     "oversample": False,
     "clamp_to_terminal": True,
     "preserve_aspect": True,
@@ -302,11 +304,11 @@ def read_gallery_in_terminal(gallery_id: int):
     def prompt_reader_settings():
         choice = input("Reader quality (ultra/high/medium/low, default ultra): ").strip().lower()
         if choice in ("medium", "m"):
-            READER_SETTINGS.update({"quality": "medium", "render_scale": 2})
+            READER_SETTINGS.update({"quality": "medium", "colors": 16})
         elif choice in ("low", "l"):
-            READER_SETTINGS.update({"quality": "low", "render_scale": 1})
+            READER_SETTINGS.update({"quality": "low", "colors": 8})
         elif choice in ("high", "h"):
-            READER_SETTINGS.update({"quality": "high", "render_scale": 3})
+            READER_SETTINGS.update({"quality": "high", "colors": 256})
         elif choice in ("ultra", "u", ""):
             pass
         else:
@@ -327,12 +329,12 @@ def read_gallery_in_terminal(gallery_id: int):
     if not sys.stdout.isatty():
         logger.warning("Read mode requires a TTY. Skipping.")
         return
-    if shutil.which("kitty") is None:
-        install = input("kitty is required for reader. Install now? (y/n): ").strip().lower()
+    if shutil.which("chafa") is None:
+        install = input("chafa is required for reader. Install now? (y/n): ").strip().lower()
         if install in ("y", "yes"):
-            subprocess.run(["sudo", "apt-get", "install", "-y", "kitty"], check=False)
-        if shutil.which("kitty") is None:
-            logger.warning("Read mode requires 'kitty' on PATH. Skipping.")
+            subprocess.run(["sudo", "apt-get", "install", "-y", "chafa"], check=False)
+        if shutil.which("chafa") is None:
+            logger.warning("Read mode requires 'chafa' on PATH. Skipping.")
             return
 
     meta = fetch_gallery_metadata(gallery_id)
@@ -393,23 +395,21 @@ def read_gallery_in_terminal(gallery_id: int):
                     render_cols = max(1, term_size.columns)
                     render_rows = max(1, term_size.lines)
 
-                render_scale = max(1, int(READER_SETTINGS.get("render_scale", 1)))
-                if READER_SETTINGS["oversample"]:
-                    render_scale = min(render_scale * 2, 8)
-                if render_scale > 1:
-                    render_cols = max(1, render_cols * render_scale)
-                    render_rows = max(1, render_rows * render_scale)
-
-                kitty_args = ["kitty", "+kitten", "icat", "--clear"]
-                if READER_SETTINGS["clamp_to_terminal"]:
-                    kitty_args.append(f"--place={render_cols}x{render_rows}@0x0")
+                chafa_args = [
+                    "chafa",
+                    f"--size={render_cols}x{render_rows}",
+                    f"--symbols={READER_SETTINGS['symbols']}",
+                    f"--colors={READER_SETTINGS['colors']}",
+                    f"--dither={READER_SETTINGS['dither']}",
+                    page_path,
+                ]
                 if not READER_SETTINGS["preserve_aspect"]:
-                    kitty_args.append("--stretch")
-                kitty_args.append(page_path)
-
-                result = subprocess.run(kitty_args, check=False)
-                if result.returncode != 0:
-                    fallback_args = ["kitty", "+kitten", "icat", "--clear", page_path]
+                    chafa_args.insert(-1, "--stretch")
+                if READER_SETTINGS["oversample"]:
+                    chafa_args.insert(-1, "--scale=2")
+                result = subprocess.run(chafa_args, check=False)
+                if result.returncode != 0 and READER_SETTINGS["oversample"]:
+                    fallback_args = [arg for arg in chafa_args if arg != "--scale=2"]
                     subprocess.run(fallback_args, check=False)
             else:
                 logger.warning("Unable to display this page.")
