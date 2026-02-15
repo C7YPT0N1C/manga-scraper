@@ -45,7 +45,11 @@ def ensure_cache_files_exist():
             continue
         try:
             if name == MASTER_CACHE_FILENAME:
-                data = {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
+                data = {
+                    "references": {},
+                    "general_metadata": {"timestamp": None, "metadata": {}},
+                    "general_raw_metadata": {"timestamp": None, "metadata": {}},
+                }
             elif name == SEARCH_HISTORY_FILENAME:
                 data = {"saved_at": None, "items": []}
             elif name == SELECTED_GALLERIES_FILENAME:
@@ -83,12 +87,20 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
 def _load_master_cache() -> dict:
     cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
     if not cache_file.exists():
-        return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
+        return {
+            "references": {},
+            "general_metadata": {"timestamp": None, "metadata": {}},
+            "general_raw_metadata": {"timestamp": None, "metadata": {}},
+        }
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
+            return {
+                "references": {},
+                "general_metadata": {"timestamp": None, "metadata": {}},
+                "general_raw_metadata": {"timestamp": None, "metadata": {}},
+            }
         references = data.get("references")
         if references is None:
             references = data.get("entries")
@@ -101,9 +113,23 @@ def _load_master_cache() -> dict:
         if not isinstance(general_metadata.get("metadata"), dict):
             general_metadata["metadata"] = {}
 
-        return {"references": references, "general_metadata": general_metadata}
+        general_raw_metadata = data.get("general_raw_metadata")
+        if not isinstance(general_raw_metadata, dict):
+            general_raw_metadata = {"timestamp": None, "metadata": {}}
+        if not isinstance(general_raw_metadata.get("metadata"), dict):
+            general_raw_metadata["metadata"] = {}
+
+        return {
+            "references": references,
+            "general_metadata": general_metadata,
+            "general_raw_metadata": general_raw_metadata,
+        }
     except Exception:
-        return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
+        return {
+            "references": {},
+            "general_metadata": {"timestamp": None, "metadata": {}},
+            "general_raw_metadata": {"timestamp": None, "metadata": {}},
+        }
 
 
 def load_all_cached_metadata() -> dict:
@@ -183,6 +209,30 @@ def save_general_metadata_cache(metadata: dict):
     data["general_metadata"] = {
         "timestamp": time.time(),
         "metadata": safe_metadata,
+    }
+    _save_master_cache(data)
+
+
+def load_general_raw_metadata_cache() -> dict:
+    """Load raw metadata stored inside master cache."""
+    data = _load_master_cache()
+    raw_block = data.get("general_raw_metadata", {})
+    metadata = raw_block.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return {}
+    if time.time() - (raw_block.get("timestamp") or 0) >= TTL:
+        return {}
+    return metadata
+
+
+def save_general_raw_metadata_cache(metadata: dict):
+    """Save raw metadata inside master cache."""
+    if not isinstance(metadata, dict):
+        return
+    data = _load_master_cache()
+    data["general_raw_metadata"] = {
+        "timestamp": time.time(),
+        "metadata": metadata,
     }
     _save_master_cache(data)
 

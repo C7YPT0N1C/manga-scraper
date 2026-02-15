@@ -16,6 +16,8 @@ from mangascraper.core.cache import (
     load_cached_metadata_for_ids,
     load_general_metadata_cache,
     save_general_metadata_cache,
+    load_general_raw_metadata_cache,
+    save_general_raw_metadata_cache,
 )
 from tqdm import tqdm
 
@@ -279,6 +281,25 @@ def clean_title(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     return make_filesystem_safe(title)
+
+
+def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
+    if not meta or not isinstance(meta, dict):
+        return None
+    artists = get_meta_tags("api", meta, "artist")
+    groups = get_meta_tags("api", meta, "group")
+    languages = get_meta_tags("api", meta, "language")
+    return {
+        "id": gallery_id,
+        "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
+        "artists": artists or ["Unknown Artist"],
+        "groups": groups or ["Unknown Group"],
+        "tags": get_meta_tags("api", meta, "tag"),
+        "characters": get_meta_tags("api", meta, "character"),
+        "parodies": get_meta_tags("api", meta, "parody"),
+        "languages": languages or ["Unknown Language"],
+        "pages": len(meta.get("images", {}).get("pages", [])),
+    }
 
 ################################################################################################################
 #  NHentai API Handling
@@ -789,6 +810,11 @@ def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
 def fetch_gallery_metadata(gallery_id: int):
     orchestrator.refresh_globals()
 
+    raw_cache = load_general_raw_metadata_cache()
+    cached_meta = raw_cache.get(str(gallery_id))
+    if cached_meta and isinstance(cached_meta, dict):
+        return cached_meta
+
     metadata_session = get_session(referrer="API", status="return")
     
     url = f"{nhentai_api_base}/gallery/{gallery_id}"
@@ -816,6 +842,16 @@ def fetch_gallery_metadata(gallery_id: int):
             if not isinstance(data, dict):
                 logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                 return None
+
+            cached_entry = _build_cached_metadata_entry(data, gallery_id)
+            if cached_entry:
+                general_metadata = load_general_metadata_cache()
+                general_metadata[gallery_id] = cached_entry
+                save_general_metadata_cache(general_metadata)
+
+            raw_cache = load_general_raw_metadata_cache()
+            raw_cache[str(gallery_id)] = data
+            save_general_raw_metadata_cache(raw_cache)
 
             log_clarification("debug")
             log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
@@ -992,23 +1028,9 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
         try:
             meta = fetch_gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
-                # Extract relevant fields
-                artists = get_meta_tags("api", meta, "artist")
-                groups = get_meta_tags("api", meta, "group")
-                languages = get_meta_tags("api", meta, "language")
-                
-                meta_entry = {
-                    "id": gallery_id,
-                    "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
-                    "artists": artists or ["Unknown Artist"],
-                    "groups": groups or ["Unknown Group"],
-                    "tags": get_meta_tags("api", meta, "tag"),
-                    "characters": get_meta_tags("api", meta, "character"),
-                    "parodies": get_meta_tags("api", meta, "parody"),
-                    "languages": languages or ["Unknown Language"],
-                    "pages": len(meta.get("images", {}).get("pages", [])),
-                }
-                metadata[gallery_id] = meta_entry
+                meta_entry = _build_cached_metadata_entry(meta, gallery_id)
+                if meta_entry:
+                    metadata[gallery_id] = meta_entry
             else:
                 failed_ids.append(gallery_id)
         except Exception as e:
