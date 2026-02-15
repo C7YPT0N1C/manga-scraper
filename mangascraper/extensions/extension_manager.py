@@ -12,7 +12,7 @@ from mangascraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
-EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/remote_extensions"
+EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/extensions"
 REMOTE_EXTENSIONS_TMP = "/tmp/manga-scraper/manga-scraper-extensions"
 os.makedirs(EXTENSIONS_DIR, exist_ok=True)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
@@ -227,7 +227,7 @@ def calculate_extension_download_path(extension_name: str) -> str:
 # ------------------------------------------------------------
 # Remote repo sync (full clone)
 # ------------------------------------------------------------
-def sync_remote_extensions_repo(url: str):
+def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
     log(f"Syncing extensions repo: {url}", "debug")
     os.makedirs(os.path.dirname(REMOTE_EXTENSIONS_TMP), exist_ok=True)
     if os.path.exists(REMOTE_EXTENSIONS_TMP):
@@ -236,10 +236,20 @@ def sync_remote_extensions_repo(url: str):
 
     log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
 
-    if os.path.exists(EXTENSIONS_DIR):
-        shutil.rmtree(EXTENSIONS_DIR)
-    shutil.copytree(REMOTE_EXTENSIONS_TMP, EXTENSIONS_DIR)
-    log(f"Remote extensions synced: {EXTENSIONS_DIR}", "debug")
+    if extension_name:
+        source_dir = os.path.join(REMOTE_EXTENSIONS_TMP, extension_name)
+        if not os.path.isdir(source_dir):
+            raise FileNotFoundError(f"Remote extension folder missing: {source_dir}")
+        target_dir = os.path.join(EXTENSIONS_DIR, extension_name)
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir)
+        shutil.copytree(source_dir, target_dir)
+        log(f"Remote extension synced into: {target_dir}", "debug")
+    else:
+        if os.path.exists(EXTENSIONS_DIR):
+            shutil.rmtree(EXTENSIONS_DIR)
+        shutil.copytree(REMOTE_EXTENSIONS_TMP, EXTENSIONS_DIR)
+        log(f"Remote extensions synced into: {EXTENSIONS_DIR}", "debug")
 
     # Quick sanity checks for entry points (debug only)
     try:
@@ -502,14 +512,14 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
 
     try:
         log(f"Syncing remote extensions from {repo_url}...", "debug")
-        sync_remote_extensions_repo(repo_url)
+        sync_remote_extensions_repo(repo_url, extension_name=extension_name)
     except Exception as e:
         logger.warning(f"Failed to sync from primary repo: {e}")
         if BACKUP_BASE_REPO_URL:
             backup_url = repo_url.replace(PRIMARY_BASE_REPO_URL, BACKUP_BASE_REPO_URL)
             try:
                 log(f"Retrying sync with backup repo: {backup_url}", "debug")
-                sync_remote_extensions_repo(backup_url)
+                sync_remote_extensions_repo(backup_url, extension_name=extension_name)
             except Exception as e2:
                 logger.error(f"Failed to sync from backup repo: {e2}")
                 return
