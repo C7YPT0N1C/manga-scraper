@@ -204,6 +204,53 @@ def _get_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | No
     entries.sort(key=lambda item: item[0], reverse=True)
     return entries[0]
 
+def _get_latest_cover_id(covers_folder: str) -> int | None:
+    if not os.path.isdir(covers_folder):
+        return None
+    cover_ids = []
+    for name in os.listdir(covers_folder):
+        entry_id = _extract_gallery_id(name)
+        if entry_id is not None:
+            cover_ids.append(entry_id)
+    if not cover_ids:
+        return None
+    return max(cover_ids)
+
+def _ensure_cover_symlink(creator_folder: str):
+    try:
+        if not os.path.isdir(creator_folder):
+            return
+        existing_cover = any(
+            f.startswith("cover") and os.path.exists(os.path.join(creator_folder, f))
+            for f in os.listdir(creator_folder)
+        )
+        if existing_cover:
+            return
+
+        _, entry_name, _ = _get_latest_gallery_entry(creator_folder)
+        if not entry_name:
+            return
+
+        covers_folder = os.path.join(creator_folder, ".covers")
+        if not os.path.isdir(covers_folder):
+            return
+
+        candidates = [
+            f for f in os.listdir(covers_folder)
+            if f.startswith(entry_name)
+        ]
+        if not candidates:
+            return
+
+        candidates.sort()
+        cover_file = os.path.join(covers_folder, candidates[0])
+        _, ext = os.path.splitext(cover_file)
+        cover_link = os.path.join(creator_folder, f"cover{ext}")
+        os.symlink(cover_file, cover_link)
+        logger.debug(f"Restored cover symlink for {creator_folder}: {cover_link} -> {cover_file}")
+    except Exception as e:
+        logger.debug(f"Failed to restore cover symlink in {creator_folder}: {e}")
+
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
@@ -359,6 +406,10 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
                     broken_symlinks_removed += 1
                 except Exception as e:
                     logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
+
+        # Restore missing cover link for creator folders
+        if os.path.dirname(dirpath) == DEDICATED_DOWNLOAD_PATH:
+            _ensure_cover_symlink(dirpath)
     
     logger.info(f"Removed empty directories.")
     log_clarification()
@@ -1245,6 +1296,11 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
         gallery_meta = return_gallery_metas(meta)
         creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        cover_source = None
+        cover_gallery_name = None
+        cover_ext = None
+        gallery_paths = {}
+        cover_gallery_id = None
         
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
@@ -1256,32 +1312,50 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                 f for f in os.listdir(creator_folder)
                 if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith(gallery_prefix)
             ]
-            if not gallery_items:
-                continue
+            if gallery_items:
+                gallery_items.sort()
+                gallery_path = os.path.join(creator_folder, gallery_items[0])
+                if os.path.isdir(gallery_path):
+                    gallery_paths[creator_name] = gallery_path
 
-            gallery_items.sort()
-            gallery_path = os.path.join(creator_folder, gallery_items[0])
+                    if cover_source is None:
+                        candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+                        if candidates:
+                            page1_file = os.path.join(gallery_path, candidates[0])
+                            _, ext = os.path.splitext(page1_file)
+                            cover_source = page1_file
+                            cover_gallery_name = gallery_items[0]
+                            cover_ext = ext
+                            cover_gallery_id = _extract_gallery_id(cover_gallery_name)
+                else:
+                    logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
 
-            # Only process if it's still a directory (not yet archived)
-            if not os.path.isdir(gallery_path):
-                logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
+        for creator_name in creators:
+            creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            if not os.path.isdir(creator_folder):
                 continue
 
             # Extract cover from the downloaded gallery and store in hidden covers subfolder
-            covers_folder = os.path.join(creator_folder, ".covers")
-            try:
-                os.makedirs(covers_folder, exist_ok=True)
-                candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+            if cover_source and cover_gallery_name and cover_ext:
+                covers_folder = os.path.join(creator_folder, ".covers")
+                try:
+                    os.makedirs(covers_folder, exist_ok=True)
+                    latest_cover_id = _get_latest_cover_id(covers_folder)
+                    if cover_gallery_id is not None and latest_cover_id is not None:
+                        if cover_gallery_id <= latest_cover_id:
+                            _ensure_cover_symlink(creator_folder)
+                            gallery_path = gallery_paths.get(creator_name)
+                            if gallery_format == "directory" or not gallery_path:
+                                if gallery_format == "directory" and gallery_path:
+                                    logger.debug(
+                                        f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                                    )
+                                continue
 
-                if candidates:
-                    page1_file = os.path.join(gallery_path, candidates[0])
-                    _, ext = os.path.splitext(page1_file)
-                    
-                    # Copy cover to covers subfolder with gallery name
-                    cover_in_subfolder = os.path.join(covers_folder, f"{gallery_items[0]}{ext}")
-                    shutil.copy2(page1_file, cover_in_subfolder)
+                    cover_in_subfolder = os.path.join(covers_folder, f"{cover_gallery_name}{cover_ext}")
+                    shutil.copy2(cover_source, cover_in_subfolder)
                     logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
-                    
+
                     # Remove any existing cover files (regardless of extension)
                     for f in os.listdir(creator_folder):
                         if f.startswith("cover") and f != "covers" and f != ".covers":
@@ -1289,22 +1363,25 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                                 os.unlink(os.path.join(creator_folder, f))
                             except Exception as e:
                                 logger.debug(f"Could not remove old cover file {f}: {e}")
-                    
+
                     # Create symlink in creator root pointing to latest cover
-                    cover_link = os.path.join(creator_folder, f"cover{ext}")
+                    cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
                     os.symlink(cover_in_subfolder, cover_link)
                     logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
-            except Exception as e:
-                logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
+                except Exception as e:
+                    logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
 
-            if gallery_format == "directory":
-                logger.debug(
-                    f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
-                )
+            gallery_path = gallery_paths.get(creator_name)
+            if gallery_format == "directory" or not gallery_path:
+                if gallery_format == "directory" and gallery_path:
+                    logger.debug(
+                        f"Gallery format is 'directory'; keeping original gallery folder: {gallery_path}"
+                    )
                 continue
 
             archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
-            expected_archive = os.path.join(creator_folder, f"{gallery_items[0]}{archive_ext}")
+            gallery_name = os.path.basename(gallery_path)
+            expected_archive = os.path.join(creator_folder, f"{gallery_name}{archive_ext}")
             if not os.path.exists(expected_archive):
                 max_checks = max(1, int(ARCHIVE_WAIT_SECONDS / ARCHIVE_POLL_INTERVAL))
                 for _ in range(max_checks):
