@@ -12,6 +12,7 @@ from pathlib import Path
 # Cache TTL: 3 hours
 TTL = 3 * 60 * 60
 SEARCH_HISTORY_FILENAME = "search_history.json"
+SELECTED_GALLERIES_FILENAME = "selected_galleries.json"
 MASTER_CACHE_FILENAME = "master_cache.json"
 
 
@@ -267,6 +268,78 @@ def save_search_history(items: list[dict], max_items: int = 10):
         _update_master_cache(
             "search_history",
             _build_master_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
+        )
+    except Exception:
+        pass
+
+
+def load_selected_galleries() -> list[int]:
+    """Load selected galleries from cache.
+
+    Returns:
+        list of gallery IDs (ints), sorted ascending
+    """
+    cache_file = get_cache_dir() / SELECTED_GALLERIES_FILENAME
+    if not cache_file.exists():
+        return []
+    try:
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        ids = data.get("ids", [])
+        if not isinstance(ids, list):
+            return []
+        cleaned = []
+        for gid in ids:
+            try:
+                cleaned.append(int(gid))
+            except Exception:
+                continue
+        cleaned = sorted(set(cleaned))
+        _update_master_cache(
+            "selected_galleries",
+            _build_master_entry(
+                "selected_galleries",
+                "selected_galleries",
+                cache_file,
+                None,
+                last_read=time.time(),
+            ),
+        )
+        return cleaned
+    except Exception:
+        return []
+
+
+def save_selected_galleries(ids: list[int]):
+    """Save selected gallery IDs as a sorted list and comma-separated string."""
+    try:
+        if not isinstance(ids, list):
+            return
+        cleaned = []
+        for gid in ids:
+            try:
+                cleaned.append(int(gid))
+            except Exception:
+                continue
+        cleaned = sorted(set(cleaned))
+        cache_file = get_cache_dir() / SELECTED_GALLERIES_FILENAME
+        saved_at = time.time()
+        data = {
+            "saved_at": saved_at,
+            "ids": cleaned,
+            "csv": ",".join(str(gid) for gid in cleaned),
+        }
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        _update_master_cache(
+            "selected_galleries",
+            _build_master_entry(
+                "selected_galleries",
+                "selected_galleries",
+                cache_file,
+                None,
+                last_write=saved_at,
+            ),
         )
     except Exception:
         pass

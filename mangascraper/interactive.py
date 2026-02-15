@@ -17,7 +17,14 @@ from mangascraper.core.api import (
     fetch_gallery_metadata,
     fetch_image_urls,
 )
-from mangascraper.core.cache import get_cache_key, load_cache, clear_cache, load_search_history, save_search_history
+from mangascraper.core.cache import (
+    get_cache_key,
+    load_cache,
+    clear_cache,
+    load_search_history,
+    save_search_history,
+    save_selected_galleries,
+)
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
 READER_SETTINGS = {
@@ -1276,6 +1283,12 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         search_history.append(entry)
     selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
 
+    def persist_selected_ids():
+        if selected_ids:
+            save_selected_galleries(sorted(set(selected_ids)))
+        else:
+            save_selected_galleries([])
+
     def add_search_history(
         search_type: str,
         search_value: str,
@@ -1469,12 +1482,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     selected_ids.extend(ids)
                     logger.info(f"Added {len(ids)} galleries to download list.")
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                    persist_selected_ids()
                     continue
                 new_ids, new_metadata = display_gallery_results(ids, cache_key)
                 if new_ids:
                     selected_ids.extend(new_ids)
                     selected_metadata.update(new_metadata)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                    persist_selected_ids()
             else:
                 if not ids:
                     if _check_no_results_and_prompt_filters():
@@ -1534,6 +1549,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     selected_ids.extend(new_ids)
                     selected_metadata.update(new_metadata)
                     logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                    persist_selected_ids()
             except ValueError as e:
                 logger.warning(f"Error processing ID range: {e}")
         
@@ -1559,6 +1575,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(new_ids)
                         selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        persist_selected_ids()
         
         elif choice == "4":
             # General search
@@ -1621,12 +1638,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        persist_selected_ids()
                         continue
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
                         selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        persist_selected_ids()
                 else:
                     if not ids:
                         if _check_no_results_and_prompt_filters():
@@ -1789,6 +1808,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                                 selected_ids.extend(new_ids)
                                 selected_metadata.update(new_metadata)
                                 logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                                persist_selected_ids()
                         else:
                             if _check_no_results_and_prompt_filters():
                                 break  # Break out to config menu
@@ -1802,6 +1822,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         elif choice == "e":
             # View selected galleries
             selected_ids = view_selected_galleries(selected_ids, selected_metadata)
+            persist_selected_ids()
             continue
 
         elif choice == "q":
