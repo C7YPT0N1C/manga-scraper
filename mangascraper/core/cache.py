@@ -205,15 +205,15 @@ def save_general_metadata_cache(metadata: dict):
     data = _load_master_cache()
     safe_metadata = {str(k): v for k, v in metadata.items()}
     now = time.time()
-        for gid, entry in safe_metadata.items():
-            if not isinstance(entry, dict):
-                continue
-            database.upsert_cache_metadata(
-                gid,
-                now,
-                clean_metadata=entry,
-                raw_metadata=None,
-            )
+    for gid, entry in safe_metadata.items():
+        if not isinstance(entry, dict):
+            continue
+        database.upsert_cache_metadata(
+            gid,
+            now,
+            clean_metadata=entry,
+            raw_metadata=None,
+        )
 
 
 def load_general_raw_metadata_cache() -> dict:
