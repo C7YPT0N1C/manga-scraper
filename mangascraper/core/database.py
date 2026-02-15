@@ -56,20 +56,17 @@ def init_db():
             notes TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS Galleries (
-            id INTEGER PRIMARY KEY,
-            raw_title TEXT,
-            clean_title TEXT,
-            num_pages INTEGER,
-            creator_id INTEGER,
-            language TEXT,
-            tags TEXT,
-            status TEXT,
-            started_at TEXT,
-            completed_at TEXT,
-            download_path TEXT,
-            cover_path TEXT,
-            extension_used TEXT,
+        CREATE TABLE IF NOT EXISTS GalleryTags (
+            gallery_id INTEGER PRIMARY KEY,
+            tag_ids TEXT,
+            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS GalleryLanguages (
+            gallery_id INTEGER PRIMARY KEY,
+            language_ids TEXT,
+            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
             favourite INTEGER DEFAULT 0,
             rating REAL,
             FOREIGN KEY (creator_id) REFERENCES Creators(id)
@@ -144,7 +141,13 @@ def upsert_creator(name, display_name=None):
             (name, display_name)
         )
         cursor.execute("SELECT id FROM Creators WHERE name=?", (name,))
-        return cursor.fetchone()[0]
+        creator_id = cursor.fetchone()[0]
+        # Update all fields except notes
+        cursor.execute(
+            "UPDATE Creators SET display_name=?, last_updated=? WHERE id=?",
+            (display_name, datetime.now(timezone.utc).isoformat(), creator_id)
+        )
+        return creator_id
 
 def upsert_tag(name, tag_type=None):
     with lock, _connect() as conn:
@@ -157,15 +160,17 @@ def upsert_tag(name, tag_type=None):
         return cursor.fetchone()[0]
 
 def link_gallery_tags(gallery_id, tag_names):
+    tag_ids = []
     for tag_name in tag_names:
         tag_id = upsert_tag(tag_name)
-        with lock, _connect() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO GalleryTags (gallery_id, tag_id) VALUES (?, ?) ON CONFLICT(gallery_id, tag_id) DO NOTHING",
-                (gallery_id, tag_id)
-            )
-            conn.commit()
+        tag_ids.append(tag_id)
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?) ON CONFLICT(gallery_id) DO UPDATE SET tag_ids=excluded.tag_ids",
+            (gallery_id, json.dumps(tag_ids))
+        )
+        conn.commit()
 
 def link_gallery_creator(gallery_id, creator_name):
     creator_id = upsert_creator(creator_name)
@@ -178,13 +183,24 @@ def link_gallery_creator(gallery_id, creator_name):
         conn.commit()
 
 def link_gallery_languages(gallery_id, languages):
+    language_ids = []
+    for lang_name in languages:
+        # Upsert language in Languages table
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO Languages (name) VALUES (?) ON CONFLICT(name) DO NOTHING",
+                (lang_name,)
+            )
+            cursor.execute("SELECT id FROM Languages WHERE name=?", (lang_name,))
+            lang_id = cursor.fetchone()[0]
+            language_ids.append(lang_id)
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        for lang in languages:
-            cursor.execute(
-                "INSERT INTO GalleryLanguages (gallery_id, language) VALUES (?, ?) ON CONFLICT(gallery_id, language) DO NOTHING",
-                (gallery_id, lang)
-            )
+        cursor.execute(
+            "INSERT INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?) ON CONFLICT(gallery_id) DO UPDATE SET language_ids=excluded.language_ids",
+            (gallery_id, json.dumps(language_ids))
+        )
         conn.commit()
 
 # ===============================
@@ -240,6 +256,9 @@ def mark_gallery_completed(gallery_id):
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("completed", now, gallery_id))
+        # Update language, tags, cover_path fields
+        # (Assume latest values are passed in via other helpers)
+        # This is a placeholder; actual update should be done via a dedicated update_gallery_metadata function
         conn.commit()
 
 def get_gallery_status(gallery_id):
