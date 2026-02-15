@@ -24,6 +24,8 @@ from mangascraper.core.cache import (
     load_search_history,
     save_search_history,
     save_selected_galleries,
+    load_selected_galleries,
+    load_cached_metadata_for_ids,
 )
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -466,24 +468,32 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         list: Updated list of selected IDs (after any removals)
     """
     if not selected_ids:
-        logger.info("No galleries selected yet.")
-        return []
+        cached_ids = load_selected_galleries()
+        if cached_ids:
+            selected_ids = cached_ids
+        else:
+            logger.info("No galleries selected yet.")
+            return []
     
     unique_ids = list(dict.fromkeys(selected_ids))
     logger.info(f"Currently selected: {len(unique_ids)} unique galleries")
     
-    # Use cached metadata if provided, otherwise fetch
+    # Use cached metadata if provided, otherwise fall back to cached selections
+    metadata = {}
     if cached_metadata:
-        metadata = {gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata}
-        # Fetch any missing galleries not in cache
-        missing_ids = [gid for gid in unique_ids if gid not in cached_metadata]
-        if missing_ids:
-            logger.info(f"Fetching metadata for {len(missing_ids)} galleries not in cache...")
-            missing_metadata = fetch_all_metadata_for_galleries(missing_ids)
-            metadata.update(missing_metadata)
-    else:
-        # Fetch metadata
-        metadata = fetch_all_metadata_for_galleries(unique_ids)
+        metadata.update({gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata})
+
+    cached_by_ids = load_cached_metadata_for_ids(unique_ids)
+    if cached_by_ids:
+        for gid in unique_ids:
+            if gid not in metadata and gid in cached_by_ids:
+                metadata[gid] = cached_by_ids[gid]
+
+    missing_ids = [gid for gid in unique_ids if gid not in metadata]
+    if missing_ids:
+        logger.info(f"Fetching metadata for {len(missing_ids)} galleries not in cache...")
+        missing_metadata = fetch_all_metadata_for_galleries(missing_ids)
+        metadata.update(missing_metadata)
     
     if not metadata:
         logger.warning("Could not fetch metadata for selected galleries")
@@ -1289,6 +1299,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         else:
             save_selected_galleries([])
 
+    if selected_ids:
+        persist_selected_ids()
+
     def add_search_history(
         search_type: str,
         search_value: str,
@@ -1341,6 +1354,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
+            if not selected_ids:
+                cached_ids = load_selected_galleries()
+                if cached_ids:
+                    selected_ids.extend(cached_ids)
             if selected_ids:
                 break
             else:
@@ -1570,6 +1587,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if invalid:
                     logger.warning(f"Ignoring invalid gallery IDs: {', '.join(invalid)}")
                 if ids:
+                    selected_ids.extend(ids)
+                    persist_selected_ids()
                     new_ids, new_metadata = display_gallery_results(ids)
                     if new_ids:
                         selected_ids.extend(new_ids)

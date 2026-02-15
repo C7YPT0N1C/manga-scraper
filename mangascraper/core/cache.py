@@ -73,6 +73,35 @@ def _load_master_cache() -> dict:
         return {"entries": {}}
 
 
+def load_all_cached_metadata() -> dict:
+    """Load and merge all cached metadata entries from the master cache registry."""
+    data = _load_master_cache()
+    entries = data.get("entries", {})
+    if not isinstance(entries, dict):
+        return {}
+    merged = {}
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "metadata":
+            continue
+        path = entry.get("path")
+        if not path:
+            continue
+        try:
+            cache_file = Path(path)
+            if not cache_file.exists():
+                continue
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            metadata = data.get("metadata", {})
+            if isinstance(metadata, dict):
+                merged.update(metadata)
+        except Exception:
+            continue
+    return merged
+
+
 def _save_master_cache(data: dict):
     try:
         cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
@@ -102,6 +131,7 @@ def _build_master_entry(
     ttl_seconds: int | None,
     last_read: float | None = None,
     last_write: float | None = None,
+    ids: list[int] | None = None,
 ) -> dict:
     try:
         size = cache_file.stat().st_size
@@ -112,7 +142,7 @@ def _build_master_entry(
     expires_at = None
     if ttl_seconds:
         expires_at = write_time + ttl_seconds
-    return {
+    entry = {
         "type": cache_type,
         "key": key,
         "path": str(cache_file),
@@ -122,6 +152,9 @@ def _build_master_entry(
         "ttl": ttl_seconds,
         "expires_at": expires_at,
     }
+    if ids is not None:
+        entry["ids"] = ids
+    return entry
 
 
 def load_cache(cache_key: str) -> dict:
@@ -140,6 +173,15 @@ def load_cache(cache_key: str) -> dict:
                 data = json.load(f)
                 # Check if cache is fresh (within TTL)
                 if time.time() - data.get('timestamp', 0) < TTL:
+                    metadata = data.get('metadata', {})
+                    ids = []
+                    if isinstance(metadata, dict):
+                        for gid in metadata.keys():
+                            try:
+                                ids.append(int(gid))
+                            except Exception:
+                                continue
+                        ids = sorted(set(ids))
                     _update_master_cache(
                         f"metadata:{cache_key}",
                         _build_master_entry(
@@ -149,9 +191,10 @@ def load_cache(cache_key: str) -> dict:
                             TTL,
                             last_read=time.time(),
                             last_write=data.get('timestamp', None),
+                            ids=ids,
                         ),
                     )
-                    return data.get('metadata', {})
+                    return metadata
                 _remove_master_cache_entry(f"metadata:{cache_key}")
         except Exception as e:
             pass  # Silently fail, return empty dict
@@ -168,15 +211,30 @@ def save_cache(cache_key: str, metadata: dict):
     try:
         cache_file = get_cache_dir() / f"{cache_key}.json"
         timestamp = time.time()
+        safe_metadata = {str(k): v for k, v in metadata.items()}
+        ids = []
+        for gid in safe_metadata.keys():
+            try:
+                ids.append(int(gid))
+            except Exception:
+                continue
+        ids = sorted(set(ids))
         data = {
             'timestamp': timestamp,
-            'metadata': {str(k): v for k, v in metadata.items()}  # Ensure keys are strings
+            'metadata': safe_metadata  # Ensure keys are strings
         }
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         _update_master_cache(
             f"metadata:{cache_key}",
-            _build_master_entry("metadata", cache_key, cache_file, TTL, last_write=timestamp),
+            _build_master_entry(
+                "metadata",
+                cache_key,
+                cache_file,
+                TTL,
+                last_write=timestamp,
+                ids=ids,
+            ),
         )
     except Exception:
         pass  # Silently fail
@@ -343,6 +401,60 @@ def save_selected_galleries(ids: list[int]):
         )
     except Exception:
         pass
+
+
+def load_cached_metadata_for_ids(ids: list[int]) -> dict:
+    """Load cached metadata for a set of IDs from master cache entries."""
+    if not ids:
+        return {}
+    wanted = set()
+    for gid in ids:
+        try:
+            wanted.add(int(gid))
+        except Exception:
+            continue
+    if not wanted:
+        return {}
+
+    data = _load_master_cache()
+    entries = data.get("entries", {})
+    if not isinstance(entries, dict):
+        return {}
+
+    merged = {}
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "metadata":
+            continue
+        entry_ids = entry.get("ids")
+        if not isinstance(entry_ids, list):
+            continue
+        try:
+            entry_set = {int(gid) for gid in entry_ids}
+        except Exception:
+            continue
+        if not (wanted & entry_set):
+            continue
+        path = entry.get("path")
+        if not path:
+            continue
+        try:
+            cache_file = Path(path)
+            if not cache_file.exists():
+                continue
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            metadata = data.get("metadata", {})
+            if not isinstance(metadata, dict):
+                continue
+            for gid in wanted:
+                gid_str = str(gid)
+                if gid_str in metadata:
+                    merged[gid] = metadata[gid_str]
+        except Exception:
+            continue
+    return merged
 
 
 def clear_cache(cache_key: str = None):
