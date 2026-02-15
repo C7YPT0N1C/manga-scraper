@@ -8,15 +8,19 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.extensions.extension_manager import calculate_extension_download_path
+from mangascraper.extensions.extension_manager import (
+    build_gallery_metadata_summary,
+    calculate_extension_download_path,
+    cleanup_download_tree,
+    find_latest_cover_id,
+    find_latest_gallery_entry,
+    parse_gallery_id,
+    repair_creator_cover,
+)
 from mangascraper.core.api import (
     get_session,
-    get_meta_tags,
     make_filesystem_safe,
-    clean_title,
     dynamic_sleep,
-    fetch_gallery_metadata,
-    fetch_image_urls,
 )
 
 ####################################################################################################################
@@ -125,170 +129,6 @@ def pre_run_hook():
     except Exception as e:
         logger.error(f"{EXTENSION_REFERRER}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
-def return_gallery_metas(meta):
-    orchestrator.refresh_globals()
-    
-    artists = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "artist")
-    groups = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-    
-    title = clean_title(meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-    
-    gallery_language = get_meta_tags(f"{EXTENSION_REFERRER}: Return_gallery_metas", meta, "language") or ["Unknown Language"]
-    
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
-
-def _extract_gallery_id(text: str) -> int | None:
-    if not text:
-        return None
-    match = re.search(r"\((\d+)\)", str(text))
-    if not match:
-        return None
-    try:
-        return int(match.group(1))
-    except ValueError:
-        return None
-
-def _get_latest_id_from_details(creator_folder: str) -> int | None:
-    details_file = os.path.join(creator_folder, "details.json")
-    if not os.path.exists(details_file):
-        return None
-    try:
-        with open(details_file, "r", encoding="utf-8") as f:
-            details = json.load(f)
-        return _extract_gallery_id(details.get("description", ""))
-    except Exception:
-        return None
-
-def _get_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | None, bool]:
-    if not os.path.isdir(creator_folder):
-        return None, None, False
-
-    entries = []
-    for name in os.listdir(creator_folder):
-        if not name.startswith("("):
-            continue
-        full_path = os.path.join(creator_folder, name)
-        is_dir = os.path.isdir(full_path)
-        is_archive = name.endswith(".cbz") or name.endswith(".zip")
-        if not (is_dir or is_archive):
-            continue
-        entry_id = _extract_gallery_id(name)
-        if entry_id is None:
-            continue
-        entry_name = name
-        if is_archive:
-            entry_name = os.path.splitext(name)[0]
-        entries.append((entry_id, entry_name, is_dir))
-
-    if not entries:
-        return None, None, False
-
-    entries.sort(key=lambda item: item[0], reverse=True)
-    return entries[0]
-
-def _get_latest_cover_id(covers_folder: str) -> int | None:
-    if not os.path.isdir(covers_folder):
-        return None
-    cover_ids = []
-    for name in os.listdir(covers_folder):
-        entry_id = _extract_gallery_id(name)
-        if entry_id is not None:
-            cover_ids.append(entry_id)
-    if not cover_ids:
-        return None
-    return max(cover_ids)
-
-def _ensure_cover_file(creator_folder: str):
-    try:
-        if not os.path.isdir(creator_folder):
-            return
-
-        latest_id, entry_name, is_dir = _get_latest_gallery_entry(creator_folder)
-        if not entry_name:
-            return
-
-        logger.debug(f"Cover missing for {creator_folder}; searching for latest gallery cover.")
-
-        def _link_cover(cover_source: str):
-            _, ext = os.path.splitext(cover_source)
-            for f in os.listdir(creator_folder):
-                if f.startswith("cover") and f != "covers" and f != ".covers":
-                    try:
-                        os.unlink(os.path.join(creator_folder, f))
-                    except Exception:
-                        pass
-            cover_link = os.path.join(creator_folder, f"cover{ext}")
-            os.symlink(cover_source, cover_link)
-            logger.info(f"Cover updated for {creator_folder}: {cover_link} -> {cover_source}")
-            return cover_link
-
-        covers_folder = os.path.join(creator_folder, ".covers")
-        if not os.path.isdir(covers_folder):
-            os.makedirs(covers_folder, exist_ok=True)
-
-        candidates = [f for f in os.listdir(covers_folder) if f.startswith(entry_name)]
-        if not candidates and latest_id is not None:
-            candidates = [
-                f for f in os.listdir(covers_folder)
-                if _extract_gallery_id(f) == latest_id
-            ]
-        if candidates:
-            candidates.sort()
-            cover_source = os.path.join(covers_folder, candidates[0])
-            logger.debug(f"Cover found in .covers: {cover_source}")
-            _link_cover(cover_source)
-            return
-
-        if is_dir:
-            gallery_path = os.path.join(creator_folder, entry_name)
-            if os.path.isdir(gallery_path):
-                logger.debug(f"Latest gallery is a folder; checking page 1 in {gallery_path}")
-                candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
-                if candidates:
-                    page1_file = os.path.join(gallery_path, candidates[0])
-                    _, ext = os.path.splitext(page1_file)
-                    cover_in_subfolder = os.path.join(covers_folder, f"{entry_name}{ext}")
-                    if not os.path.exists(cover_in_subfolder):
-                        logger.debug(f"Copying cover into .covers: {cover_in_subfolder}")
-                        shutil.copy2(page1_file, cover_in_subfolder)
-                    _link_cover(cover_in_subfolder)
-                    return
-
-        if latest_id is not None:
-            logger.debug(f"Cover not found locally; downloading for Gallery {latest_id}")
-            try:
-                meta = fetch_gallery_metadata(latest_id)
-                if not meta:
-                    return
-                urls = fetch_image_urls(meta, 1)
-                if not urls:
-                    return
-                url = urls[0]
-                ext = os.path.splitext(url.split("?")[0])[1]
-                if not ext:
-                    ext = ".jpg"
-                target = os.path.join(covers_folder, f"{entry_name}{ext}")
-                session = get_session(referrer="Cover Repair", status="return")
-                resp = session.get(url, timeout=(60, 60))
-                resp.raise_for_status()
-                with open(target, "wb") as f:
-                    f.write(resp.content)
-                logger.info(f"Cover updated (downloaded) for Gallery {latest_id}: {target}")
-                _link_cover(target)
-            except Exception as e:
-                logger.warning(f"Failed to download missing cover for Gallery {latest_id}: {e}")
-    except Exception as e:
-        logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
-
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
@@ -396,64 +236,40 @@ def test_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
 
-# Remove empty folders inside DEDICATED_DOWNLOAD_PATH without deleting the root folder itself.
-def clean_directories(RemoveEmptyArtistFolder: bool = True):
-    global DEDICATED_DOWNLOAD_PATH
-    
+def _get_latest_id_from_details(creator_folder: str) -> int | None:
+    details_file = os.path.join(creator_folder, "details.json")
+    if not os.path.exists(details_file):
+        return None
+    try:
+        with open(details_file, "r", encoding="utf-8") as f:
+            details = json.load(f)
+        return parse_gallery_id(details.get("description", ""))
+    except Exception:
+        return None
+
+def repair_covers_hook():
     orchestrator.refresh_globals()
-    
-    log_clarification("debug")
-
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        log("No valid DEDICATED_DOWNLOAD_PATH set, skipping cleanup.", "debug")
-        return
-
     if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] Would remove empty directories under {DEDICATED_DOWNLOAD_PATH}")
+        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Repair covers hook inactive.")
         return
-
-    broken_symlinks_removed = 0
-    
-    # Combined single walk for both directory cleanup and symlink removal
-    for dirpath, dirnames, filenames in os.walk(DEDICATED_DOWNLOAD_PATH, topdown=False):
-        if dirpath == DEDICATED_DOWNLOAD_PATH:
-            continue
-        
-        # Remove empty directories
-        try:
-            if RemoveEmptyArtistFolder:
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-            else:
-                if not dirnames and not filenames:
-                    os.rmdir(dirpath)
-                    logger.info(f"Removed empty directory: {dirpath}")
-        except Exception as e:
-            logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
-        
-        # Check and remove broken symlinks
-        for fname in filenames:
-            full_path = os.path.join(dirpath, fname)
-            if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
-                try:
-                    os.unlink(full_path)
-                    logger.info(f"Removed broken symlink: {full_path}")
-                    broken_symlinks_removed += 1
-                except Exception as e:
-                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
-
-        # Restore missing cover file for creator folders
-        if os.path.dirname(dirpath) == DEDICATED_DOWNLOAD_PATH:
-            _ensure_cover_file(dirpath)
-    
-    logger.info(f"Removed empty directories.")
-    log_clarification()
-    
-    if broken_symlinks_removed > 0:
-        logger.info(f"Fixed {broken_symlinks_removed} broken symlink(s).")
-    
-    logger.info("Scan complete.")
+    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        return
+    repaired = 0
+    for name in os.listdir(DEDICATED_DOWNLOAD_PATH):
+        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, name)
+        if os.path.isdir(creator_folder):
+            before = any(
+                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
+                for f in os.listdir(creator_folder)
+            )
+            repair_creator_cover(creator_folder)
+            after = any(
+                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
+                for f in os.listdir(creator_folder)
+            )
+            if not before and after:
+                repaired += 1
+    logger.debug(f"{EXTENSION_REFERRER}: Cover update pass complete. Restored {repaired} cover(s).")
 
 ############################################
 
@@ -951,13 +767,13 @@ def update_creator_manga(meta):
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
-    gallery_meta = return_gallery_metas(meta)
+    gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
     creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
     if not creators:
         return
 
     gallery_title = gallery_meta["title"]
-    current_gallery_id = _extract_gallery_id(gallery_title) or int(meta.get("id", 0))
+    current_gallery_id = parse_gallery_id(gallery_title) or int(meta.get("id", 0))
     gallery_tags = meta.get("tags", [])
     gallery_genres = [
         tag["name"] for tag in gallery_tags
@@ -1008,7 +824,7 @@ def update_creator_manga(meta):
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
 
-        latest_id, latest_name, _ = _get_latest_gallery_entry(creator_folder)
+        latest_id, latest_name, _ = find_latest_gallery_entry(creator_folder)
         if latest_id is None or latest_name is None:
             description = f"Latest Doujin: {gallery_title}"
         else:
@@ -1330,7 +1146,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             )
             gallery_format = "directory"
 
-        gallery_meta = return_gallery_metas(meta)
+        gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
         creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
         cover_source = None
         cover_gallery_name = None
@@ -1372,10 +1188,11 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                             cover_source = page1_file
                             cover_gallery_name = gallery_items[0]
                             cover_ext = ext
-                            cover_gallery_id = _extract_gallery_id(cover_gallery_name)
+                            cover_gallery_id = parse_gallery_id(cover_gallery_name)
                 else:
                     logger.debug(f"Gallery {gallery_items[0]} is already archived or not a directory, skipping")
 
+        cover_generated = {}
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             if not os.path.isdir(creator_folder):
@@ -1386,7 +1203,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                 covers_folder = os.path.join(creator_folder, ".covers")
                 try:
                     os.makedirs(covers_folder, exist_ok=True)
-                    latest_cover_id = _get_latest_cover_id(covers_folder)
+                    latest_cover_id = find_latest_cover_id(covers_folder)
                     if cover_gallery_id is not None and latest_cover_id is not None:
                         if cover_gallery_id <= latest_cover_id:
                             continue
@@ -1414,8 +1231,15 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
                     os.symlink(cover_in_subfolder, cover_link)
                     logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
+                    cover_generated[creator_name] = True
                 except Exception as e:
                     logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
+
+            if not cover_generated.get(creator_name):
+                logger.debug(
+                    f"Skipping delete for {creator_name}; cover not generated for gallery {gallery_id}."
+                )
+                continue
 
             gallery_path = gallery_paths.get(creator_name)
             if gallery_format == "directory" or not gallery_path:
@@ -1456,31 +1280,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
 # Hook for cleaning after downloads
 def cleanup_hook():
-    clean_directories(True) # Clean up the download folder / directories
-
-def repair_covers_hook():
-    orchestrator.refresh_globals()
-    if orchestrator.dry_run:
-        logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Repair covers hook inactive.")
-        return
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        return
-    repaired = 0
-    for name in os.listdir(DEDICATED_DOWNLOAD_PATH):
-        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, name)
-        if os.path.isdir(creator_folder):
-            before = any(
-                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
-                for f in os.listdir(creator_folder)
-            )
-            _ensure_cover_file(creator_folder)
-            after = any(
-                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
-                for f in os.listdir(creator_folder)
-            )
-            if not before and after:
-                repaired += 1
-    logger.debug(f"{EXTENSION_REFERRER}: Cover update pass complete. Restored {repaired} cover(s).")
+    repair_covers_hook()
+    cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
@@ -1531,7 +1332,6 @@ def post_run_hook():
         log_clarification("debug")
         log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
     else:
-        repair_covers_hook()
         cleanup_hook() # Call the cleanup hook
         
         # Add all creators to Suwayomi

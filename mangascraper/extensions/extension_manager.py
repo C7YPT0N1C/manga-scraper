@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/extension_loader.py
 
-import os, json, importlib, importlib.util, shutil, subprocess, sys
+import os, json, importlib, importlib.util, shutil, subprocess, sys, re
 
 from urllib.request import urlopen
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core.api import (
+    get_session,
+    get_meta_tags,
+    clean_title,
+    fetch_gallery_metadata,
+    fetch_image_urls,
+)
 from mangascraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------
@@ -33,7 +40,7 @@ BACKUP_REMOTE_MANIFEST_URL = (
 INSTALLED_EXTENSIONS = []
 
 #######################################################################
-# Helpers
+# Manifest / Metadata Helpers
 #######################################################################
 def load_local_manifest():
     """
@@ -53,7 +60,7 @@ def save_local_manifest(manifest: dict):
     """
     Save the local manifest to disk.
     """
-    
+
     with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
@@ -61,7 +68,7 @@ def fetch_remote_manifest():
     """
     Fetch remote manifest.json with backup fallback.
     """
-    
+
     try:
         with urlopen(PRIMARY_REMOTE_MANIFEST_URL) as response:
             return json.load(response)
@@ -81,7 +88,7 @@ def update_local_manifest_from_remote():
     """
     Merge remote manifest into local manifest, keeping installed flags intact.
     """
-    
+
     remote_manifest = fetch_remote_manifest()
     local_manifest = {"extensions": []}
     if os.path.exists(LOCAL_MANIFEST_PATH):
@@ -123,149 +130,48 @@ def update_local_manifest_from_remote():
     save_local_manifest(local_manifest)
     return local_manifest
 
+def ensure_local_manifest_exists():
+    if os.path.exists(LOCAL_MANIFEST_PATH):
+        return
+    repo_url = PRIMARY_BASE_REPO_URL
+    backup_url = BACKUP_BASE_REPO_URL if BACKUP_BASE_REPO_URL else None
+    for candidate in (repo_url, backup_url):
+        if not candidate:
+            continue
+        try:
+            _ensure_remote_repo_tmp(candidate)
+            tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
+            if os.path.exists(tmp_manifest_path):
+                os.makedirs(EXTENSIONS_DIR, exist_ok=True)
+                shutil.copy2(tmp_manifest_path, LOCAL_MANIFEST_PATH)
+                log(f"Local manifest created from tmp repo: {LOCAL_MANIFEST_PATH}", "debug")
+                return
+        except Exception:
+            continue
+    try:
+        remote_manifest = fetch_remote_manifest()
+        os.makedirs(EXTENSIONS_DIR, exist_ok=True)
+        with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
+            json.dump(remote_manifest, f, ensure_ascii=False, indent=2)
+        log(f"Local manifest created from remote manifest: {LOCAL_MANIFEST_PATH}", "debug")
+    except Exception:
+        pass
+
 # ------------------------------------------------------------
-# Refresh manifest and installed extensions
+# Refresh Manifest Cache
 # ------------------------------------------------------------
 def _reload_extensions():
     """
     Update manifest, reinstall missing extensions, and reload INSTALLED_EXTENSIONS.
     """
-    
+
     update_local_manifest_from_remote()
     load_installed_extensions()
     return load_local_manifest()
 
-def get_extension_download_path(extension_name: str) -> str:
-    """
-    Get the appropriate download path for an extension.
-    
-    Priority:
-    1. If orchestrator has a custom extension_download_path (from CLI or config), use it
-    2. Else, use the extension's manifest image_download_path
-    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
-    
-    Args:
-        extension_name: Name of the extension (lowercase)
-        
-    Returns:
-        str: The download path for the extension
-    """
-    orchestrator.refresh_globals()
-    override_download_path = getattr(orchestrator, "extension_download_path", None)
-    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
-
-    def _ensure_trailing_slash(path: str) -> str:
-        if not path:
-            return path
-        return path if path.endswith("/") else f"{path}/"
-    
-    # If a custom path was set via CLI or config, use it
-    if override_download_path:
-        override_norm = os.path.normpath(override_download_path)
-        default_norm = os.path.normpath(default_path)
-        if override_norm != default_norm:
-            resolved = _ensure_trailing_slash(override_download_path)
-            logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
-            )
-            return resolved
-    
-    # Get the extension's default from manifest
-    manifest = load_local_manifest()
-    for ext in manifest.get("extensions", []):
-        if ext.get("name") == extension_name.lower():
-            manifest_path = ext.get("image_download_path")
-            if manifest_path:
-                resolved = _ensure_trailing_slash(manifest_path)
-                logger.debug(
-                    f"Extension download path resolved: {resolved} (source=manifest)"
-                )
-                return resolved
-    
-    # Fall back to default
-    resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
-    return resolved
-
-def get_extension_manifest_info(extension_name: str) -> dict | None:
-    """
-    Get manifest entry for an extension.
-    
-    Args:
-        extension_name: Name of the extension (lowercase)
-        
-    Returns:
-        dict: The extension's manifest entry, or None if not found
-    """
-    manifest = load_local_manifest()
-    for ext in manifest.get("extensions", []):
-        if ext.get("name") == extension_name.lower():
-            return ext
-    return None
-
-def calculate_extension_download_path(extension_name: str) -> str:
-    """
-    Calculate the DEDICATED_DOWNLOAD_PATH for an extension.
-    This helper function removes code duplication from skeleton and suwayomi extensions.
-    
-    Priority:
-    1. If orchestrator has a custom extension_download_path (not the default), use it
-    2. Else, use the extension's manifest image_download_path
-    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
-    
-    Args:
-        extension_name: Name of the extension (lowercase, e.g., "skeleton", "suwayomi")
-        
-    Returns:
-        str: The DEDICATED_DOWNLOAD_PATH for the extension
-        
-    Usage in extensions:
-        from mangascraper.extensions.extension_manager import calculate_extension_download_path
-        DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
-    """
-    from mangascraper.core.orchestrator import (
-        DEFAULT_EXTENSION_DOWNLOAD_PATH, extension_download_path
-    )
-    
-    orchestrator.refresh_globals()
-    override_download_path = getattr(orchestrator, "extension_download_path", None)
-    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
-
-    def _ensure_trailing_slash(path: str) -> str:
-        if not path:
-            return path
-        return path if path.endswith("/") else f"{path}/"
-    
-    # If a custom path was set via CLI or config (and it's not the default), use it
-    if override_download_path:
-        override_norm = os.path.normpath(override_download_path)
-        default_norm = os.path.normpath(default_path)
-        if override_norm != default_norm:
-            resolved = _ensure_trailing_slash(override_download_path)
-            logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
-            )
-            return resolved
-    
-    # Get the extension's default from manifest
-    ext_info = get_extension_manifest_info(extension_name)
-    if ext_info:
-        manifest_path = ext_info.get("image_download_path")
-        if manifest_path:
-            resolved = _ensure_trailing_slash(manifest_path)
-            logger.debug(
-                f"Extension download path resolved: {resolved} (source=manifest)"
-            )
-            return resolved
-    
-    # Fall back to default
-    resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
-    return resolved
-
-# ------------------------------------------------------------
-# Remote repo sync (full clone)
-# ------------------------------------------------------------
+#######################################################################
+# Remote Repo Sync (Full Clone)
+#######################################################################
 def _clear_directory(path: str):
     for entry in os.listdir(path):
         entry_path = os.path.join(path, entry)
@@ -309,34 +215,6 @@ def _ensure_remote_repo_tmp(url: str):
         log("Tmp repo is up to date; reusing existing clone.", "debug")
 
 
-def ensure_local_manifest_exists():
-    if os.path.exists(LOCAL_MANIFEST_PATH):
-        return
-    repo_url = PRIMARY_BASE_REPO_URL
-    backup_url = BACKUP_BASE_REPO_URL if BACKUP_BASE_REPO_URL else None
-    for candidate in (repo_url, backup_url):
-        if not candidate:
-            continue
-        try:
-            _ensure_remote_repo_tmp(candidate)
-            tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
-            if os.path.exists(tmp_manifest_path):
-                os.makedirs(EXTENSIONS_DIR, exist_ok=True)
-                shutil.copy2(tmp_manifest_path, LOCAL_MANIFEST_PATH)
-                log(f"Local manifest created from tmp repo: {LOCAL_MANIFEST_PATH}", "debug")
-                return
-        except Exception:
-            continue
-    try:
-        remote_manifest = fetch_remote_manifest()
-        os.makedirs(EXTENSIONS_DIR, exist_ok=True)
-        with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
-            json.dump(remote_manifest, f, ensure_ascii=False, indent=2)
-        log(f"Local manifest created from remote manifest: {LOCAL_MANIFEST_PATH}", "debug")
-    except Exception:
-        pass
-
-
 def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
     _ensure_remote_repo_tmp(url)
 
@@ -376,10 +254,8 @@ def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
         log(f"Failed entry point sanity check: {e}", "warning")
 
 #######################################################################
-
-# ------------------------------------------------------------
 # Extension Loader
-# ------------------------------------------------------------
+#######################################################################
 def _load_extension_module(module_name: str, entry_point: str):
     spec = importlib.util.spec_from_file_location(module_name, entry_point)
     if spec is None or spec.loader is None:
@@ -468,12 +344,12 @@ def load_single_extension(
 def load_installed_extensions(suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
-    
+
     Load installed extensions dynamically; reinstall if missing.
     """
-    
+
     orchestrator.refresh_globals()
-    
+
     INSTALLED_EXTENSIONS.clear()  # Ensure no duplicates if called multiple times
     manifest = load_local_manifest()
 
@@ -502,7 +378,7 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
 
     if updates_requested:
         manifest = load_local_manifest()
-    
+
     for ext in manifest.get("extensions", []):
         ext_folder = os.path.join(EXTENSIONS_DIR, ext["name"])
         entry_point = os.path.join(ext_folder, ext["entry_point"])
@@ -525,18 +401,18 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
         else:
             logger.warning(f"Extension: {ext['name']}: Entry point not found.")
 
-# ------------------------------------------------------------
+#######################################################################
 # Install / Uninstall Extension
-# ------------------------------------------------------------
+#######################################################################
 def is_remote_version_newer(local_version: str, remote_version: str) -> bool:
     """
     Compares semantic version strings (e.g., "1.2.3").
     Returns True if remote_version > local_version.
     """
-    
+
     def parse(v):
         return [int(x) for x in v.split(".") if x.isdigit()]
-    
+
     lv = parse(local_version or "0.0.0")
     rv = parse(remote_version or "0.0.0")
     # Pad shorter versions with zeros
@@ -679,7 +555,7 @@ def uninstall_selected_extension(extension_name: str):
     """
     Uninstalls an extension. Runs uninstall hook if available.
     """
-    
+
     manifest = load_local_manifest()
     ext_entry = next((ext for ext in manifest["extensions"] if ext["name"] == extension_name), None)
     if not ext_entry or not ext_entry.get("installed", False):
@@ -701,19 +577,20 @@ def uninstall_selected_extension(extension_name: str):
     ext_entry["installed"] = False
     save_local_manifest(manifest)
 
-# ------------------------------------------------------------
-# Get selected extension (with skeleton fallback)
+#######################################################################
+# Extension Selection
+#######################################################################
 def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
-    
+
     Returns the selected extension module.
     If the extension is not installed, installs it first.
     Ensures 'skeleton' is always installed to provide a valid download path.
     """
-    
+
     orchestrator.refresh_globals()
-    
+
     original_name = name  # Save the originally requested extension
 
     if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
@@ -753,9 +630,386 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
 
     return ext
 
-# Backwards-compatible wrappers
+#######################################################################
+# Backwards-Compatible Wrappers
+#######################################################################
 def install_extension_cli(extension_name: str):
     return ensure_extension_cli(extension_name)
 
 def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     return ensure_extension_runtime(name, suppess_pre_run_hook=suppess_pre_run_hook)
+
+#######################################################################
+# Extension Download Path Helpers
+#######################################################################
+def get_extension_download_path(extension_name: str) -> str:
+    """
+    Get the appropriate download path for an extension.
+
+    Priority:
+    1. If orchestrator has a custom extension_download_path (from CLI or config), use it
+    2. Else, use the extension's manifest image_download_path
+    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    Args:
+        extension_name: Name of the extension (lowercase)
+
+    Returns:
+        str: The download path for the extension
+    """
+    orchestrator.refresh_globals()
+    override_download_path = getattr(orchestrator, "extension_download_path", None)
+    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    def _ensure_trailing_slash(path: str) -> str:
+        if not path:
+            return path
+        return path if path.endswith("/") else f"{path}/"
+
+    # If a custom path was set via CLI or config, use it
+    if override_download_path:
+        override_norm = os.path.normpath(override_download_path)
+        default_norm = os.path.normpath(default_path)
+        if override_norm != default_norm:
+            resolved = _ensure_trailing_slash(override_download_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=override)"
+            )
+            return resolved
+
+    # Get the extension's default from manifest
+    manifest = load_local_manifest()
+    for ext in manifest.get("extensions", []):
+        if ext.get("name") == extension_name.lower():
+            manifest_path = ext.get("image_download_path")
+            if manifest_path:
+                resolved = _ensure_trailing_slash(manifest_path)
+                logger.debug(
+                    f"Extension download path resolved: {resolved} (source=manifest)"
+                )
+                return resolved
+
+    # Fall back to default
+    resolved = _ensure_trailing_slash(default_path)
+    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    return resolved
+
+def get_extension_manifest_info(extension_name: str) -> dict | None:
+    """
+    Get manifest entry for an extension.
+
+    Args:
+        extension_name: Name of the extension (lowercase)
+
+    Returns:
+        dict: The extension's manifest entry, or None if not found
+    """
+    manifest = load_local_manifest()
+    for ext in manifest.get("extensions", []):
+        if ext.get("name") == extension_name.lower():
+            return ext
+    return None
+
+def calculate_extension_download_path(extension_name: str) -> str:
+    """
+    Calculate the DEDICATED_DOWNLOAD_PATH for an extension.
+    This helper function removes code duplication from skeleton and suwayomi extensions.
+
+    Priority:
+    1. If orchestrator has a custom extension_download_path (not the default), use it
+    2. Else, use the extension's manifest image_download_path
+    3. Else, use DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    Args:
+        extension_name: Name of the extension (lowercase, e.g., "skeleton", "suwayomi")
+
+    Returns:
+        str: The DEDICATED_DOWNLOAD_PATH for the extension
+
+    Usage in extensions:
+        from mangascraper.extensions.extension_manager import calculate_extension_download_path
+        DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
+    """
+    from mangascraper.core.orchestrator import (
+        DEFAULT_EXTENSION_DOWNLOAD_PATH, extension_download_path
+    )
+
+    orchestrator.refresh_globals()
+    override_download_path = getattr(orchestrator, "extension_download_path", None)
+    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    def _ensure_trailing_slash(path: str) -> str:
+        if not path:
+            return path
+        return path if path.endswith("/") else f"{path}/"
+
+    # If a custom path was set via CLI or config (and it's not the default), use it
+    if override_download_path:
+        override_norm = os.path.normpath(override_download_path)
+        default_norm = os.path.normpath(default_path)
+        if override_norm != default_norm:
+            resolved = _ensure_trailing_slash(override_download_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=override)"
+            )
+            return resolved
+
+    # Get the extension's default from manifest
+    ext_info = get_extension_manifest_info(extension_name)
+    if ext_info:
+        manifest_path = ext_info.get("image_download_path")
+        if manifest_path:
+            resolved = _ensure_trailing_slash(manifest_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=manifest)"
+            )
+            return resolved
+
+    # Fall back to default
+    resolved = _ensure_trailing_slash(default_path)
+    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    return resolved
+
+#######################################################################
+# Shared Extension Helpers (Non-Hook)
+#######################################################################
+def build_gallery_metadata_summary(meta, referrer: str):
+    orchestrator.refresh_globals()
+
+    artists = get_meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = get_meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+
+    title = clean_title(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+
+    gallery_language = get_meta_tags(
+        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
+    ) or ["Unknown Language"]
+
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language,
+    }
+
+def parse_gallery_id(text: str) -> int | None:
+    if not text:
+        return None
+    match = re.search(r"\((\d+)\)", str(text))
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+def find_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | None, bool]:
+    if not os.path.isdir(creator_folder):
+        return None, None, False
+
+    entries = []
+    for name in os.listdir(creator_folder):
+        if not name.startswith("("):
+            continue
+        full_path = os.path.join(creator_folder, name)
+        is_dir = os.path.isdir(full_path)
+        is_archive = name.endswith(".cbz") or name.endswith(".zip")
+        if not (is_dir or is_archive):
+            continue
+        entry_id = parse_gallery_id(name)
+        if entry_id is None:
+            continue
+        entry_name = name
+        if is_archive:
+            entry_name = os.path.splitext(name)[0]
+        entries.append((entry_id, entry_name, is_dir))
+
+    if not entries:
+        return None, None, False
+
+    entries.sort(key=lambda item: item[0], reverse=True)
+    return entries[0]
+
+def find_latest_cover_id(covers_folder: str) -> int | None:
+    if not os.path.isdir(covers_folder):
+        return None
+    cover_ids = []
+    for name in os.listdir(covers_folder):
+        entry_id = parse_gallery_id(name)
+        if entry_id is not None:
+            cover_ids.append(entry_id)
+    if not cover_ids:
+        return None
+    return max(cover_ids)
+
+def link_creator_cover(creator_folder: str, cover_source: str) -> str | None:
+    try:
+        _, ext = os.path.splitext(cover_source)
+        for f in os.listdir(creator_folder):
+            if f.startswith("cover") and f != "covers" and f != ".covers":
+                try:
+                    os.unlink(os.path.join(creator_folder, f))
+                except Exception:
+                    pass
+        cover_link = os.path.join(creator_folder, f"cover{ext}")
+        os.symlink(cover_source, cover_link)
+        logger.info(f"Cover updated for {creator_folder}: {cover_link} -> {cover_source}")
+        return cover_link
+    except Exception:
+        return None
+
+def find_local_cover_and_link(creator_folder: str, entry_name: str, is_dir: bool) -> str | None:
+    covers_folder = os.path.join(creator_folder, ".covers")
+    if not os.path.isdir(covers_folder):
+        os.makedirs(covers_folder, exist_ok=True)
+
+    candidates = [
+        f for f in os.listdir(covers_folder)
+        if os.path.splitext(f)[0] == entry_name
+    ]
+    if candidates:
+        candidates.sort()
+        cover_source = os.path.join(covers_folder, candidates[0])
+        logger.debug(f"Cover found in .covers: {cover_source}")
+        return link_creator_cover(creator_folder, cover_source)
+
+    if is_dir:
+        gallery_path = os.path.join(creator_folder, entry_name)
+        if os.path.isdir(gallery_path):
+            logger.debug(f"Latest gallery is a folder; checking page 1 in {gallery_path}")
+            candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+            if candidates:
+                page1_file = os.path.join(gallery_path, candidates[0])
+                _, ext = os.path.splitext(page1_file)
+                cover_in_subfolder = os.path.join(covers_folder, f"{entry_name}{ext}")
+                if not os.path.exists(cover_in_subfolder):
+                    logger.debug(f"Copying cover into .covers: {cover_in_subfolder}")
+                    shutil.copy2(page1_file, cover_in_subfolder)
+                return link_creator_cover(creator_folder, cover_in_subfolder)
+
+    return None
+
+def ensure_creator_cover(creator_folder: str):
+    try:
+        if not os.path.isdir(creator_folder):
+            return
+        latest_id, entry_name, is_dir = find_latest_gallery_entry(creator_folder)
+        if not entry_name or latest_id is None:
+            return
+
+        logger.debug(f"Cover missing for {creator_folder}; checking local sources for gallery {latest_id}.")
+        find_local_cover_and_link(creator_folder, entry_name, is_dir)
+    except Exception as e:
+        logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
+
+def repair_creator_cover(creator_folder: str):
+    try:
+        if not os.path.isdir(creator_folder):
+            return
+        if any(
+            f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
+            for f in os.listdir(creator_folder)
+        ):
+            return
+
+        latest_id, entry_name, is_dir = find_latest_gallery_entry(creator_folder)
+        if not entry_name or latest_id is None:
+            return
+
+        if find_local_cover_and_link(creator_folder, entry_name, is_dir):
+            return
+
+        covers_folder = os.path.join(creator_folder, ".covers")
+        if not os.path.isdir(covers_folder):
+            os.makedirs(covers_folder, exist_ok=True)
+
+        logger.debug(f"Cover not found locally; downloading for Gallery {latest_id}")
+        try:
+            meta = fetch_gallery_metadata(latest_id)
+            if not meta:
+                return
+            urls = fetch_image_urls(meta, 1)
+            if not urls:
+                return
+            url = urls[0]
+            ext = os.path.splitext(url.split("?")[0])[1]
+            if not ext:
+                ext = ".jpg"
+            target = os.path.join(covers_folder, f"{entry_name}{ext}")
+            session = get_session(referrer="Cover Repair", status="return")
+            resp = session.get(url, timeout=(60, 60))
+            resp.raise_for_status()
+            with open(target, "wb") as f:
+                f.write(resp.content)
+            logger.info(f"Cover updated (downloaded) for Gallery {latest_id}: {target}")
+            link_creator_cover(creator_folder, target)
+        except Exception as e:
+            logger.warning(f"Failed to download missing cover for Gallery {latest_id}: {e}")
+    except Exception as e:
+        logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
+
+def cleanup_download_tree(
+    download_path: str,
+    remove_empty_artist_folder: bool = True,
+    log_scan_summary: bool = False,
+):
+    orchestrator.refresh_globals()
+
+    log_clarification("debug")
+
+    if not download_path or not os.path.isdir(download_path):
+        log("No valid download path set, skipping cleanup.", "debug")
+        return
+
+    if orchestrator.dry_run:
+        logger.info(f"[DRY RUN] Would remove empty directories under {download_path}")
+        return
+
+    broken_symlinks_removed = 0
+
+    # Combined single walk for both directory cleanup and symlink removal
+    for dirpath, dirnames, filenames in os.walk(download_path, topdown=False):
+        if dirpath == download_path:
+            continue
+
+        # Remove empty directories
+        try:
+            if remove_empty_artist_folder:
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+            else:
+                if not dirnames and not filenames:
+                    os.rmdir(dirpath)
+                    logger.info(f"Removed empty directory: {dirpath}")
+        except Exception as e:
+            logger.warning(f"Could not remove empty directory: {dirpath}: {e}")
+
+        # Check and remove broken symlinks
+        for fname in filenames:
+            full_path = os.path.join(dirpath, fname)
+            if os.path.islink(full_path) and not os.path.exists(os.readlink(full_path)):
+                try:
+                    os.unlink(full_path)
+                    logger.info(f"Removed broken symlink: {full_path}")
+                    broken_symlinks_removed += 1
+                except Exception as e:
+                    logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
+
+        # Restore missing cover file for creator folders
+        if os.path.dirname(dirpath) == download_path:
+            ensure_creator_cover(dirpath)
+
+    if log_scan_summary:
+        logger.info("Removed empty directories.")
+        log_clarification()
+
+    if broken_symlinks_removed > 0:
+        logger.info(f"Fixed {broken_symlinks_removed} broken symlink(s).")
+
+    if log_scan_summary:
+        logger.info("Scan complete.")

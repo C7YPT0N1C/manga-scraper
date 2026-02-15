@@ -202,7 +202,10 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
     """
     
-    gallery_metas = active_extension.return_gallery_metas(meta)
+    gallery_metas = active_extension.build_gallery_metadata_summary(
+        meta,
+        active_extension.EXTENSION_REFERRER,
+    )
 
     if iteration:
         for k, v in iteration.items():
@@ -496,7 +499,10 @@ def process_galleries(batch_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 active_extension.during_gallery_download_hook(gallery_id)
-                gallery_metas = active_extension.return_gallery_metas(meta)
+                gallery_metas = active_extension.build_gallery_metadata_summary(
+                    meta,
+                    active_extension.EXTENSION_REFERRER,
+                )
                 creators = gallery_metas["creator"]
                 gallery_title = gallery_metas["title"]
                 

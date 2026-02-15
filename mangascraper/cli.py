@@ -22,9 +22,11 @@ from mangascraper.extensions.extension_manager import (
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
 EPILOG = """Examples:
+    manga-scraper --file archive=true
     manga-scraper --homepage 1 3
     manga-scraper --homepage recent 1 5
     manga-scraper --artist "some artist" popular 1 2
+    manga-scraper --artist "some artist" archive=true
     manga-scraper --search "\"big breasts\" -yaoi" popular
     manga-scraper --output-folder /mnt/storage --ids "123456,654321" --output-format cbz
 """
@@ -83,6 +85,7 @@ def parse_args():
     
     # Mutually exclusive groups
     interactive_mode_group = parser.add_mutually_exclusive_group()
+    summary_mode_group = runtime_group.add_mutually_exclusive_group()
 
     # Installer / Updater flags
     installer_group.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
@@ -128,9 +131,9 @@ def parse_args():
         "--file",
         dest="file",
         type=str,
-        nargs="?",                  # Makes the argument optional
-        const=DEFAULT_DOUJIN_TXT_PATH,  # Use default if --file is passed without a value
-        help="Path to a file containing gallery URLs or IDs (one per line)",
+        nargs="*",                  # Makes the argument optional
+        const=[DEFAULT_DOUJIN_TXT_PATH],  # Use default if --file is passed without a value
+        help="Usage: --file [PATH] [ARCHIVE]. PATH defaults to the .env list. ARCHIVE is archive=true or archive=false.",
     )
     
     source_group.add_argument(
@@ -165,42 +168,42 @@ def parse_args():
         action="append",
         nargs="+",  # All args after this flag are collected
         metavar="ARGS",
-        help="Download by artist. Usage: --artist NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by artist. Usage: --artist NAME [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     source_group.add_argument(
         "--group",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download by group. Usage: --group NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by group. Usage: --group NAME [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     source_group.add_argument(
         "--tag",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download by tag. Usage: --tag NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by tag. Usage: --tag NAME [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     source_group.add_argument(
         "--character",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download by character. Usage: --character NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by character. Usage: --character NAME [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     source_group.add_argument(
         "--parody",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download by parody. Usage: --parody NAME [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by parody. Usage: --parody NAME [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     source_group.add_argument(
         "--search",
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Download by search query. Usage: --search QUERY [SORT] [START] [END] [ARCHIVE]. Repeatable.",
+        help="Download by search query. Usage: --search QUERY [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     
     # NHentai Archival
@@ -209,7 +212,7 @@ def parse_args():
         action="append",
         nargs="+",
         metavar="ARGS",
-        help="Archive results. Use: --archive QUERY [SORT] [START] [END] [ARCHIVE] or --archive all",
+        help="Archive results. Use: --archive QUERY [SORT] [START] [END] or --archive all.",
     )
 
     # Filters
@@ -283,7 +286,7 @@ def parse_args():
         help="Maximum sleep before starting a new download",
     )
     
-    runtime_group.add_argument(
+    summary_mode_group.add_argument(
         "--show-summary",
         action="store_true",
         default=False,
@@ -315,7 +318,7 @@ def parse_args():
         default=argparse.SUPPRESS,
         help="Simulate downloads without saving files",
     )
-    interactive_mode_group.add_argument(
+    summary_mode_group.add_argument(
         "--unattended",
         action="store_true",
         default=False,
@@ -349,7 +352,24 @@ def _parse_positive_int(value: str, label: str) -> int:
     return parsed
 
 
+def _parse_archive_flag(value: str) -> bool | None:
+    """
+    Parse archive flags like: archive=true or archive=false.
+    Returns True/False if matched, otherwise None.
+    """
+    lowered = str(value).strip().lower()
+    if lowered.startswith("archive="):
+        flag_val = lowered.split("=", 1)[1]
+        if flag_val in ("true", "yes", "1"):
+            return True
+        if flag_val in ("false", "no", "0"):
+            return False
+    return None
+
+
 def _validate_args(args):
+    if args.interactive and args.unattended:
+        raise ValueError("--interactive and --unattended cannot be used together.")
     if args.range:
         start, end = args.range
         if start <= 0 or end <= 0:
@@ -524,7 +544,7 @@ def display_download_summary(gallery_ids: list, show_summary: bool = False, cach
 def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
     """
     Parse CLI args or file URLs and call fetch_gallery_ids for any query type.
-    Supports optional sort type in flags: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE] [ARCHIVAL_BOOL]
+    Supports optional sort type in flags: --artist ARTIST [SORT_TYPE] [START_PAGE] [END_PAGE] [ARCHIVE]
     Defaults: sort='date', start_page=1, end_page=DEFAULT_PAGE_RANGE_END
 
     File input supports:
@@ -544,7 +564,31 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     # --- File input ---
     if query_lower == "file":
-        file_path = arg_list[0] if isinstance(arg_list, list) else arg_list
+        archive_mode = DEFAULT_ARCHIVING
+        file_path = None
+
+        if isinstance(arg_list, list):
+            for token in arg_list:
+                if token is None:
+                    continue
+                parsed_flag = _parse_archive_flag(token)
+                if parsed_flag is None:
+                    if file_path is None:
+                        file_path = str(token)
+                    else:
+                        logger.warning(f"Ignoring extra --file argument: {token}")
+                else:
+                    archive_mode = parsed_flag
+        else:
+            parsed_flag = _parse_archive_flag(arg_list)
+            if parsed_flag is None:
+                file_path = str(arg_list)
+            else:
+                archive_mode = parsed_flag
+
+        if not file_path:
+            file_path = DEFAULT_DOUJIN_TXT_PATH
+
         if not os.path.isfile(file_path):
             logger.warning(f"Gallery file not found: {file_path}")
             return set()
@@ -576,7 +620,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
                     end_page = int(m_homepage.group(1))
-                    gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -593,7 +637,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids_with_fallback(qtype, qvalue, sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback(qtype, qvalue, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 elif m_search:
@@ -602,7 +646,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page))
+                    gallery_ids.update(fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 else:
@@ -648,9 +692,19 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
         end_page = DEFAULT_PAGE_RANGE_END
         
         archive_mode = DEFAULT_ARCHIVING
-        if str(entry[-1]).lower() in ("true", "archive"):
-            archive_mode = True
-            entry = entry[:-1] # Remove the flag before parsing numbers
+        if query_lower == "archive":
+            archive_override = _parse_archive_flag(entry[-1]) if entry else None
+            if archive_override is not None:
+                entry = entry[:-1] # Ignore redundant archive flag for --archive
+        else:
+            archive_override = _parse_archive_flag(entry[-1]) if entry else None
+            if archive_override is not None:
+                archive_mode = archive_override
+                entry = entry[:-1] # Remove the flag before parsing numbers
+
+        if not entry:
+            logger.warning(f"No query value provided for --{query_lower}; skipping.")
+            continue
         
         if len(entry) > 1 and str(entry[1]).lower() in valid_sorts:
             sort_val = str(entry[1]).lower()
