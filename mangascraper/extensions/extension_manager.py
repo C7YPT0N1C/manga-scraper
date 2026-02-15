@@ -243,8 +243,9 @@ def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
         target_dir = os.path.join(EXTENSIONS_DIR, extension_name)
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
-        shutil.copytree(source_dir, target_dir)
-        log(f"Remote extension synced into: {target_dir}", "debug")
+        os.makedirs(EXTENSIONS_DIR, exist_ok=True)
+        shutil.move(source_dir, target_dir)
+        log(f"Remote extension moved into: {target_dir}", "debug")
     else:
         if os.path.exists(EXTENSIONS_DIR):
             shutil.rmtree(EXTENSIONS_DIR)
