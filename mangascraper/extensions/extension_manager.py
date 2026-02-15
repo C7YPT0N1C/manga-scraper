@@ -12,7 +12,8 @@ from mangascraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
-EXTENSIONS_DIR = os.path.dirname(__file__)
+EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/extensions"
+os.makedirs(EXTENSIONS_DIR, exist_ok=True)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
 # Primary + backup repo / manifest locations
@@ -248,8 +249,22 @@ def sparse_clone(extension_name: str, url: str):
     # Flatten nested folder if exists
     repo_folder = os.path.join(ext_folder, extension_name)
     if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
-        for item in os.listdir(repo_folder):
-            shutil.move(os.path.join(repo_folder, item), ext_folder)
+        def _merge_tree(src_dir: str, dest_dir: str):
+            for item in os.listdir(src_dir):
+                src = os.path.join(src_dir, item)
+                dest = os.path.join(dest_dir, item)
+                if os.path.isdir(src):
+                    if os.path.exists(dest) and os.path.isdir(dest):
+                        _merge_tree(src, dest)
+                        shutil.rmtree(src)
+                    else:
+                        shutil.move(src, dest)
+                else:
+                    if os.path.exists(dest):
+                        os.remove(dest)
+                    shutil.move(src, dest)
+
+        _merge_tree(repo_folder, ext_folder)
         shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
 
     log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
