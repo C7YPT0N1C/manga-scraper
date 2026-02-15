@@ -14,8 +14,6 @@ TTL = 3 * 60 * 60
 SEARCH_HISTORY_FILENAME = "(search_history).json"
 SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
 MASTER_CACHE_FILENAME = "(master_cache).json"
-GENERAL_CACHE_FILENAME = "(general_cache).json"
-GENERAL_CACHE_KEY = "general_cache"
 
 
 def get_cache_dir() -> Path:
@@ -39,7 +37,7 @@ def get_cache_dir() -> Path:
 def ensure_cache_files_exist():
     """Ensure cache directory and core cache files exist."""
     cache_dir = get_cache_dir()
-    for name in (SEARCH_HISTORY_FILENAME, MASTER_CACHE_FILENAME, SELECTED_GALLERIES_FILENAME, GENERAL_CACHE_FILENAME):
+    for name in (SEARCH_HISTORY_FILENAME, MASTER_CACHE_FILENAME, SELECTED_GALLERIES_FILENAME):
         cache_file = cache_dir / name
         if cache_file.exists():
             continue
@@ -50,8 +48,6 @@ def ensure_cache_files_exist():
                 data = {"saved_at": None, "items": []}
             elif name == SELECTED_GALLERIES_FILENAME:
                 data = {"saved_at": None, "ids": [], "csv": ""}
-            elif name == GENERAL_CACHE_FILENAME:
-                data = {"timestamp": None, "metadata": {}}
             else:
                 data = {}
             with open(cache_file, "w", encoding="utf-8") as f:
@@ -96,33 +92,6 @@ def _load_master_cache() -> dict:
             references = data.get("entries")
         if not isinstance(references, dict):
             return {"references": {}}
-
-        cache_dir = get_cache_dir()
-        general_cache_file = cache_dir / GENERAL_CACHE_FILENAME
-        if general_cache_file.exists() and f"metadata:{GENERAL_CACHE_KEY}" not in references:
-            try:
-                with open(general_cache_file, "r", encoding="utf-8") as f:
-                    general_data = json.load(f)
-                metadata = general_data.get("metadata", {})
-                ids = []
-                if isinstance(metadata, dict):
-                    for gid in metadata.keys():
-                        try:
-                            ids.append(int(gid))
-                        except Exception:
-                            continue
-                    ids = sorted(set(ids))
-                references[f"metadata:{GENERAL_CACHE_KEY}"] = _build_master_entry(
-                    "metadata",
-                    GENERAL_CACHE_KEY,
-                    general_cache_file,
-                    TTL,
-                    last_write=general_data.get("timestamp", None),
-                    ids=ids,
-                )
-                _save_master_cache({"references": references})
-            except Exception:
-                pass
 
         return {"references": references}
     except Exception:
@@ -257,42 +226,6 @@ def load_cache(cache_key: str) -> dict:
     return {}
 
 
-def load_general_cache() -> dict:
-    """Load cached metadata for explicit gallery IDs (general cache)."""
-    cache_file = get_cache_dir() / GENERAL_CACHE_FILENAME
-    if cache_file.exists():
-        try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if time.time() - data.get('timestamp', 0) < TTL:
-                    metadata = data.get('metadata', {})
-                    ids = []
-                    if isinstance(metadata, dict):
-                        for gid in metadata.keys():
-                            try:
-                                ids.append(int(gid))
-                            except Exception:
-                                continue
-                        ids = sorted(set(ids))
-                    _update_master_cache(
-                        f"metadata:{GENERAL_CACHE_KEY}",
-                        _build_master_entry(
-                            "metadata",
-                            GENERAL_CACHE_KEY,
-                            cache_file,
-                            TTL,
-                            last_read=time.time(),
-                            last_write=data.get('timestamp', None),
-                            ids=ids,
-                        ),
-                    )
-                    return metadata
-                _remove_master_cache_entry(f"metadata:{GENERAL_CACHE_KEY}")
-        except Exception:
-            pass
-    return {}
-
-
 def save_cache(cache_key: str, metadata: dict):
     """Save metadata to cache.
     
@@ -330,40 +263,6 @@ def save_cache(cache_key: str, metadata: dict):
         )
     except Exception:
         pass  # Silently fail
-
-
-def save_general_cache(metadata: dict):
-    """Save metadata for explicit gallery IDs to the general cache."""
-    try:
-        cache_file = get_cache_dir() / GENERAL_CACHE_FILENAME
-        timestamp = time.time()
-        safe_metadata = {str(k): v for k, v in metadata.items()}
-        ids = []
-        for gid in safe_metadata.keys():
-            try:
-                ids.append(int(gid))
-            except Exception:
-                continue
-        ids = sorted(set(ids))
-        data = {
-            'timestamp': timestamp,
-            'metadata': safe_metadata,
-        }
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        _update_master_cache(
-            f"metadata:{GENERAL_CACHE_KEY}",
-            _build_master_entry(
-                "metadata",
-                GENERAL_CACHE_KEY,
-                cache_file,
-                TTL,
-                last_write=timestamp,
-                ids=ids,
-            ),
-        )
-    except Exception:
-        pass
 
 
 def load_search_history(max_items: int = 10) -> list[dict]:
@@ -592,10 +491,7 @@ def clear_cache(cache_key: str = None):
     try:
         cache_dir = get_cache_dir()
         if cache_key:
-            if cache_key == GENERAL_CACHE_KEY:
-                cache_file = cache_dir / GENERAL_CACHE_FILENAME
-            else:
-                cache_file = cache_dir / f"{cache_key}.json"
+            cache_file = cache_dir / f"{cache_key}.json"
             if cache_file.exists():
                 cache_file.unlink()
             _remove_master_cache_entry(f"metadata:{cache_key}")

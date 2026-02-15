@@ -10,7 +10,7 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database
-from mangascraper.core.cache import load_cache, save_cache, load_general_cache, save_general_cache
+from mangascraper.core.cache import load_cache, save_cache, load_cached_metadata_for_ids
 from tqdm import tqdm
 
 ################################################################################################################
@@ -942,7 +942,7 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     if cache_key:
         cached_metadata = load_cache(cache_key)
     else:
-        cached_metadata = load_general_cache()
+        cached_metadata = load_cached_metadata_for_ids(gallery_ids)
 
     if cached_metadata:
         normalised_cached = {}
@@ -978,7 +978,6 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     log_clarification()
     
     metadata = dict(cached_metadata)  # Start with cached results
-    fetched_metadata = {}
     failed_ids = []
     
     # Fetch missing galleries with progress bar
@@ -1004,7 +1003,6 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
                     "pages": len(meta.get("images", {}).get("pages", [])),
                 }
                 metadata[gallery_id] = meta_entry
-                fetched_metadata[gallery_id] = meta_entry
             else:
                 failed_ids.append(gallery_id)
         except Exception as e:
@@ -1015,16 +1013,8 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
         logger.warning(f"Failed to fetch metadata for {len(failed_ids)} galleries (they will be skipped)")
     
     # Save to cache
-    if metadata:
-        if cache_key:
-            save_cache(cache_key, metadata)
-        else:
-            save_general_cache(metadata)
-
-    if fetched_metadata:
-        general_cache = load_general_cache()
-        general_cache.update(fetched_metadata)
-        save_general_cache(general_cache)
+    if metadata and cache_key:
+        save_cache(cache_key, metadata)
     
     return metadata
 
