@@ -15,6 +15,7 @@ from mangascraper.core import orchestrator, database
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
 SEARCH_HISTORY_FILENAME = "(search_history).json"
 SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
+SEARCH_HISTORY_MAX = 10
 
 
 def get_cache_dir() -> Path:
@@ -42,6 +43,19 @@ def ensure_cache_files_exist():
     for name in (SEARCH_HISTORY_FILENAME, SELECTED_GALLERIES_FILENAME):
         cache_file = cache_dir / name
         if cache_file.exists():
+            if name != SEARCH_HISTORY_FILENAME:
+                continue
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                items = data.get("items", []) if isinstance(data, dict) else []
+                if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
+                    data["items"] = items[-SEARCH_HISTORY_MAX:]
+                    data["saved_at"] = time.time()
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
             continue
         try:
             if name == SEARCH_HISTORY_FILENAME:
@@ -369,7 +383,7 @@ def save_cache(cache_key: str, metadata: dict):
         pass  # Silently fail
 
 
-def load_search_history(max_items: int = 10) -> list[dict]:
+def load_search_history(max_items: int = SEARCH_HISTORY_MAX) -> list[dict]:
     """Load recent search history from cache.
     
     Args:
@@ -404,8 +418,11 @@ def load_search_history(max_items: int = 10) -> list[dict]:
                     'end_page': item.get('end_page'),
                     'archive_mode': bool(item.get('archive_mode', False)),
                 })
-            if max_items and len(cleaned) > max_items:
-                cleaned = cleaned[-max_items:]
+            capped = SEARCH_HISTORY_MAX
+            if max_items is not None:
+                capped = min(int(max_items), SEARCH_HISTORY_MAX)
+            if capped and len(cleaned) > capped:
+                cleaned = cleaned[-capped:]
             _update_master_cache(
                 "search_history",
                 _build_master_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
@@ -415,7 +432,7 @@ def load_search_history(max_items: int = 10) -> list[dict]:
         return []
 
 
-def save_search_history(items: list[dict], max_items: int = 10):
+def save_search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
     """Save recent search history to cache.
     
     Args:
@@ -442,8 +459,11 @@ def save_search_history(items: list[dict], max_items: int = 10):
                 'end_page': item.get('end_page'),
                 'archive_mode': bool(item.get('archive_mode', False)),
             })
-        if max_items and len(safe_items) > max_items:
-            safe_items = safe_items[-max_items:]
+        capped = SEARCH_HISTORY_MAX
+        if max_items is not None:
+            capped = min(int(max_items), SEARCH_HISTORY_MAX)
+        if capped and len(safe_items) > capped:
+            safe_items = safe_items[-capped:]
         cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
         saved_at = time.time()
         data = {
