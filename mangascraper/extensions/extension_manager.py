@@ -241,8 +241,10 @@ def sparse_clone(extension_name: str, url: str):
     # Configure sparse-checkout to fetch the extension folder and entry point
     sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
     with open(sparse_file, "w", encoding="utf-8") as f:
-        f.write(f"/{extension_name}/**\n")
-        f.write(f"/{extension_name}__msext.py\n")
+        f.write(f"{extension_name}/\n")
+        f.write(f"{extension_name}/**\n")
+        f.write(f"{extension_name}__msext.py\n")
+        f.write(f"**/{extension_name}__msext.py\n")
 
     # Pull the branch (assumes 'main')
     subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
@@ -267,6 +269,18 @@ def sparse_clone(extension_name: str, url: str):
 
         _merge_tree(repo_folder, ext_folder)
         shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
+
+    # Ensure entry point is at extension root if it exists elsewhere
+    entry_point_name = f"{extension_name}__msext.py"
+    expected_entry = os.path.join(ext_folder, entry_point_name)
+    if not os.path.exists(expected_entry):
+        for root, _, files in os.walk(ext_folder):
+            if entry_point_name in files:
+                source = os.path.join(root, entry_point_name)
+                if os.path.exists(expected_entry):
+                    os.remove(expected_entry)
+                shutil.move(source, expected_entry)
+                break
 
     log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
 
