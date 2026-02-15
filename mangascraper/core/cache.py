@@ -47,8 +47,7 @@ def ensure_cache_files_exist():
             if name == MASTER_CACHE_FILENAME:
                 data = {
                     "references": {},
-                    "general_metadata": {"timestamp": None, "metadata": {}},
-                    "general_raw_metadata": {"timestamp": None, "metadata": {}},
+                    "metadata": {},
                 }
             elif name == SEARCH_HISTORY_FILENAME:
                 data = {"saved_at": None, "items": []}
@@ -89,8 +88,7 @@ def _load_master_cache() -> dict:
     if not cache_file.exists():
         return {
             "references": {},
-            "general_metadata": {"timestamp": None, "metadata": {}},
-            "general_raw_metadata": {"timestamp": None, "metadata": {}},
+            "metadata": {},
         }
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
@@ -98,8 +96,7 @@ def _load_master_cache() -> dict:
         if not isinstance(data, dict):
             return {
                 "references": {},
-                "general_metadata": {"timestamp": None, "metadata": {}},
-                "general_raw_metadata": {"timestamp": None, "metadata": {}},
+                "metadata": {},
             }
         references = data.get("references")
         if references is None:
@@ -107,28 +104,70 @@ def _load_master_cache() -> dict:
         if not isinstance(references, dict):
             references = {}
 
-        general_metadata = data.get("general_metadata")
-        if not isinstance(general_metadata, dict):
-            general_metadata = {"timestamp": None, "metadata": {}}
-        if not isinstance(general_metadata.get("metadata"), dict):
-            general_metadata["metadata"] = {}
+        metadata_block = data.get("metadata")
+        if not isinstance(metadata_block, dict):
+            metadata_block = {}
 
-        general_raw_metadata = data.get("general_raw_metadata")
-        if not isinstance(general_raw_metadata, dict):
-            general_raw_metadata = {"timestamp": None, "metadata": {}}
-        if not isinstance(general_raw_metadata.get("metadata"), dict):
-            general_raw_metadata["metadata"] = {}
+        def _ensure_entry(gid: str) -> dict:
+            entry = metadata_block.get(gid)
+            if not isinstance(entry, dict):
+                entry = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
+            if not isinstance(entry.get("clean_metadata"), dict):
+                entry["clean_metadata"] = {}
+            if not isinstance(entry.get("raw_metadata"), dict):
+                entry["raw_metadata"] = {}
+            metadata_block[gid] = entry
+            return entry
+
+        legacy_general = data.get("general_metadata")
+        legacy_raw = data.get("general_raw_metadata")
+        if isinstance(legacy_general, dict) and isinstance(legacy_general.get("metadata"), dict):
+            for gid, entry in legacy_general.get("metadata", {}).items():
+                if not isinstance(entry, dict):
+                    continue
+                target = _ensure_entry(str(gid))
+                target["clean_metadata"].update(entry)
+                if target.get("timestamp") is None:
+                    target["timestamp"] = legacy_general.get("timestamp")
+        if isinstance(legacy_raw, dict) and isinstance(legacy_raw.get("metadata"), dict):
+            for gid, entry in legacy_raw.get("metadata", {}).items():
+                target = _ensure_entry(str(gid))
+                target["raw_metadata"] = entry
+                if target.get("timestamp") is None:
+                    target["timestamp"] = legacy_raw.get("timestamp")
+
+        if isinstance(metadata_block.get("entries"), dict):
+            legacy_entries = metadata_block.pop("entries")
+            for gid, entry in legacy_entries.items():
+                if not isinstance(entry, dict):
+                    continue
+                target = _ensure_entry(str(gid))
+                target["clean_metadata"].update({k: v for k, v in entry.items() if k != "raw_metadata"})
+                if "raw_metadata" in entry:
+                    target["raw_metadata"] = entry.get("raw_metadata")
+
+        if isinstance(metadata_block.get("metadata"), dict):
+            legacy_summary = metadata_block.pop("metadata")
+            for gid, entry in legacy_summary.items():
+                if not isinstance(entry, dict):
+                    continue
+                target = _ensure_entry(str(gid))
+                target["clean_metadata"].update(entry)
+
+        if isinstance(metadata_block.get("raw_metadata"), dict):
+            legacy_raw_map = metadata_block.pop("raw_metadata")
+            for gid, entry in legacy_raw_map.items():
+                target = _ensure_entry(str(gid))
+                target["raw_metadata"] = entry
 
         return {
             "references": references,
-            "general_metadata": general_metadata,
-            "general_raw_metadata": general_raw_metadata,
+            "metadata": metadata_block,
         }
     except Exception:
         return {
             "references": {},
-            "general_metadata": {"timestamp": None, "metadata": {}},
-            "general_raw_metadata": {"timestamp": None, "metadata": {}},
+            "metadata": {},
         }
 
 
@@ -139,11 +178,17 @@ def load_all_cached_metadata() -> dict:
     if not isinstance(references, dict):
         return {}
     merged = {}
-    general_block = data.get("general_metadata", {})
-    general_metadata = general_block.get("metadata", {})
-    general_timestamp = general_block.get("timestamp") or 0
-    if isinstance(general_metadata, dict) and (time.time() - general_timestamp) < TTL:
-        merged.update(general_metadata)
+    general_block = data.get("metadata", {})
+    if isinstance(general_block, dict):
+        for gid, entry in general_block.items():
+            if not isinstance(entry, dict):
+                continue
+            timestamp = entry.get("timestamp") or 0
+            if (time.time() - timestamp) >= TTL:
+                continue
+            clean = entry.get("clean_metadata")
+            if isinstance(clean, dict):
+                merged[gid] = clean
     for entry in references.values():
         if not isinstance(entry, dict):
             continue
@@ -191,13 +236,20 @@ def _remove_master_cache_entry(entry_key: str):
 def load_general_metadata_cache() -> dict:
     """Load general metadata stored inside master cache."""
     data = _load_master_cache()
-    general_metadata = data.get("general_metadata", {})
-    metadata = general_metadata.get("metadata", {})
+    metadata = data.get("metadata", {})
     if not isinstance(metadata, dict):
         return {}
-    if time.time() - (general_metadata.get("timestamp") or 0) >= TTL:
-        return {}
-    return metadata
+    cleaned = {}
+    for gid, entry in metadata.items():
+        if not isinstance(entry, dict):
+            continue
+        timestamp = entry.get("timestamp") or 0
+        if (time.time() - timestamp) >= TTL:
+            continue
+        clean = entry.get("clean_metadata")
+        if isinstance(clean, dict):
+            cleaned[gid] = clean
+    return cleaned
 
 
 def save_general_metadata_cache(metadata: dict):
@@ -206,22 +258,40 @@ def save_general_metadata_cache(metadata: dict):
         return
     data = _load_master_cache()
     safe_metadata = {str(k): v for k, v in metadata.items()}
-    data["general_metadata"] = {
-        "timestamp": time.time(),
-        "metadata": safe_metadata,
-    }
+    metadata_block = data.get("metadata", {})
+    if not isinstance(metadata_block, dict):
+        metadata_block = {}
+    for gid, entry in safe_metadata.items():
+        current = metadata_block.get(gid)
+        if not isinstance(current, dict):
+            current = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
+        if not isinstance(current.get("clean_metadata"), dict):
+            current["clean_metadata"] = {}
+        if not isinstance(current.get("raw_metadata"), dict):
+            current["raw_metadata"] = {}
+        if isinstance(entry, dict):
+            current["clean_metadata"].update(entry)
+        current["timestamp"] = time.time()
+        metadata_block[gid] = current
+    data["metadata"] = metadata_block
     _save_master_cache(data)
 
 
 def load_general_raw_metadata_cache() -> dict:
     """Load raw metadata stored inside master cache."""
     data = _load_master_cache()
-    raw_block = data.get("general_raw_metadata", {})
-    metadata = raw_block.get("metadata", {})
-    if not isinstance(metadata, dict):
+    raw_block = data.get("metadata", {})
+    if not isinstance(raw_block, dict):
         return {}
-    if time.time() - (raw_block.get("timestamp") or 0) >= TTL:
-        return {}
+    metadata = {}
+    for gid, entry in raw_block.items():
+        if not isinstance(entry, dict):
+            continue
+        timestamp = entry.get("timestamp") or 0
+        if (time.time() - timestamp) >= TTL:
+            continue
+        if "raw_metadata" in entry:
+            metadata[gid] = entry.get("raw_metadata")
     return metadata
 
 
@@ -230,10 +300,20 @@ def save_general_raw_metadata_cache(metadata: dict):
     if not isinstance(metadata, dict):
         return
     data = _load_master_cache()
-    data["general_raw_metadata"] = {
-        "timestamp": time.time(),
-        "metadata": metadata,
-    }
+    metadata_block = data.get("metadata", {})
+    if not isinstance(metadata_block, dict):
+        metadata_block = {}
+    for gid, entry in metadata.items():
+        key = str(gid)
+        current = metadata_block.get(key)
+        if not isinstance(current, dict):
+            current = {"timestamp": None, "clean_metadata": {}, "raw_metadata": {}}
+        if not isinstance(current.get("clean_metadata"), dict):
+            current["clean_metadata"] = {}
+        current["raw_metadata"] = entry
+        current["timestamp"] = time.time()
+        metadata_block[key] = current
+    data["metadata"] = metadata_block
     _save_master_cache(data)
 
 
@@ -535,14 +615,19 @@ def load_cached_metadata_for_ids(ids: list[int]) -> dict:
         return {}
 
     merged = {}
-    general_block = data.get("general_metadata", {})
-    general_metadata = general_block.get("metadata", {})
-    general_timestamp = general_block.get("timestamp") or 0
-    if isinstance(general_metadata, dict) and (time.time() - general_timestamp) < TTL:
+    general_block = data.get("metadata", {})
+    if isinstance(general_block, dict):
         for gid in wanted:
             gid_str = str(gid)
-            if gid_str in general_metadata:
-                merged[gid] = general_metadata[gid_str]
+            entry = general_block.get(gid_str)
+            if not isinstance(entry, dict):
+                continue
+            timestamp = entry.get("timestamp") or 0
+            if (time.time() - timestamp) >= TTL:
+                continue
+            clean = entry.get("clean_metadata")
+            if isinstance(clean, dict):
+                merged[gid] = clean
     for entry in references.values():
         if not isinstance(entry, dict):
             continue
