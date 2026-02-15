@@ -776,17 +776,17 @@ def start_downloader(gallery_list=None):
     
     orchestrator.refresh_globals()
     
-    selected_cache_path = os.path.join(
-        str(get_cache_dir()),
-        "(selected_galleries).json",
-    )
-    if os.path.exists(selected_cache_path):
-        selected_ids = load_selected_galleries()
-        gallery_list = selected_ids
-    elif gallery_list:
-        logger.warning(
-            "Selected galleries cache file missing; using in-memory gallery list."
+    if gallery_list is None:
+        selected_cache_path = os.path.join(
+            str(get_cache_dir()),
+            "(selected_galleries).json",
         )
+        if os.path.exists(selected_cache_path):
+            gallery_list = load_selected_galleries()
+        else:
+            logger.warning(
+                "Selected galleries cache file missing; no galleries to download."
+            )
 
     orchestrator.galleries = gallery_list
     

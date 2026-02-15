@@ -26,6 +26,7 @@ from mangascraper.core.cache import (
     save_selected_galleries,
     load_selected_galleries,
     load_cached_metadata_for_ids,
+    get_cache_dir,
 )
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -1282,10 +1283,18 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     log_clarification()
 
     get_session(referrer="Interactive", status="build")
+
+    save_selected_galleries([])
     
-    selected_ids = list(dict.fromkeys(initial_ids)) if initial_ids else []
-    if selected_ids:
-        logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
+    selected_ids = []
+    cache_path = get_cache_dir() / "(selected_galleries).json"
+    if cache_path.exists():
+        selected_ids = load_selected_galleries()
+    if initial_ids:
+        selected_ids.extend(initial_ids)
+        selected_ids = list(dict.fromkeys(selected_ids))
+        if selected_ids:
+            logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
     search_history_max = 10
     search_history = deque(maxlen=search_history_max)  # Each entry is a dict with search details
     for entry in load_search_history(search_history_max):
@@ -1293,10 +1302,12 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
 
     def persist_selected_ids():
-        if selected_ids:
-            save_selected_galleries(sorted(set(selected_ids)))
-        else:
-            save_selected_galleries([])
+        nonlocal selected_ids
+        cache_exists = cache_path.exists()
+        cached_ids = load_selected_galleries() if cache_exists else []
+        merged = list(dict.fromkeys(cached_ids + selected_ids))
+        save_selected_galleries(sorted(set(merged)) if merged else [])
+        selected_ids = merged
 
     if selected_ids:
         persist_selected_ids()
@@ -1353,10 +1364,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            if not selected_ids:
-                cached_ids = load_selected_galleries()
-                if cached_ids:
-                    selected_ids.extend(cached_ids)
+            if cache_path.exists():
+                selected_ids = load_selected_galleries()
             if selected_ids:
                 break
             else:
@@ -1844,6 +1853,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
+            if cache_path.exists():
+                selected_ids = load_selected_galleries()
             selected_ids = view_selected_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
