@@ -44,6 +44,11 @@ MAX_X_BATCHES = 50
 EVERY_X_BATCHES = 10
 RUNS_PER_X_BATCHES = 1
 
+ARCHIVE_WAIT_SECONDS = 120
+ARCHIVE_POLL_INTERVAL = 0.5
+
+####################################################################
+# CUSTOM VARIABLES
 ####################################################################
 
 GRAPHQL_URL = "http://127.0.0.1:4567/api/graphql"
@@ -52,9 +57,6 @@ LOCAL_SOURCE_ID = None  # Local source is usually "0"
 SUWAYOMI_CATEGORY_NAME = "ScrapedMangas"
 CATEGORY_ID = None
 SUWAYOMI_POPULATION_TIME = 2 # Suwayomi update ticks every ~2 secs.
-
-ARCHIVE_WAIT_SECONDS = 120
-ARCHIVE_POLL_INTERVAL = 0.5
 
 # NOTE: TEST
 AUTH_USERNAME = config.get("BASIC_AUTH_USERNAME", None) # Must be manually set for now.
@@ -99,8 +101,6 @@ def save_creators_metadata(metadata: dict):
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"Could not save creators_metadata.json: {e}")
-        
-# Removed redundant wrapper functions. Code now works directly with metadata dict.
 
 ####################################################################################################################
 # CORE
@@ -211,11 +211,31 @@ def uninstall_extension():
             os.remove(service_file)
         subprocess.run(["systemctl", "daemon-reload"], check=False)
 
-        if os.path.exists(EXTENSION_INSTALL_PATH):
-            shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
+        # Delete /root/.local/share/Tachidesk if it exists
+        tachidesk_path = "/root/.local/share/Tachidesk"
+        if os.path.exists(tachidesk_path):
+            shutil.rmtree(tachidesk_path, ignore_errors=True)
+
+        # Delete everything under /opt/suwayomi-server/ except /opt/suwayomi-server/local/
+        suwayomi_path = "/opt/suwayomi-server/"
+        suwayomi_local = os.path.join(suwayomi_path, "local")
+        if os.path.exists(suwayomi_path):
+            for entry in os.listdir(suwayomi_path):
+                full_path = os.path.join(suwayomi_path, entry)
+                if os.path.abspath(full_path) == os.path.abspath(suwayomi_local):
+                    continue
+                if os.path.isdir(full_path):
+                    shutil.rmtree(full_path, ignore_errors=True)
+                else:
+                    try:
+                        os.remove(full_path)
+                    except Exception:
+                        pass
+
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
-        logger.info(f"Extension {EXTENSION_REFERRER}: Uninstalled successfully")
+
+        logger.info(f"Extension {EXTENSION_REFERRER}: Uninstalled successfully. Your galleries folder will NOT be deleted.")
 
     except Exception as e:
         logger.error(f"Extension {EXTENSION_REFERRER}: Failed to uninstall: {e}")
@@ -247,8 +267,6 @@ def _get_latest_id_from_details(creator_folder: str) -> int | None:
         return parse_gallery_id(details.get("description", ""))
     except Exception:
         return None
-
-############################################
 
 def graphql_request(request: str, variables: dict = None, gql_debugging: bool = False):
     """
@@ -1129,13 +1147,19 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])
 
-        # --- Minimal database update calls ---
-        if creators:
-            database.link_gallery_creator(gallery_id, creators[0])
-        if tags:
-            database.link_gallery_tags(gallery_id, tags)
-        if languages:
-            database.link_gallery_languages(gallery_id, languages)
+        # --- Consolidated database update call ---
+        database.update_gallery_metadata(
+            gallery_id=gallery_id,
+            raw_title=gallery_meta.get("raw_title"),
+            clean_title=gallery_meta.get("clean_title"),
+            language=gallery_meta.get("languages", []),
+            tags=gallery_meta.get("tags", []),
+            cover_path=gallery_meta.get("cover_path"),
+            creator_name=creators[0] if creators else None,
+            download_path=gallery_meta.get("download_path"),
+            extension_used=gallery_meta.get("extension_used"),
+            num_pages=gallery_meta.get("num_pages")
+        )
 
         cover_source = None
         cover_gallery_name = None

@@ -49,6 +49,8 @@ ARCHIVE_WAIT_SECONDS = 120
 ARCHIVE_POLL_INTERVAL = 0.5
 
 ####################################################################
+# CUSTOM VARIABLES
+####################################################################
 
 # PUT YOUR VARIABLES HERE
 
@@ -87,10 +89,7 @@ def install_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     orchestrator.refresh_globals()
-
-    if not DEDICATED_DOWNLOAD_PATH:
-        # Fallback in case manifest didn't define it
-        DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
+    DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
@@ -128,7 +127,7 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             os.rmdir(DEDICATED_DOWNLOAD_PATH)
         
-        logger.info(f"{EXTENSION_REFERRER}: Uninstalled")
+        logger.info(f"{EXTENSION_REFERRER}: Uninstalled successfully. Your galleries folder will NOT be deleted.")
     
     except Exception as e:
         logger.error(f"{EXTENSION_REFERRER}: Failed to uninstall: {e}")
@@ -313,13 +312,19 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])
 
-        # --- Minimal database update calls ---
-        if creators:
-            database.link_gallery_creator(gallery_id, creators[0])
-        if tags:
-            database.link_gallery_tags(gallery_id, tags)
-        if languages:
-            database.link_gallery_languages(gallery_id, languages)
+        # --- Consolidated database update call ---
+        database.update_gallery_metadata(
+            gallery_id=gallery_id,
+            raw_title=gallery_meta.get("raw_title"),
+            clean_title=gallery_meta.get("clean_title"),
+            language=gallery_meta.get("languages", []),
+            tags=gallery_meta.get("tags", []),
+            cover_path=gallery_meta.get("cover_path"),
+            creator_name=creators[0] if creators else None,
+            download_path=gallery_meta.get("download_path"),
+            extension_used=gallery_meta.get("extension_used"),
+            num_pages=gallery_meta.get("num_pages")
+        )
 
         cover_source = None
         cover_gallery_name = None
