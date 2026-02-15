@@ -86,7 +86,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            type TEXT,
             popularity INTEGER
         );
         
@@ -100,7 +99,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Languages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            type TEXT,
             popularity INTEGER
         );
 
