@@ -39,6 +39,7 @@ def get_cache_dir() -> Path:
 def ensure_cache_files_exist():
     """Ensure cache directory and core cache files exist."""
     cache_dir = get_cache_dir()
+    _prune_cache_files(cache_dir)
     for name in (SEARCH_HISTORY_FILENAME, MASTER_CACHE_FILENAME, SELECTED_GALLERIES_FILENAME):
         cache_file = cache_dir / name
         if cache_file.exists():
@@ -57,6 +58,26 @@ def ensure_cache_files_exist():
                 data = {}
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            continue
+
+
+def _prune_cache_files(cache_dir: Path):
+    now = time.time()
+    protected = {
+        SEARCH_HISTORY_FILENAME,
+        MASTER_CACHE_FILENAME,
+        SELECTED_GALLERIES_FILENAME,
+    }
+    for cache_file in cache_dir.glob("*.json"):
+        if cache_file.name in protected:
+            continue
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            timestamp = data.get("timestamp") or 0
+            if (now - timestamp) >= TTL:
+                cache_file.unlink()
         except Exception:
             continue
 
@@ -160,15 +181,60 @@ def _load_master_cache() -> dict:
                 target = _ensure_entry(str(gid))
                 target["raw_metadata"] = entry
 
-        return {
+        data = {
             "references": references,
             "metadata": metadata_block,
         }
+        return _prune_master_cache(data, save_if_changed=True)
     except Exception:
         return {
             "references": {},
             "metadata": {},
         }
+
+
+def _prune_master_cache(data: dict, save_if_changed: bool = False) -> dict:
+    if not isinstance(data, dict):
+        return {"references": {}, "metadata": {}}
+
+    references = data.get("references")
+    metadata_block = data.get("metadata")
+    if not isinstance(references, dict):
+        references = {}
+    if not isinstance(metadata_block, dict):
+        metadata_block = {}
+
+    now = time.time()
+    changed = False
+
+    for gid in list(metadata_block.keys()):
+        entry = metadata_block.get(gid)
+        if not isinstance(entry, dict):
+            metadata_block.pop(gid, None)
+            changed = True
+            continue
+        timestamp = entry.get("timestamp") or 0
+        if (now - timestamp) >= TTL:
+            metadata_block.pop(gid, None)
+            changed = True
+
+    for key in list(references.keys()):
+        entry = references.get(key)
+        if not isinstance(entry, dict):
+            references.pop(key, None)
+            changed = True
+            continue
+        expires_at = entry.get("expires_at")
+        if expires_at and now >= expires_at:
+            references.pop(key, None)
+            changed = True
+
+    data["references"] = references
+    data["metadata"] = metadata_block
+
+    if changed and save_if_changed:
+        _save_master_cache(data)
+    return data
 
 
 def load_all_cached_metadata() -> dict:
@@ -388,6 +454,10 @@ def load_cache(cache_key: str) -> dict:
                         ),
                     )
                     return metadata
+                try:
+                    cache_file.unlink()
+                except Exception:
+                    pass
                 _remove_master_cache_entry(f"metadata:{cache_key}")
         except Exception as e:
             pass  # Silently fail, return empty dict
