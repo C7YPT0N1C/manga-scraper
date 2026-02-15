@@ -393,7 +393,14 @@ def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val:
     
     while attempt < max_retries:
         try:
-            ids = fetch_gallery_ids(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival)
+            ids = fetch_gallery_ids(
+                query_type,
+                query_value,
+                sort_val,
+                start_page,
+                end_page,
+                fetch_as_archival=fetch_as_archival,
+            )
             return ids or []
         except Exception as e:
             attempt += 1

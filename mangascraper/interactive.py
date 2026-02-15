@@ -1145,7 +1145,14 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
     
     while attempt < max_retries:
         try:
-            ids = fetch_gallery_ids(search_type, search_value, sort_val, start_page, end_page, fetch_as_archival)
+            ids = fetch_gallery_ids(
+                search_type,
+                search_value,
+                sort_val,
+                start_page,
+                end_page,
+                fetch_as_archival=fetch_as_archival,
+            )
             if ids:
                 return ids, cache_key
             else:
