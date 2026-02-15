@@ -26,9 +26,9 @@ READER_SETTINGS = {
     "symbols": "block",
     "dither": "none",
     "oversample": False,
-    "raw_size": False,
+    "clamp_to_terminal": True,
+    "preserve_aspect": True,
 }
-READER_SETTINGS_PROMPTED = False
 
 ####################################################################################################
 # DISPLAY UTILITIES
@@ -301,7 +301,28 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
 
 
 def read_gallery_in_terminal(gallery_id: int):
-    global READER_SETTINGS_PROMPTED
+    def prompt_reader_settings():
+        choice = input("Reader quality (ultra/high/medium/low, default ultra): ").strip().lower()
+        if choice in ("medium", "m"):
+            READER_SETTINGS.update({"quality": "medium", "colors": 16})
+        elif choice in ("low", "l"):
+            READER_SETTINGS.update({"quality": "low", "colors": 8})
+        elif choice in ("high", "h"):
+            READER_SETTINGS.update({"quality": "high", "colors": 256})
+        elif choice in ("ultra", "u", ""):
+            pass
+        else:
+            logger.warning("Unknown quality option. Keeping default (ultra).")
+
+        oversample = input("Enable oversample render scale (may be slow)? (y/n): ").strip().lower()
+        READER_SETTINGS["oversample"] = oversample in ("y", "yes")
+
+        clamp = input("Clamp to terminal size (recommended)? (y/n): ").strip().lower()
+        READER_SETTINGS["clamp_to_terminal"] = clamp in ("y", "yes", "")
+
+        preserve = input("Preserve aspect ratio (recommended)? (y/n): ").strip().lower()
+        READER_SETTINGS["preserve_aspect"] = preserve in ("y", "yes", "")
+
     if not sys.platform.startswith("linux"):
         logger.warning("Read mode is Linux-only. Skipping.")
         return
@@ -327,27 +348,7 @@ def read_gallery_in_terminal(gallery_id: int):
         logger.warning(f"Gallery {gallery_id} has no pages to display")
         return
 
-    if not READER_SETTINGS_PROMPTED:
-        READER_SETTINGS_PROMPTED = True
-        choice = input("Reader quality (ultra/high/medium/low, default ultra): ").strip().lower()
-        if choice in ("medium", "m"):
-            READER_SETTINGS.update({"quality": "medium", "colors": 16})
-        elif choice in ("low", "l"):
-            READER_SETTINGS.update({"quality": "low", "colors": 8})
-        elif choice in ("high", "h"):
-            READER_SETTINGS.update({"quality": "high", "colors": 256})
-        elif choice in ("ultra", "u", ""):
-            pass
-        else:
-            logger.warning("Unknown quality option. Keeping default (ultra).")
-
-        oversample = input("Enable oversample render scale (may be slow)? (y/n): ").strip().lower()
-        if oversample in ("y", "yes"):
-            READER_SETTINGS["oversample"] = True
-
-        raw_size = input("Enable raw size mode (may overflow terminal)? (y/n): ").strip().lower()
-        if raw_size in ("y", "yes"):
-            READER_SETTINGS["raw_size"] = True
+    prompt_reader_settings()
 
     session = get_session(referrer="Interactive Reader", status="return")
     base_tmp_dir = "/tmp/manga-scraper"
@@ -387,21 +388,22 @@ def read_gallery_in_terminal(gallery_id: int):
             page_path = _get_page_path(current_page)
             if page_path:
                 term_size = shutil.get_terminal_size(fallback=(80, 24))
-                if READER_SETTINGS["raw_size"]:
-                    render_cols = max(1, term_size.columns)
-                    render_rows = max(1, term_size.lines)
-                else:
+                if READER_SETTINGS["clamp_to_terminal"]:
                     render_cols = max(20, term_size.columns)
                     render_rows = max(10, term_size.lines - 4)
+                else:
+                    render_cols = max(1, term_size.columns)
+                    render_rows = max(1, term_size.lines)
                 chafa_args = [
                     "chafa",
                     f"--size={render_cols}x{render_rows}",
                     f"--symbols={READER_SETTINGS['symbols']}",
                     f"--colors={READER_SETTINGS['colors']}",
                     f"--dither={READER_SETTINGS['dither']}",
-                    "--stretch",
                     page_path,
                 ]
+                if not READER_SETTINGS["preserve_aspect"]:
+                    chafa_args.insert(-1, "--stretch")
                 if READER_SETTINGS["oversample"]:
                     chafa_args.insert(-1, "--scale=2")
                 result = subprocess.run(chafa_args, check=False)
@@ -411,7 +413,7 @@ def read_gallery_in_terminal(gallery_id: int):
             else:
                 logger.warning("Unable to display this page.")
 
-            print("\nOptions: [n]ext | [p]revious | [g]oto | [q]uit")
+            print("\nOptions: [n]ext | [p]revious | [g]oto | [s]ettings | [q]uit")
             choice = input("Choice: ").strip().lower()
             if choice in ("q", "quit"):
                 break
@@ -429,6 +431,9 @@ def read_gallery_in_terminal(gallery_id: int):
                     page_num = int(page_input)
                     if 1 <= page_num <= total_pages:
                         current_page = page_num
+                continue
+            if choice in ("s", "settings"):
+                prompt_reader_settings()
                 continue
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -941,7 +946,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             "  [0] Continue to search with these settings\n"
         )
         
-        choice = input("Enter choice [0-9,q,w,e,r,t,y,a]: ").strip().lower()
+        choice = input("Enter choice [1-9,q,w,e,r,t,y,a,0]: ").strip().lower()
         
         if choice == "0":
             break
@@ -1299,7 +1304,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "Tip: Press Enter without input to cancel/go back during prompts\n"
         )
         
-        choice = input("Enter choice [1-9,w,e,t,r,0]: ").strip().lower()
+        choice = input("Enter choice [1-9,w,e,r,t,0]: ").strip().lower()
         
         if choice == "0":
             if selected_ids:
