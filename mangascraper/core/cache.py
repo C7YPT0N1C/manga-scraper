@@ -240,13 +240,13 @@ def save_general_raw_metadata_cache(metadata: dict):
         return
     data = _load_master_cache()
     now = time.time()
-        for gid, entry in metadata.items():
-            database.upsert_cache_metadata(
-                str(gid),
-                now,
-                clean_metadata=None,
-                raw_metadata=entry,
-            )
+    for gid, entry in metadata.items():
+        database.upsert_cache_metadata(
+            str(gid),
+            now,
+            clean_metadata=None,
+            raw_metadata=entry,
+        )
 
 
 def _build_master_entry(
