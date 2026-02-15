@@ -216,40 +216,56 @@ def _get_latest_cover_id(covers_folder: str) -> int | None:
         return None
     return max(cover_ids)
 
-def _ensure_cover_symlink(creator_folder: str):
+def _ensure_cover_file(creator_folder: str):
     try:
         if not os.path.isdir(creator_folder):
             return
         existing_cover = any(
-            f.startswith("cover") and os.path.exists(os.path.join(creator_folder, f))
+            f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
             for f in os.listdir(creator_folder)
         )
         if existing_cover:
             return
 
-        _, entry_name, _ = _get_latest_gallery_entry(creator_folder)
+        latest_id, entry_name, is_dir = _get_latest_gallery_entry(creator_folder)
         if not entry_name:
             return
 
+        cover_source = None
         covers_folder = os.path.join(creator_folder, ".covers")
-        if not os.path.isdir(covers_folder):
+        if is_dir:
+            gallery_path = os.path.join(creator_folder, entry_name)
+            if os.path.isdir(gallery_path):
+                candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+                if candidates:
+                    cover_source = os.path.join(gallery_path, candidates[0])
+
+        if cover_source is None and os.path.isdir(covers_folder):
+            candidates = [f for f in os.listdir(covers_folder) if f.startswith(entry_name)]
+            if not candidates and latest_id is not None:
+                candidates = [
+                    f for f in os.listdir(covers_folder)
+                    if _extract_gallery_id(f) == latest_id
+                ]
+            if candidates:
+                candidates.sort()
+                cover_source = os.path.join(covers_folder, candidates[0])
+
+        if not cover_source:
             return
 
-        candidates = [
-            f for f in os.listdir(covers_folder)
-            if f.startswith(entry_name)
-        ]
-        if not candidates:
-            return
-
-        candidates.sort()
-        cover_file = os.path.join(covers_folder, candidates[0])
-        _, ext = os.path.splitext(cover_file)
-        cover_link = os.path.join(creator_folder, f"cover{ext}")
-        os.symlink(cover_file, cover_link)
-        logger.debug(f"Restored cover symlink for {creator_folder}: {cover_link} -> {cover_file}")
+        _, ext = os.path.splitext(cover_source)
+        for f in os.listdir(creator_folder):
+            if f.startswith("cover") and f != "covers" and f != ".covers":
+                try:
+                    os.unlink(os.path.join(creator_folder, f))
+                except Exception:
+                    pass
+        cover_file = os.path.join(creator_folder, f"cover{ext}")
+        shutil.copy2(cover_source, cover_file)
+        logger.debug(f"Restored cover file for {creator_folder}: {cover_file}")
     except Exception as e:
-        logger.debug(f"Failed to restore cover symlink in {creator_folder}: {e}")
+        logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
 
 SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/download/v2.1.1867/Suwayomi-Server-v2.1.1867-linux-x64.tar.gz"
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
@@ -407,9 +423,9 @@ def clean_directories(RemoveEmptyArtistFolder: bool = True):
                 except Exception as e:
                     logger.warning(f"Failed to remove broken symlink {full_path}: {e}")
 
-        # Restore missing cover link for creator folders
+        # Restore missing cover file for creator folders
         if os.path.dirname(dirpath) == DEDICATED_DOWNLOAD_PATH:
-            _ensure_cover_symlink(dirpath)
+            _ensure_cover_file(dirpath)
     
     logger.info(f"Removed empty directories.")
     log_clarification()
@@ -1343,7 +1359,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     latest_cover_id = _get_latest_cover_id(covers_folder)
                     if cover_gallery_id is not None and latest_cover_id is not None:
                         if cover_gallery_id <= latest_cover_id:
-                            _ensure_cover_symlink(creator_folder)
+                            _ensure_cover_file(creator_folder)
                             gallery_path = gallery_paths.get(creator_name)
                             if gallery_format == "directory" or not gallery_path:
                                 if gallery_format == "directory" and gallery_path:
@@ -1364,10 +1380,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                             except Exception as e:
                                 logger.debug(f"Could not remove old cover file {f}: {e}")
 
-                    # Create symlink in creator root pointing to latest cover
+                    # Copy cover into creator root
                     cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
-                    os.symlink(cover_in_subfolder, cover_link)
-                    logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
+                    shutil.copy2(cover_in_subfolder, cover_link)
+                    logger.debug(f"Updated cover file for {creator_name}: {cover_link}")
                 except Exception as e:
                     logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
 
