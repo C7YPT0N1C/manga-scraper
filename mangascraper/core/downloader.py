@@ -603,7 +603,7 @@ def process_galleries(batch_ids):
                             logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
                             continue  # skip creating symlink if real folder exists
                         os.symlink(finalised_path, extra_folder)
-                        logger.info(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
+                        logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
