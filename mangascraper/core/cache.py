@@ -278,10 +278,10 @@ def _build_master_entry(
         size = None
     now = time.time()
     write_time = last_write if last_write is not None else now
-        # Default TTL for searches is 10800 seconds (3 hours)
-        ttl_default = 10800
-        ttl = ttl_seconds if ttl_seconds is not None else ttl_default
-        expires_at = write_time + ttl if ttl else None
+    # Default TTL for searches is 10800 seconds (3 hours)
+    ttl_default = 10800
+    ttl = ttl_seconds if ttl_seconds is not None else ttl_default
+    expires_at = write_time + ttl if ttl else None
     entry = {
         "type": cache_type,
         "key": key,
@@ -359,9 +359,6 @@ def save_cache(cache_key: str, metadata: dict):
         ids = []
         for gid in safe_metadata.keys():
             try:
-            # Prune cache files based on database expires_at as well as file timestamp
-            from mangascraper.core import database
-            database.prune_cache_references(now)
                 ids.append(int(gid))
             except Exception:
                 continue
@@ -372,11 +369,14 @@ def save_cache(cache_key: str, metadata: dict):
         }
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        # Prune cache files based on database expires_at as well as file timestamp
+        from mangascraper.core import database
+        now = time.time()
+        database.prune_cache_references(now)
         _update_master_cache(
             f"metadata:{cache_key}",
             _build_master_entry(
-                    # Remove if file is expired by timestamp or by database expires_at
-                    if (now - timestamp) >= TTL:
+                "metadata",
                 cache_key,
                 cache_file,
                 TTL,
@@ -650,6 +650,8 @@ def clear_cache(cache_key: str = None):
             # Clear all cache files
             for cache_file in cache_dir.glob("*.json"):
                 cache_file.unlink()
+            # Remove master cache file if defined
+            MASTER_CACHE_FILENAME = "(master_cache).json"
             master_file = cache_dir / MASTER_CACHE_FILENAME
             if master_file.exists():
                 master_file.unlink()
