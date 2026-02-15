@@ -42,8 +42,13 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
         Cache key suitable for filename (e.g., "artist_john", "tag_schoolgirl")
     """
     if search_value:
-        # Sanitise for use as filename
-        safe_value = "".join(c for c in search_value if c.isalnum() or c in ('-', '_')).lower()
+        # For multi-word searches, sort terms alphabetically to ensure order-independence
+        # E.g., "THREE TWO ONE" and "ONE TWO THREE" both become "one_three_two"
+        terms = search_value.lower().split()
+        terms.sort()
+        sorted_value = "_".join(terms)
+        # Sanitise for use as filename (remove special chars)
+        safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
         return f"{search_type}_{safe_value}"
     return search_type
 
