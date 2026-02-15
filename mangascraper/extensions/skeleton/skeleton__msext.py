@@ -13,7 +13,6 @@ from mangascraper.extensions.extension_manager import (
     find_latest_cover_id,
     find_latest_gallery_entry,
     parse_gallery_id,
-    repair_creator_cover,
     repair_covers_hook,
 )
 from mangascraper.core.api import (

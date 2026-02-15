@@ -128,7 +128,11 @@ def init_db():
 
         conn.commit()
 
-# Consolidated update for creator metadata
+####################################################################################################################
+# Consolidated update
+####################################################################################################################
+
+# Creator metadata
 def update_creator_metadata(creator_name, display_name, download_path=None):
     """
     Update all relevant fields for a creator, using the latest metadata.
@@ -191,7 +195,7 @@ def update_creator_metadata(creator_name, display_name, download_path=None):
             cursor.execute("UPDATE Tags SET count=? WHERE id=?", (json.dumps(creator_counts), tag_id))
         conn.commit()
 
-# Consolidated update for gallery metadata
+# Gallery metadata
 def update_gallery_metadata(gallery_id, raw_title, clean_title, language, tags, cover_path, creator_name=None, download_path=None, extension_used=None, num_pages=None):
     """
     Update all relevant fields for a gallery, always overwriting with latest values.
@@ -235,10 +239,51 @@ def update_gallery_metadata(gallery_id, raw_title, clean_title, language, tags, 
         cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gallery_id, json.dumps(language_ids)))
         conn.commit()
 
+# Update or insert a language and its popularity
+def update_language_metadata(language_name, popularity=0):
+    """
+    Update or insert a language and its popularity.
+    """
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Languages (name, popularity) VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET popularity=excluded.popularity",
+            (language_name, popularity)
+        )
+        conn.commit()
 
-# ===============================
-# GENERIC FIELD UPDATE HELPER
-# ===============================
+# Update or insert a tag and its count (per creator)
+def update_tag_metadata(tag_name, creator_id=None, count=1):
+    """
+    Update or insert a tag and increment/update its count for a creator.
+    """
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Tags (name, count) VALUES (?, ?) "
+            "ON CONFLICT(name) DO NOTHING",
+            (tag_name, "[]")
+        )
+        cursor.execute("SELECT id, count FROM Tags WHERE name=?", (tag_name,))
+        row = cursor.fetchone()
+        if not row:
+            return
+        tag_id, count_json = row
+        creator_counts = []
+        if count_json:
+            try:
+                creator_counts = json.loads(count_json)
+            except Exception:
+                creator_counts = []
+        if creator_id is not None:
+            # Remove any previous entry for this creator
+            creator_counts = [d for d in creator_counts if str(creator_id) not in d]
+            creator_counts.append({str(creator_id): count})
+            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (json.dumps(creator_counts), tag_id))
+        conn.commit()
+
+# GENERIC FIELD UPDATE HELPERS
 def update_field(table, key_field, key_value, field, value):
     """
     Update a single field in a table for a given key.
@@ -252,9 +297,10 @@ def update_field(table, key_field, key_value, field, value):
         )
         conn.commit()
 
-# ===============================
-# UPDATE GALLERIES
-# ===============================
+####################################################################################################################
+# GALLERY UPDATES
+####################################################################################################################
+
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
@@ -387,7 +433,6 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         }
     return result
 
-
 def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
     if not ids:
         return {}
@@ -417,7 +462,6 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
         }
     return result
 
-
 def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     init_db()
     with lock, _connect() as conn:
@@ -433,7 +477,6 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     clean = json.loads(clean_json) if clean_json else {}
     raw = json.loads(raw_json) if raw_json else {}
     return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
-
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
     init_db()
@@ -466,7 +509,6 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         )
         conn.commit()
 
-
 def prune_cache_metadata(cutoff: float):
     init_db()
     with lock, _connect() as conn:
@@ -476,7 +518,6 @@ def prune_cache_metadata(cutoff: float):
             (cutoff,),
         )
         conn.commit()
-
 
 # ===============================
 # CACHE REFERENCES
@@ -522,11 +563,9 @@ def load_cache_references() -> dict:
         result[str(entry_key)] = entry
     return result
 
-
 def upsert_cache_reference(entry_key: str, entry: dict):
     init_db()
     ids = entry.get("ids")
-    # Always store as JSON array, even if None or not a list
     if not isinstance(ids, list):
         ids = [] if ids is None else [ids]
     ids_json = json.dumps(ids)
@@ -534,7 +573,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO CachedReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
             "cache_key=excluded.cache_key, "
@@ -560,14 +599,12 @@ def upsert_cache_reference(entry_key: str, entry: dict):
         )
         conn.commit()
 
-
 def delete_cache_reference(entry_key: str):
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM CachedReferences WHERE entry_key = ?", (str(entry_key),))
         conn.commit()
-
 
 def prune_cache_references(now: float):
     init_db()

@@ -16,7 +16,6 @@ from mangascraper.extensions.extension_manager import (
     find_latest_cover_id,
     find_latest_gallery_entry,
     parse_gallery_id,
-    repair_creator_cover,
     repair_covers_hook,
 )
 from mangascraper.core.api import (
@@ -825,7 +824,7 @@ def update_creator_manga(meta):
         # Query database for most_popular_tags (top genres) for this creator
         genre_names = []
         try:
-            with db.lock, db._connect() as conn:
+            with scraper_db.lock, scraper_db._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
                 row = cursor.fetchone()

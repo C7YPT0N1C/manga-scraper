@@ -278,9 +278,10 @@ def _build_master_entry(
         size = None
     now = time.time()
     write_time = last_write if last_write is not None else now
-    expires_at = None
-    if ttl_seconds:
-        expires_at = write_time + ttl_seconds
+        # Default TTL for searches is 10800 seconds (3 hours)
+        ttl_default = 10800
+        ttl = ttl_seconds if ttl_seconds is not None else ttl_default
+        expires_at = write_time + ttl if ttl else None
     entry = {
         "type": cache_type,
         "key": key,
@@ -358,6 +359,9 @@ def save_cache(cache_key: str, metadata: dict):
         ids = []
         for gid in safe_metadata.keys():
             try:
+            # Prune cache files based on database expires_at as well as file timestamp
+            from mangascraper.core import database
+            database.prune_cache_references(now)
                 ids.append(int(gid))
             except Exception:
                 continue
@@ -371,7 +375,8 @@ def save_cache(cache_key: str, metadata: dict):
         _update_master_cache(
             f"metadata:{cache_key}",
             _build_master_entry(
-                "metadata",
+                    # Remove if file is expired by timestamp or by database expires_at
+                    if (now - timestamp) >= TTL:
                 cache_key,
                 cache_file,
                 TTL,
@@ -538,15 +543,22 @@ def save_selected_galleries(ids: list[int]):
         }
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        _update_master_cache(
+        # Calculate TTL and expires_at for CachedReferences
+        from mangascraper.core import orchestrator, database
+        ttl = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
+        expires_at = saved_at + ttl if saved_at else None
+        database.upsert_cache_reference(
             "selected_galleries",
-            _build_master_entry(
-                "selected_galleries",
-                "selected_galleries",
-                cache_file,
-                None,
-                last_write=saved_at,
-            ),
+            {
+                "type": "selected_galleries",
+                "key": "selected_galleries",
+                "path": str(cache_file),
+                "size": cache_file.stat().st_size if cache_file.exists() else None,
+                "last_read": None,
+                "last_write": saved_at,
+                "ttl": ttl,
+                "expires_at": expires_at,
+            },
         )
     except Exception:
         pass
