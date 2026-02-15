@@ -1284,8 +1284,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     get_session(referrer="Interactive", status="build")
 
-    save_selected_galleries([])
-    
+    # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
+    if (not initial_ids) and (not unattended):
+        save_selected_galleries([])
+
     selected_ids = []
     cache_path = get_cache_dir() / "(selected_galleries).json"
     if cache_path.exists():
