@@ -317,10 +317,10 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             gallery_id=gallery_id,
             raw_title=gallery_meta.get("raw_title"),
             clean_title=gallery_meta.get("clean_title"),
-            language=gallery_meta.get("languages", []),
-            tags=gallery_meta.get("tags", []),
+            language=languages,
+            tags=tags,
             cover_path=gallery_meta.get("cover_path"),
-            creator_name=creators[0] if creators else None,
+            creator_name=creators,
             download_path=gallery_meta.get("download_path"),
             extension_used=gallery_meta.get("extension_used"),
             num_pages=gallery_meta.get("num_pages")

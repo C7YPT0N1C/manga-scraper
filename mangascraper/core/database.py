@@ -61,9 +61,9 @@ def init_db():
             raw_title TEXT,
             clean_title TEXT,
             num_pages INTEGER,
-            creator_id INTEGER,
-            language TEXT,
-            tags TEXT,
+            creator_ids TEXT, -- JSON array of creator ids
+            language_ids TEXT, -- JSON array of language ids
+            tag_ids TEXT, -- JSON array of tag ids
             status TEXT,
             started_at TEXT,
             completed_at TEXT,
@@ -71,8 +71,7 @@ def init_db():
             cover_path TEXT,
             extension_used TEXT,
             favourite INTEGER DEFAULT 0,
-            rating REAL,
-            FOREIGN KEY (creator_id) REFERENCES Creators(id)
+            rating REAL
         );
 
         CREATE TABLE IF NOT EXISTS GalleryTags (
@@ -90,7 +89,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            popularity INTEGER
+            count TEXT -- JSON array: [{creator_id: count}, ...]
         );
 
         CREATE TABLE IF NOT EXISTS Languages (
@@ -102,7 +101,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS BrokenSymbols (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT UNIQUE,
-            example_occurrences TEXT,
             date_detected TEXT,
             fixed INTEGER DEFAULT 0
         );
@@ -159,24 +157,38 @@ def update_creator_metadata(creator_name, display_name, download_path=None):
         # Count total galleries
         cursor.execute("SELECT COUNT(*) FROM Galleries WHERE creator_id=?", (creator_id,))
         total_galleries = cursor.fetchone()[0]
-        # Calculate most popular tags
-        cursor.execute("SELECT tags FROM Galleries WHERE creator_id=? AND tags IS NOT NULL", (creator_id,))
+        # Calculate most popular tags (by tag id)
+        cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (SELECT id FROM Galleries WHERE creator_id=?)", (creator_id,))
         tag_counts = {}
-        for (tags_json,) in cursor.fetchall():
-            if tags_json:
+        for (tag_ids_json,) in cursor.fetchall():
+            if tag_ids_json:
                 try:
-                    tags = json.loads(tags_json)
-                    for tag in tags:
-                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                    tag_ids = json.loads(tag_ids_json)
+                    for tag_id in tag_ids:
+                        tag_counts[tag_id] = tag_counts.get(tag_id, 0) + 1
                 except Exception:
                     continue
         sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
-        most_popular_tags = [tag for tag, _ in sorted_tags[:15]]
+        most_popular_tag_ids = [tag_id for tag_id, _ in sorted_tags[:15]]
         # Update all fields except notes
         cursor.execute(
             "UPDATE Creators SET display_name=?, download_path=?, last_updated=?, total_galleries=?, most_popular_tags=?, first_seen=COALESCE(first_seen, ?) WHERE id=?",
-            (display_name, download_path, now, total_galleries, json.dumps(most_popular_tags), first_seen or now, creator_id)
+            (display_name, download_path, now, total_galleries, json.dumps(most_popular_tag_ids), first_seen or now, creator_id)
         )
+        # Update Tags table: update count field for each tag used by this creator
+        for tag_id, count in tag_counts.items():
+            cursor.execute("SELECT count FROM Tags WHERE id=?", (tag_id,))
+            row = cursor.fetchone()
+            creator_counts = []
+            if row and row[0]:
+                try:
+                    creator_counts = json.loads(row[0])
+                except Exception:
+                    creator_counts = []
+            # Remove any previous entry for this creator
+            creator_counts = [d for d in creator_counts if str(creator_id) not in d]
+            creator_counts.append({str(creator_id): count})
+            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (json.dumps(creator_counts), tag_id))
         conn.commit()
 
 # Consolidated update for gallery metadata
@@ -186,19 +198,41 @@ def update_gallery_metadata(gallery_id, raw_title, clean_title, language, tags, 
     """
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        # Optionally upsert creator and get creator_id
-        creator_id = None
+        # Upsert creators, tags, languages, and get their ids
+        creator_ids = []
         if creator_name:
-            cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
+            # Accepts a single creator or list
+            names = creator_name if isinstance(creator_name, list) else [creator_name]
+            for name in names:
+                cursor.execute("INSERT OR IGNORE INTO Creators (name) VALUES (?)", (name,))
+                cursor.execute("SELECT id FROM Creators WHERE name=?", (name,))
+                row = cursor.fetchone()
+                if row:
+                    creator_ids.append(row[0])
+        tag_ids = []
+        for tag in tags or []:
+            cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?) ", (tag, "[]"))
+            cursor.execute("SELECT id FROM Tags WHERE name=?", (tag,))
             row = cursor.fetchone()
             if row:
-                creator_id = row[0]
+                tag_ids.append(row[0])
+        language_ids = []
+        for lang in language or []:
+            cursor.execute("INSERT OR IGNORE INTO Languages (name, popularity) VALUES (?, ?) ", (lang, 0))
+            cursor.execute("SELECT id FROM Languages WHERE name=?", (lang,))
+            row = cursor.fetchone()
+            if row:
+                language_ids.append(row[0])
+        # Insert/update Galleries
         cursor.execute(
-            "INSERT INTO Galleries (id, raw_title, clean_title, language, tags, cover_path, creator_id, download_path, extension_used, num_pages) "
+            "INSERT INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, download_path, cover_path, extension_used) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, language=excluded.language, tags=excluded.tags, cover_path=excluded.cover_path, creator_id=excluded.creator_id, download_path=excluded.download_path, extension_used=excluded.extension_used, num_pages=excluded.num_pages",
-            (gallery_id, raw_title, clean_title, json.dumps(language) if isinstance(language, list) else language, json.dumps(tags), cover_path, creator_id, download_path, extension_used, num_pages)
+            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, num_pages=excluded.num_pages, creator_ids=excluded.creator_ids, language_ids=excluded.language_ids, tag_ids=excluded.tag_ids, download_path=excluded.download_path, cover_path=excluded.cover_path, extension_used=excluded.extension_used",
+            (gallery_id, raw_title, clean_title, num_pages, json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), download_path, cover_path, extension_used)
         )
+        # Update GalleryTags and GalleryLanguages
+        cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gallery_id, json.dumps(tag_ids)))
+        cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gallery_id, json.dumps(language_ids)))
         conn.commit()
 
 
@@ -316,14 +350,13 @@ def save_broken_symbols(symbol_map: dict[str, str]):
         c = conn.cursor()
         for symbol in symbol_map.keys():
             c.execute("""
-                INSERT INTO BrokenSymbols (symbol, example_occurrences, date_detected)
-                VALUES (?, ?, ?)
+                INSERT INTO BrokenSymbols (symbol, date_detected, fixed)
+                VALUES (?, ?, 0)
                 ON CONFLICT(symbol) DO UPDATE SET
                     fixed=0,
                     date_detected=excluded.date_detected
-            """, (symbol, "", now))
+            """, (symbol, now))
         conn.commit()
-
 
 # ===============================
 # CACHE METADATA
@@ -493,7 +526,10 @@ def load_cache_references() -> dict:
 def upsert_cache_reference(entry_key: str, entry: dict):
     init_db()
     ids = entry.get("ids")
-    ids_json = json.dumps(ids) if ids is not None else None
+    # Always store as JSON array, even if None or not a list
+    if not isinstance(ids, list):
+        ids = [] if ids is None else [ids]
+    ids_json = json.dumps(ids)
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
