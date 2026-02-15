@@ -648,7 +648,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     
     If insufficient space, prompts user to download as many as fit.
     """
-    logger.info(f"Estimating download size for {len(gallery_ids)} galleries...")
+    log(f"Estimating download size for {len(gallery_ids)} galleries...", "info")
     
     total_estimated = 0
     gallery_sizes = []  # List of (gallery_id, estimated_bytes)
