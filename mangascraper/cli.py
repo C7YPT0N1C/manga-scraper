@@ -7,7 +7,7 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.downloader import start_downloader
 from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
-from mangascraper.core.cache import get_cache_key, load_cache
+from mangascraper.core.cache import get_cache_key, load_cache, ensure_cache_files_exist
 from mangascraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
 
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
@@ -867,6 +867,7 @@ def update_config(args):
 # Main
 # ------------------------------------------------------------
 def main():
+    ensure_cache_files_exist()
     """
     This is one this module's entrypoints.
     """

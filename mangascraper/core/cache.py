@@ -12,7 +12,7 @@ from pathlib import Path
 # Cache TTL: 3 hours
 TTL = 3 * 60 * 60
 SEARCH_HISTORY_FILENAME = "(search_history).json"
-SELECTED_GALLERIES_FILENAME = "selected_galleries.json"
+SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
 MASTER_CACHE_FILENAME = "(master_cache).json"
 
 
@@ -32,6 +32,28 @@ def get_cache_dir() -> Path:
     fallback_cache = Path(__file__).parent / "cache"
     fallback_cache.mkdir(parents=True, exist_ok=True)
     return fallback_cache
+
+
+def ensure_cache_files_exist():
+    """Ensure cache directory and core cache files exist."""
+    cache_dir = get_cache_dir()
+    for name in (SEARCH_HISTORY_FILENAME, MASTER_CACHE_FILENAME, SELECTED_GALLERIES_FILENAME):
+        cache_file = cache_dir / name
+        if cache_file.exists():
+            continue
+        try:
+            if name == MASTER_CACHE_FILENAME:
+                data = {"entries": {}}
+            elif name == SEARCH_HISTORY_FILENAME:
+                data = {"saved_at": None, "items": []}
+            elif name == SELECTED_GALLERIES_FILENAME:
+                data = {"saved_at": None, "ids": [], "csv": ""}
+            else:
+                data = {}
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            continue
 
 
 def get_cache_key(search_type: str, search_value: str = None) -> str:
