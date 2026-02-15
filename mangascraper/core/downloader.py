@@ -7,7 +7,7 @@ from tqdm.contrib.concurrent import thread_map
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as db
+from mangascraper.core import database as scraper_db
 from mangascraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
@@ -474,7 +474,7 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            db.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraper_db.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -494,7 +494,7 @@ def process_galleries(batch_ids):
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        db.mark_gallery_failed(gallery_id)
+                        scraper_db.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -522,7 +522,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        db.mark_gallery_skipped(gallery_id)
+                        scraper_db.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -615,7 +615,7 @@ def process_galleries(batch_ids):
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
-                    db.mark_gallery_completed(gallery_id)
+                    scraper_db.mark_gallery_completed(gallery_id)
                     
                     # Track actual size downloaded
                     actual_bytes = 0
@@ -641,7 +641,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    db.mark_gallery_failed(gallery_id)
+                    scraper_db.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN

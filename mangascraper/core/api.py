@@ -9,7 +9,7 @@ from pathlib import Path
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database
+from mangascraper.core import database as scraper_db
 from mangascraper.core.cache import (
     load_cache,
     save_cache,
@@ -221,7 +221,7 @@ def clean_title(meta_or_title):
         )
     
     # Load persisted broken symbols (mapping)
-    possible_broken_symbols = database.load_broken_symbols()
+    possible_broken_symbols = scraper_db.load_broken_symbols()
 
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
@@ -255,7 +255,7 @@ def clean_title(meta_or_title):
         for s in new_broken:
             possible_broken_symbols[s] = "_"
         logger.info(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
-        database.save_broken_symbols(possible_broken_symbols)
+        scraper_db.save_broken_symbols(possible_broken_symbols)
     else:
         logger.info("[BrokenSymbols] No new broken symbols detected. No database update needed.")
 

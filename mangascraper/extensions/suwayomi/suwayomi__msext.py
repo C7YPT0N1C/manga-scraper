@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/suwayomi/suwayomi__msext.py
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile, math, re
+import os, time, json, requests, threading, subprocess, shutil, tarfile, math, re, sqlite3
 
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import database as scraper_db
 from mangascraper.extensions.extension_manager import (
     build_gallery_metadata_summary,
     calculate_extension_download_path,
@@ -148,6 +149,12 @@ def install_extension():
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
 
         tarball_path = os.path.join("/tmp", TARBALL_FILENAME)
+        
+        suwayomi_jar = os.path.join(EXTENSION_INSTALL_PATH, "Suwayomi-Launcher.jar")
+        if os.path.exists(suwayomi_jar):
+            logger.info(f"{EXTENSION_REFERRER}: Suwayomi-Server already installed at {suwayomi_jar}, skipping installation.")
+            pre_run_hook()
+            return
 
         if not os.path.exists(tarball_path):
             logger.info(f"Downloading Suwayomi-Server tarball from {SUWAYOMI_TARBALL_URL}...")
@@ -257,16 +264,16 @@ def test_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
 
-def _get_latest_id_from_details(creator_folder: str) -> int | None:
-    details_file = os.path.join(creator_folder, "details.json")
-    if not os.path.exists(details_file):
-        return None
-    try:
-        with open(details_file, "r", encoding="utf-8") as f:
-            details = json.load(f)
-        return parse_gallery_id(details.get("description", ""))
-    except Exception:
-        return None
+#def _get_latest_id_from_details(creator_folder: str) -> int | None:
+#    details_file = os.path.join(creator_folder, "details.json")
+#    if not os.path.exists(details_file):
+#        return None
+#    try:
+#        with open(details_file, "r", encoding="utf-8") as f:
+#            details = json.load(f)
+#        return parse_gallery_id(details.get("description", ""))
+#    except Exception:
+#        return None
 
 def graphql_request(request: str, variables: dict = None, gql_debugging: bool = False):
     """
@@ -804,17 +811,7 @@ def update_creator_manga(meta):
             # No existing manga found, mark creator as deferred
             deferred_creators.add(creator_name)
 
-        # --- Update genre counts ---
-        entry = metadata["creators"].setdefault(creator_name, {})
-        genre_counts = entry.get("genre_counts", {})
-        for genre in gallery_genres:
-            genre_counts[genre] = genre_counts.get(genre, 0) + 1
-        
-        # Single sort with reuse for MAX_GENRES_PARSED
-        sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
-        entry["genre_counts"] = dict(sorted_genres[:MAX_GENRES_PARSED])
-
-        # --- Update details.json ---
+        # --- Update details.json using top genres from database ---
         creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
         os.makedirs(creator_folder, exist_ok=True)
         details_file = os.path.join(creator_folder, "details.json")
@@ -825,13 +822,33 @@ def update_creator_manga(meta):
         else:
             description = f"Latest Doujin: {latest_name}"
 
-        # Reuse sorted_genres for MAX_GENRES_STORED slice
+        # Query database for most_popular_tags (top genres) for this creator
+        genre_names = []
+        try:
+            with db.lock, db._connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
+                row = cursor.fetchone()
+                if row:
+                    creator_id = row[0]
+                    cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
+                    tag_ids_json = cursor.fetchone()
+                    if tag_ids_json and tag_ids_json[0]:
+                        tag_ids = json.loads(tag_ids_json[0])
+                        if tag_ids:
+                            # Resolve tag names from tag ids
+                            qmarks = ",".join(["?"] * len(tag_ids))
+                            cursor.execute(f"SELECT name FROM Tags WHERE id IN ({qmarks})", tag_ids)
+                            genre_names = [r[0] for r in cursor.fetchall() if r and r[0]]
+        except Exception as e:
+            logger.warning(f"Could not fetch top genres from database for {creator_name}: {e}")
+
         details = {
             "title": creator_name,
             "author": creator_name,
             "artist": creator_name,
             "description": description,
-            "genre": [g for g, _ in sorted_genres[:MAX_GENRES_STORED]],
+            "genre": genre_names[:MAX_GENRES_STORED],
             "status": "1",
             "_status values": ["0 = Unknown", "1 = Ongoing", "2 = Completed", "3 = Licensed"]
         }
@@ -1132,7 +1149,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
-        from mangascraper.core import database
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
@@ -1148,7 +1164,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         languages = gallery_meta.get("languages", [])
 
         # --- Consolidated database update call ---
-        database.update_gallery_metadata(
+        scraper_db.update_gallery_metadata(
             gallery_id=gallery_id,
             raw_title=gallery_meta.get("raw_title"),
             clean_title=gallery_meta.get("clean_title"),

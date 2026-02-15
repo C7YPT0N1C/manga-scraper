@@ -12,7 +12,7 @@ from mangascraper.core.cache import (
     load_cache,
     ensure_cache_files_exist,
 )
-from mangascraper.core import database
+from mangascraper.core import database as scraper_db
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
     get_selected_extension,
@@ -935,7 +935,7 @@ def update_config(args):
 # ------------------------------------------------------------
 def main():
     ensure_cache_files_exist()
-    database.init_db()
+    scraper_db.init_db()
     """
     This is one this module's entrypoints.
     """

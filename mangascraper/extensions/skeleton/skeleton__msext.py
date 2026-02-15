@@ -5,6 +5,7 @@ import os, time, json, requests, math, shutil, re
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import database as scraper_db
 from mangascraper.extensions.extension_manager import (
     build_gallery_metadata_summary,
     calculate_extension_download_path,
@@ -297,7 +298,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
-        from mangascraper.core import database
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
@@ -313,7 +313,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         languages = gallery_meta.get("languages", [])
 
         # --- Consolidated database update call ---
-        database.update_gallery_metadata(
+        scraper_db.update_gallery_metadata(
             gallery_id=gallery_id,
             raw_title=gallery_meta.get("raw_title"),
             clean_title=gallery_meta.get("clean_title"),
