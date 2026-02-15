@@ -902,11 +902,12 @@ def ensure_creator_cover(creator_folder: str):
     try:
         if not os.path.isdir(creator_folder):
             return
+        # Use find_latest_gallery_entry, which considers both directories and .cbz/.zip archives
         latest_id, entry_name, is_dir = find_latest_gallery_entry(creator_folder)
         if not entry_name or latest_id is None:
             return
 
-        logger.debug(f"Cover missing for {creator_folder}; checking local sources for gallery {latest_id}.")
+        logger.debug(f"Cover missing for {creator_folder}; checking local sources for gallery {latest_id} (is_dir={is_dir}).")
         find_local_cover_and_link(creator_folder, entry_name, is_dir)
     except Exception as e:
         logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
@@ -924,6 +925,7 @@ def repair_creator_cover(creator_folder: str):
             logger.debug(f"[Cover Repair] Cover file already exists in: {creator_folder}")
             return
 
+        # Use find_latest_gallery_entry, which considers both directories and .cbz/.zip archives
         latest_id, entry_name, is_dir = find_latest_gallery_entry(creator_folder)
         logger.debug(f"[Cover Repair] Latest gallery entry: id={latest_id}, name={entry_name}, is_dir={is_dir}")
         if not entry_name or latest_id is None:
