@@ -39,10 +39,11 @@ def load_local_manifest():
     """
     Load the local manifest, create it from remote if it doesn't exist.
     """
-    
     if not os.path.exists(LOCAL_MANIFEST_PATH):
         logger.warning("Local manifest not found. Creating from remote...")
-        update_local_manifest_from_remote()
+        ensure_local_manifest_exists()
+        if not os.path.exists(LOCAL_MANIFEST_PATH):
+            update_local_manifest_from_remote()
     with open(LOCAL_MANIFEST_PATH, "r", encoding="utf-8") as f:
         json_load = json.load(f)
         #log("Local Manifest: {json_load}", "debug")
@@ -227,28 +228,30 @@ def calculate_extension_download_path(extension_name: str) -> str:
 # ------------------------------------------------------------
 # Remote repo sync (full clone)
 # ------------------------------------------------------------
-def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
+def _clear_directory(path: str):
+    for entry in os.listdir(path):
+        entry_path = os.path.join(path, entry)
+        if os.path.isdir(entry_path) and not os.path.islink(entry_path):
+            shutil.rmtree(entry_path)
+        else:
+            os.remove(entry_path)
+
+
+def _read_manifest_versions(manifest_path: str) -> dict:
+    if not os.path.exists(manifest_path):
+        return {}
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return {
+        ext.get("name"): ext.get("version")
+        for ext in manifest.get("extensions", [])
+        if ext.get("name")
+    }
+
+
+def _ensure_remote_repo_tmp(url: str):
     log(f"Syncing extensions repo: {url}", "debug")
     os.makedirs(REMOTE_EXTENSIONS_TMP, exist_ok=True)
-
-    def _clear_directory(path: str):
-        for entry in os.listdir(path):
-            entry_path = os.path.join(path, entry)
-            if os.path.isdir(entry_path) and not os.path.islink(entry_path):
-                shutil.rmtree(entry_path)
-            else:
-                os.remove(entry_path)
-
-    def _read_manifest_versions(manifest_path: str) -> dict:
-        if not os.path.exists(manifest_path):
-            return {}
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-        return {
-            ext.get("name"): ext.get("version")
-            for ext in manifest.get("extensions", [])
-            if ext.get("name")
-        }
 
     tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
     tmp_versions = _read_manifest_versions(tmp_manifest_path)
@@ -266,6 +269,38 @@ def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
         log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
     else:
         log("Tmp repo is up to date; reusing existing clone.", "debug")
+
+
+def ensure_local_manifest_exists():
+    if os.path.exists(LOCAL_MANIFEST_PATH):
+        return
+    repo_url = PRIMARY_BASE_REPO_URL
+    backup_url = BACKUP_BASE_REPO_URL if BACKUP_BASE_REPO_URL else None
+    for candidate in (repo_url, backup_url):
+        if not candidate:
+            continue
+        try:
+            _ensure_remote_repo_tmp(candidate)
+            tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
+            if os.path.exists(tmp_manifest_path):
+                os.makedirs(EXTENSIONS_DIR, exist_ok=True)
+                shutil.copy2(tmp_manifest_path, LOCAL_MANIFEST_PATH)
+                log(f"Local manifest created from tmp repo: {LOCAL_MANIFEST_PATH}", "debug")
+                return
+        except Exception:
+            continue
+    try:
+        remote_manifest = fetch_remote_manifest()
+        os.makedirs(EXTENSIONS_DIR, exist_ok=True)
+        with open(LOCAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
+            json.dump(remote_manifest, f, ensure_ascii=False, indent=2)
+        log(f"Local manifest created from remote manifest: {LOCAL_MANIFEST_PATH}", "debug")
+    except Exception:
+        pass
+
+
+def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
+    _ensure_remote_repo_tmp(url)
 
     if extension_name:
         source_dir = os.path.join(REMOTE_EXTENSIONS_TMP, extension_name)

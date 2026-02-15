@@ -978,6 +978,7 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     log_clarification()
     
     metadata = dict(cached_metadata)  # Start with cached results
+    fetched_metadata = {}
     failed_ids = []
     
     # Fetch missing galleries with progress bar
@@ -991,7 +992,7 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
                 groups = get_meta_tags("api", meta, "group")
                 languages = get_meta_tags("api", meta, "language")
                 
-                metadata[gallery_id] = {
+                meta_entry = {
                     "id": gallery_id,
                     "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
                     "artists": artists or ["Unknown Artist"],
@@ -1002,6 +1003,8 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
                     "languages": languages or ["Unknown Language"],
                     "pages": len(meta.get("images", {}).get("pages", [])),
                 }
+                metadata[gallery_id] = meta_entry
+                fetched_metadata[gallery_id] = meta_entry
             else:
                 failed_ids.append(gallery_id)
         except Exception as e:
@@ -1017,6 +1020,11 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
             save_cache(cache_key, metadata)
         else:
             save_general_cache(metadata)
+
+    if fetched_metadata:
+        general_cache = load_general_cache()
+        general_cache.update(fetched_metadata)
+        save_general_cache(general_cache)
     
     return metadata
 

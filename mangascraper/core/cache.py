@@ -45,7 +45,7 @@ def ensure_cache_files_exist():
             continue
         try:
             if name == MASTER_CACHE_FILENAME:
-                data = {"entries": {}}
+                data = {"references": {}}
             elif name == SEARCH_HISTORY_FILENAME:
                 data = {"saved_at": None, "items": []}
             elif name == SELECTED_GALLERIES_FILENAME:
@@ -85,28 +85,58 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
 def _load_master_cache() -> dict:
     cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
     if not cache_file.exists():
-        return {"entries": {}}
+        return {"references": {}}
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return {"entries": {}}
-        entries = data.get("entries")
-        if not isinstance(entries, dict):
-            return {"entries": {}}
-        return {"entries": entries}
+            return {"references": {}}
+        references = data.get("references")
+        if references is None:
+            references = data.get("entries")
+        if not isinstance(references, dict):
+            return {"references": {}}
+
+        cache_dir = get_cache_dir()
+        general_cache_file = cache_dir / GENERAL_CACHE_FILENAME
+        if general_cache_file.exists() and f"metadata:{GENERAL_CACHE_KEY}" not in references:
+            try:
+                with open(general_cache_file, "r", encoding="utf-8") as f:
+                    general_data = json.load(f)
+                metadata = general_data.get("metadata", {})
+                ids = []
+                if isinstance(metadata, dict):
+                    for gid in metadata.keys():
+                        try:
+                            ids.append(int(gid))
+                        except Exception:
+                            continue
+                    ids = sorted(set(ids))
+                references[f"metadata:{GENERAL_CACHE_KEY}"] = _build_master_entry(
+                    "metadata",
+                    GENERAL_CACHE_KEY,
+                    general_cache_file,
+                    TTL,
+                    last_write=general_data.get("timestamp", None),
+                    ids=ids,
+                )
+                _save_master_cache({"references": references})
+            except Exception:
+                pass
+
+        return {"references": references}
     except Exception:
-        return {"entries": {}}
+        return {"references": {}}
 
 
 def load_all_cached_metadata() -> dict:
     """Load and merge all cached metadata entries from the master cache registry."""
     data = _load_master_cache()
-    entries = data.get("entries", {})
-    if not isinstance(entries, dict):
+    references = data.get("references", {})
+    if not isinstance(references, dict):
         return {}
     merged = {}
-    for entry in entries.values():
+    for entry in references.values():
         if not isinstance(entry, dict):
             continue
         if entry.get("type") != "metadata":
@@ -139,14 +169,14 @@ def _save_master_cache(data: dict):
 
 def _update_master_cache(entry_key: str, entry: dict):
     data = _load_master_cache()
-    data["entries"][entry_key] = entry
+    data["references"][entry_key] = entry
     _save_master_cache(data)
 
 
 def _remove_master_cache_entry(entry_key: str):
     data = _load_master_cache()
-    if entry_key in data["entries"]:
-        del data["entries"][entry_key]
+    if entry_key in data["references"]:
+        del data["references"][entry_key]
         _save_master_cache(data)
 
 
@@ -513,12 +543,12 @@ def load_cached_metadata_for_ids(ids: list[int]) -> dict:
         return {}
 
     data = _load_master_cache()
-    entries = data.get("entries", {})
-    if not isinstance(entries, dict):
+    references = data.get("references", {})
+    if not isinstance(references, dict):
         return {}
 
     merged = {}
-    for entry in entries.values():
+    for entry in references.values():
         if not isinstance(entry, dict):
             continue
         if entry.get("type") != "metadata":
