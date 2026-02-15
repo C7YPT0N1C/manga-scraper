@@ -185,7 +185,7 @@ doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 DEFAULT_EXTENSION = "skeleton"
 extension = DEFAULT_EXTENSION
 
-DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/manga-scraper/downloads"
+DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/manga-scraper/downloads/"
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 # Metadata cache TTL (seconds) - runtime only, not persisted to env

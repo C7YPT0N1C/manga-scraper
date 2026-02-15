@@ -152,10 +152,23 @@ def get_extension_download_path(extension_name: str) -> str:
     """
     orchestrator.refresh_globals()
     override_download_path = getattr(orchestrator, "extension_download_path", None)
+    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    def _ensure_trailing_slash(path: str) -> str:
+        if not path:
+            return path
+        return path if path.endswith("/") else f"{path}/"
     
     # If a custom path was set via CLI or config, use it
-    if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
-        return override_download_path
+    if override_download_path:
+        override_norm = os.path.normpath(override_download_path)
+        default_norm = os.path.normpath(default_path)
+        if override_norm != default_norm:
+            resolved = _ensure_trailing_slash(override_download_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=override)"
+            )
+            return resolved
     
     # Get the extension's default from manifest
     manifest = load_local_manifest()
@@ -163,10 +176,16 @@ def get_extension_download_path(extension_name: str) -> str:
         if ext.get("name") == extension_name.lower():
             manifest_path = ext.get("image_download_path")
             if manifest_path:
-                return manifest_path
+                resolved = _ensure_trailing_slash(manifest_path)
+                logger.debug(
+                    f"Extension download path resolved: {resolved} (source=manifest)"
+                )
+                return resolved
     
     # Fall back to default
-    return DEFAULT_EXTENSION_DOWNLOAD_PATH
+    resolved = _ensure_trailing_slash(default_path)
+    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    return resolved
 
 def get_extension_manifest_info(extension_name: str) -> dict | None:
     """
@@ -210,20 +229,39 @@ def calculate_extension_download_path(extension_name: str) -> str:
     
     orchestrator.refresh_globals()
     override_download_path = getattr(orchestrator, "extension_download_path", None)
+    default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
+
+    def _ensure_trailing_slash(path: str) -> str:
+        if not path:
+            return path
+        return path if path.endswith("/") else f"{path}/"
     
     # If a custom path was set via CLI or config (and it's not the default), use it
-    if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
-        return override_download_path
+    if override_download_path:
+        override_norm = os.path.normpath(override_download_path)
+        default_norm = os.path.normpath(default_path)
+        if override_norm != default_norm:
+            resolved = _ensure_trailing_slash(override_download_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=override)"
+            )
+            return resolved
     
     # Get the extension's default from manifest
     ext_info = get_extension_manifest_info(extension_name)
     if ext_info:
         manifest_path = ext_info.get("image_download_path")
         if manifest_path:
-            return manifest_path
+            resolved = _ensure_trailing_slash(manifest_path)
+            logger.debug(
+                f"Extension download path resolved: {resolved} (source=manifest)"
+            )
+            return resolved
     
     # Fall back to default
-    return DEFAULT_EXTENSION_DOWNLOAD_PATH
+    resolved = _ensure_trailing_slash(default_path)
+    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    return resolved
 
 # ------------------------------------------------------------
 # Remote repo sync (full clone)
