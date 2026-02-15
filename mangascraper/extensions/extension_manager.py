@@ -308,8 +308,14 @@ def load_single_extension(
     extension_name: str,
     install_if_missing: bool = False,
     prompt_for_update: bool = True,
+    override_download_path: str | None = None,
 ):
     """Load a single extension by name, installing it if requested or missing files are detected."""
+    previous_download_path = None
+    if override_download_path is not None:
+        previous_download_path = config.get("EXTENSION_DOWNLOAD_PATH")
+        config["EXTENSION_DOWNLOAD_PATH"] = override_download_path
+        orchestrator.refresh_globals()
     manifest = load_local_manifest()
     ext_entry = _find_manifest_entry(manifest, extension_name)
     if ext_entry is None:
@@ -318,6 +324,9 @@ def load_single_extension(
         ext_entry = _find_manifest_entry(manifest, extension_name)
     if ext_entry is None:
         logger.warning(f"Extension '{extension_name}' not found in manifest")
+        if override_download_path is not None:
+            config["EXTENSION_DOWNLOAD_PATH"] = previous_download_path
+            orchestrator.refresh_globals()
         return None
 
     if install_if_missing and not ext_entry.get("installed", False):
@@ -326,6 +335,9 @@ def load_single_extension(
         manifest = load_local_manifest()
         ext_entry = _find_manifest_entry(manifest, extension_name)
         if ext_entry is None:
+            if override_download_path is not None:
+                config["EXTENSION_DOWNLOAD_PATH"] = previous_download_path
+                orchestrator.refresh_globals()
             return None
 
     ext_folder = os.path.join(EXTENSIONS_DIR, ext_entry["name"])
@@ -344,6 +356,9 @@ def load_single_extension(
 
     if not os.path.exists(entry_point):
         logger.warning(f"Extension: {ext_entry['name']}: Entry point not found.")
+        if override_download_path is not None:
+            config["EXTENSION_DOWNLOAD_PATH"] = previous_download_path
+            orchestrator.refresh_globals()
         return None
 
     module_name = f"mangascraper.extensions.{ext_entry['name']}.{ext_entry['entry_point'].replace('.py', '')}"
@@ -354,6 +369,10 @@ def load_single_extension(
             f"Extension: {ext_entry['name']}: Failed to load: {e}. Is an external program managing it?"
         )
         return None
+    finally:
+        if override_download_path is not None:
+            config["EXTENSION_DOWNLOAD_PATH"] = previous_download_path
+            orchestrator.refresh_globals()
 
 def load_installed_extensions(suppess_pre_run_hook: bool = False):
     """
@@ -551,6 +570,7 @@ def ensure_extension_cli(extension_name: str):
         extension_name,
         install_if_missing=True,
         prompt_for_update=False,
+        override_download_path=DEFAULT_EXTENSION_DOWNLOAD_PATH,
     )
     if not module:
         return
@@ -607,13 +627,6 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
 
-    # Ensure skeleton is installed (fallback only, do not load all extensions)
-    manifest = load_local_manifest()
-    skeleton_entry = _find_manifest_entry(manifest, "skeleton")
-    if skeleton_entry is None or not skeleton_entry.get("installed", False):
-        logger.warning("Skeleton extension not installed, installing now...")
-        install_selected_extension("skeleton", reinstall=True)
-
     # Try to load requested extension only
     ext = load_single_extension(
         original_name,
@@ -627,6 +640,7 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
             "skeleton",
             install_if_missing=True,
             prompt_for_update=False,
+            override_download_path=DEFAULT_EXTENSION_DOWNLOAD_PATH,
         )
         final_name = "skeleton"
 
