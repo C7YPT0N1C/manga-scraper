@@ -581,20 +581,26 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
 def ensure_extension_cli(extension_name: str):
     """Ensure a single extension is installed via the --install-extension CLI flow."""
     update_local_manifest_from_remote()
-    module = load_single_extension(
-        extension_name,
-        install_if_missing=True,
-        prompt_for_update=False,
-        override_download_path=DEFAULT_EXTENSION_DOWNLOAD_PATH,
-    )
-    if not module:
+    manifest = load_local_manifest()
+    ext_entry = _find_manifest_entry(manifest, extension_name)
+    if not ext_entry:
+        logger.warning(f"Extension '{extension_name}' not found in manifest")
         return
-    if hasattr(module, "install_extension"):
-        logger.debug(f"Extension '{extension_name}': Running install_extension()")
-        module.install_extension()
-        logger.warning(f"Extension '{extension_name}': Installed successfully.")
-    else:
-        logger.warning(f"Extension '{extension_name}': No install_extension() hook found")
+
+    entry_point = ext_entry.get("entry_point")
+    ext_folder = os.path.join(EXTENSIONS_DIR, ext_entry["name"])
+    entry_path = os.path.join(ext_folder, entry_point) if entry_point else None
+
+    if ext_entry.get("installed", False):
+        if entry_path and not os.path.exists(entry_path):
+            install_selected_extension(extension_name, reinstall=True, prompt_for_update=False)
+        else:
+            logger.warning(
+                f"Extension '{extension_name}': Already installed and up-to-date."
+            )
+        return
+
+    install_selected_extension(extension_name, reinstall=False, prompt_for_update=False)
 
 def uninstall_selected_extension(extension_name: str):
     """
