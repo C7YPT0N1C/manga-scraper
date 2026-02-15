@@ -1422,7 +1422,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     end_page = None
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=archive_mode or fetch_all)
+            fetch_all_pages = archive_mode or fetch_all or end_page is None
+            ids, cache_key = fetch_gallery_ids_with_fallback(
+                "homepage",
+                sort_val,
+                sort_val,
+                start_page,
+                end_page,
+                fetch_as_archival=fetch_all_pages,
+            )
             
             # Check for search errors
             if cache_key is None:
@@ -1566,7 +1574,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         continue
                 
                 logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
-                ids, cache_key = fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode)
+                fetch_all_pages = archive_mode or end_page is None
+                ids, cache_key = fetch_gallery_ids_with_fallback(
+                    "search",
+                    search_query,
+                    sort_val,
+                    start_page,
+                    end_page,
+                    fetch_as_archival=fetch_all_pages,
+                )
                 
                 # Check for search errors
                 if cache_key is None:
@@ -1641,7 +1657,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         continue
                 
                 logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
-                ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=archive_mode)
+                fetch_all_pages = archive_mode or end_page is None
+                ids, cache_key = fetch_gallery_ids_with_fallback(
+                    query_type,
+                    query_value,
+                    sort_val,
+                    start_page,
+                    end_page,
+                    fetch_as_archival=fetch_all_pages,
+                )
                 
                 # Check for search errors
                 if cache_key is None:
@@ -1718,13 +1742,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                             end_page = parse_end_page(end_page_input, fallback_end)
                         
                         logger.info(f"Re-running search: {search_type}={search_value}...")
+                        fetch_all_pages = archive_mode or end_page is None
                         ids, rerun_cache_key = fetch_gallery_ids_with_fallback(
                             search_type,
                             search_value,
                             sort_val,
                             start_page,
                             end_page,
-                            fetch_as_archival=archive_mode,
+                            fetch_as_archival=fetch_all_pages,
                         )
                         
                         # Check for search errors
