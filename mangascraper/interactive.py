@@ -1074,6 +1074,17 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             if value in ("n", "no"):
                 return False
             logger.warning("Invalid input. Enter y or n.")
+
+    def prompt_archive_mode() -> bool:
+        archive = prompt_yes_no("Archive this query (add every result to download)? (y/n): ")
+        if not archive:
+            return False
+        logger.warning("WARNING: Archiving adds every result to the download queue.")
+        confirm = prompt_yes_no("Are you sure you want to archive this query? (y/n): ")
+        if not confirm:
+            logger.info("Archive cancelled. Continuing with normal browsing.")
+            return False
+        return True
     
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
@@ -1126,7 +1137,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [7] Search by tag\n"
             "  [8] Search by character\n"
             "  [9] Search by parody\n"
-            "  [q] Archive\n"
             "\n"
             "Options:\n"
             "  [w] View recent searches\n"
@@ -1137,7 +1147,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "Tip: Press Enter without input to cancel/go back during prompts\n"
         )
         
-        choice = input("Enter choice [1-9,q,w,e,r,0]: ").strip().lower()
+        choice = input("Enter choice [1-9,w,e,r,0]: ").strip().lower()
         
         if choice == "0":
             if selected_ids:
@@ -1200,12 +1210,19 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "1":
             # Homepage
-            sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
-            sort_val = get_valid_sort_value(sort_val)
-            start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-            start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-            end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
-            end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
+            archive_mode = prompt_archive_mode()
+            if archive_mode:
+                sort_val = DEFAULT_PAGE_SORT
+                start_page = DEFAULT_PAGE_RANGE_START
+                end_page = None
+                fetch_all = True
+            else:
+                sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                sort_val = get_valid_sort_value(sort_val)
+                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
+                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
             
             # Warn about large page ranges
             if end_page and end_page - start_page >= 20 and not unattended:
@@ -1222,31 +1239,32 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     logger.info("Search cancelled.")
                     continue
             
-            fetch_all = False
-            view_results = prompt_yes_no("View results? (y/n): ")
-            if not view_results:
-                add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
-                if not add_all:
-                    logger.info("No galleries added. Returning to menu.")
-                    continue
-                fetch_all = True
-                if not unattended:
-                    log_clarification()
-                    logger.warning(
-                        "WARNING: Adding all galleries to download queue will:\n"
-                        "  • Parse potentially thousands of pages\n"
-                        "  • Take significant time (hours)\n"
-                        "  • Risk rate limiting (403 errors)\n"
-                        "  • Use this for archival purposes only"
-                    )
-                    confirm = input("Continue with add to download queue? (yes/no): ").strip().lower()
-                    if confirm != "yes":
-                        logger.info("Add to download queue cancelled.")
+            if not archive_mode:
+                fetch_all = False
+                view_results = prompt_yes_no("View results? (y/n): ")
+                if not view_results:
+                    add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
+                    if not add_all:
+                        logger.info("No galleries added. Returning to menu.")
                         continue
-                end_page = None
+                    fetch_all = True
+                    if not unattended:
+                        log_clarification()
+                        logger.warning(
+                            "WARNING: Adding all galleries to download queue will:\n"
+                            "  • Parse potentially thousands of pages\n"
+                            "  • Take significant time (hours)\n"
+                            "  • Risk rate limiting (403 errors)\n"
+                            "  • Use this for archival purposes only"
+                        )
+                        confirm = input("Continue with add to download queue? (yes/no): ").strip().lower()
+                        if confirm != "yes":
+                            logger.info("Add to download queue cancelled.")
+                            continue
+                    end_page = None
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
-            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
+            ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=archive_mode or fetch_all)
             
             # Check for search errors
             if cache_key is None:
@@ -1260,7 +1278,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             
             if ids and cache_key:
                 cache_key = get_cache_key("homepage", sort_val)
-                add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page)
+                add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                 new_ids, new_metadata = display_gallery_results(ids, cache_key)
                 if new_ids:
                     selected_ids.extend(new_ids)
@@ -1355,13 +1373,19 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             # General search
             search_query = input("Enter search query (or press Enter to go back): ").strip()
             if search_query:
-                sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
-                sort_val = get_valid_sort_value(sort_val)
-                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
-                
-                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
+                archive_mode = prompt_archive_mode()
+                if archive_mode:
+                    sort_val = DEFAULT_PAGE_SORT
+                    start_page = DEFAULT_PAGE_RANGE_START
+                    end_page = None
+                else:
+                    sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                    sort_val = get_valid_sort_value(sort_val)
+                    start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
+                    end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+                    
+                    start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                    end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                 
                 # Warn about large page ranges
                 if end_page and end_page - start_page >= 20 and not unattended:
@@ -1379,7 +1403,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         continue
                 
                 logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
-                ids, cache_key = fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page)
+                ids, cache_key = fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode)
                 
                 # Check for search errors
                 if cache_key is None:
@@ -1393,7 +1417,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 if ids and cache_key:
                     cache_key = get_cache_key("search", search_query)
-                    add_search_history("search", search_query, cache_key, sort_val, start_page, end_page)
+                    add_search_history("search", search_query, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
@@ -1419,13 +1443,19 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             query_value = input(f"Enter {query_type} (or press Enter to go back): ").strip()
             
             if query_value:
-                sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
-                sort_val = get_valid_sort_value(sort_val)
-                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
-                
-                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
+                archive_mode = prompt_archive_mode()
+                if archive_mode:
+                    sort_val = DEFAULT_PAGE_SORT
+                    start_page = DEFAULT_PAGE_RANGE_START
+                    end_page = None
+                else:
+                    sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
+                    sort_val = get_valid_sort_value(sort_val)
+                    start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
+                    end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
+                    
+                    start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
+                    end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
                 
                 # Warn about large page ranges
                 if end_page and end_page - start_page >= 20 and not unattended:
@@ -1443,7 +1473,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         continue
                 
                 logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
-                ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page)
+                ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=archive_mode)
                 
                 # Check for search errors
                 if cache_key is None:
@@ -1457,7 +1487,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 if ids and cache_key:
                     cache_key = get_cache_key(query_type, query_value)
-                    add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page)
+                    add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
@@ -1550,181 +1580,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     logger.warning("Invalid selection")
             else:
                 logger.info("No recent searches yet.")
-
-        elif choice == "q":
-            # Archive
-            archive_homepage = input("Archive homepage instead of a query? (y/n): ").strip().lower() == "y"
-            if archive_homepage:
-                homepage_sorts = ["date", "popular-today", "popular-week", "popular"]
-                print("Homepage sort options: " + ", ".join(homepage_sorts))
-                sort_val = input("Enter sort (default: date): ").strip() or DEFAULT_PAGE_SORT
-                sort_val = get_valid_sort_value(sort_val)
-                start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page_input = input("Enter end page (default: all, or 'all' for all pages): ").strip()
-                end_page = parse_end_page(end_page_input, None)
-                fetch_all = False
-                view_results = prompt_yes_no("View results? (y/n): ")
-                if not view_results:
-                    add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
-                    if not add_all:
-                        logger.info("No galleries added. Returning to menu.")
-                        continue
-                    fetch_all = True
-                    if not unattended:
-                        log_clarification()
-                        logger.warning(
-                            "WARNING: Adding all galleries to download queue will:\n"
-                            "  • Download potentially thousands of galleries (100+ GB)\n"
-                            "  • Take hours or days to complete\n"
-                            "  • Risk rate limiting (403 errors, temporary bans)\n"
-                            "  • Consume significant disk space (~150KB per page average)"
-                        )
-                        confirm = input("Continue with add to download queue? (yes/no): ").strip().lower()
-                        if confirm != "yes":
-                            logger.info("Add to download queue cancelled.")
-                            continue
-                    end_page = None
-                elif end_page is not None and end_page - start_page > 10:
-                    if not unattended:
-                        log_clarification()
-                        logger.warning(
-                            f"WARNING: Adding {end_page - start_page + 1} pages to download queue may:\n"
-                            f"  • Download hundreds of galleries\n"
-                            f"  • Take significant time (hours)\n"
-                            f"  • Risk rate limiting\n"
-                            f"Recommended: Start with 10 pages or less."
-                        )
-                        confirm = input("Continue? (y/n): ").strip().lower()
-                        if confirm != "y":
-                            logger.info("Add to download queue cancelled.")
-                            continue
-                
-                logger.info(f"Adding homepage galleries to download queue (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
-                ids, cache_key = fetch_gallery_ids_with_fallback("homepage", sort_val, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
-                
-                # Check for search errors
-                if cache_key is None:
-                    logger.error(
-                        f"Failed to add homepage galleries to download queue.\n"
-                        f"Check the log file for details: {RUNTIME_LOG_FILE}"
-                    )
-                    logger.info("Returning to menu. Please try a different search or check your connection.")
-                    log_clarification()
-                    continue
-                
-                if ids and cache_key:
-                    cache_key = get_cache_key("archive", "all" if fetch_all else sort_val)
-                    add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=True)
-                    new_ids, new_metadata = display_gallery_results(ids, cache_key)
-                    if new_ids:
-                        selected_ids.extend(new_ids)
-                        selected_metadata.update(new_metadata)
-                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-                else:
-                    if not ids:
-                        if _check_no_results_and_prompt_filters():
-                            break  # Break out to config menu
-                    else:
-                        logger.info("No galleries found to add to download queue")
-            else:
-                query_type_map = {
-                    "1": "search",
-                    "2": "artist",
-                    "3": "group",
-                    "4": "tag",
-                    "5": "character",
-                    "6": "parody",
-                }
-                log_clarification()
-                print(
-                    "Archive query types:\n"
-                    "  [1] General Search\n"
-                    "  [2] Artist\n"
-                    "  [3] Group\n"
-                    "  [4] Tag\n"
-                    "  [5] Character\n"
-                    "  [6] Parody\n"
-                )
-                query_choice = input("Select query type: ").strip()
-                query_type = query_type_map.get(query_choice)
-                if query_type:
-                    query_value = input(f"Enter {query_type} (or press Enter to go back): ").strip()
-                    if query_value:
-                        sort_val = input(f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {DEFAULT_PAGE_SORT}): ").strip() or DEFAULT_PAGE_SORT
-                        sort_val = get_valid_sort_value(sort_val)
-                        start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
-                        start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                        end_page_input = input("Enter end page (default: all, or 'all' for all pages): ").strip()
-                        end_page = parse_end_page(end_page_input, None)
-                        fetch_all = False
-                        view_results = prompt_yes_no("View results? (y/n): ")
-                        if not view_results:
-                            add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
-                            if not add_all:
-                                logger.info("No galleries added. Returning to menu.")
-                                continue
-                            fetch_all = True
-                            if not unattended:
-                                log_clarification()
-                                logger.warning(
-                                    "WARNING: Adding all galleries to download queue will:\n"
-                                    "  • Download potentially thousands of galleries (100+ GB)\n"
-                                    "  • Take hours or days to complete\n"
-                                    "  • Risk rate limiting (403 errors, temporary bans)\n"
-                                    "  • Consume significant disk space (~150KB per page average)"
-                                )
-                                confirm = input("Continue with add to download queue? (yes/no): ").strip().lower()
-                                if confirm != "yes":
-                                    logger.info("Add to download queue cancelled.")
-                                    continue
-                            end_page = None
-                        elif end_page is not None and end_page - start_page > 10:
-                            if not unattended:
-                                log_clarification()
-                                logger.warning(
-                                    f"WARNING: Adding {end_page - start_page + 1} pages to download queue may:\n"
-                                    f"  • Download hundreds of galleries\n"
-                                    f"  • Take significant time (hours)\n"
-                                    f"  • Risk rate limiting\n"
-                                    f"Recommended: Start with 10 pages or less."
-                                )
-                                confirm = input("Continue? (y/n): ").strip().lower()
-                                if confirm != "y":
-                                    logger.info("Add to download queue cancelled.")
-                                    continue
-                        
-                        logger.info(f"Adding galleries to download queue for {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
-                        ids, cache_key = fetch_gallery_ids_with_fallback(query_type, query_value, sort_val, start_page, end_page, fetch_as_archival=fetch_all)
-                        
-                        # Check for search errors
-                        if cache_key is None:
-                            logger.error(
-                                f"Failed to add galleries to download queue for {query_type}={query_value}.\n"
-                                f"Check the log file for details: {RUNTIME_LOG_FILE}"
-                            )
-                            logger.info("Returning to menu. Please try a different search or check your connection.")
-                            log_clarification()
-                            continue
-                        
-                        if ids and cache_key:
-                            cache_key = get_cache_key("archive", query_value)
-                            add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=True)
-                            new_ids, new_metadata = display_gallery_results(ids, cache_key)
-                            if new_ids:
-                                selected_ids.extend(new_ids)
-                                selected_metadata.update(new_metadata)
-                                logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-                        else:
-                            if not ids:
-                                if _check_no_results_and_prompt_filters():
-                                    break  # Break out to config menu
-                                else:
-                                    logger.info(f"No galleries found to add to download queue for {query_type}={query_value}")
-                            else:
-                                logger.info(f"No galleries found to add to download queue for {query_type}={query_value}")
-                else:
-                    logger.warning("Invalid archive query type.")
         
         elif choice == "e":
             # View selected galleries
@@ -1732,7 +1587,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             continue
         
         else:
-            logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
+            logger.warning("Invalid choice. Enter 1-9, w, e, r, or 0.")
         
         log_clarification()
     
