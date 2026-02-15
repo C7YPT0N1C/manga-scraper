@@ -224,12 +224,15 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
             
             print("Options: " + " | ".join(nav_options))
             nav_choice = input("Choice: ").strip().lower()
+            logger.debug(f"Results menu choice: {nav_choice}")
             
             if (nav_choice == "p" or nav_choice == "previous") and current_page > 0:
                 current_page -= 1
+                logger.debug(f"Results menu page -> {current_page + 1}")
                 continue
             elif (nav_choice == "n" or nav_choice == "next") and current_page < total_pages - 1:
                 current_page += 1
+                logger.debug(f"Results menu page -> {current_page + 1}")
                 continue
             elif nav_choice == "d" or nav_choice == "details":
                 show_gallery_details(dict(metadata_items))
@@ -246,6 +249,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
             print()
             print("Options: [d]etails | [s]elect galleries | [q]uit")
             nav_choice = input("Choice: ").strip().lower()
+            logger.debug(f"Results menu choice: {nav_choice}")
             
             if nav_choice == "d" or nav_choice == "details":
                 show_gallery_details(dict(metadata_items))
@@ -265,6 +269,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
     print("  [n]one - Return without selecting anything")
     
     select_choice = input("Choice (a/s/n): ").strip().lower()
+    logger.debug(f"Results selection choice: {select_choice}")
     
     if select_choice in ("n", "none"):
         return [], {}
@@ -274,6 +279,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
     elif select_choice in ("s", "specific"):
         # Offer to apply filters before final selection
         if input("\nApply filters to refine results? (y/n): ").strip().lower() == "y":
+            logger.debug("Results filter prompt: yes")
             summary = get_metadata_summary(metadata)
             filtered_ids, filtered_metadata = show_filter_menu(summary, metadata)
             if filtered_ids:
@@ -285,6 +291,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
             return [], {}
 
         selection = input("Select galleries by list index (e.g. 1,3-5 for galleries #1, #3-#5 shown above), 'all' for all, or 0 to cancel: ").strip()
+        logger.debug(f"Results selection input: {selection}")
         selected = _select_by_index(metadata_items, selection)
         selected_metadata = {}
         for gid in selected:
@@ -586,12 +593,15 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         
         print("Options: " + " | ".join(nav_options))
         nav_choice = input("Choice: ").strip().lower()
+        logger.debug(f"Selected galleries menu choice: {nav_choice}")
         
         if (nav_choice == "p" or nav_choice == "previous") and current_page > 0:
             current_page -= 1
+            logger.debug(f"Selected galleries page -> {current_page + 1}")
             continue
         elif (nav_choice == "n" or nav_choice == "next") and current_page < total_pages - 1:
             current_page += 1
+            logger.debug(f"Selected galleries page -> {current_page + 1}")
             continue
         elif nav_choice == "d" or nav_choice == "details":
             show_gallery_details(dict(active_items))
@@ -599,6 +609,7 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         elif nav_choice == "r" or nav_choice == "remove":
             # Ask which galleries to remove
             selection = input("Remove galleries by index (comma-separated list, e.g. 1,3-5, 'all' to remove all, or 0 to cancel): ").strip()
+            logger.debug(f"Selected galleries remove input: {selection}")
             indices = _parse_index_selection(selection, len(active_items))
             if indices is None:
                 logger.warning("Invalid selection. Use numbers like 1,3-5 or 'all'.")
@@ -773,6 +784,7 @@ def show_filter_menu(summary: dict, metadata: dict) -> tuple:
         )
         
         choice = input("Enter choice [0-7]: ").strip()
+        logger.debug(f"Filter menu choice: {choice}")
         
         if choice == "0":
             break
@@ -1306,6 +1318,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         )
         
         choice = input("Enter choice [1-9,q,w,e,r,0]: ").strip().lower()
+        logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
             if selected_ids:

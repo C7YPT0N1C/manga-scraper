@@ -184,7 +184,7 @@ def _ensure_cover_file(creator_folder: str):
                         pass
             cover_link = os.path.join(creator_folder, f"cover{ext}")
             os.symlink(cover_source, cover_link)
-            logger.info(f"Cover repaired for {creator_folder}: {cover_link} -> {cover_source}")
+            logger.info(f"Cover updated for {creator_folder}: {cover_link} -> {cover_source}")
             return cover_link
 
         covers_folder = os.path.join(creator_folder, ".covers")
@@ -238,7 +238,7 @@ def _ensure_cover_file(creator_folder: str):
                 resp.raise_for_status()
                 with open(target, "wb") as f:
                     f.write(resp.content)
-                logger.info(f"Cover repaired (downloaded) for Gallery {latest_id}: {target}")
+                logger.info(f"Cover updated (downloaded) for Gallery {latest_id}: {target}")
                 _link_cover(target)
             except Exception as e:
                 logger.warning(f"Failed to download missing cover for Gallery {latest_id}: {e}")
@@ -677,7 +677,7 @@ def repair_covers_hook():
             )
             if not before and after:
                 repaired += 1
-    logger.debug(f"{EXTENSION_REFERRER}: Cover repair complete. Restored {repaired} cover(s).")
+    logger.debug(f"{EXTENSION_REFERRER}: Cover update pass complete. Restored {repaired} cover(s).")
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
