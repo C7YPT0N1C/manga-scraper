@@ -12,7 +12,8 @@ from mangascraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
-EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/extensions"
+EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/remote_extensions"
+REMOTE_EXTENSIONS_TMP = "/tmp/manga-scraper/manga-scraper-extensions"
 os.makedirs(EXTENSIONS_DIR, exist_ok=True)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
@@ -224,65 +225,40 @@ def calculate_extension_download_path(extension_name: str) -> str:
     return DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 # ------------------------------------------------------------
-# Sparse clone repo
+# Remote repo sync (full clone)
 # ------------------------------------------------------------
-def sparse_clone(extension_name: str, url: str):
-    ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
+def sync_remote_extensions_repo(url: str):
+    log(f"Syncing extensions repo: {url}", "debug")
+    os.makedirs(os.path.dirname(REMOTE_EXTENSIONS_TMP), exist_ok=True)
+    if os.path.exists(REMOTE_EXTENSIONS_TMP):
+        shutil.rmtree(REMOTE_EXTENSIONS_TMP)
+    subprocess.run(["git", "clone", "--depth", "1", url, REMOTE_EXTENSIONS_TMP], check=True)
 
-    if os.path.exists(ext_folder):
-        shutil.rmtree(ext_folder)
-    os.makedirs(ext_folder, exist_ok=True)
+    log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
 
-    # Initialise empty repo
-    subprocess.run(["git", "init", ext_folder], check=True)
-    subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
-    subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
+    if os.path.exists(EXTENSIONS_DIR):
+        shutil.rmtree(EXTENSIONS_DIR)
+    shutil.copytree(REMOTE_EXTENSIONS_TMP, EXTENSIONS_DIR)
+    log(f"Remote extensions synced: {EXTENSIONS_DIR}", "debug")
 
-    # Configure sparse-checkout to fetch the extension folder and entry point
-    sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
-    with open(sparse_file, "w", encoding="utf-8") as f:
-        f.write(f"{extension_name}/\n")
-        f.write(f"{extension_name}/**\n")
-        f.write(f"{extension_name}__msext.py\n")
-        f.write(f"**/{extension_name}__msext.py\n")
-
-    # Pull the branch (assumes 'main')
-    subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
-
-    # Flatten nested folder if exists
-    repo_folder = os.path.join(ext_folder, extension_name)
-    if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
-        def _merge_tree(src_dir: str, dest_dir: str):
-            for item in os.listdir(src_dir):
-                src = os.path.join(src_dir, item)
-                dest = os.path.join(dest_dir, item)
-                if os.path.isdir(src):
-                    if os.path.exists(dest) and os.path.isdir(dest):
-                        _merge_tree(src, dest)
-                        shutil.rmtree(src)
-                    else:
-                        shutil.move(src, dest)
+    # Quick sanity checks for entry points (debug only)
+    try:
+        manifest_path = os.path.join(EXTENSIONS_DIR, "master_manifest.json")
+        if os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                remote_manifest = json.load(f)
+            for ext in remote_manifest.get("extensions", []):
+                entry = ext.get("entry_point")
+                name = ext.get("name")
+                if not entry or not name:
+                    continue
+                entry_path = os.path.join(EXTENSIONS_DIR, name, entry)
+                if os.path.exists(entry_path):
+                    log(f"Entry point ok: {entry_path}", "debug")
                 else:
-                    if os.path.exists(dest):
-                        os.remove(dest)
-                    shutil.move(src, dest)
-
-        _merge_tree(repo_folder, ext_folder)
-        shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
-
-    # Ensure entry point is at extension root if it exists elsewhere
-    entry_point_name = f"{extension_name}__msext.py"
-    expected_entry = os.path.join(ext_folder, entry_point_name)
-    if not os.path.exists(expected_entry):
-        for root, _, files in os.walk(ext_folder):
-            if entry_point_name in files:
-                source = os.path.join(root, entry_point_name)
-                if os.path.exists(expected_entry):
-                    os.remove(expected_entry)
-                shutil.move(source, expected_entry)
-                break
-
-    log(f"Clone complete: {extension_name} -> {ext_folder}", "debug")
+                    log(f"Entry point missing: {entry_path}", "warning")
+    except Exception as e:
+        log(f"Failed entry point sanity check: {e}", "warning")
 
 #######################################################################
 
@@ -525,20 +501,17 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
         return
 
     try:
-        log(f"Sparse cloning {extension_name} from {repo_url}...", "debug")
-        sparse_clone(extension_name, repo_url)
+        log(f"Syncing remote extensions from {repo_url}...", "debug")
+        sync_remote_extensions_repo(repo_url)
     except Exception as e:
-        logger.warning(f"Failed to sparse-clone from primary repo: {e}")
+        logger.warning(f"Failed to sync from primary repo: {e}")
         if BACKUP_BASE_REPO_URL:
             backup_url = repo_url.replace(PRIMARY_BASE_REPO_URL, BACKUP_BASE_REPO_URL)
             try:
-                log(f"Retrying sparse-clone with backup repo: {backup_url}", "debug")
-                # clean up half-baked folder before retry
-                shutil.rmtree(ext_folder, ignore_errors=True)
-                os.makedirs(ext_folder, exist_ok=True)
-                sparse_clone(extension_name, backup_url)
+                log(f"Retrying sync with backup repo: {backup_url}", "debug")
+                sync_remote_extensions_repo(backup_url)
             except Exception as e2:
-                logger.error(f"Failed to sparse-clone from backup repo: {e2}")
+                logger.error(f"Failed to sync from backup repo: {e2}")
                 return
         else:
             return
@@ -575,8 +548,11 @@ def ensure_extension_cli(extension_name: str):
     if not module:
         return
     if hasattr(module, "install_extension"):
+        logger.debug(f"Extension '{extension_name}': Running install_extension()")
         module.install_extension()
         logger.warning(f"Extension '{extension_name}': Installed successfully.")
+    else:
+        logger.warning(f"Extension '{extension_name}': No install_extension() hook found")
 
 def uninstall_selected_extension(extension_name: str):
     """
