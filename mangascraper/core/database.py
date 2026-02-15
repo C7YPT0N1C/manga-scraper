@@ -48,40 +48,33 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
             display_name TEXT,
-            most_popular_tags TEXT,
+            download_path TEXT,
             first_seen TEXT,
             last_updated TEXT,
-            download_path TEXT,
             total_galleries INTEGER,
+            most_popular_tags TEXT,
             notes TEXT
         );
 
         CREATE TABLE IF NOT EXISTS Galleries (
             id INTEGER PRIMARY KEY,
-            creator_id INTEGER,
             raw_title TEXT,
             clean_title TEXT,
+            num_pages INTEGER,
+            creator_id INTEGER,
+            language TEXT,
+            tags TEXT,
             status TEXT,
             started_at TEXT,
             completed_at TEXT,
-            extension_used TEXT,
-            num_pages INTEGER,
-            language TEXT,
-            tags TEXT,
             download_path TEXT,
             cover_path TEXT,
+            extension_used TEXT,
             favourite INTEGER DEFAULT 0,
             rating REAL,
             FOREIGN KEY (creator_id) REFERENCES Creators(id)
         );
-
-        CREATE TABLE IF NOT EXISTS Tags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
-            type TEXT,
-            popularity INTEGER
-        );
-
+        
         CREATE TABLE IF NOT EXISTS GalleryTags (
             gallery_id INTEGER,
             tag_id INTEGER,
@@ -90,11 +83,25 @@ def init_db():
             FOREIGN KEY (tag_id) REFERENCES Tags(id)
         );
 
+        CREATE TABLE IF NOT EXISTS Tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            type TEXT,
+            popularity INTEGER
+        );
+        
         CREATE TABLE IF NOT EXISTS GalleryLanguages (
-            gallery_id INTEGER,
             language TEXT,
+            gallery_id INTEGER,
             PRIMARY KEY (gallery_id, language),
             FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS Languages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            type TEXT,
+            popularity INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS BrokenSymbols (
@@ -105,14 +112,14 @@ def init_db():
             fixed INTEGER DEFAULT 0
         );
 
-        CREATE TABLE IF NOT EXISTS CacheMetadata (
+        CREATE TABLE IF NOT EXISTS CachedMetadata (
             gallery_id TEXT PRIMARY KEY,
             timestamp REAL,
             clean_metadata TEXT,
             raw_metadata TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS CacheReferences (
+        CREATE TABLE IF NOT EXISTS CachedReferences (
             entry_key TEXT PRIMARY KEY,
             cache_type TEXT,
             cache_key TEXT,
@@ -296,12 +303,12 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         if cutoff is not None:
             cursor.execute(
                 "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
-                "FROM CacheMetadata WHERE timestamp >= ?",
+                "FROM CachedMetadata WHERE timestamp >= ?",
                 (cutoff,),
             )
         else:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CacheMetadata"
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
             )
         rows = cursor.fetchall()
     result = {}
@@ -325,7 +332,7 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
     params = list(ids)
     query = (
         "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
-        "FROM CacheMetadata WHERE gallery_id IN (" + placeholders + ")"
+        "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
     )
     if cutoff is not None:
         query += " AND timestamp >= ?"
@@ -351,7 +358,7 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT timestamp, clean_metadata, raw_metadata FROM CacheMetadata WHERE gallery_id = ?",
+            "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
             (str(gallery_id),),
         )
         row = cursor.fetchone()
@@ -379,7 +386,7 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CacheMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
+            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
             "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(gallery_id) DO UPDATE SET "
             "timestamp=excluded.timestamp, "
@@ -400,7 +407,7 @@ def prune_cache_metadata(cutoff: float):
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM CacheMetadata WHERE timestamp IS NULL OR timestamp < ?",
+            "DELETE FROM CachedMetadata WHERE timestamp IS NULL OR timestamp < ?",
             (cutoff,),
         )
         conn.commit()
@@ -415,7 +422,7 @@ def load_cache_references() -> dict:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
-            "FROM CacheReferences"
+            "FROM CachedReferences"
         )
         rows = cursor.fetchall()
     result = {}
@@ -458,7 +465,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
+            "INSERT INTO CachedReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
@@ -490,7 +497,7 @@ def delete_cache_reference(entry_key: str):
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
+        cursor.execute("DELETE FROM CachedReferences WHERE entry_key = ?", (str(entry_key),))
         conn.commit()
 
 
@@ -499,7 +506,7 @@ def prune_cache_references(now: float):
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            "DELETE FROM CachedReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
             (now,),
         )
         conn.commit()

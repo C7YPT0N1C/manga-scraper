@@ -215,10 +215,10 @@ def uninstall_extension():
             shutil.rmtree(EXTENSION_INSTALL_PATH, ignore_errors=True)
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
-        logger.info(f"Extension {EXTENSION_NAME}: Uninstalled successfully")
+        logger.info(f"Extension {EXTENSION_REFERRER}: Uninstalled successfully")
 
     except Exception as e:
-        logger.error(f"Extension {EXTENSION_NAME}: Failed to uninstall: {e}")
+        logger.error(f"Extension {EXTENSION_REFERRER}: Failed to uninstall: {e}")
 
 
 ####################################################################################################################
@@ -744,7 +744,6 @@ def update_creator_manga(meta):
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
-    from mangascraper.core import database
     gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
     creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
     if not creators:
@@ -752,28 +751,13 @@ def update_creator_manga(meta):
 
     gallery_title = gallery_meta["title"]
     current_gallery_id = parse_gallery_id(gallery_title) or int(meta.get("id", 0))
-    clean_title_val = gallery_meta.get("short_title", "")
-    raw_title_val = meta.get("title", {}).get("english", "")
-    num_pages = meta.get("num_pages", 0)
-    cover_path = None
-    tags = [t["name"] for t in meta.get("tags", []) if t.get("type") == "tag"]
-    languages = [t["name"] for t in meta.get("tags", []) if t.get("type") == "language"]
+    gallery_tags = meta.get("tags", [])
+    gallery_genres = [
+        tag["name"] for tag in gallery_tags
+        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
+    ]
 
-    # Link creators (main creator only for now)
-    database.link_gallery_creator(current_gallery_id, creators[0])
-    # Link tags
-    database.link_gallery_tags(current_gallery_id, tags)
-    # Link languages
-    database.link_gallery_languages(current_gallery_id, languages)
-
-    # Update gallery fields
-    with database.lock, database._connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE Galleries SET clean_title=?, raw_title=?, num_pages=?, cover_path=? WHERE id=?",
-            (clean_title_val, raw_title_val, num_pages, cover_path, current_gallery_id)
-        )
-        conn.commit()
+    # Load all metadata at once
     metadata = load_creators_metadata()
     collected_ids = set(metadata.get("collected_manga_ids", []))
     deferred_creators = set(metadata.get("deferred_creators", []))
@@ -1119,7 +1103,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Post-download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    log(f"{EXTENSION_REFERRER}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
 
     # Thread-safe append
     with _gallery_meta_lock:
@@ -1130,6 +1114,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
+        from mangascraper.core import database
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
@@ -1141,6 +1126,17 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
         gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
         creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        tags = gallery_meta.get("tags", [])
+        languages = gallery_meta.get("languages", [])
+
+        # --- Minimal database update calls ---
+        if creators:
+            database.link_gallery_creator(gallery_id, creators[0])
+        if tags:
+            database.link_gallery_tags(gallery_id, tags)
+        if languages:
+            database.link_gallery_languages(gallery_id, languages)
+
         cover_source = None
         cover_gallery_name = None
         cover_ext = None
