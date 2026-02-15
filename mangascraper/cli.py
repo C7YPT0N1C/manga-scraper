@@ -1060,7 +1060,7 @@ def main():
             f"Recommended: Download in smaller batches (<300 galleries)."
         )
         confirm = input("Continue with download? (yes/no): ").strip().lower()
-        if confirm != "yes":
+        if confirm not in ("yes", "y"):
             logger.info("Download cancelled.")
             sys.exit(0)
     

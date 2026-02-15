@@ -224,69 +224,6 @@ def _get_latest_cover_id(covers_folder: str) -> int | None:
         return None
     return max(cover_ids)
 
-def _find_cover_in_covers_folder(covers_folder: str, entry_name: str, latest_id: int | None) -> str | None:
-    if not os.path.isdir(covers_folder):
-        return None
-    candidates = [f for f in os.listdir(covers_folder) if f.startswith(entry_name)]
-    if not candidates and latest_id is not None:
-        candidates = [
-            f for f in os.listdir(covers_folder)
-            if _extract_gallery_id(f) == latest_id
-        ]
-    if not candidates:
-        return None
-    candidates.sort()
-    return os.path.join(covers_folder, candidates[0])
-
-def _find_cover_in_library(entry_name: str, latest_id: int | None) -> str | None:
-    if not DEDICATED_DOWNLOAD_PATH or not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        return None
-    for name in os.listdir(DEDICATED_DOWNLOAD_PATH):
-        creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, name)
-        if not os.path.isdir(creator_folder):
-            continue
-        covers_folder = os.path.join(creator_folder, ".covers")
-        cover = _find_cover_in_covers_folder(covers_folder, entry_name, latest_id)
-        if cover:
-            return cover
-    return None
-
-def _download_cover_for_gallery(gallery_id: int, covers_folder: str, entry_name: str) -> str | None:
-    try:
-        meta = fetch_gallery_metadata(gallery_id)
-        if not meta:
-            return None
-        urls = fetch_image_urls(meta, 1)
-        if not urls:
-            return None
-        url = urls[0]
-        ext = os.path.splitext(url.split("?")[0])[1]
-        if not ext:
-            ext = ".jpg"
-        target = os.path.join(covers_folder, f"{entry_name}{ext}")
-        session = get_session(referrer="Cover Repair", status="return")
-        resp = session.get(url, timeout=(60, 60))
-        resp.raise_for_status()
-        with open(target, "wb") as f:
-            f.write(resp.content)
-        logger.info(f"Cover repaired (downloaded) for Gallery {gallery_id}: {target}")
-        return target
-    except Exception as e:
-        logger.warning(f"Failed to download missing cover for Gallery {gallery_id}: {e}")
-        return None
-
-def _link_cover_to_root(creator_folder: str, cover_source: str):
-    _, ext = os.path.splitext(cover_source)
-    for f in os.listdir(creator_folder):
-        if f.startswith("cover") and f != "covers" and f != ".covers":
-            try:
-                os.unlink(os.path.join(creator_folder, f))
-            except Exception:
-                pass
-    cover_link = os.path.join(creator_folder, f"cover{ext}")
-    os.symlink(cover_source, cover_link)
-    logger.info(f"Cover repaired for {creator_folder}: {cover_link} -> {cover_source}")
-
 def _ensure_cover_file(creator_folder: str):
     try:
         if not os.path.isdir(creator_folder):
@@ -298,14 +235,34 @@ def _ensure_cover_file(creator_folder: str):
 
         logger.debug(f"Cover missing for {creator_folder}; searching for latest gallery cover.")
 
+        def _link_cover(cover_source: str):
+            _, ext = os.path.splitext(cover_source)
+            for f in os.listdir(creator_folder):
+                if f.startswith("cover") and f != "covers" and f != ".covers":
+                    try:
+                        os.unlink(os.path.join(creator_folder, f))
+                    except Exception:
+                        pass
+            cover_link = os.path.join(creator_folder, f"cover{ext}")
+            os.symlink(cover_source, cover_link)
+            logger.info(f"Cover repaired for {creator_folder}: {cover_link} -> {cover_source}")
+            return cover_link
+
         covers_folder = os.path.join(creator_folder, ".covers")
         if not os.path.isdir(covers_folder):
             os.makedirs(covers_folder, exist_ok=True)
 
-        cover_source = _find_cover_in_covers_folder(covers_folder, entry_name, latest_id)
-        if cover_source:
+        candidates = [f for f in os.listdir(covers_folder) if f.startswith(entry_name)]
+        if not candidates and latest_id is not None:
+            candidates = [
+                f for f in os.listdir(covers_folder)
+                if _extract_gallery_id(f) == latest_id
+            ]
+        if candidates:
+            candidates.sort()
+            cover_source = os.path.join(covers_folder, candidates[0])
             logger.debug(f"Cover found in .covers: {cover_source}")
-            _link_cover_to_root(creator_folder, cover_source)
+            _link_cover(cover_source)
             return
 
         if is_dir:
@@ -320,25 +277,32 @@ def _ensure_cover_file(creator_folder: str):
                     if not os.path.exists(cover_in_subfolder):
                         logger.debug(f"Copying cover into .covers: {cover_in_subfolder}")
                         shutil.copy2(page1_file, cover_in_subfolder)
-                    _link_cover_to_root(creator_folder, cover_in_subfolder)
+                    _link_cover(cover_in_subfolder)
                     return
-
-        cover_source = _find_cover_in_library(entry_name, latest_id)
-        if cover_source:
-            logger.debug(f"Cover found in another creator .covers: {cover_source}")
-            _, ext = os.path.splitext(cover_source)
-            cover_in_subfolder = os.path.join(covers_folder, f"{entry_name}{ext}")
-            if not os.path.exists(cover_in_subfolder):
-                logger.debug(f"Copying cover into .covers: {cover_in_subfolder}")
-                shutil.copy2(cover_source, cover_in_subfolder)
-            _link_cover_to_root(creator_folder, cover_in_subfolder)
-            return
 
         if latest_id is not None:
             logger.debug(f"Cover not found locally; downloading for Gallery {latest_id}")
-            downloaded = _download_cover_for_gallery(latest_id, covers_folder, entry_name)
-            if downloaded:
-                _link_cover_to_root(creator_folder, downloaded)
+            try:
+                meta = fetch_gallery_metadata(latest_id)
+                if not meta:
+                    return
+                urls = fetch_image_urls(meta, 1)
+                if not urls:
+                    return
+                url = urls[0]
+                ext = os.path.splitext(url.split("?")[0])[1]
+                if not ext:
+                    ext = ".jpg"
+                target = os.path.join(covers_folder, f"{entry_name}{ext}")
+                session = get_session(referrer="Cover Repair", status="return")
+                resp = session.get(url, timeout=(60, 60))
+                resp.raise_for_status()
+                with open(target, "wb") as f:
+                    f.write(resp.content)
+                logger.info(f"Cover repaired (downloaded) for Gallery {latest_id}: {target}")
+                _link_cover(target)
+            except Exception as e:
+                logger.warning(f"Failed to download missing cover for Gallery {latest_id}: {e}")
     except Exception as e:
         logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
 
@@ -1434,7 +1398,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     latest_cover_id = _get_latest_cover_id(covers_folder)
                     if cover_gallery_id is not None and latest_cover_id is not None:
                         if cover_gallery_id <= latest_cover_id:
-                            _ensure_cover_file(creator_folder)
+                            continue
                             gallery_path = gallery_paths.get(creator_name)
                             if gallery_format == "directory" or not gallery_path:
                                 if gallery_format == "directory" and gallery_path:
