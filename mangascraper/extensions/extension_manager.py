@@ -241,7 +241,7 @@ def sparse_clone(extension_name: str, url: str):
     # Configure sparse-checkout to fetch the extension folder and entry point
     sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
     with open(sparse_file, "w", encoding="utf-8") as f:
-        f.write(f"/{extension_name}/\n")
+        f.write(f"/{extension_name}/**\n")
         f.write(f"/{extension_name}__msext.py\n")
 
     # Pull the branch (assumes 'main')
@@ -283,6 +283,63 @@ def _load_extension_module(module_name: str, entry_point: str):
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+def _find_manifest_entry(manifest: dict, extension_name: str) -> dict | None:
+    for ext in manifest.get("extensions", []):
+        if ext.get("name", "").lower() == extension_name.lower():
+            return ext
+    return None
+
+def load_single_extension(
+    extension_name: str,
+    install_if_missing: bool = False,
+    prompt_for_update: bool = True,
+):
+    """Load a single extension by name, installing it if requested or missing files are detected."""
+    manifest = load_local_manifest()
+    ext_entry = _find_manifest_entry(manifest, extension_name)
+    if ext_entry is None:
+        update_local_manifest_from_remote()
+        manifest = load_local_manifest()
+        ext_entry = _find_manifest_entry(manifest, extension_name)
+    if ext_entry is None:
+        logger.warning(f"Extension '{extension_name}' not found in manifest")
+        return None
+
+    if install_if_missing and not ext_entry.get("installed", False):
+        logger.warning(f"Extension '{ext_entry['name']}' not installed, installing now...")
+        install_selected_extension(ext_entry["name"], reinstall=False, prompt_for_update=prompt_for_update)
+        manifest = load_local_manifest()
+        ext_entry = _find_manifest_entry(manifest, extension_name)
+        if ext_entry is None:
+            return None
+
+    ext_folder = os.path.join(EXTENSIONS_DIR, ext_entry["name"])
+    entry_point = os.path.join(ext_folder, ext_entry["entry_point"])
+    if ext_entry.get("installed", False) and not os.path.exists(entry_point):
+        logger.warning(
+            f"Extension '{ext_entry['name']}' marked as installed but missing files. Reinstalling..."
+        )
+        install_selected_extension(ext_entry["name"], reinstall=True, prompt_for_update=prompt_for_update)
+        manifest = load_local_manifest()
+        ext_entry = _find_manifest_entry(manifest, extension_name)
+        if ext_entry is None:
+            return None
+        ext_folder = os.path.join(EXTENSIONS_DIR, ext_entry["name"])
+        entry_point = os.path.join(ext_folder, ext_entry["entry_point"])
+
+    if not os.path.exists(entry_point):
+        logger.warning(f"Extension: {ext_entry['name']}: Entry point not found.")
+        return None
+
+    module_name = f"mangascraper.extensions.{ext_entry['name']}.{ext_entry['entry_point'].replace('.py', '')}"
+    try:
+        return _load_extension_module(module_name, entry_point)
+    except Exception as e:
+        logger.warning(
+            f"Extension: {ext_entry['name']}: Failed to load: {e}. Is an external program managing it?"
+        )
+        return None
 
 def load_installed_extensions(suppess_pre_run_hook: bool = False):
     """
@@ -472,6 +529,21 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
         ext_entry["version"] = remote_version
     save_local_manifest(manifest)
 
+
+def ensure_extension_cli(extension_name: str):
+    """Ensure a single extension is installed via the --install-extension CLI flow."""
+    update_local_manifest_from_remote()
+    module = load_single_extension(
+        extension_name,
+        install_if_missing=True,
+        prompt_for_update=False,
+    )
+    if not module:
+        return
+    if hasattr(module, "install_extension"):
+        module.install_extension()
+        logger.warning(f"Extension '{extension_name}': Installed successfully.")
+
 def uninstall_selected_extension(extension_name: str):
     """
     Uninstalls an extension. Runs uninstall hook if available.
@@ -500,7 +572,7 @@ def uninstall_selected_extension(extension_name: str):
 
 # ------------------------------------------------------------
 # Get selected extension (with skeleton fallback)
-def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
+def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool = False):
     """
     This is one this module's entrypoints.
     
@@ -521,51 +593,44 @@ def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
 
-    # Load installed extensions
-    load_installed_extensions()
-
-    # Load manifest
+    # Ensure skeleton is installed (fallback only, do not load all extensions)
     manifest = load_local_manifest()
-
-    # Ensure skeleton is installed first
-    skeleton_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == "skeleton"), None)
+    skeleton_entry = _find_manifest_entry(manifest, "skeleton")
     if skeleton_entry is None or not skeleton_entry.get("installed", False):
         logger.warning("Skeleton extension not installed, installing now...")
         install_selected_extension("skeleton", reinstall=True)
-        manifest = _reload_extensions()
 
-    # Ensure the requested extension is installed
-    ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
-    if ext_entry is None:
-        update_local_manifest_from_remote()
-        manifest = load_local_manifest()
-        ext_entry = next((e for e in manifest.get("extensions", []) if e["name"].lower() == original_name.lower()), None)
+    # Try to load requested extension only
+    ext = load_single_extension(
+        original_name,
+        install_if_missing=True,
+        prompt_for_update=False,
+    )
+    final_name = original_name
+    if ext is None:
+        logger.warning(f"Extension '{original_name}' not available, falling back to skeleton")
+        ext = load_single_extension(
+            "skeleton",
+            install_if_missing=True,
+            prompt_for_update=False,
+        )
+        final_name = "skeleton"
 
-    if ext_entry is None:
-        logger.warning(f"Extension '{original_name}' not found in manifest, falling back to skeleton")
-        name = "skeleton"
-    elif not ext_entry.get("installed", False):
-        logger.warning(f"Extension '{original_name}' not installed, installing now...")
-        install_selected_extension(original_name, reinstall=True)
-        manifest = _reload_extensions()
+    if ext is None:
+        logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
+        return None
 
-    # Final name to load (fall back to skeleton if necessary)
-    final_name = original_name if ext_entry else "skeleton"
+    if suppess_pre_run_hook == False:
+        if hasattr(ext, "pre_run_hook"):
+            ext.pre_run_hook()
+        log_clarification()
+        logger.info(f"Selected extension: {final_name}")
 
-    # Find and return the module
-    for ext in INSTALLED_EXTENSIONS:
-        if getattr(ext, "__name__", "").lower().endswith(f"{final_name.lower()}__msext"):
-            #if hasattr(ext, "install_extension"): # This runs the installer again, not necessary
-            #    ext.install_extension()
-            if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
-                if hasattr(ext, "pre_run_hook"):
-                    ext.pre_run_hook()
-                
-                log_clarification()
-                logger.info(f"Selected extension: {final_name}")
-            
-            return ext
+    return ext
 
-    # If we reach here, something went really wrong
-    logger.error("Failed to load the requested extension or skeleton! This should never happen, so something went really wrong.")
-    return None
+# Backwards-compatible wrappers
+def install_extension_cli(extension_name: str):
+    return ensure_extension_cli(extension_name)
+
+def get_selected_extension(name: str = "skeleton", suppess_pre_run_hook: bool = False):
+    return ensure_extension_runtime(name, suppess_pre_run_hook=suppess_pre_run_hook)
