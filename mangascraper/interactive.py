@@ -313,7 +313,9 @@ def read_gallery_in_terminal(gallery_id: int):
         return
 
     session = get_session(referrer="Interactive Reader", status="return")
-    temp_dir = tempfile.mkdtemp(prefix=f"mangascraper-read-{gallery_id}-")
+    base_tmp_dir = "/tmp/manga-scraper"
+    os.makedirs(base_tmp_dir, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(prefix=f"mangascraper-read-{gallery_id}-", dir=base_tmp_dir)
     cached_paths = {}
 
     def _get_page_path(page: int) -> str | None:
@@ -347,7 +349,18 @@ def read_gallery_in_terminal(gallery_id: int):
             print(f"Gallery {gallery_id} - Page {current_page}/{total_pages}\n")
             page_path = _get_page_path(current_page)
             if page_path:
-                subprocess.run(["chafa", page_path], check=False)
+                term_size = shutil.get_terminal_size(fallback=(80, 24))
+                render_cols = max(20, term_size.columns)
+                render_rows = max(10, term_size.lines - 4)
+                chafa_args = [
+                    "chafa",
+                    f"--size={render_cols}x{render_rows}",
+                    "--symbols=block",
+                    "--colors=256",
+                    "--dither=none",
+                    page_path,
+                ]
+                subprocess.run(chafa_args, check=False)
             else:
                 logger.warning("Unable to display this page.")
 
@@ -1228,11 +1241,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [7] Search by tag\n"
             "  [8] Search by character\n"
             "  [9] Search by parody\n"
+            "  [t] Read a gallery\n"
             "\n"
             "Options:\n"
             "  [w] View recent searches\n"
             "  [e] View selected galleries\n"
-            "  [t] Read a gallery (Linux + chafa)\n"
             "  [r] Return to configuration menu\n"
             "  [0] Proceed with selected galleries\n"
             "\n"
