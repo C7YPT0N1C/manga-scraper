@@ -683,13 +683,13 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     required_with_buffer = total_estimated + parallel_buffer + safety_buffer
     
     log_clarification()
-    logger.info(f"Total download size estimate: {_format_bytes(total_estimated)}")
-    logger.info(f"Available disk space: {_format_bytes(available)}")
-    logger.info(f"Required with buffer: {_format_bytes(required_with_buffer)}")
+    log(f"Total download size estimate: {_format_bytes(total_estimated)}", "info")
+    log(f"Available disk space: {_format_bytes(available)}", "info")
+    log(f"Required with buffer: {_format_bytes(required_with_buffer)}", "info")
     
     # If sufficient space, return all galleries
     if available < 0 or available >= required_with_buffer:
-        logger.info("Sufficient space available. Proceeding with download.")
+        log("Sufficient space available. Proceeding with download.", "info")
         return total_estimated, gallery_ids
     
     # Insufficient space - ask user if they want to download as many as fit
