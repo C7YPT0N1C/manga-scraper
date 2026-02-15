@@ -11,9 +11,9 @@ from pathlib import Path
 
 # Cache TTL: 3 hours
 TTL = 3 * 60 * 60
-SEARCH_HISTORY_FILENAME = "search_history.json"
+SEARCH_HISTORY_FILENAME = "(search_history).json"
 SELECTED_GALLERIES_FILENAME = "selected_galleries.json"
-MASTER_CACHE_FILENAME = "master_cache.json"
+MASTER_CACHE_FILENAME = "(master_cache).json"
 
 
 def get_cache_dir() -> Path:
