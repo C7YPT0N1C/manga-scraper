@@ -38,6 +38,7 @@ The **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)** Extension automa
 - OS: `Ubuntu / Linux server or VM`
 - RAM: `Recommended: ~4GB (scale based on need)`
 - Storage: **`1 Doujin is ~16MB, so you do the math.`**
+- Optional: `chafa` (for interactive "Read a gallery" mode)
 
 ### Installation Commands
 One Line Install: `wget -O mangascraper-install.sh https://git.anthrosys.uk/C7YPT0N1C/manga-scraper/raw/branch/main/mangascraper-install.sh && sudo bash ./mangascraper-install.sh --install`

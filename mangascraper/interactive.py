@@ -20,6 +20,16 @@ from mangascraper.core.api import (
 from mangascraper.core.cache import get_cache_key, load_cache, clear_cache, load_search_history, save_search_history
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
+READER_SETTINGS = {
+    "quality": "ultra",
+    "colors": "full",
+    "symbols": "block",
+    "dither": "none",
+    "oversample": False,
+    "raw_size": False,
+}
+READER_SETTINGS_PROMPTED = False
+
 ####################################################################################################
 # DISPLAY UTILITIES
 ####################################################################################################
@@ -291,6 +301,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
 
 
 def read_gallery_in_terminal(gallery_id: int):
+    global READER_SETTINGS_PROMPTED
     if not sys.platform.startswith("linux"):
         logger.warning("Read mode is Linux-only. Skipping.")
         return
@@ -298,8 +309,12 @@ def read_gallery_in_terminal(gallery_id: int):
         logger.warning("Read mode requires a TTY. Skipping.")
         return
     if shutil.which("chafa") is None:
-        logger.warning("Read mode requires 'chafa' on PATH. Skipping.")
-        return
+        install = input("chafa is required for reader. Install now? (y/n): ").strip().lower()
+        if install in ("y", "yes"):
+            subprocess.run(["sudo", "apt-get", "install", "-y", "chafa"], check=False)
+        if shutil.which("chafa") is None:
+            logger.warning("Read mode requires 'chafa' on PATH. Skipping.")
+            return
 
     meta = fetch_gallery_metadata(gallery_id)
     if not meta or not isinstance(meta, dict):
@@ -311,6 +326,28 @@ def read_gallery_in_terminal(gallery_id: int):
     if total_pages == 0:
         logger.warning(f"Gallery {gallery_id} has no pages to display")
         return
+
+    if not READER_SETTINGS_PROMPTED:
+        READER_SETTINGS_PROMPTED = True
+        choice = input("Reader quality (ultra/high/medium/low, default ultra): ").strip().lower()
+        if choice in ("medium", "m"):
+            READER_SETTINGS.update({"quality": "medium", "colors": 16})
+        elif choice in ("low", "l"):
+            READER_SETTINGS.update({"quality": "low", "colors": 8})
+        elif choice in ("high", "h"):
+            READER_SETTINGS.update({"quality": "high", "colors": 256})
+        elif choice in ("ultra", "u", ""):
+            pass
+        else:
+            logger.warning("Unknown quality option. Keeping default (ultra).")
+
+        oversample = input("Enable oversample render scale (may be slow)? (y/n): ").strip().lower()
+        if oversample in ("y", "yes"):
+            READER_SETTINGS["oversample"] = True
+
+        raw_size = input("Enable raw size mode (may overflow terminal)? (y/n): ").strip().lower()
+        if raw_size in ("y", "yes"):
+            READER_SETTINGS["raw_size"] = True
 
     session = get_session(referrer="Interactive Reader", status="return")
     base_tmp_dir = "/tmp/manga-scraper"
@@ -350,17 +387,27 @@ def read_gallery_in_terminal(gallery_id: int):
             page_path = _get_page_path(current_page)
             if page_path:
                 term_size = shutil.get_terminal_size(fallback=(80, 24))
-                render_cols = max(20, term_size.columns)
-                render_rows = max(10, term_size.lines - 4)
+                if READER_SETTINGS["raw_size"]:
+                    render_cols = max(1, term_size.columns)
+                    render_rows = max(1, term_size.lines)
+                else:
+                    render_cols = max(20, term_size.columns)
+                    render_rows = max(10, term_size.lines - 4)
                 chafa_args = [
                     "chafa",
                     f"--size={render_cols}x{render_rows}",
-                    "--symbols=block",
-                    "--colors=256",
-                    "--dither=none",
+                    f"--symbols={READER_SETTINGS['symbols']}",
+                    f"--colors={READER_SETTINGS['colors']}",
+                    f"--dither={READER_SETTINGS['dither']}",
+                    "--stretch",
                     page_path,
                 ]
-                subprocess.run(chafa_args, check=False)
+                if READER_SETTINGS["oversample"]:
+                    chafa_args.insert(-1, "--scale=2")
+                result = subprocess.run(chafa_args, check=False)
+                if result.returncode != 0 and READER_SETTINGS["oversample"]:
+                    fallback_args = [arg for arg in chafa_args if arg != "--scale=2"]
+                    subprocess.run(fallback_args, check=False)
             else:
                 logger.warning("Unable to display this page.")
 
@@ -1241,7 +1288,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [7] Search by tag\n"
             "  [8] Search by character\n"
             "  [9] Search by parody\n"
-            "  [t] Read a gallery\n"
+            "  [t] Read a gallery (Linux + chafa)\n"
             "\n"
             "Options:\n"
             "  [w] View recent searches\n"
