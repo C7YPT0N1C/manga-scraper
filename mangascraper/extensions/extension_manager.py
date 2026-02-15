@@ -908,49 +908,87 @@ def ensure_creator_cover(creator_folder: str):
 
 def repair_creator_cover(creator_folder: str):
     try:
+        logger.debug(f"[Cover Repair] Checking folder: {creator_folder}")
         if not os.path.isdir(creator_folder):
+            logger.debug(f"[Cover Repair] Folder does not exist: {creator_folder}")
             return
         if any(
             f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
             for f in os.listdir(creator_folder)
         ):
+            logger.debug(f"[Cover Repair] Cover file already exists in: {creator_folder}")
             return
 
         latest_id, entry_name, is_dir = find_latest_gallery_entry(creator_folder)
+        logger.debug(f"[Cover Repair] Latest gallery entry: id={latest_id}, name={entry_name}, is_dir={is_dir}")
         if not entry_name or latest_id is None:
+            logger.debug(f"[Cover Repair] No valid gallery entry found in: {creator_folder}")
             return
 
         if find_local_cover_and_link(creator_folder, entry_name, is_dir):
+            logger.debug(f"[Cover Repair] Cover restored from local sources for: {creator_folder}")
             return
 
         covers_folder = os.path.join(creator_folder, ".covers")
         if not os.path.isdir(covers_folder):
+            logger.debug(f"[Cover Repair] Creating covers folder: {covers_folder}")
             os.makedirs(covers_folder, exist_ok=True)
 
-        logger.debug(f"Cover not found locally; downloading for Gallery {latest_id}")
+        logger.debug(f"[Cover Repair] Cover not found locally; attempting download for Gallery {latest_id}")
         try:
             meta = fetch_gallery_metadata(latest_id)
+            logger.debug(f"[Cover Repair] Fetched metadata for Gallery {latest_id}: {meta is not None}")
             if not meta:
+                logger.warning(f"[Cover Repair] No metadata found for Gallery {latest_id}")
                 return
             urls = fetch_image_urls(meta, 1)
+            logger.debug(f"[Cover Repair] Fetched image URLs for Gallery {latest_id}: {urls}")
             if not urls:
+                logger.warning(f"[Cover Repair] No image URLs found for Gallery {latest_id}")
                 return
             url = urls[0]
             ext = os.path.splitext(url.split("?")[0])[1]
             if not ext:
                 ext = ".jpg"
             target = os.path.join(covers_folder, f"{entry_name}{ext}")
+            logger.debug(f"[Cover Repair] Downloading cover from {url} to {target}")
             session = get_session(referrer="Cover Repair", status="return")
             resp = session.get(url, timeout=(60, 60))
             resp.raise_for_status()
             with open(target, "wb") as f:
                 f.write(resp.content)
-            logger.info(f"Cover updated (downloaded) for Gallery {latest_id}: {target}")
+            logger.info(f"[Cover Repair] Cover updated (downloaded) for Gallery {latest_id}: {target}")
             link_creator_cover(creator_folder, target)
+            logger.debug(f"[Cover Repair] Cover linked for {creator_folder}: {target}")
         except Exception as e:
-            logger.warning(f"Failed to download missing cover for Gallery {latest_id}: {e}")
+            logger.warning(f"[Cover Repair] Failed to download missing cover for Gallery {latest_id}: {e}")
     except Exception as e:
-        logger.debug(f"Failed to restore cover file in {creator_folder}: {e}")
+        logger.debug(f"[Cover Repair] Failed to restore cover file in {creator_folder}: {e}")
+        
+def repair_covers_hook(download_path, referrer="Extension Manager"):
+    orchestrator.refresh_globals()
+    if orchestrator.dry_run:
+        logger.info(f"[DRY RUN] {referrer}: Repair covers hook inactive.")
+        return
+    if not download_path or not os.path.isdir(download_path):
+        logger.debug(f"[Cover Repair] No valid download path: {download_path}")
+        return
+    repaired = 0
+    for name in os.listdir(download_path):
+        creator_folder = os.path.join(download_path, name)
+        if os.path.isdir(creator_folder):
+            before = any(
+                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
+                for f in os.listdir(creator_folder)
+            )
+            repair_creator_cover(creator_folder)
+            after = any(
+                f.startswith("cover") and os.path.isfile(os.path.join(creator_folder, f))
+                for f in os.listdir(creator_folder)
+            )
+            if not before and after:
+                repaired += 1
+    logger.debug(f"{referrer}: Cover update pass complete. Restored {repaired} cover(s).")
 
 def cleanup_download_tree(
     download_path: str,
