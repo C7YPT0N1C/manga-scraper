@@ -10,7 +10,7 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database
-from mangascraper.core.cache import load_cache, save_cache
+from mangascraper.core.cache import load_cache, save_cache, load_general_cache, save_general_cache
 from tqdm import tqdm
 
 ################################################################################################################
@@ -941,28 +941,31 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
 
     if cache_key:
         cached_metadata = load_cache(cache_key)
-        if cached_metadata:
-            normalised_cached = {}
-            for gid, meta in cached_metadata.items():
-                try:
-                    gid_int = int(gid)
-                except (TypeError, ValueError):
-                    continue
-                normalised_cached[gid_int] = meta
-            cached_metadata = normalised_cached
-        if cached_metadata:
-            incomplete = [gid for gid, meta in cached_metadata.items() if not _is_complete_cached_meta(meta)]
-            if incomplete:
-                logger.debug(f"Dropping {len(incomplete)} cached galleries due to incomplete metadata")
-            for gid in incomplete:
-                cached_metadata.pop(gid, None)
-            if incomplete:
-                logger.info(f"Refreshing {len(incomplete)} cached galleries with incomplete metadata")
-        ids_to_fetch = [gid for gid in gallery_ids if gid not in cached_metadata]
-        if cached_metadata:
-            logger.info(f"Using {len(cached_metadata)} galleries from cache")
     else:
-        ids_to_fetch = gallery_ids
+        cached_metadata = load_general_cache()
+
+    if cached_metadata:
+        normalised_cached = {}
+        for gid, meta in cached_metadata.items():
+            try:
+                gid_int = int(gid)
+            except (TypeError, ValueError):
+                continue
+            normalised_cached[gid_int] = meta
+        cached_metadata = normalised_cached
+
+    if cached_metadata:
+        incomplete = [gid for gid, meta in cached_metadata.items() if not _is_complete_cached_meta(meta)]
+        if incomplete:
+            logger.debug(f"Dropping {len(incomplete)} cached galleries due to incomplete metadata")
+        for gid in incomplete:
+            cached_metadata.pop(gid, None)
+        if incomplete:
+            logger.info(f"Refreshing {len(incomplete)} cached galleries with incomplete metadata")
+
+    ids_to_fetch = [gid for gid in gallery_ids if gid not in cached_metadata]
+    if cached_metadata:
+        logger.info(f"Using {len(cached_metadata)} galleries from cache")
     
     # If all galleries are cached, return immediately
     if not ids_to_fetch:
@@ -1008,9 +1011,12 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     if failed_ids:
         logger.warning(f"Failed to fetch metadata for {len(failed_ids)} galleries (they will be skipped)")
     
-    # Save to cache if cache_key provided
-    if cache_key and metadata:
-        save_cache(cache_key, metadata)
+    # Save to cache
+    if metadata:
+        if cache_key:
+            save_cache(cache_key, metadata)
+        else:
+            save_general_cache(metadata)
     
     return metadata
 

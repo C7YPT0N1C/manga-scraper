@@ -228,6 +228,10 @@ def calculate_extension_download_path(extension_name: str) -> str:
 def sparse_clone(extension_name: str, url: str):
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
 
+    if os.path.exists(ext_folder):
+        shutil.rmtree(ext_folder)
+    os.makedirs(ext_folder, exist_ok=True)
+
     # Initialise empty repo
     subprocess.run(["git", "init", ext_folder], check=True)
     subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
@@ -401,39 +405,10 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
         return
 
     ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
-
-    # Remove old folder if reinstalling
-    if reinstall and os.path.exists(ext_folder):
-        shutil.rmtree(ext_folder)
-
     repo_url = ext_entry.get("repo_url", "")
-    if not os.path.exists(ext_folder):
-        os.makedirs(ext_folder, exist_ok=True)
-
-    def sparse_clone(extension_name: str, url: str):
-        ext_folder = os.path.join(EXTENSIONS_DIR, extension_name)
-
-        # Initialise empty repo
-        subprocess.run(["git", "init", ext_folder], check=True)
-        subprocess.run(["git", "-C", ext_folder, "remote", "add", "origin", url], check=True)
-        subprocess.run(["git", "-C", ext_folder, "config", "core.sparseCheckout", "true"], check=True)
-
-        # Configure sparse-checkout to fetch the top-level folder
-        sparse_file = os.path.join(ext_folder, ".git", "info", "sparse-checkout")
-        with open(sparse_file, "w", encoding="utf-8") as f:
-            f.write(f"{extension_name}/*\n")  # Fetch everything inside the repo folder
-
-        # Pull the branch (assumes 'main')
-        subprocess.run(["git", "-C", ext_folder, "pull", "origin", "main"], check=True)
-
-        # Check if repo folder exists inside ext_folder (double nesting)
-        repo_folder = os.path.join(ext_folder, extension_name)
-        if os.path.exists(repo_folder) and os.path.isdir(repo_folder):
-            for item in os.listdir(repo_folder):
-                shutil.move(os.path.join(repo_folder, item), ext_folder)
-            shutil.rmtree(repo_folder)  # Remove the now-empty nested folder
-
-        print(f"Clone complete: {extension_name} -> {ext_folder}")
+    if not repo_url:
+        logger.error(f"Extension '{extension_name}': Missing repo_url in manifest")
+        return
 
     try:
         log(f"Sparse cloning {extension_name} from {repo_url}...", "debug")
@@ -457,7 +432,11 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
     # Import and run install hook
     entry_point = ext_entry["entry_point"]
     module_name = f"mangascraper.extensions.{extension_name}.{entry_point.replace('.py', '')}"
-    module = importlib.import_module(module_name)
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as e:
+        logger.error(f"Extension '{extension_name}': Failed to load entry point after install: {e}")
+        return
     if hasattr(module, "install_extension"):
         module.install_extension()
         logger.warning(f"Extension '{extension_name}': Installed successfully.")

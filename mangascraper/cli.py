@@ -8,7 +8,7 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core.downloader import start_downloader
 from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
 from mangascraper.core.cache import get_cache_key, load_cache, ensure_cache_files_exist
-from mangascraper.extensions.extension_manager import install_selected_extension, uninstall_selected_extension
+from mangascraper.extensions.extension_manager import get_selected_extension, uninstall_selected_extension
 
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
@@ -913,7 +913,7 @@ def main():
     # Handle extension installation / uninstallation
     # ------------------------------------------------------------
     if args.install_extension:
-        install_selected_extension(args.install_extension)
+        get_selected_extension(args.install_extension, suppess_pre_run_hook=True)
         return
     
     if args.uninstall_extension:
