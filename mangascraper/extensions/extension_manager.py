@@ -229,12 +229,43 @@ def calculate_extension_download_path(extension_name: str) -> str:
 # ------------------------------------------------------------
 def sync_remote_extensions_repo(url: str, extension_name: str | None = None):
     log(f"Syncing extensions repo: {url}", "debug")
-    os.makedirs(os.path.dirname(REMOTE_EXTENSIONS_TMP), exist_ok=True)
-    if os.path.exists(REMOTE_EXTENSIONS_TMP):
-        shutil.rmtree(REMOTE_EXTENSIONS_TMP)
-    subprocess.run(["git", "clone", "--depth", "1", url, REMOTE_EXTENSIONS_TMP], check=True)
+    os.makedirs(REMOTE_EXTENSIONS_TMP, exist_ok=True)
 
-    log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
+    def _clear_directory(path: str):
+        for entry in os.listdir(path):
+            entry_path = os.path.join(path, entry)
+            if os.path.isdir(entry_path) and not os.path.islink(entry_path):
+                shutil.rmtree(entry_path)
+            else:
+                os.remove(entry_path)
+
+    def _read_manifest_versions(manifest_path: str) -> dict:
+        if not os.path.exists(manifest_path):
+            return {}
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        return {
+            ext.get("name"): ext.get("version")
+            for ext in manifest.get("extensions", [])
+            if ext.get("name")
+        }
+
+    tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
+    tmp_versions = _read_manifest_versions(tmp_manifest_path)
+    remote_versions = {
+        ext.get("name"): ext.get("version")
+        for ext in fetch_remote_manifest().get("extensions", [])
+        if ext.get("name")
+    }
+
+    needs_refresh = not tmp_versions or tmp_versions != remote_versions
+    if needs_refresh:
+        log("Remote manifest differs or missing; refreshing tmp repo...", "debug")
+        _clear_directory(REMOTE_EXTENSIONS_TMP)
+        subprocess.run(["git", "clone", "--depth", "1", url, REMOTE_EXTENSIONS_TMP], check=True)
+        log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
+    else:
+        log("Tmp repo is up to date; reusing existing clone.", "debug")
 
     if extension_name:
         source_dir = os.path.join(REMOTE_EXTENSIONS_TMP, extension_name)
