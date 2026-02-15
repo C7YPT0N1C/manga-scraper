@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal
+import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile
 
 from tqdm.contrib.concurrent import thread_map
 
@@ -13,6 +13,9 @@ from mangascraper.core.api import (
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
 )
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
+
+ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
+
 
 ####################################################################################################
 # Global Variables
@@ -69,6 +72,36 @@ def get_available_disk_space(path: str) -> int:
     except Exception as e:
         logger.warning(f"Failed to check disk space: {e}")
         return -1  # Return -1 if we can't check
+
+def _is_network_share(path: str) -> bool:
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        mount_path = os.path.realpath(path)
+        best_match = ("", "")
+        with open("/proc/mounts", "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mount_point = parts[1]
+                fs_type = parts[2]
+                if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
+                    if len(mount_point) > len(best_match[0]):
+                        best_match = (mount_point, fs_type)
+        return best_match[1] in {
+            "nfs",
+            "nfs4",
+            "cifs",
+            "smbfs",
+            "sshfs",
+            "fuse.sshfs",
+            "davfs",
+            "fuse.glusterfs",
+            "fuse.ceph",
+        }
+    except Exception:
+        return False
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -163,7 +196,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
     log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}", "info")
 
-def build_gallery_path(meta, iteration: dict = None):
+def build_gallery_path(meta, iteration: dict = None, base_path: str | None = None):
     """
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
     """
@@ -175,7 +208,7 @@ def build_gallery_path(meta, iteration: dict = None):
             gallery_metas[k] = v
 
     template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
-    path_parts = [download_location]
+    path_parts = [base_path or download_location]
 
     for key in template:
         value = gallery_metas.get(key, "Unknown")
@@ -230,6 +263,36 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         log_clarification()
         update_skipped_galleries(False, meta, "No Pages.")
         return False
+
+        def _is_network_share(path: str) -> bool:
+            if not sys.platform.startswith("linux"):
+                return False
+            try:
+                mount_path = os.path.realpath(path)
+                best_match = ("", "")
+                with open("/proc/mounts", "r", encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) < 3:
+                            continue
+                        mount_point = parts[1]
+                        fs_type = parts[2]
+                        if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
+                            if len(mount_point) > len(best_match[0]):
+                                best_match = (mount_point, fs_type)
+                return best_match[1] in {
+                    "nfs",
+                    "nfs4",
+                    "cifs",
+                    "smbfs",
+                    "sshfs",
+                    "fuse.sshfs",
+                    "davfs",
+                    "fuse.glusterfs",
+                    "fuse.ceph",
+                }
+            except Exception:
+                return False
 
     # Skip only if NOT in dry-run
     if not orchestrator.dry_run and os.path.exists(doujin_folder):
@@ -312,7 +375,12 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
 # ARCHIVE CONVERSION
 ####################################################################################################
 
-def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: str):
+def finalise_gallery_format(
+    gallery_id: int,
+    gallery_folder: str,
+    format_type: str,
+    final_parent_dir: str | None = None,
+):
     """
     Convert downloaded gallery folder to specified format (zip or cbz).
     Cover extraction is handled by extension hooks.
@@ -337,7 +405,8 @@ def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: s
     parent_dir = os.path.dirname(gallery_folder)
     folder_name = os.path.basename(gallery_folder)
     archive_ext = ".cbz" if format_type == "cbz" else ".zip"
-    archive_path = os.path.join(parent_dir, folder_name + archive_ext)
+    archive_path = os.path.join(final_parent_dir or parent_dir, folder_name + archive_ext)
+    temp_archive_path = None
     
     try:
         # Get list of image files sorted for proper reading order
@@ -350,14 +419,30 @@ def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: s
             logger.warning(f"Downloader: No images found in {gallery_folder}")
             return gallery_folder
         
-        logger.debug(f"Downloader: Creating {format_type} archive for Gallery {gallery_id}: {archive_path}")
+        use_temp_archive = _is_network_share(final_parent_dir or parent_dir)
+        if use_temp_archive:
+            os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
+            fd, temp_archive_path = tempfile.mkstemp(
+                prefix=f"{folder_name}-",
+                suffix=archive_ext,
+                dir=ARCHIVE_TEMP_ROOT,
+            )
+            os.close(fd)
+            archive_target = temp_archive_path
+        else:
+            archive_target = archive_path
+
+        logger.debug(f"Downloader: Creating {format_type} archive for Gallery {gallery_id}: {archive_target}")
         
         # Create zip/cbz archive with images in sorted order
-        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(archive_target, 'w', zipfile.ZIP_DEFLATED) as zf:
             for img_file in image_files:
                 img_path = os.path.join(gallery_folder, img_file)
                 arcname = os.path.join(folder_name, img_file)  # Keep folder structure in archive
                 zf.write(img_path, arcname=arcname)
+
+        if use_temp_archive:
+            os.replace(archive_target, archive_path)
         
         logger.debug(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
         
@@ -365,6 +450,11 @@ def finalise_gallery_format(gallery_id: int, gallery_folder: str, format_type: s
         
     except Exception as e:
         logger.error(f"Downloader: Failed to create {format_type} archive for Gallery {gallery_id}: {e}")
+        if temp_archive_path and os.path.exists(temp_archive_path):
+            try:
+                os.unlink(temp_archive_path)
+            except Exception:
+                pass
         return gallery_folder
 
 ####################################################################################################
@@ -427,10 +517,25 @@ def process_galleries(batch_ids):
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
+                use_local_archive = (
+                    orchestrator.gallery_format != "directory"
+                    and _is_network_share(download_location)
+                )
+                archive_parent_dir = None
+                if use_local_archive:
+                    os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
+                    archive_parent_dir = os.path.dirname(
+                        build_gallery_path(meta, {"creator": [creators[0]]})
+                    )
+
                 # --- Prepare primary folder (first creator only) ---
                 primary_creator = make_filesystem_safe(creators[0]) if creators else "Unknown"
                 log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
-                primary_folder = build_gallery_path(meta, {"creator": [creators[0]]})
+                primary_folder = build_gallery_path(
+                    meta,
+                    {"creator": [creators[0]]},
+                    base_path=ARCHIVE_TEMP_ROOT if use_local_archive else None,
+                )
 
                 if orchestrator.dry_run:
                     log(f"[DRY RUN] Downloader: Would create primary folder for {creators[0]}: {primary_folder}", "debug")
@@ -469,7 +574,12 @@ def process_galleries(batch_ids):
                 finalised_path = primary_folder
                 if not orchestrator.dry_run:
                     if orchestrator.gallery_format != "directory":
-                        finalised_path = finalise_gallery_format(gallery_id, primary_folder, orchestrator.gallery_format)
+                        finalised_path = finalise_gallery_format(
+                            gallery_id,
+                            primary_folder,
+                            orchestrator.gallery_format,
+                            final_parent_dir=archive_parent_dir,
+                        )
 
                 # --- Symlink all additional creators to the finalised path (archive or folder) ---
                 for extra_creator in creators[1:]:
@@ -492,6 +602,8 @@ def process_galleries(batch_ids):
 
                 if not orchestrator.dry_run:
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    if use_local_archive and os.path.isdir(primary_folder):
+                        shutil.rmtree(primary_folder, ignore_errors=True)
                     db.mark_gallery_completed(gallery_id)
                     
                     # Track actual size downloaded
@@ -552,14 +664,26 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
             total_estimated += default_size
     
     # Check available space
-    available = get_available_disk_space(download_location)
+    staging_root = download_location
+    if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
+        os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
+        staging_root = ARCHIVE_TEMP_ROOT
+    available = get_available_disk_space(staging_root)
+
+    # Add buffer for parallel downloads and temporary overhead
+    avg_gallery_size = total_estimated / max(1, len(gallery_ids))
+    parallel_galleries = min(len(gallery_ids), max(1, orchestrator.threads_galleries))
+    parallel_buffer = avg_gallery_size * parallel_galleries
+    safety_buffer = max(512 * 1024 * 1024, total_estimated * 0.1)
+    required_with_buffer = total_estimated + parallel_buffer + safety_buffer
     
     log_clarification()
     logger.info(f"Total download size estimate: {_format_bytes(total_estimated)}")
     logger.info(f"Available disk space: {_format_bytes(available)}")
+    logger.info(f"Required with buffer: {_format_bytes(required_with_buffer)}")
     
     # If sufficient space, return all galleries
-    if available < 0 or available >= total_estimated:
+    if available < 0 or available >= required_with_buffer:
         logger.info("Sufficient space available. Proceeding with download.")
         return total_estimated, gallery_ids
     
@@ -567,16 +691,17 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     log_clarification()
     logger.warning(
         f"Insufficient space for all galleries!\n"
-        f"  Required: {_format_bytes(total_estimated)}\n"
+        f"  Required (with buffer): {_format_bytes(required_with_buffer)}\n"
         f"  Available: {_format_bytes(available)}"
     )
     
     # Calculate how many galleries can fit
     running_total = 0
+    available_for_galleries = max(0, available - parallel_buffer - safety_buffer)
     galleries_that_fit = []
     
     for gallery_id, size in gallery_sizes:
-        if running_total + size <= available:
+        if running_total + size <= available_for_galleries:
             galleries_that_fit.append(gallery_id)
             running_total += size
         else:
@@ -585,7 +710,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     log_clarification()
     logger.info(
         f"You can download {len(galleries_that_fit)} out of {len(gallery_ids)} galleries "
-        f"({_format_bytes(running_total)} total)"
+        f"({_format_bytes(running_total)} total, buffered)"
     )
     
     # Prompt user

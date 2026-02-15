@@ -1294,7 +1294,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [7] Search by tag\n"
             "  [8] Search by character\n"
             "  [9] Search by parody\n"
-            "  [q] Read a gallery\n"
+            "  [q] Read a gallery (don't expect high quality lmfaoooo)\n"
             "\n"
             "Options:\n"
             "  [w] View recent searches\n"

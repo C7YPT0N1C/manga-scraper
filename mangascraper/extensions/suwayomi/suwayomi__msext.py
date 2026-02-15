@@ -1357,19 +1357,29 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
+        temp_root = "/tmp/manga-scraper/archive_temp"
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            if not os.path.isdir(creator_folder):
+            temp_creator_folder = os.path.join(temp_root, creator_name)
+
+            search_folders = []
+            if os.path.isdir(creator_folder):
+                search_folders.append(creator_folder)
+            if os.path.isdir(temp_creator_folder):
+                search_folders.append(temp_creator_folder)
+            if not search_folders:
                 continue
 
             gallery_prefix = f"({gallery_id})"
-            gallery_items = [
-                f for f in os.listdir(creator_folder)
-                if os.path.isdir(os.path.join(creator_folder, f)) and f.startswith(gallery_prefix)
-            ]
-            if gallery_items:
+            for search_folder in search_folders:
+                gallery_items = [
+                    f for f in os.listdir(search_folder)
+                    if os.path.isdir(os.path.join(search_folder, f)) and f.startswith(gallery_prefix)
+                ]
+                if not gallery_items:
+                    continue
                 gallery_items.sort()
-                gallery_path = os.path.join(creator_folder, gallery_items[0])
+                gallery_path = os.path.join(search_folder, gallery_items[0])
                 if os.path.isdir(gallery_path):
                     gallery_paths[creator_name] = gallery_path
 
