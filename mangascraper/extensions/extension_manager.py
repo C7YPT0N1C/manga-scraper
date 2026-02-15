@@ -817,16 +817,21 @@ def find_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | No
             continue
         full_path = os.path.join(creator_folder, name)
         is_dir = os.path.isdir(full_path)
-        is_archive = name.endswith(".cbz") or name.endswith(".zip")
+        is_cbz = name.endswith(".cbz") and os.path.isfile(full_path)
+        is_zip = name.endswith(".zip") and os.path.isfile(full_path)
+        is_archive = is_cbz or is_zip
         if not (is_dir or is_archive):
             continue
         entry_id = parse_gallery_id(name)
         if entry_id is None:
             continue
-        entry_name = name
+        # For archives, strip extension for entry_name, and set is_dir False
         if is_archive:
             entry_name = os.path.splitext(name)[0]
-        entries.append((entry_id, entry_name, is_dir))
+            entries.append((entry_id, entry_name, False))
+        else:
+            entry_name = name
+            entries.append((entry_id, entry_name, True))
 
     if not entries:
         return None, None, False
