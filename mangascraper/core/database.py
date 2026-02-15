@@ -56,6 +56,25 @@ def init_db():
             notes TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS Galleries (
+            id INTEGER PRIMARY KEY,
+            raw_title TEXT,
+            clean_title TEXT,
+            num_pages INTEGER,
+            creator_id INTEGER,
+            language TEXT,
+            tags TEXT,
+            status TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            download_path TEXT,
+            cover_path TEXT,
+            extension_used TEXT,
+            favourite INTEGER DEFAULT 0,
+            rating REAL,
+            FOREIGN KEY (creator_id) REFERENCES Creators(id)
+        );
+
         CREATE TABLE IF NOT EXISTS GalleryTags (
             gallery_id INTEGER PRIMARY KEY,
             tag_ids TEXT,
@@ -67,32 +86,13 @@ def init_db():
             language_ids TEXT,
             FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
         );
-            favourite INTEGER DEFAULT 0,
-            rating REAL,
-            FOREIGN KEY (creator_id) REFERENCES Creators(id)
-        );
-        
-        CREATE TABLE IF NOT EXISTS GalleryTags (
-            gallery_id INTEGER,
-            tag_id INTEGER,
-            PRIMARY KEY (gallery_id, tag_id),
-            FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
-            FOREIGN KEY (tag_id) REFERENCES Tags(id)
-        );
 
         CREATE TABLE IF NOT EXISTS Tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
             popularity INTEGER
         );
-        
-        CREATE TABLE IF NOT EXISTS GalleryLanguages (
-            language TEXT,
-            gallery_id INTEGER,
-            PRIMARY KEY (gallery_id, language),
-            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
-        );
-        
+
         CREATE TABLE IF NOT EXISTS Languages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
