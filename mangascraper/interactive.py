@@ -467,13 +467,12 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
+    cached_ids = load_selected_galleries()
+    selected_ids = cached_ids
+
     if not selected_ids:
-        cached_ids = load_selected_galleries()
-        if cached_ids:
-            selected_ids = cached_ids
-        else:
-            logger.info("No galleries selected yet.")
-            return []
+        logger.info("No galleries selected yet.")
+        return []
     
     unique_ids = list(dict.fromkeys(selected_ids))
     logger.info(f"Currently selected: {len(unique_ids)} unique galleries")
@@ -1742,12 +1741,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        persist_selected_ids()
                         continue
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
                         selected_metadata.update(new_metadata)
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        persist_selected_ids()
                 else:
                     if not ids:
                         if _check_no_results_and_prompt_filters():
