@@ -131,7 +131,7 @@ def parse_args():
         "--file",
         dest="file",
         type=str,
-        nargs="*",                  # Makes the argument optional
+        nargs="?",
         const=[DEFAULT_DOUJIN_TXT_PATH],  # Use default if --file is passed without a value
         help="Usage: --file [PATH] [ARCHIVE]. PATH defaults to the .env list. ARCHIVE is archive=true or archive=false.",
     )
