@@ -214,6 +214,7 @@ def load_search_history(max_items: int = 10) -> list[dict]:
                     'sort': item.get('sort'),
                     'start_page': item.get('start_page'),
                     'end_page': item.get('end_page'),
+                    'archive_mode': bool(item.get('archive_mode', False)),
                 })
             if max_items and len(cleaned) > max_items:
                 cleaned = cleaned[-max_items:]
@@ -251,6 +252,7 @@ def save_search_history(items: list[dict], max_items: int = 10):
                 'sort': item.get('sort'),
                 'start_page': item.get('start_page'),
                 'end_page': item.get('end_page'),
+                'archive_mode': bool(item.get('archive_mode', False)),
             })
         if max_items and len(safe_items) > max_items:
             safe_items = safe_items[-max_items:]

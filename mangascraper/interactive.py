@@ -298,20 +298,8 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         logger.info("No galleries selected yet.")
         return []
     
-    # Ask if user wants to fetch metadata
-    log_clarification()
-    show_metadata = input("Display metadata for selected galleries? (y/n): ").strip().lower() == "y"
-    
     unique_ids = list(dict.fromkeys(selected_ids))
     logger.info(f"Currently selected: {len(unique_ids)} unique galleries")
-    
-    if not show_metadata:
-        # Just show the IDs without metadata
-        log_clarification()
-        print(f"Selected {len(unique_ids)} galleries (ID view):")
-        for idx, gid in enumerate(unique_ids, 1):
-            print(f"  {idx}. ID: {gid}")
-        return unique_ids
     
     # Use cached metadata if provided, otherwise fetch
     if cached_metadata:
@@ -1077,6 +1065,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         if end_page_input == "all":
             return None
         return int(end_page_input) if end_page_input.isdigit() else default
+
+    def prompt_yes_no(prompt: str) -> bool:
+        while True:
+            value = input(prompt).strip().lower()
+            if value in ("y", "yes"):
+                return True
+            if value in ("n", "no"):
+                return False
+            logger.warning("Invalid input. Enter y or n.")
     
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
@@ -1099,6 +1096,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         sort_val: str | None = None,
         start_page: int | None = None,
         end_page: int | None = None,
+        archive_mode: bool = False,
     ):
         entry = {
             "type": search_type,
@@ -1107,6 +1105,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "sort": sort_val,
             "start_page": start_page,
             "end_page": end_page,
+            "archive_mode": archive_mode,
         }
         search_history.append(entry)
         save_search_history(list(search_history), search_history_max)
@@ -1223,8 +1222,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     logger.info("Search cancelled.")
                     continue
             
-            fetch_all = input("Skip viewing results and add all galleries to download? (y/n): ").strip().lower() == "y"
-            if fetch_all:
+            fetch_all = False
+            view_results = prompt_yes_no("View results? (y/n): ")
+            if not view_results:
+                add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
+                if not add_all:
+                    logger.info("No galleries added. Returning to menu.")
+                    continue
+                fetch_all = True
                 if not unattended:
                     log_clarification()
                     logger.warning(
@@ -1471,7 +1476,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 log_clarification()
                 print("Recent searches (most recent first):\n")
                 for idx, entry in enumerate(reversed(list(search_history)), 1):
-                    print(f"  [{idx}] {entry['type']}: {entry['value']}")
+                    label = f"{entry['type']}: {entry['value']}"
+                    if entry.get("archive_mode"):
+                        label = f"archive {entry['type']}: {entry['value']}"
+                    print(f"  [{idx}] {label}")
                 
                 try:
                     selection = int(input("\nSelect search to re-run (1-{}) or 0 to cancel: ".format(len(search_history))).strip())
@@ -1480,6 +1488,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         search_type = selected_search["type"]
                         search_value = selected_search["value"]
                         cache_key = selected_search.get("cache_key")
+                        archive_mode = bool(selected_search.get("archive_mode", False))
                         default_sort = selected_search.get("sort") or DEFAULT_PAGE_SORT
                         default_start = selected_search.get("start_page") or DEFAULT_PAGE_RANGE_START
                         default_end = selected_search.get("end_page")
@@ -1506,7 +1515,14 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                             end_page = parse_end_page(end_page_input, fallback_end)
                         
                         logger.info(f"Re-running search: {search_type}={search_value}...")
-                        ids, rerun_cache_key = fetch_gallery_ids_with_fallback(search_type, search_value, sort_val, start_page, end_page)
+                        ids, rerun_cache_key = fetch_gallery_ids_with_fallback(
+                            search_type,
+                            search_value,
+                            sort_val,
+                            start_page,
+                            end_page,
+                            fetch_as_archival=archive_mode,
+                        )
                         
                         # Check for search errors
                         if rerun_cache_key is None:
@@ -1545,10 +1561,16 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 sort_val = get_valid_sort_value(sort_val)
                 start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                 start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
-                end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
-                fetch_all = input("Skip viewing results and add all galleries to download? (y/n): ").strip().lower() == "y"
-                if fetch_all:
+                end_page_input = input("Enter end page (default: all, or 'all' for all pages): ").strip()
+                end_page = parse_end_page(end_page_input, None)
+                fetch_all = False
+                view_results = prompt_yes_no("View results? (y/n): ")
+                if not view_results:
+                    add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
+                    if not add_all:
+                        logger.info("No galleries added. Returning to menu.")
+                        continue
+                    fetch_all = True
                     if not unattended:
                         log_clarification()
                         logger.warning(
@@ -1563,7 +1585,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                             logger.info("Add to download queue cancelled.")
                             continue
                     end_page = None
-                elif end_page - start_page > 10:
+                elif end_page is not None and end_page - start_page > 10:
                     if not unattended:
                         log_clarification()
                         logger.warning(
@@ -1593,7 +1615,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 if ids and cache_key:
                     cache_key = get_cache_key("archive", "all" if fetch_all else sort_val)
-                    add_search_history("archive", sort_val, cache_key, sort_val, start_page, end_page)
+                    add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=True)
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
@@ -1633,10 +1655,16 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         sort_val = get_valid_sort_value(sort_val)
                         start_page = input(f"Enter start page (default: {DEFAULT_PAGE_RANGE_START}): ").strip()
                         start_page = int(start_page) if start_page.isdigit() else DEFAULT_PAGE_RANGE_START
-                        end_page_input = input(f"Enter end page (default: {DEFAULT_PAGE_RANGE_END}, or 'all' for all pages): ").strip()
-                        end_page = parse_end_page(end_page_input, DEFAULT_PAGE_RANGE_END)
-                        fetch_all = input("Skip viewing results and add all galleries to download? (y/n): ").strip().lower() == "y"
-                        if fetch_all:
+                        end_page_input = input("Enter end page (default: all, or 'all' for all pages): ").strip()
+                        end_page = parse_end_page(end_page_input, None)
+                        fetch_all = False
+                        view_results = prompt_yes_no("View results? (y/n): ")
+                        if not view_results:
+                            add_all = prompt_yes_no("Add all galleries to download? (y/n): ")
+                            if not add_all:
+                                logger.info("No galleries added. Returning to menu.")
+                                continue
+                            fetch_all = True
                             if not unattended:
                                 log_clarification()
                                 logger.warning(
@@ -1651,7 +1679,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                                     logger.info("Add to download queue cancelled.")
                                     continue
                             end_page = None
-                        elif end_page - start_page > 10:
+                        elif end_page is not None and end_page - start_page > 10:
                             if not unattended:
                                 log_clarification()
                                 logger.warning(
@@ -1681,7 +1709,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         
                         if ids and cache_key:
                             cache_key = get_cache_key("archive", query_value)
-                            add_search_history("archive", query_value, cache_key, sort_val, start_page, end_page)
+                            add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=True)
                             new_ids, new_metadata = display_gallery_results(ids, cache_key)
                             if new_ids:
                                 selected_ids.extend(new_ids)
