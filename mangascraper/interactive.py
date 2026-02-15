@@ -1585,6 +1585,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         invalid.append(part)
                 if invalid:
                     logger.warning(f"Ignoring invalid gallery IDs: {', '.join(invalid)}")
+                if len(ids) > 25:
+                    logger.warning("You can enter at most 25 gallery IDs at a time. Use --file in the CLI for larger lists.")
+                    continue
                 if ids:
                     selected_ids.extend(ids)
                     persist_selected_ids()

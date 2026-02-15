@@ -361,9 +361,13 @@ def _validate_args(args):
         raise ValueError("--min-sleep must be <= --max-sleep.")
     if args.output_folder is not None and not str(args.output_folder).strip():
         raise ValueError("--output-folder must be a non-empty path.")
+    if args.galleries:
+        ids = _parse_galleries_arg(args.galleries, warn_invalid=False)
+        if len(ids) > 25:
+            raise ValueError("--ids supports at most 25 IDs. Use --file for larger lists.")
 
 
-def _parse_galleries_arg(galleries_value: str) -> list[int]:
+def _parse_galleries_arg(galleries_value: str, warn_invalid: bool = True) -> list[int]:
     ids = []
     invalid = []
     for part in galleries_value.split(","):
@@ -375,7 +379,7 @@ def _parse_galleries_arg(galleries_value: str) -> list[int]:
         else:
             invalid.append(part)
 
-    if invalid:
+    if invalid and warn_invalid:
         print(f"[WARN] Ignoring invalid gallery IDs: {', '.join(invalid)}", file=sys.stderr)
     return ids
 
