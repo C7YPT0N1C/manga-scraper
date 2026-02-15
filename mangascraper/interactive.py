@@ -1279,6 +1279,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             if ids and cache_key:
                 cache_key = get_cache_key("homepage", sort_val)
                 add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
+                if archive_mode:
+                    selected_ids.extend(ids)
+                    logger.info(f"Added {len(ids)} galleries to download list.")
+                    logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                    continue
                 new_ids, new_metadata = display_gallery_results(ids, cache_key)
                 if new_ids:
                     selected_ids.extend(new_ids)
@@ -1418,6 +1423,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if ids and cache_key:
                     cache_key = get_cache_key("search", search_query)
                     add_search_history("search", search_query, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
+                    if archive_mode:
+                        selected_ids.extend(ids)
+                        logger.info(f"Added {len(ids)} galleries to download list.")
+                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        continue
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
@@ -1488,6 +1498,11 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 if ids and cache_key:
                     cache_key = get_cache_key(query_type, query_value)
                     add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
+                    if archive_mode:
+                        selected_ids.extend(ids)
+                        logger.info(f"Added {len(ids)} galleries to download list.")
+                        logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
+                        continue
                     new_ids, new_metadata = display_gallery_results(ids, cache_key)
                     if new_ids:
                         selected_ids.extend(new_ids)
