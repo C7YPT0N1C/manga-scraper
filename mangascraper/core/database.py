@@ -130,76 +130,91 @@ def init_db():
 
         conn.commit()
 
-# ===============================
-# GALLERY LINKING HELPERS
-# ===============================
-def upsert_creator(name, display_name=None):
+# Consolidated update for creator metadata
+def update_creator_metadata(creator_name, display_name, download_path=None):
+    """
+    Update all relevant fields for a creator, using the latest metadata.
+    - display_name: cleaned creator name (from latest gallery metadata, fallback to CachedMetadata)
+    - download_path: path to creator's download folder
+    - first_seen: set if not already set
+    - last_updated: always set to now
+    - total_galleries: count of galleries linked to this creator
+    - most_popular_tags: top 15 tags by count across all galleries for this creator
+    """
+    now = datetime.now(timezone.utc).isoformat()
     with lock, _connect() as conn:
         cursor = conn.cursor()
+        # Upsert creator
         cursor.execute(
-            "INSERT INTO Creators (name, display_name) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
-            (name, display_name)
+            "INSERT INTO Creators (name, display_name, download_path, first_seen, last_updated, total_galleries, most_popular_tags) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO NOTHING",
+            (creator_name, display_name, download_path, now, now, 0, "[]")
         )
-        cursor.execute("SELECT id FROM Creators WHERE name=?", (name,))
-        creator_id = cursor.fetchone()[0]
+        cursor.execute("SELECT id, first_seen FROM Creators WHERE name=?", (creator_name,))
+        row = cursor.fetchone()
+        if not row:
+            return
+        creator_id, first_seen = row
+        # Count total galleries
+        cursor.execute("SELECT COUNT(*) FROM Galleries WHERE creator_id=?", (creator_id,))
+        total_galleries = cursor.fetchone()[0]
+        # Calculate most popular tags
+        cursor.execute("SELECT tags FROM Galleries WHERE creator_id=? AND tags IS NOT NULL", (creator_id,))
+        tag_counts = {}
+        for (tags_json,) in cursor.fetchall():
+            if tags_json:
+                try:
+                    tags = json.loads(tags_json)
+                    for tag in tags:
+                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                except Exception:
+                    continue
+        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+        most_popular_tags = [tag for tag, _ in sorted_tags[:15]]
         # Update all fields except notes
         cursor.execute(
-            "UPDATE Creators SET display_name=?, last_updated=? WHERE id=?",
-            (display_name, datetime.now(timezone.utc).isoformat(), creator_id)
-        )
-        return creator_id
-
-def upsert_tag(name, tag_type=None):
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Tags (name, type) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
-            (name, tag_type)
-        )
-        cursor.execute("SELECT id FROM Tags WHERE name=?", (name,))
-        return cursor.fetchone()[0]
-
-def link_gallery_tags(gallery_id, tag_names):
-    tag_ids = []
-    for tag_name in tag_names:
-        tag_id = upsert_tag(tag_name)
-        tag_ids.append(tag_id)
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?) ON CONFLICT(gallery_id) DO UPDATE SET tag_ids=excluded.tag_ids",
-            (gallery_id, json.dumps(tag_ids))
+            "UPDATE Creators SET display_name=?, download_path=?, last_updated=?, total_galleries=?, most_popular_tags=?, first_seen=COALESCE(first_seen, ?) WHERE id=?",
+            (display_name, download_path, now, total_galleries, json.dumps(most_popular_tags), first_seen or now, creator_id)
         )
         conn.commit()
 
-def link_gallery_creator(gallery_id, creator_name):
-    creator_id = upsert_creator(creator_name)
+# Consolidated update for gallery metadata
+def update_gallery_metadata(gallery_id, raw_title, clean_title, language, tags, cover_path, creator_name=None, download_path=None, extension_used=None, num_pages=None):
+    """
+    Update all relevant fields for a gallery, always overwriting with latest values.
+    """
     with lock, _connect() as conn:
         cursor = conn.cursor()
+        # Optionally upsert creator and get creator_id
+        creator_id = None
+        if creator_name:
+            cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
+            row = cursor.fetchone()
+            if row:
+                creator_id = row[0]
         cursor.execute(
-            "UPDATE Galleries SET creator_id=? WHERE id=?",
-            (creator_id, gallery_id)
+            "INSERT INTO Galleries (id, raw_title, clean_title, language, tags, cover_path, creator_id, download_path, extension_used, num_pages) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, language=excluded.language, tags=excluded.tags, cover_path=excluded.cover_path, creator_id=excluded.creator_id, download_path=excluded.download_path, extension_used=excluded.extension_used, num_pages=excluded.num_pages",
+            (gallery_id, raw_title, clean_title, json.dumps(language) if isinstance(language, list) else language, json.dumps(tags), cover_path, creator_id, download_path, extension_used, num_pages)
         )
         conn.commit()
 
-def link_gallery_languages(gallery_id, languages):
-    language_ids = []
-    for lang_name in languages:
-        # Upsert language in Languages table
-        with lock, _connect() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO Languages (name) VALUES (?) ON CONFLICT(name) DO NOTHING",
-                (lang_name,)
-            )
-            cursor.execute("SELECT id FROM Languages WHERE name=?", (lang_name,))
-            lang_id = cursor.fetchone()[0]
-            language_ids.append(lang_id)
+
+# ===============================
+# GENERIC FIELD UPDATE HELPER
+# ===============================
+def update_field(table, key_field, key_value, field, value):
+    """
+    Update a single field in a table for a given key.
+    Example: update_field('Creators', 'name', 'John Doe', 'display_name', 'John D.')
+    """
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?) ON CONFLICT(gallery_id) DO UPDATE SET language_ids=excluded.language_ids",
-            (gallery_id, json.dumps(language_ids))
+            f"UPDATE {table} SET {field}=? WHERE {key_field}=?",
+            (value, key_value)
         )
         conn.commit()
 

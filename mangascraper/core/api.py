@@ -36,6 +36,8 @@ _UNDERSCORE_PATTERN = re.compile(r"_+")
 _SYMBOL_TRANSLATION_TABLE = None
 
 def _build_symbol_translation_table():
+    import logging
+    logger = logging.getLogger("mangascraper.api")
     """Build a translation table for symbol replacements (called once at module load)."""
     global _SYMBOL_TRANSLATION_TABLE
     trans_dict = {ord(symbol): replacement for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items()}
@@ -247,11 +249,15 @@ def clean_title(meta_or_title):
     )
     new_broken = symbols.difference(known_symbols)
 
-    # Add new symbols to the Database
+
+    # Add new symbols to the Database, with logging
     if new_broken:
         for s in new_broken:
             possible_broken_symbols[s] = "_"
+        logger.info(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
         database.save_broken_symbols(possible_broken_symbols)
+    else:
+        logger.info("[BrokenSymbols] No new broken symbols detected. No database update needed.")
 
     # Remove content inside [] or {} brackets (use pre-compiled regex)
     title = _BRACKET_PATTERN.sub("", title)
