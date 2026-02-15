@@ -38,12 +38,13 @@ atexit.register(close_connection)
 # ===============================
 def init_db():
     orchestrator.refresh_globals()
-    
     os.makedirs(DATA_DIR, exist_ok=True)
     with lock, _connect() as conn:
         c = conn.cursor()
-
-        c.executescript("""
+        c.executescript(f"""
+        CREATE TABLE IF NOT EXISTS SelectedGalleries (
+            id INTEGER PRIMARY KEY
+        );
         CREATE TABLE IF NOT EXISTS Creators (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
@@ -89,7 +90,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            count TEXT -- JSON array: [{creator_id: count}, ...]
+            count TEXT
         );
 
         CREATE TABLE IF NOT EXISTS Languages (
@@ -125,7 +126,6 @@ def init_db():
             ids TEXT
         );
         """)
-
         conn.commit()
 
 ####################################################################################################################
@@ -158,11 +158,25 @@ def update_creator_metadata(creator_name, display_name, download_path=None):
         if not row:
             return
         creator_id, first_seen = row
-        # Count total galleries
-        cursor.execute("SELECT COUNT(*) FROM Galleries WHERE creator_id=?", (creator_id,))
+        # Count total galleries (search for creator_id in creator_ids JSON array)
+        cursor.execute("""
+            SELECT COUNT(*) FROM Galleries
+            WHERE EXISTS (
+                SELECT 1 FROM json_each(Galleries.creator_ids)
+                WHERE json_each.value = ?
+            )
+        """, (creator_id,))
         total_galleries = cursor.fetchone()[0]
         # Calculate most popular tags (by tag id)
-        cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (SELECT id FROM Galleries WHERE creator_id=?)", (creator_id,))
+        cursor.execute("""
+            SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (
+                SELECT id FROM Galleries
+                WHERE EXISTS (
+                    SELECT 1 FROM json_each(Galleries.creator_ids)
+                    WHERE json_each.value = ?
+                )
+            )
+        """, (creator_id,))
         tag_counts = {}
         for (tag_ids_json,) in cursor.fetchall():
             if tag_ids_json:
@@ -301,6 +315,9 @@ def update_field(table, key_field, key_value, field, value):
 # GALLERY UPDATES
 ####################################################################################################################
 
+# ===============================
+# DOWNLOAD HELPERS
+# ===============================
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
@@ -354,6 +371,26 @@ def mark_gallery_completed(gallery_id):
         # Update language, tags, cover_path fields
         # (Assume latest values are passed in via other helpers)
         # This is a placeholder; actual update should be done via a dedicated update_gallery_metadata function
+        conn.commit()
+
+def get_selected_galleries():
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM SelectedGalleries")
+        rows = cursor.fetchall()
+        return sorted({int(row[0]) for row in rows})
+
+def set_selected_galleries(ids):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM SelectedGalleries")
+        for gid in set(ids or []):
+            try:
+                cursor.execute("INSERT INTO SelectedGalleries (id) VALUES (?)", (int(gid),))
+            except Exception:
+                continue
         conn.commit()
 
 def get_gallery_status(gallery_id):

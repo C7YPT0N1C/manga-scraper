@@ -14,7 +14,6 @@ from mangascraper.core import orchestrator, database
 # Cache TTL: 3 hours (runtime-configured)
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
 SEARCH_HISTORY_FILENAME = "(search_history).json"
-SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
 SEARCH_HISTORY_MAX = 10
 
 
@@ -40,41 +39,32 @@ def ensure_cache_files_exist():
     """Ensure cache directory and core cache files exist."""
     cache_dir = get_cache_dir()
     _prune_cache_files(cache_dir)
-    for name in (SEARCH_HISTORY_FILENAME, SELECTED_GALLERIES_FILENAME):
-        cache_file = cache_dir / name
-        if cache_file.exists():
-            if name != SEARCH_HISTORY_FILENAME:
-                continue
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                items = data.get("items", []) if isinstance(data, dict) else []
-                if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
-                    data["items"] = items[-SEARCH_HISTORY_MAX:]
-                    data["saved_at"] = time.time()
-                    with open(cache_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception:
-                pass
-            continue
+    cache_file = cache_dir / SEARCH_HISTORY_FILENAME
+    if cache_file.exists():
         try:
-            if name == SEARCH_HISTORY_FILENAME:
-                data = {"saved_at": None, "items": []}
-            elif name == SELECTED_GALLERIES_FILENAME:
-                data = {"saved_at": None, "ids": [], "csv": ""}
-            else:
-                data = {}
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            items = data.get("items", []) if isinstance(data, dict) else []
+            if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
+                data["items"] = items[-SEARCH_HISTORY_MAX:]
+                data["saved_at"] = time.time()
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+    else:
+        try:
+            data = {"saved_at": None, "items": []}
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception:
-            continue
+            pass
 
 
 def _prune_cache_files(cache_dir: Path):
     now = time.time()
     protected = {
         SEARCH_HISTORY_FILENAME,
-        SELECTED_GALLERIES_FILENAME,
     }
     for cache_file in cache_dir.glob("*.json"):
         if cache_file.name == "(master_cache).json":
@@ -483,86 +473,6 @@ def save_search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
         )
     except Exception:
         pass
-
-
-def load_selected_galleries() -> list[int]:
-    """Load selected galleries from cache.
-
-    Returns:
-        list of gallery IDs (ints), sorted ascending
-    """
-    cache_file = get_cache_dir() / SELECTED_GALLERIES_FILENAME
-    if not cache_file.exists():
-        return []
-    try:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        ids = data.get("ids", [])
-        if not isinstance(ids, list):
-            return []
-        cleaned = []
-        for gid in ids:
-            try:
-                cleaned.append(int(gid))
-            except Exception:
-                continue
-        cleaned = sorted(set(cleaned))
-        _update_master_cache(
-            "selected_galleries",
-            _build_master_entry(
-                "selected_galleries",
-                "selected_galleries",
-                cache_file,
-                None,
-                last_read=time.time(),
-            ),
-        )
-        return cleaned
-    except Exception:
-        return []
-
-
-def save_selected_galleries(ids: list[int]):
-    """Save selected gallery IDs as a sorted list and comma-separated string."""
-    try:
-        if not isinstance(ids, list):
-            return
-        cleaned = []
-        for gid in ids:
-            try:
-                cleaned.append(int(gid))
-            except Exception:
-                continue
-        cleaned = sorted(set(cleaned))
-        cache_file = get_cache_dir() / SELECTED_GALLERIES_FILENAME
-        saved_at = time.time()
-        data = {
-            "saved_at": saved_at,
-            "ids": cleaned,
-            "csv": ",".join(str(gid) for gid in cleaned),
-        }
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        # Calculate TTL and expires_at for CachedReferences
-        from mangascraper.core import orchestrator, database
-        ttl = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
-        expires_at = saved_at + ttl if saved_at else None
-        database.upsert_cache_reference(
-            "selected_galleries",
-            {
-                "type": "selected_galleries",
-                "key": "selected_galleries",
-                "path": str(cache_file),
-                "size": cache_file.stat().st_size if cache_file.exists() else None,
-                "last_read": None,
-                "last_write": saved_at,
-                "ttl": ttl,
-                "expires_at": expires_at,
-            },
-        )
-    except Exception:
-        pass
-
 
 def load_cached_metadata_for_ids(ids: list[int]) -> dict:
     """Load cached metadata for a set of IDs from master cache entries."""
