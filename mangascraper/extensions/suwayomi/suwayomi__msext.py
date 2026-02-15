@@ -744,6 +744,7 @@ def update_creator_manga(meta):
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
+    from mangascraper.core import database
     gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
     creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
     if not creators:
@@ -751,13 +752,28 @@ def update_creator_manga(meta):
 
     gallery_title = gallery_meta["title"]
     current_gallery_id = parse_gallery_id(gallery_title) or int(meta.get("id", 0))
-    gallery_tags = meta.get("tags", [])
-    gallery_genres = [
-        tag["name"] for tag in gallery_tags
-        if "name" in tag and tag.get("type") not in ["artist", "group", "language", "category"]
-    ]
+    clean_title_val = gallery_meta.get("short_title", "")
+    raw_title_val = meta.get("title", {}).get("english", "")
+    num_pages = meta.get("num_pages", 0)
+    cover_path = None
+    tags = [t["name"] for t in meta.get("tags", []) if t.get("type") == "tag"]
+    languages = [t["name"] for t in meta.get("tags", []) if t.get("type") == "language"]
 
-    # Load all metadata at once
+    # Link creators (main creator only for now)
+    database.link_gallery_creator(current_gallery_id, creators[0])
+    # Link tags
+    database.link_gallery_tags(current_gallery_id, tags)
+    # Link languages
+    database.link_gallery_languages(current_gallery_id, languages)
+
+    # Update gallery fields
+    with database.lock, database._connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE Galleries SET clean_title=?, raw_title=?, num_pages=?, cover_path=? WHERE id=?",
+            (clean_title_val, raw_title_val, num_pages, cover_path, current_gallery_id)
+        )
+        conn.commit()
     metadata = load_creators_metadata()
     collected_ids = set(metadata.get("collected_manga_ids", []))
     deferred_creators = set(metadata.get("deferred_creators", []))

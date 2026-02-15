@@ -90,6 +90,13 @@ def init_db():
             FOREIGN KEY (tag_id) REFERENCES Tags(id)
         );
 
+        CREATE TABLE IF NOT EXISTS GalleryLanguages (
+            gallery_id INTEGER,
+            language TEXT,
+            PRIMARY KEY (gallery_id, language),
+            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
+
         CREATE TABLE IF NOT EXISTS BrokenSymbols (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT UNIQUE,
@@ -119,6 +126,60 @@ def init_db():
         );
         """)
 
+        conn.commit()
+
+# ===============================
+# GALLERY LINKING HELPERS
+# ===============================
+def upsert_creator(name, display_name=None):
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Creators (name, display_name) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
+            (name, display_name)
+        )
+        cursor.execute("SELECT id FROM Creators WHERE name=?", (name,))
+        return cursor.fetchone()[0]
+
+def upsert_tag(name, tag_type=None):
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Tags (name, type) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
+            (name, tag_type)
+        )
+        cursor.execute("SELECT id FROM Tags WHERE name=?", (name,))
+        return cursor.fetchone()[0]
+
+def link_gallery_tags(gallery_id, tag_names):
+    for tag_name in tag_names:
+        tag_id = upsert_tag(tag_name)
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO GalleryTags (gallery_id, tag_id) VALUES (?, ?) ON CONFLICT(gallery_id, tag_id) DO NOTHING",
+                (gallery_id, tag_id)
+            )
+            conn.commit()
+
+def link_gallery_creator(gallery_id, creator_name):
+    creator_id = upsert_creator(creator_name)
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE Galleries SET creator_id=? WHERE id=?",
+            (creator_id, gallery_id)
+        )
+        conn.commit()
+
+def link_gallery_languages(gallery_id, languages):
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        for lang in languages:
+            cursor.execute(
+                "INSERT INTO GalleryLanguages (gallery_id, language) VALUES (?, ?) ON CONFLICT(gallery_id, language) DO NOTHING",
+                (gallery_id, lang)
+            )
         conn.commit()
 
 # ===============================

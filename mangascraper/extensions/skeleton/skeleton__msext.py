@@ -298,6 +298,33 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     # Extract cover and delete original gallery folder after archiving
     try:
+        from mangascraper.core import database
+        # --- Update database with gallery info ---
+        gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
+        creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        clean_title_val = gallery_meta.get("short_title", "")
+        raw_title_val = meta.get("title", {}).get("english", "")
+        num_pages = meta.get("num_pages", 0)
+        cover_path = None
+        tags = [t["name"] for t in meta.get("tags", []) if t.get("type") == "tag"]
+        languages = [t["name"] for t in meta.get("tags", []) if t.get("type") == "language"]
+
+        # Link creators (main creator only for now)
+        if creators:
+            database.link_gallery_creator(gallery_id, creators[0])
+        # Link tags
+        database.link_gallery_tags(gallery_id, tags)
+        # Link languages
+        database.link_gallery_languages(gallery_id, languages)
+
+        # Update gallery fields
+        with database.lock, database._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE Galleries SET clean_title=?, raw_title=?, num_pages=?, cover_path=? WHERE id=?",
+                (clean_title_val, raw_title_val, num_pages, cover_path, gallery_id)
+            )
+            conn.commit()
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
