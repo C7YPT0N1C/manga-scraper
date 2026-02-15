@@ -239,6 +239,9 @@ def _prune_master_cache(data: dict, save_if_changed: bool = False) -> dict:
 
 def load_all_cached_metadata() -> dict:
     """Load and merge all cached metadata entries from the master cache registry."""
+    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
+    if not cache_file.exists():
+        return {}
     data = _load_master_cache()
     references = data.get("references", {})
     if not isinstance(references, dict):
@@ -301,6 +304,9 @@ def _remove_master_cache_entry(entry_key: str):
 
 def load_general_metadata_cache() -> dict:
     """Load general metadata stored inside master cache."""
+    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
+    if not cache_file.exists():
+        return {}
     data = _load_master_cache()
     metadata = data.get("metadata", {})
     if not isinstance(metadata, dict):
@@ -345,6 +351,9 @@ def save_general_metadata_cache(metadata: dict):
 
 def load_general_raw_metadata_cache() -> dict:
     """Load raw metadata stored inside master cache."""
+    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
+    if not cache_file.exists():
+        return {}
     data = _load_master_cache()
     raw_block = data.get("metadata", {})
     if not isinstance(raw_block, dict):
@@ -669,6 +678,9 @@ def save_selected_galleries(ids: list[int]):
 def load_cached_metadata_for_ids(ids: list[int]) -> dict:
     """Load cached metadata for a set of IDs from master cache entries."""
     if not ids:
+        return {}
+    cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
+    if not cache_file.exists():
         return {}
     wanted = set()
     for gid in ids:
