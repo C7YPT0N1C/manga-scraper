@@ -442,7 +442,11 @@ def finalise_gallery_format(
                 zf.write(img_path, arcname=arcname)
 
         if use_temp_archive:
-            os.replace(archive_target, archive_path)
+            os.makedirs(os.path.dirname(archive_path), exist_ok=True)
+            try:
+                os.replace(archive_target, archive_path)
+            except OSError:
+                shutil.move(archive_target, archive_path)
         
         logger.debug(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
         
