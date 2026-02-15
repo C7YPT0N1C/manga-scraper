@@ -5,6 +5,7 @@ import os, time, json, requests, math, shutil, re
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.extensions.extension_manager import calculate_extension_download_path
 from mangascraper.core.api import (
     get_session,
     get_meta_tags,
@@ -29,28 +30,7 @@ EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printi
 
 EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 
-LOCAL_MANIFEST_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "local_manifest.json"
-)
-
-with open(os.path.abspath(LOCAL_MANIFEST_PATH), "r", encoding="utf-8") as f:
-    manifest = json.load(f)
-
-DEDICATED_DOWNLOAD_PATH = None
-manifest_download_path = None
-for ext in manifest.get("extensions", []):
-    if ext.get("name") == EXTENSION_NAME:
-        manifest_download_path = ext.get("image_download_path")
-        break
-
-orchestrator.refresh_globals()
-override_download_path = getattr(orchestrator, "extension_download_path", None)
-if override_download_path and override_download_path != DEFAULT_EXTENSION_DOWNLOAD_PATH:
-    DEDICATED_DOWNLOAD_PATH = override_download_path
-elif manifest_download_path:
-    DEDICATED_DOWNLOAD_PATH = manifest_download_path
-else:
-    DEDICATED_DOWNLOAD_PATH = DEFAULT_EXTENSION_DOWNLOAD_PATH
+DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
 
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
@@ -76,11 +56,13 @@ def pre_run_hook():
     """
     This is one this module's entrypoints.
     """
+    global DEDICATED_DOWNLOAD_PATH
     
     logger.debug(f"{EXTENSION_REFERRER}: Ready.")
     log(f"{EXTENSION_REFERRER}: Debugging started.", "debug")
     
     orchestrator.refresh_globals()
+    DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
     if orchestrator.dry_run:
