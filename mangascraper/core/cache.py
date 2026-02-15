@@ -9,8 +9,10 @@ import json
 import time
 from pathlib import Path
 
-# Cache TTL: 3 hours
-TTL = 3 * 60 * 60
+from mangascraper.core import orchestrator
+
+# Cache TTL: 3 hours (runtime-configured)
+TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
 SEARCH_HISTORY_FILENAME = "(search_history).json"
 SELECTED_GALLERIES_FILENAME = "(selected_galleries).json"
 MASTER_CACHE_FILENAME = "(master_cache).json"
@@ -43,7 +45,7 @@ def ensure_cache_files_exist():
             continue
         try:
             if name == MASTER_CACHE_FILENAME:
-                data = {"references": {}}
+                data = {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
             elif name == SEARCH_HISTORY_FILENAME:
                 data = {"saved_at": None, "items": []}
             elif name == SELECTED_GALLERIES_FILENAME:
@@ -81,21 +83,27 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
 def _load_master_cache() -> dict:
     cache_file = get_cache_dir() / MASTER_CACHE_FILENAME
     if not cache_file.exists():
-        return {"references": {}}
+        return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            return {"references": {}}
+            return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
         references = data.get("references")
         if references is None:
             references = data.get("entries")
         if not isinstance(references, dict):
-            return {"references": {}}
+            references = {}
 
-        return {"references": references}
+        general_metadata = data.get("general_metadata")
+        if not isinstance(general_metadata, dict):
+            general_metadata = {"timestamp": None, "metadata": {}}
+        if not isinstance(general_metadata.get("metadata"), dict):
+            general_metadata["metadata"] = {}
+
+        return {"references": references, "general_metadata": general_metadata}
     except Exception:
-        return {"references": {}}
+        return {"references": {}, "general_metadata": {"timestamp": None, "metadata": {}}}
 
 
 def load_all_cached_metadata() -> dict:
@@ -105,6 +113,11 @@ def load_all_cached_metadata() -> dict:
     if not isinstance(references, dict):
         return {}
     merged = {}
+    general_block = data.get("general_metadata", {})
+    general_metadata = general_block.get("metadata", {})
+    general_timestamp = general_block.get("timestamp") or 0
+    if isinstance(general_metadata, dict) and (time.time() - general_timestamp) < TTL:
+        merged.update(general_metadata)
     for entry in references.values():
         if not isinstance(entry, dict):
             continue
@@ -147,6 +160,31 @@ def _remove_master_cache_entry(entry_key: str):
     if entry_key in data["references"]:
         del data["references"][entry_key]
         _save_master_cache(data)
+
+
+def load_general_metadata_cache() -> dict:
+    """Load general metadata stored inside master cache."""
+    data = _load_master_cache()
+    general_metadata = data.get("general_metadata", {})
+    metadata = general_metadata.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return {}
+    if time.time() - (general_metadata.get("timestamp") or 0) >= TTL:
+        return {}
+    return metadata
+
+
+def save_general_metadata_cache(metadata: dict):
+    """Save general metadata inside master cache."""
+    if not isinstance(metadata, dict):
+        return
+    data = _load_master_cache()
+    safe_metadata = {str(k): v for k, v in metadata.items()}
+    data["general_metadata"] = {
+        "timestamp": time.time(),
+        "metadata": safe_metadata,
+    }
+    _save_master_cache(data)
 
 
 def _build_master_entry(
@@ -447,6 +485,14 @@ def load_cached_metadata_for_ids(ids: list[int]) -> dict:
         return {}
 
     merged = {}
+    general_block = data.get("general_metadata", {})
+    general_metadata = general_block.get("metadata", {})
+    general_timestamp = general_block.get("timestamp") or 0
+    if isinstance(general_metadata, dict) and (time.time() - general_timestamp) < TTL:
+        for gid in wanted:
+            gid_str = str(gid)
+            if gid_str in general_metadata:
+                merged[gid] = general_metadata[gid_str]
     for entry in references.values():
         if not isinstance(entry, dict):
             continue
@@ -474,6 +520,8 @@ def load_cached_metadata_for_ids(ids: list[int]) -> dict:
             if not isinstance(metadata, dict):
                 continue
             for gid in wanted:
+                if gid in merged:
+                    continue
                 gid_str = str(gid)
                 if gid_str in metadata:
                     merged[gid] = metadata[gid_str]

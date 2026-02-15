@@ -10,7 +10,13 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database
-from mangascraper.core.cache import load_cache, save_cache, load_cached_metadata_for_ids
+from mangascraper.core.cache import (
+    load_cache,
+    save_cache,
+    load_cached_metadata_for_ids,
+    load_general_metadata_cache,
+    save_general_metadata_cache,
+)
 from tqdm import tqdm
 
 ################################################################################################################
@@ -1015,6 +1021,10 @@ def fetch_all_metadata_for_galleries(gallery_ids: list, cache_key: str = None) -
     # Save to cache
     if metadata and cache_key:
         save_cache(cache_key, metadata)
+    elif metadata:
+        general_metadata = load_general_metadata_cache()
+        general_metadata.update(metadata)
+        save_general_metadata_cache(general_metadata)
     
     return metadata
 
