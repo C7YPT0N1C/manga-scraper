@@ -7,8 +7,16 @@ Handles pre-fetching metadata, displaying summaries, and allowing users to filte
 
 import sys, os, shutil, json, re, subprocess, tempfile
 from collections import deque
+
 from mangascraper.core import orchestrator
-from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
+from mangascraper.core.orchestrator import (
+    logger,
+    log_clarification,
+    log,
+    update_env,
+    refresh_globals,
+    RUNTIME_LOG_FILE
+)
 from mangascraper.core import database as scraper_db
 from mangascraper.core.database import (
     get_cache_key,
@@ -27,8 +35,11 @@ from mangascraper.core.api import (
     fetch_gallery_metadata,
     fetch_image_urls,
 )
-
 from mangascraper.extensions.extension_manager import get_extension_download_path
+
+####################################################################################################
+# DISPLAY UTILITIES
+####################################################################################################
 
 READER_SETTINGS = {
     "quality": "ultra",
@@ -39,10 +50,6 @@ READER_SETTINGS = {
     "clamp_to_terminal": True,
     "preserve_aspect": True,
 }
-
-####################################################################################################
-# DISPLAY UTILITIES
-####################################################################################################
 
 def clear_screen():
     """Clear the terminal screen using ANSI escape codes."""

@@ -2,13 +2,17 @@
 # mangascraper/extensions/suwayomi/suwayomi__msext.py
 
 import os, time, json, requests, threading, subprocess, shutil, tarfile, math, re, sqlite3
-
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database as scraper_db
+from mangascraper.core.api import (
+    get_session,
+    make_filesystem_safe,
+    dynamic_sleep,
+)
 from mangascraper.extensions.extension_manager import (
     build_gallery_metadata_summary,
     calculate_extension_download_path,
@@ -17,11 +21,6 @@ from mangascraper.extensions.extension_manager import (
     find_latest_gallery_entry,
     parse_gallery_id,
     repair_covers_hook,
-)
-from mangascraper.core.api import (
-    get_session,
-    make_filesystem_safe,
-    dynamic_sleep,
 )
 
 ####################################################################################################################

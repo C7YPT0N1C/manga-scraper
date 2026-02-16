@@ -2,21 +2,17 @@
 # mangascraper/core/downloader.py
 
 import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile
-
 from tqdm.contrib.concurrent import thread_map
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database as scraper_db
+from mangascraper.core.database import load_queued_galleries, get_cache_dir
 from mangascraper.core.api import (
     get_session, dynamic_sleep, fetch_gallery_metadata,
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
 )
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
-from mangascraper.core.database import load_queued_galleries, get_cache_dir
-
-ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
-
 
 ####################################################################################################
 # Global Variables
@@ -24,6 +20,7 @@ ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
 
 active_extension = "skeleton"
 download_location = ""
+ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
 
 skipped_galleries = []
 

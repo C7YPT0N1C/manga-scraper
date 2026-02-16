@@ -2,7 +2,6 @@
 # mangascraper/core/database.py
 
 import os, sqlite3, threading, atexit, json
-
 from datetime import datetime, timezone
 
 from mangascraper.core import orchestrator
@@ -12,7 +11,6 @@ DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core/data")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 lock = threading.Lock()
 _thread_local = threading.local()
-
 
 def _connect():
     conn = getattr(_thread_local, "connection", None)
@@ -29,7 +27,6 @@ def close_connection():
     if conn is not None:
         conn.close()
         _thread_local.connection = None
-
 
 atexit.register(close_connection)
 

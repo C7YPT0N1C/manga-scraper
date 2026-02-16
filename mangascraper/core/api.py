@@ -2,10 +2,10 @@
 # mangascraper/core/api.py
 
 import os, time, random, cloudscraper, requests, re, json, threading, socket, urllib.parse
-
 from datetime import datetime
 from urllib.parse import urljoin
 from pathlib import Path
+from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
@@ -19,7 +19,6 @@ from mangascraper.core.database import (
     load_general_raw_metadata_cache,
     save_general_raw_metadata_cache,
 )
-from tqdm import tqdm
 
 ################################################################################################################
 # GLOBAL VARIABLES & CACHING

@@ -5,20 +5,23 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core.downloader import start_downloader
-from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
+from mangascraper.core import database as scraper_db
 from mangascraper.core.database import (
     get_cache_key,
     load_cache,
     ensure_cache_files_exist,
 )
-from mangascraper.core import database as scraper_db
+from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
+from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
     get_selected_extension,
     uninstall_selected_extension,
 )
 
+# ------------------------------------------------------------
+# VARIABLES
+# ------------------------------------------------------------
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
 EPILOG = """Examples:
