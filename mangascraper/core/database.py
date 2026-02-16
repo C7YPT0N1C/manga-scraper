@@ -42,7 +42,7 @@ def init_db():
     with lock, _connect() as conn:
         c = conn.cursor()
         c.executescript(f"""
-        CREATE TABLE IF NOT EXISTS SelectedGalleries (
+        CREATE TABLE IF NOT EXISTS GalleriesQueue (
             id INTEGER PRIMARY KEY
         );
         CREATE TABLE IF NOT EXISTS Creators (
@@ -373,22 +373,22 @@ def mark_gallery_completed(gallery_id):
         # This is a placeholder; actual update should be done via a dedicated update_gallery_metadata function
         conn.commit()
 
-def get_selected_galleries():
+def get_queued_galleries():
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM SelectedGalleries")
+        cursor.execute("SELECT id FROM GalleriesQueue")
         rows = cursor.fetchall()
         return sorted({int(row[0]) for row in rows})
 
-def set_selected_galleries(ids):
+def set_queued_galleries(ids):
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM SelectedGalleries")
+        cursor.execute("DELETE FROM GalleriesQueue")
         for gid in set(ids or []):
             try:
-                cursor.execute("INSERT INTO SelectedGalleries (id) VALUES (?)", (int(gid),))
+                cursor.execute("INSERT INTO GalleriesQueue (id) VALUES (?)", (int(gid),))
             except Exception:
                 continue
         conn.commit()

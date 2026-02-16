@@ -9,6 +9,7 @@ import sys, os, shutil, json, re, subprocess, tempfile
 from collections import deque
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
+from mangascraper.core import database as scraper_db
 from mangascraper.core.api import (
     fetch_all_metadata_for_galleries,
     get_metadata_summary,
@@ -26,7 +27,6 @@ from mangascraper.core.cache import (
     load_cached_metadata_for_ids,
     get_cache_dir,
 )
-from mangascraper.core import database
 
 READER_SETTINGS = {
     "quality": "ultra",
@@ -466,7 +466,7 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
-    selected_ids = database.get_selected_galleries()
+    selected_ids = scraper_db.get_selected_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")
         return []
@@ -1281,9 +1281,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
-        database.set_selected_galleries([])
+        scraper_db.set_selected_galleries([])
 
-    selected_ids = database.get_selected_galleries()
+    selected_ids = scraper_db.get_selected_galleries()
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
@@ -1297,9 +1297,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     def persist_selected_ids():
         nonlocal selected_ids
-        cached_ids = database.get_selected_galleries()
+        cached_ids = scraper_db.get_selected_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
-        database.set_selected_galleries(sorted(set(merged)) if merged else [])
+        scraper_db.set_selected_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
 
     if selected_ids:
@@ -1357,7 +1357,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            selected_ids = database.get_selected_galleries()
+            selected_ids = scraper_db.get_selected_galleries()
             if selected_ids:
                 break
             else:
@@ -1845,7 +1845,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            selected_ids = database.get_selected_galleries()
+            selected_ids = scraper_db.get_selected_galleries()
             selected_ids = view_selected_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
