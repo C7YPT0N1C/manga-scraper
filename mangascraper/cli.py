@@ -7,7 +7,7 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.downloader import start_downloader
 from mangascraper.core.api import get_session, fetch_gallery_ids, fetch_all_metadata_for_galleries
-from mangascraper.core.cache import (
+from mangascraper.core.database import (
     get_cache_key,
     load_cache,
     ensure_cache_files_exist,

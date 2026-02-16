@@ -10,7 +10,7 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database as scraper_db
-from mangascraper.core.cache import (
+from mangascraper.core.database import (
     load_cache,
     save_cache,
     load_cached_metadata_for_ids,

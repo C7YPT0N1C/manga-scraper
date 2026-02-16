@@ -18,7 +18,7 @@ from mangascraper.core.api import (
     fetch_gallery_metadata,
     fetch_image_urls,
 )
-from mangascraper.core.cache import (
+from mangascraper.core.database import (
     get_cache_key,
     load_cache,
     clear_cache,
@@ -28,7 +28,7 @@ from mangascraper.core.cache import (
     get_cache_dir,
 )
 
-from mangascraper.core.cache import get_extension_download_path
+from mangascraper.core.database import get_extension_download_path
 
 READER_SETTINGS = {
     "quality": "ultra",
