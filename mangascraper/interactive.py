@@ -28,6 +28,8 @@ from mangascraper.core.cache import (
     get_cache_dir,
 )
 
+from mangascraper.core.cache import get_extension_download_path
+
 READER_SETTINGS = {
     "quality": "ultra",
     "colors": "full",
