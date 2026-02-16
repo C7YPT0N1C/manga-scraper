@@ -10,14 +10,6 @@ from collections import deque
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log_clarification, log, update_env, refresh_globals, RUNTIME_LOG_FILE
 from mangascraper.core import database as scraper_db
-from mangascraper.core.api import (
-    fetch_all_metadata_for_galleries,
-    get_metadata_summary,
-    fetch_gallery_ids,
-    get_session,
-    fetch_gallery_metadata,
-    fetch_image_urls,
-)
 from mangascraper.core.database import (
     get_cache_key,
     load_cache,
@@ -27,8 +19,16 @@ from mangascraper.core.database import (
     load_cached_metadata_for_ids,
     get_cache_dir,
 )
+from mangascraper.core.api import (
+    fetch_all_metadata_for_galleries,
+    get_metadata_summary,
+    fetch_gallery_ids,
+    get_session,
+    fetch_gallery_metadata,
+    fetch_image_urls,
+)
 
-from mangascraper.core.database import get_extension_download_path
+from mangascraper.extensions.extension_manager import get_extension_download_path
 
 READER_SETTINGS = {
     "quality": "ultra",
