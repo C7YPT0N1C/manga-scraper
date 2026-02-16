@@ -13,7 +13,7 @@ from mangascraper.core.api import (
     fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
 )
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
-from mangascraper.core.database import load_selected_galleries, get_cache_dir
+from mangascraper.core.database import load_queued_galleries, get_cache_dir
 
 ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
 
@@ -783,7 +783,7 @@ def start_downloader(gallery_list=None):
     orchestrator.refresh_globals()
     
     if gallery_list is None:
-        gallery_list = load_selected_galleries()
+        gallery_list = load_queued_galleries()
         if not gallery_list:
             logger.warning("No galleries queued in database; no galleries to download.")
 

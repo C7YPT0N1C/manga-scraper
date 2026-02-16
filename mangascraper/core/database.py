@@ -671,7 +671,7 @@ from pathlib import Path
 from mangascraper.core import orchestrator
 from mangascraper.core import database as scraper_db
 
-def load_selected_galleries() -> list:
+def load_queued_galleries() -> list:
     """Fetch queued galleries from GalleriesQueue table in the database."""
     return scraper_db.get_queued_galleries()
 

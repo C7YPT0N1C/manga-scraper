@@ -457,7 +457,7 @@ def read_gallery_in_terminal(gallery_id: int):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
+def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
     """
     Display selected galleries in paginated format with removal capability.
     
@@ -468,7 +468,7 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
-    selected_ids = scraper_db.get_selected_galleries()
+    selected_ids = scraper_db.get_queued_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")
         return []
@@ -1283,9 +1283,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
-        scraper_db.set_selected_galleries([])
+        scraper_db.set_queued_galleries([])
 
-    selected_ids = scraper_db.get_selected_galleries()
+    selected_ids = scraper_db.get_queued_galleries()
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
@@ -1299,9 +1299,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     def persist_selected_ids():
         nonlocal selected_ids
-        cached_ids = scraper_db.get_selected_galleries()
+        cached_ids = scraper_db.get_queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
-        scraper_db.set_selected_galleries(sorted(set(merged)) if merged else [])
+        scraper_db.set_queued_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
 
     if selected_ids:
@@ -1359,7 +1359,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            selected_ids = scraper_db.get_selected_galleries()
+            selected_ids = scraper_db.get_queued_galleries()
             if selected_ids:
                 break
             else:
@@ -1847,8 +1847,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            selected_ids = scraper_db.get_selected_galleries()
-            selected_ids = view_selected_galleries(selected_ids, selected_metadata)
+            selected_ids = scraper_db.get_queued_galleries()
+            selected_ids = view_queued_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
 
