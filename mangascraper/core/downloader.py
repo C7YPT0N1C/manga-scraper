@@ -36,7 +36,8 @@ def load_extension(suppess_pre_run_hook: bool = False):
     
     if suppess_pre_run_hook==False:
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
-        log(f"Downloading Galleries To: {download_location}\n")
+        log_clarification()
+        log(f"Downloading Galleries To: {download_location}")
 
     if not orchestrator.dry_run:
         os.makedirs(download_location, exist_ok=True)
@@ -110,7 +111,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     # --- Output ---
     log_clarification("warning")
     log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
-    log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}")
+    log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}\n")
     log(f"Estimated Total API Hits: {total_api_hits}\n", "debug")
     
 # Space monitoring for progress display
@@ -647,7 +648,6 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     
     If insufficient space, prompts user to download as many as fit.
     """
-    log_clarification()
     log(f"Estimating download size for {len(gallery_ids)} galleries...")
     
     total_estimated = 0
