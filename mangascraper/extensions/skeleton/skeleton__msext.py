@@ -384,7 +384,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     latest_cover_id = find_latest_cover_id(covers_folder)
                     if cover_gallery_id is not None and latest_cover_id is not None:
                         if cover_gallery_id <= latest_cover_id:
-                            continue
                             gallery_path = gallery_paths.get(creator_name)
                             if gallery_format == "directory" or not gallery_path:
                                 if gallery_format == "directory" and gallery_path:
@@ -430,6 +429,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
             gallery_name = os.path.basename(gallery_path)
             expected_archive = os.path.join(creator_folder, f"{gallery_name}{archive_ext}")
+            
             # Archive the gallery if it's a directory and not already archived
             if gallery_format in {"cbz", "zip"} and os.path.isdir(gallery_path):
                 import zipfile
@@ -440,7 +440,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                             file_path = os.path.join(root, file)
                             arcname = os.path.relpath(file_path, gallery_path)
                             archive.write(file_path, arcname)
-                logger.info(f"Archived gallery {gallery_path} to {archive_path}")
+                logger.debug(f"{EXTENSION_REFERRER}: Archived gallery {gallery_path} to {archive_path}")
+            
             # Wait for the archive to exist
             if not os.path.exists(expected_archive):
                 max_checks = max(1, int(ARCHIVE_WAIT_SECONDS / ARCHIVE_POLL_INTERVAL))

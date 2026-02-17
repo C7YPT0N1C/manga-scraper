@@ -258,11 +258,11 @@ def sanitise_string(meta_or_title):
     if new_broken:
         for s in new_broken:
             possible_broken_symbols[s] = "_"
-        logger.info(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
+        logger.debug(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
         scraperdb.save_broken_symbols(possible_broken_symbols)
         _build_symbol_translation_table()
     else:
-        logger.info("[BrokenSymbols] No new broken symbols detected. No database update needed.")
+        logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
 
     # Remove content inside [] or {} brackets (use pre-compiled regex)
     title = _BRACKET_PATTERN.sub("", title)
