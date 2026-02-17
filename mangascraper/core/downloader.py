@@ -756,7 +756,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
         total_pages += num_pages
 
     bar_format = (
-        "{desc}: {percentage:3.0f}%|{bar}| [{n_fmt}/{total_fmt} Pages, {rate_fmt}{postfix}, {elapsed}<{remaining}]"
+        "{desc} {percentage:3.0f}%|{bar}| [{n_fmt}/{total_fmt} Pages, {rate_fmt}{postfix}, {elapsed}<{remaining}]"
     )
     page_progress = tqdm(
         total=total_pages,
