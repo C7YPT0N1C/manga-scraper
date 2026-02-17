@@ -7,13 +7,7 @@ from urllib.request import urlopen
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core.api import (
-    get_session,
-    get_meta_tags,
-    clean_title,
-    fetch_gallery_metadata,
-    fetch_image_urls,
-)
+from mangascraper.core.api import *
 from mangascraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------
@@ -730,9 +724,6 @@ def calculate_extension_download_path(extension_name: str) -> str:
         from mangascraper.extensions.extension_manager import calculate_extension_download_path
         DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
     """
-    from mangascraper.core.orchestrator import (
-        DEFAULT_EXTENSION_DOWNLOAD_PATH, extension_download_path
-    )
 
     orchestrator.refresh_globals()
     override_download_path = getattr(orchestrator, "extension_download_path", None)
@@ -776,15 +767,15 @@ def calculate_extension_download_path(extension_name: str) -> str:
 def build_gallery_metadata_summary(meta, referrer: str):
     orchestrator.refresh_globals()
 
-    artists = get_meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
-    groups = get_meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    artists = APIGet.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = APIGet.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
 
-    title = clean_title(meta)
+    title = sanitise_string(meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
 
-    gallery_language = get_meta_tags(
+    gallery_language = APIGet.meta_tags(
         f"{referrer}: Build_gallery_metadata_summary", meta, "language"
     ) or ["Unknown Language"]
 
@@ -943,12 +934,12 @@ def repair_creator_cover(creator_folder: str):
 
         logger.debug(f"[Cover Repair] Cover not found locally; attempting download for Gallery {latest_id}")
         try:
-            meta = fetch_gallery_metadata(latest_id)
+            meta = APIFetch.gallery_metadata(latest_id)
             logger.debug(f"[Cover Repair] Fetched metadata for Gallery {latest_id}: {meta is not None}")
             if not meta:
                 logger.warning(f"[Cover Repair] No metadata found for Gallery {latest_id}")
                 return
-            urls = fetch_image_urls(meta, 1)
+            urls = APIFetch.image_urls(meta, 1)
             logger.debug(f"[Cover Repair] Fetched image URLs for Gallery {latest_id}: {urls}")
             if not urls:
                 logger.warning(f"[Cover Repair] No image URLs found for Gallery {latest_id}")
@@ -959,7 +950,7 @@ def repair_creator_cover(creator_folder: str):
                 ext = ".jpg"
             target = os.path.join(covers_folder, f"{entry_name}{ext}")
             logger.debug(f"[Cover Repair] Downloading cover from {url} to {target}")
-            session = get_session(referrer="Cover Repair", status="return")
+            session = APIGet.session(referrer="Cover Repair", status="return")
             resp = session.get(url, timeout=(60, 60))
             resp.raise_for_status()
             with open(target, "wb") as f:

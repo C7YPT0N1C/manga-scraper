@@ -6,6 +6,7 @@ import os, time, random, threading
 from flask import Blueprint, jsonify, request
 
 from mangascraper.core import orchestrator
+from mangascraper.core.orchestrator import *
 
 scraper_bp = Blueprint("scraper", __name__)
 

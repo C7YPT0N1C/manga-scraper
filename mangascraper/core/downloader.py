@@ -6,12 +6,8 @@ from tqdm.contrib.concurrent import thread_map
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraper_db
-from mangascraper.core.database import load_queued_galleries, get_cache_dir
-from mangascraper.core.api import (
-    get_session, dynamic_sleep, fetch_gallery_metadata,
-    fetch_image_urls, get_meta_tags, make_filesystem_safe, clean_title, estimate_gallery_size
-)
+from mangascraper.core.api import *
+from mangascraper.core import database as scraperdb
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
 
 ####################################################################################################
@@ -23,83 +19,6 @@ download_location = ""
 ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
 
 skipped_galleries = []
-
-# Space monitoring for progress display
-space_monitor = {
-    "total_estimated_bytes": 0,
-    "total_actual_bytes": 0,
-    "galleries_processed": 0,
-}
-
-# Thread pool management for graceful shutdown
-_active_executors = []
-_shutdown_event = None
-
-def _register_executor(executor):
-    """Register a ThreadPoolExecutor for graceful shutdown."""
-    _active_executors.append(executor)
-
-def _shutdown_all_executors(wait=True):
-    """Shutdown all registered executors gracefully."""
-    for executor in _active_executors:
-        try:
-            executor.shutdown(wait=wait)
-        except Exception as e:
-            logger.warning(f"Error shutting down executor: {e}")
-    _active_executors.clear()
-
-def _signal_handler(signum, frame):
-    """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
-    logger.warning(f"\nReceived signal {signum}, shutting down gracefully...")
-    _shutdown_all_executors(wait=True)
-    raise KeyboardInterrupt("Graceful shutdown initiated")
-
-def _format_bytes(bytes_val: int) -> str:
-    """Format bytes to human-readable size."""
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes_val < 1024:
-            return f"{bytes_val:.2f} {unit}"
-        bytes_val /= 1024
-    return f"{bytes_val:.2f} PB"
-
-def get_available_disk_space(path: str) -> int:
-    """Get available disk space in bytes at the given path."""
-    try:
-        stat = os.statvfs(path)
-        return stat.f_bavail * stat.f_frsize
-    except Exception as e:
-        logger.warning(f"Failed to check disk space: {e}")
-        return -1  # Return -1 if we can't check
-
-def _is_network_share(path: str) -> bool:
-    if not sys.platform.startswith("linux"):
-        return False
-    try:
-        mount_path = os.path.realpath(path)
-        best_match = ("", "")
-        with open("/proc/mounts", "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) < 3:
-                    continue
-                mount_point = parts[1]
-                fs_type = parts[2]
-                if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
-                    if len(mount_point) > len(best_match[0]):
-                        best_match = (mount_point, fs_type)
-        return best_match[1] in {
-            "nfs",
-            "nfs4",
-            "cifs",
-            "smbfs",
-            "sshfs",
-            "fuse.sshfs",
-            "davfs",
-            "fuse.glusterfs",
-            "fuse.ceph",
-        }
-    except Exception:
-        return False
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -193,6 +112,83 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     log(f"Estimated Total API Hits: {total_api_hits}", "debug")
     log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
     log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}", "info")
+    
+# Space monitoring for progress display
+space_monitor = {
+    "total_estimated_bytes": 0,
+    "total_actual_bytes": 0,
+    "galleries_processed": 0,
+}
+
+# Thread pool management for graceful shutdown
+_active_executors = []
+_shutdown_event = None
+
+def _register_executor(executor):
+    """Register a ThreadPoolExecutor for graceful shutdown."""
+    _active_executors.append(executor)
+
+def _shutdown_all_executors(wait=True):
+    """Shutdown all registered executors gracefully."""
+    for executor in _active_executors:
+        try:
+            executor.shutdown(wait=wait)
+        except Exception as e:
+            logger.warning(f"Error shutting down executor: {e}")
+    _active_executors.clear()
+
+def _signal_handler(signum, frame):
+    """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
+    logger.warning(f"\nReceived signal {signum}, shutting down gracefully...")
+    _shutdown_all_executors(wait=True)
+    raise KeyboardInterrupt("Graceful shutdown initiated")
+
+def _format_bytes(bytes_val: int) -> str:
+    """Format bytes to human-readable size."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_val < 1024:
+            return f"{bytes_val:.2f} {unit}"
+        bytes_val /= 1024
+    return f"{bytes_val:.2f} PB"
+
+def get_available_disk_space(path: str) -> int:
+    """Get available disk space in bytes at the given path."""
+    try:
+        stat = os.statvfs(path)
+        return stat.f_bavail * stat.f_frsize
+    except Exception as e:
+        logger.warning(f"Failed to check disk space: {e}")
+        return -1  # Return -1 if we can't check
+
+def _is_network_share(path: str) -> bool:
+    if not sys.platform.startswith("linux"):
+        return False
+    try:
+        mount_path = os.path.realpath(path)
+        best_match = ("", "")
+        with open("/proc/mounts", "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mount_point = parts[1]
+                fs_type = parts[2]
+                if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
+                    if len(mount_point) > len(best_match[0]):
+                        best_match = (mount_point, fs_type)
+        return best_match[1] in {
+            "nfs",
+            "nfs4",
+            "cifs",
+            "smbfs",
+            "sshfs",
+            "fuse.sshfs",
+            "davfs",
+            "fuse.glusterfs",
+            "fuse.ceph",
+        }
+    except Exception:
+        return False
 
 def build_gallery_path(meta, iteration: dict = None, base_path: str | None = None):
     """
@@ -217,7 +213,7 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
             value = value[0] if value else "Unknown"
         if not isinstance(value, str):
             value = str(value)
-        path_parts.append(make_filesystem_safe(value))
+        path_parts.append(sanitise_string(value))
 
     return os.path.join(*path_parts)
 
@@ -236,7 +232,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
             return
 
         gallery_id = meta.get("id", "Unknown")
-        gallery_title = clean_title(meta)
+        gallery_title = sanitise_string(meta)
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
@@ -319,7 +315,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Excluded Tags ---
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
-    gallery_tags = [t.lower() for t in get_meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
+    gallery_tags = [t.lower() for t in APIGet.meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
     
     for tag in gallery_tags:
@@ -328,7 +324,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Allowed Languages ---
     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
-    gallery_langs = [l.lower() for l in get_meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
+    gallery_langs = [l.lower() for l in APIGet.meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
     if allowed_gallery_language:
@@ -471,7 +467,7 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraper_db.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraperdb.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -487,11 +483,11 @@ def process_galleries(batch_ids):
                 log_clarification("debug")
                 logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{orchestrator.max_retries})")
 
-                meta = fetch_gallery_metadata(gallery_id)
+                meta = APIFetch.gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        scraper_db.mark_gallery_failed(gallery_id)
+                        scraperdb.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -519,7 +515,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraper_db.mark_gallery_skipped(gallery_id)
+                        scraperdb.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -537,7 +533,7 @@ def process_galleries(batch_ids):
                     )
 
                 # --- Prepare primary folder (first creator only) ---
-                primary_creator = make_filesystem_safe(creators[0]) if creators else "Unknown"
+                primary_creator = sanitise_string(creators[0]) if creators else "Unknown"
                 log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(
                     meta,
@@ -554,7 +550,7 @@ def process_galleries(batch_ids):
                 tasks = []
                 for i in range(num_pages):
                     page = i + 1
-                    img_urls = fetch_image_urls(meta, page)
+                    img_urls = APIFetch.image_urls(meta, page)
                     if not img_urls:
                         logger.warning(f"Downloader: Skipping Page {page} for {primary_creator}: Failed to get URLs")
                         update_skipped_galleries(False, meta, "Failed to get URLs.")
@@ -570,7 +566,7 @@ def process_galleries(batch_ids):
                         _register_executor(executor)
                         try:
                             if not orchestrator.dry_run:
-                                local_session = get_session(referrer="Downloader", status="return")
+                                local_session = APIGet.session(referrer="Downloader", status="return")
                                 submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                             else:
                                 for _ in tasks:
@@ -591,7 +587,7 @@ def process_galleries(batch_ids):
 
                 # --- Symlink all additional creators to the finalised path (archive or folder) ---
                 for extra_creator in creators[1:]:
-                    extra_creator_safe = make_filesystem_safe(extra_creator)
+                    extra_creator_safe = sanitise_string(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
@@ -612,7 +608,7 @@ def process_galleries(batch_ids):
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
-                    scraper_db.mark_gallery_completed(gallery_id)
+                    scraperdb.mark_gallery_completed(gallery_id)
                     
                     # Track actual size downloaded
                     actual_bytes = 0
@@ -638,7 +634,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    scraper_db.mark_gallery_failed(gallery_id)
+                    scraperdb.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN
@@ -659,7 +655,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     # Estimate size for each gallery
     for gallery_id in gallery_ids:
         try:
-            meta = fetch_gallery_metadata(gallery_id)
+            meta = APIFetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
                 estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
                 gallery_sizes.append((gallery_id, estimated_size))

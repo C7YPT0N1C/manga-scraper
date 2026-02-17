@@ -5,12 +5,8 @@ import os, time, json, requests, math, shutil, re
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraper_db
-from mangascraper.core.api import (
-    get_session,
-    make_filesystem_safe,
-    dynamic_sleep,
-)
+from mangascraper.core.api import *
+from mangascraper.core import database as scraperdb
 from mangascraper.extensions.extension_manager import (
     build_gallery_metadata_summary,
     calculate_extension_download_path,
@@ -228,7 +224,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         logger.warning(
             f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more..."
         )
-        downloader_session = get_session(referrer=f"{EXTENSION_NAME}", status="rebuild")
+        downloader_session = APIGet.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
     if not success:
@@ -307,12 +303,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             gallery_format = "directory"
 
         gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
-        creators = [make_filesystem_safe(c) for c in gallery_meta.get("creator", [])]
+        creators = [sanitise_string(c) for c in gallery_meta.get("creator", [])]
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])
 
         # --- Consolidated database update call ---
-        scraper_db.update_gallery_metadata(
+        scraperdb.update_gallery_metadata(
             gallery_id=gallery_id,
             raw_title=gallery_meta.get("raw_title"),
             clean_title=gallery_meta.get("clean_title"),
