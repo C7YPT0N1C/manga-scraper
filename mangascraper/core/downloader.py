@@ -567,6 +567,11 @@ def process_galleries(batch_ids):
                 for extra_creator in creators[1:]:
                     extra_creator_safe = sanitise_string(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
+                    
+                    # If archiving, append the extension for the symlink target
+                    if orchestrator.gallery_format != "directory":
+                        archive_ext = ".cbz" if orchestrator.gallery_format == "cbz" else ".zip"
+                        extra_folder = extra_folder + archive_ext
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
@@ -645,12 +650,19 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
             gallery_sizes.append((gallery_id, default_size))
             total_estimated += default_size
     
-    # Check available space
-    staging_root = download_location
+
+    # Always check available space on the actual download location (network share or not)
+    available_on_target = get_available_disk_space(download_location)
+    available_on_staging = None
+    use_staging = False
     if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
         os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
-        staging_root = ARCHIVE_TEMP_ROOT
-    available = get_available_disk_space(staging_root)
+        available_on_staging = get_available_disk_space(ARCHIVE_TEMP_ROOT)
+        use_staging = True
+    else:
+        available_on_staging = available_on_target  # fallback, not used
+
+    available = available_on_target
 
     # Add buffer for parallel downloads and temporary overhead
     avg_gallery_size = total_estimated / max(1, len(gallery_ids))
@@ -662,12 +674,13 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     log(
         f"Space Usage Estimate:\n"
         f"-     Total download size: {_format_bytes(total_estimated)}\n"
-        f"-     Available disk space: {_format_bytes(available)}\n"
-        f"-     Required with buffer: {_format_bytes(required_with_buffer)}\n"
+        f"-     Available disk space (target): {_format_bytes(available_on_target)}\n"
+        + (f"-     Available disk space (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
+        + f"-     Required with buffer: {_format_bytes(required_with_buffer)}\n"
     )
     
-    # If sufficient space, return all galleries
-    if available < 0 or available >= required_with_buffer:
+    # If sufficient space on the target, return all galleries
+    if available_on_target < 0 or available_on_target >= required_with_buffer:
         log("Sufficient space available. Proceeding with download.\n")
         return total_estimated, gallery_ids
     
@@ -675,20 +688,29 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     logger.warning(
         f"Insufficient space for all galleries!\n"
         f"  Required (with buffer): {_format_bytes(required_with_buffer)}\n"
-        f"  Available: {_format_bytes(available)}\n"
+        f"  Available (target): {_format_bytes(available_on_target)}\n"
+        + (f"  Available (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
     )
-    
-    # Calculate how many galleries can fit
+
+    # Calculate how many galleries can fit on the target
     running_total = 0
-    available_for_galleries = max(0, available - parallel_buffer - safety_buffer)
+    available_for_galleries = max(0, available_on_target - parallel_buffer - safety_buffer)
     galleries_that_fit = []
-    
     for gallery_id, size in gallery_sizes:
         if running_total + size <= available_for_galleries:
             galleries_that_fit.append(gallery_id)
             running_total += size
         else:
             break
+
+    # If using a staging folder, warn if it may not have enough space for the largest gallery
+    if use_staging and galleries_that_fit:
+        largest_gallery = max([size for _, size in gallery_sizes], default=0)
+        if available_on_staging is not None and available_on_staging < largest_gallery:
+            logger.warning(
+                f"Staging folder ({ARCHIVE_TEMP_ROOT}) may not have enough space for the largest gallery (needs {_format_bytes(largest_gallery)}, has {_format_bytes(available_on_staging)}). "
+                "Will fall back to downloading and zipping directly on the network share for those galleries."
+            )
     
     log_clarification()
     logger.info(
