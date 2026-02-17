@@ -420,8 +420,10 @@ def finalise_gallery_format(
             os.makedirs(os.path.dirname(archive_path), exist_ok=True)
             try:
                 os.replace(archive_target, archive_path)
+                logger.debug(f"Downloader: Moved archive for Gallery {gallery_id} from temp folder to download folder: {archive_target} -> {archive_path}")
             except OSError:
                 shutil.move(archive_target, archive_path)
+                logger.debug(f"Downloader: Moved archive for Gallery {gallery_id} from temp folder to download folder (shutil.move fallback): {archive_target} -> {archive_path}")
         
         logger.debug(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
         
