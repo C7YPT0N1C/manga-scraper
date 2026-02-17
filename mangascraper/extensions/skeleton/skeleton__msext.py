@@ -157,6 +157,15 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     """
 
     orchestrator.refresh_globals()
+    
+    # Abort early if shutdown requested
+    try:
+        from mangascraper.core.downloader import _shutdown_event
+    except ImportError:
+        _shutdown_event = None
+    if _shutdown_event and _shutdown_event.is_set():
+        logger.warning("Shutdown event detected, aborting image download.")
+        return False
 
     if not urls:
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")

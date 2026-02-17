@@ -123,7 +123,8 @@ space_monitor = {
 
 # Thread pool management for graceful shutdown
 _active_executors = []
-_shutdown_event = None
+import threading
+_shutdown_event = threading.Event()
 
 def _register_executor(executor):
     """Register a ThreadPoolExecutor for graceful shutdown."""
@@ -141,6 +142,7 @@ def _shutdown_all_executors(wait=True):
 def _signal_handler(signum, frame):
     """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
     logger.warning(f"\nReceived signal {signum}, shutting down gracefully...")
+    _shutdown_event.set()
     _shutdown_all_executors(wait=True)
     raise KeyboardInterrupt("Graceful shutdown initiated")
 
@@ -342,9 +344,10 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
         )
         for page, urls, path, _ in creator_tasks
     ]
-    # Just wait for completion
-    for _ in concurrent.futures.as_completed(futures):
-        pass
+    # Wait for completion, but abort if shutdown event is set
+    for f in concurrent.futures.as_completed(futures):
+        if _shutdown_event.is_set():
+            break
 
 ####################################################################################################
 # ARCHIVE CONVERSION
@@ -445,6 +448,9 @@ def process_galleries(batch_ids):
     orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
+        if _shutdown_event.is_set():
+            logger.warning("Shutdown event detected, aborting gallery processing.")
+            break
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
             scraperdb.mark_gallery_started(gallery_id, download_location, extension_name)
@@ -455,6 +461,9 @@ def process_galleries(batch_ids):
         gallery_attempts = 0
 
         while gallery_attempts < orchestrator.max_retries:
+            if _shutdown_event.is_set():
+                logger.warning("Shutdown event detected, aborting gallery retry loop.")
+                break
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
@@ -547,9 +556,12 @@ def process_galleries(batch_ids):
                         try:
                             if not orchestrator.dry_run:
                                 local_session = APIGet.session(referrer="Downloader", status="return")
-                                submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
+                                if not _shutdown_event.is_set():
+                                    submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                             else:
                                 for _ in tasks:
+                                    if _shutdown_event.is_set():
+                                        break
                                     time.sleep(0.1)  # fake delay
                         finally:
                             _active_executors.remove(executor)
@@ -617,6 +629,9 @@ def process_galleries(batch_ids):
                 break  # exit retry loop on success
 
             except Exception as e:
+                if _shutdown_event.is_set():
+                    logger.warning(f"Shutdown event detected during exception handling: {e}")
+                    break
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
                     scraperdb.mark_gallery_failed(gallery_id)
@@ -792,6 +807,9 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     # Patch the download_images_hook to call our page_update_hook after each page
     orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
     def wrapped_download_images_hook(*args, **kwargs):
+        if _shutdown_event.is_set():
+            logger.warning("Shutdown event detected in download_images_hook, aborting page download.")
+            return None
         result = orig_download_images_hook(*args, **kwargs)
         page_update_hook()
         return result
@@ -802,7 +820,9 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     with concurrent.futures.ThreadPoolExecutor(max_workers=orchestrator.threads_galleries) as executor:
         futures = [executor.submit(process_galleries, [gid]) for gid in batch_list]
         for f in concurrent.futures.as_completed(futures):
-            pass
+            if _shutdown_event.is_set():
+                logger.warning("Shutdown event detected in batch, aborting remaining galleries.")
+                break
 
     # Restore original hook
     if orig_download_images_hook:
