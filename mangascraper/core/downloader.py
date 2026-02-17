@@ -177,7 +177,7 @@ def _is_network_share(path: str) -> bool:
                 if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
                     if len(mount_point) > len(best_match[0]):
                         best_match = (mount_point, fs_type)
-        return best_match[1] in {
+        network_fs_types = {
             "nfs",
             "nfs4",
             "cifs",
@@ -188,7 +188,14 @@ def _is_network_share(path: str) -> bool:
             "fuse.glusterfs",
             "fuse.ceph",
         }
-    except Exception:
+        is_network = best_match[1] in network_fs_types
+        if is_network:
+            logger.debug(f"Download directory '{path}' is on a network share (filesystem: {best_match[1]} at mount point: {best_match[0]}). Optimising download.")
+        else:
+            logger.debug(f"Download directory '{path}' is on a local filesystem (filesystem: {best_match[1]} at mount point: {best_match[0]}).")
+        return is_network
+    except Exception as e:
+        logger.warning(f"Failed to determine if '{path}' is a network share: {e}")
         return False
 
 def build_gallery_path(meta, iteration: dict = None, base_path: str | None = None):
@@ -261,36 +268,6 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         log_clarification()
         update_skipped_galleries(False, meta, "No Pages.")
         return False
-
-        def _is_network_share(path: str) -> bool:
-            if not sys.platform.startswith("linux"):
-                return False
-            try:
-                mount_path = os.path.realpath(path)
-                best_match = ("", "")
-                with open("/proc/mounts", "r", encoding="utf-8") as f:
-                    for line in f:
-                        parts = line.split()
-                        if len(parts) < 3:
-                            continue
-                        mount_point = parts[1]
-                        fs_type = parts[2]
-                        if mount_path.startswith(mount_point.rstrip("/") + "/") or mount_path == mount_point:
-                            if len(mount_point) > len(best_match[0]):
-                                best_match = (mount_point, fs_type)
-                return best_match[1] in {
-                    "nfs",
-                    "nfs4",
-                    "cifs",
-                    "smbfs",
-                    "sshfs",
-                    "fuse.sshfs",
-                    "davfs",
-                    "fuse.glusterfs",
-                    "fuse.ceph",
-                }
-            except Exception:
-                return False
 
     # Skip only if NOT in dry-run
     if not orchestrator.dry_run and os.path.exists(doujin_folder):
@@ -845,6 +822,6 @@ def start_downloader(gallery_list=None):
     
     #update_skipped_galleries(True) # Report all skipped galleries at end
     log_clarification()
-    log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.")
+    log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.\n")
 
     active_extension.post_run_hook()
