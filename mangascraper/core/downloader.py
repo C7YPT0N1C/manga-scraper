@@ -847,3 +847,13 @@ def start_downloader(gallery_list=None):
     log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.\n")
 
     active_extension.post_run_hook()
+    
+    # Clean up temp archive folder if used
+    if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
+        import shutil
+        try:
+            if os.path.exists(ARCHIVE_TEMP_ROOT):
+                shutil.rmtree(ARCHIVE_TEMP_ROOT)
+                logger.info(f"Cleaned up temp archive folder: {ARCHIVE_TEMP_ROOT}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp archive folder: {e}")
