@@ -755,7 +755,17 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
         gallery_page_counts.append(num_pages)
         total_pages += num_pages
 
-    page_progress = tqdm(total=total_pages, desc=f"Batch {current_batch_number}/{total_batch_numbers}", unit="page")
+    bar_format = (
+        "{desc}: {percentage:3.0f}%|{bar}| [{{n_fmt}}/{{total_fmt}} Pages, {{rate_fmt}}{{postfix}}, {{elapsed}}<{{remaining}}]"
+    )
+    page_progress = tqdm(
+        total=total_pages,
+        desc=f"Gallery 1 / {len(batch_list)}",
+        unit="page",
+        bar_format=bar_format,
+        position=0,
+        dynamic_ncols=True
+    )
 
     # Precompute gallery page milestones
     gallery_milestones = []
@@ -776,7 +786,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
             while (progress_state["gallery"] <= len(gallery_milestones) and
                    progress_state["pages"] > gallery_milestones[progress_state["gallery"] - 1]):
                 progress_state["gallery"] += 1
-            page_progress.set_postfix_str(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
+            page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
             page_progress.update(1)
 
     # Patch the download_images_hook to call our page_update_hook after each page
