@@ -36,7 +36,7 @@ def load_extension(suppess_pre_run_hook: bool = False):
     
     if suppess_pre_run_hook==False:
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
-        logger.info(f"Downloading Galleries To: {download_location}")
+        log(f"Downloading Galleries To: {download_location}")
 
     if not orchestrator.dry_run:
         os.makedirs(download_location, exist_ok=True)
@@ -109,9 +109,9 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
 
     # --- Output ---
     log_clarification("warning")
-    log(f"Estimated Total API Hits: {total_api_hits}", "debug")
     log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
-    log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}", "info")
+    log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}")
+    log(f"Estimated Total API Hits: {total_api_hits}")
     
 # Space monitoring for progress display
 space_monitor = {
@@ -647,7 +647,8 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     
     If insufficient space, prompts user to download as many as fit.
     """
-    log(f"Estimating download size for {len(gallery_ids)} galleries...", "info")
+    log_clarification()
+    log(f"Estimating download size for {len(gallery_ids)} galleries...")
     
     total_estimated = 0
     gallery_sizes = []  # List of (gallery_id, estimated_bytes)
@@ -681,18 +682,19 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     safety_buffer = max(512 * 1024 * 1024, total_estimated * 0.1)
     required_with_buffer = total_estimated + parallel_buffer + safety_buffer
     
-    log_clarification()
-    log(f"Total download size estimate: {_format_bytes(total_estimated)}", "info")
-    log(f"Available disk space: {_format_bytes(available)}", "info")
-    log(f"Required with buffer: {_format_bytes(required_with_buffer)}", "info")
+    log(
+        f"Space Usage Estimate:\n"
+        f"  Total download size: {_format_bytes(total_estimated)}\n"
+        f"  Available disk space: {_format_bytes(available)}\n"
+        f"  Required with buffer: {_format_bytes(required_with_buffer)}\n"
+    )
     
     # If sufficient space, return all galleries
     if available < 0 or available >= required_with_buffer:
-        log("Sufficient space available. Proceeding with download.", "info")
+        log("Sufficient space available. Proceeding with download.")
         return total_estimated, gallery_ids
     
     # Insufficient space - ask user if they want to download as many as fit
-    log_clarification()
     logger.warning(
         f"Insufficient space for all galleries!\n"
         f"  Required (with buffer): {_format_bytes(required_with_buffer)}\n"
@@ -833,7 +835,7 @@ def start_downloader(gallery_list=None):
     # Report space usage statistics
     log_clarification()
     if space_monitor["galleries_processed"] > 0:
-        logger.info(
+        log(
             f"Space Usage Summary:\n"
             f"  Galleries processed: {space_monitor['galleries_processed']}\n"
             f"  Total estimated: {_format_bytes(space_monitor['total_estimated_bytes'])}\n"
