@@ -899,8 +899,8 @@ class ClearCache:
 class CacheUtil:
     @staticmethod
     def ensure_files():
+        prune_all_caches()
         cache_dir = get_cache_dir()
-        prune_all_caches(cache_dir)
         cache_file = cache_dir / SEARCH_HISTORY_FILENAME
         if cache_file.exists():
             try:
