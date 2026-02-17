@@ -16,7 +16,7 @@ from mangascraper.extensions.extension_manager import get_selected_extension  # 
 
 active_extension = "skeleton"
 download_location = ""
-ARCHIVE_TEMP_ROOT = "/tmp/manga-scraper/archive_temp"
+ARCHIVE_TEMP_ROOT = "/opt/manga-scraper/mangascraper/core/data/archive_temp/"
 
 skipped_galleries = []
 
