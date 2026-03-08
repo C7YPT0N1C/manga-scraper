@@ -231,7 +231,7 @@ def mark_gallery_completed(gallery_id):
     gallery_languages = {}
 
     for gid, entry in cache.items():
-        logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {meta}")
+        logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
         
         meta = entry.get("clean_metadata") or {}
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"

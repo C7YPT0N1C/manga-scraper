@@ -1001,8 +1001,6 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
     Tries mirrors in order until one succeeds, with retries per mirror.
     Updates tqdm progress bar with current creator.
     """
-    
-    logger.debug("DOWNLOADING IMAGES")
 
     orchestrator.refresh_globals()
     
