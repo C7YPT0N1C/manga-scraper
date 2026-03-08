@@ -313,11 +313,11 @@ def mark_gallery_completed(gallery_id):
             lang_id_map[lname] = cursor.fetchone()[0]
 
         for gid, gdata in galleries.items():
-            logger.debug(f"[DATABASE] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
-            
             creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
             tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
             language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+            
+            logger.debug(f"[DATABASE] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
             cursor.execute(
                 "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
