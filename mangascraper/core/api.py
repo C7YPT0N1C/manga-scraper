@@ -131,8 +131,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS CachedMetadata (
             gallery_id TEXT PRIMARY KEY,
             timestamp REAL,
-            raw_metadata TEXT
-            clean_metadata TEXT,
+            raw_metadata TEXT,
+            clean_metadata TEXT
         );
 
         CREATE TABLE IF NOT EXISTS CachedReferences (
