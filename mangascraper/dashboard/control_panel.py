@@ -5,7 +5,7 @@ import os
 from flask import Flask, render_template
 from flask_cors import CORS
 
-from mangascraper.core import database as scraperdb
+from mangascraper.core import api as scraperapi
 
 from mangascraper.dashboard.routes.scraper_routes import scraper_bp
 from mangascraper.dashboard.routes.database_routes import db_bp
@@ -37,7 +37,7 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        entries = scraperdb.list_galleries()
+        entries = scraperapi.list_galleries()
         return render_template("database.html", entries=entries)
 
     @app.route("/gallery")

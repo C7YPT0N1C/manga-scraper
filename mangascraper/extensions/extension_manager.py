@@ -7,7 +7,7 @@ from urllib.request import urlopen
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core.api import *
+from mangascraper.core import api as scraperapi
 from mangascraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------
@@ -767,15 +767,15 @@ def calculate_extension_download_path(extension_name: str) -> str:
 def build_gallery_metadata_summary(meta, referrer: str):
     orchestrator.refresh_globals()
 
-    artists = APIGet.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
-    groups = APIGet.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    artists = scraperapi.Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = scraperapi.Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
 
     title = sanitise_string(meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
 
-    gallery_language = APIGet.meta_tags(
+    gallery_language = scraperapi.Get.meta_tags(
         f"{referrer}: Build_gallery_metadata_summary", meta, "language"
     ) or ["Unknown Language"]
 
@@ -934,12 +934,12 @@ def repair_creator_cover(creator_folder: str):
 
         logger.debug(f"[Cover Repair] Cover not found locally; attempting download for Gallery {latest_id}")
         try:
-            meta = APIFetch.gallery_metadata(latest_id)
+            meta = scraperapi.Fetch.gallery_metadata(latest_id)
             logger.debug(f"[Cover Repair] Fetched metadata for Gallery {latest_id}: {meta is not None}")
             if not meta:
                 logger.warning(f"[Cover Repair] No metadata found for Gallery {latest_id}")
                 return
-            urls = APIFetch.image_urls(meta, 1)
+            urls = scraperapi.Fetch.image_urls(meta, 1)
             logger.debug(f"[Cover Repair] Fetched image URLs for Gallery {latest_id}: {urls}")
             if not urls:
                 logger.warning(f"[Cover Repair] No image URLs found for Gallery {latest_id}")
@@ -950,7 +950,7 @@ def repair_creator_cover(creator_folder: str):
                 ext = ".jpg"
             target = os.path.join(covers_folder, f"{entry_name}{ext}")
             logger.debug(f"[Cover Repair] Downloading cover from {url} to {target}")
-            session = APIGet.session(referrer="Cover Repair", status="return")
+            session = scraperapi.Get.session(referrer="Cover Repair", status="return")
             resp = session.get(url, timeout=(60, 60))
             resp.raise_for_status()
             with open(target, "wb") as f:

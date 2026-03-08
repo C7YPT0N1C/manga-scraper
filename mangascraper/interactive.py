@@ -10,8 +10,7 @@ from collections import deque
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core.api import *
-from mangascraper.core import database as scraperdb
+from mangascraper.core import api as scraperapi
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
 ####################################################################################################
@@ -40,7 +39,7 @@ def get_latest_gallery_id(timeout: int = 5) -> int | None:
         log(f"Fetching latest gallery ID from nhentai homepage...", "debug")
         
         # Request homepage directly from API without using fetch_gallery_ids to avoid state pollution
-        session = APIGet.session(referrer="Latest ID Fetch", status="return")
+        session = scraperapi.Get.session(referrer="Latest ID Fetch", status="return")
         url = f"{orchestrator.nhentai_api_base}/galleries/all?page=1"
         
         resp = session.get(url, timeout=(10, 10))
@@ -98,7 +97,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         return [], {}
     
     # Fetch metadata for all found galleries (uses cache if available)
-    metadata = APIFetch.all_galleries_metadata(gallery_ids, cache_key)
+    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata for any galleries")
@@ -198,7 +197,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         print()
         
         # Show summary for full result set
-        summary = APIGet.metadata_summary(dict(metadata_items))
+        summary = scraperapi.Get.metadata_summary(dict(metadata_items))
         logger.info(
             f"Summary: {summary['total_galleries']} galleries, "
             f"{summary['unique_artists']} artists, "
@@ -274,7 +273,7 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         # Offer to apply filters before final selection
         if input("\nApply filters to refine results? (y/n): ").strip().lower() == "y":
             logger.debug("Results filter prompt: yes")
-            summary = APIGet.metadata_summary(metadata)
+            summary = scraperapi.Get.metadata_summary(metadata)
             filtered_ids, filtered_metadata = show_filter_menu(summary, metadata)
             if filtered_ids:
                 logger.info(f"Filtered results: {len(filtered_ids)} galleries")
@@ -338,7 +337,7 @@ def read_gallery_in_terminal(gallery_id: int):
             logger.warning("Read mode requires 'chafa' on PATH. Skipping.")
             return
 
-    meta = APIFetch.gallery_metadata(gallery_id)
+    meta = scraperapi.Fetch.gallery_metadata(gallery_id)
     if not meta or not isinstance(meta, dict):
         logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
         return
@@ -351,7 +350,7 @@ def read_gallery_in_terminal(gallery_id: int):
 
     prompt_reader_settings()
 
-    session = APIGet.session(referrer="Interactive Reader", status="return")
+    session = scraperapi.Get.session(referrer="Interactive Reader", status="return")
     base_tmp_dir = "/tmp/manga-scraper"
     os.makedirs(base_tmp_dir, exist_ok=True)
     temp_dir = tempfile.mkdtemp(prefix=f"mangascraper-read-{gallery_id}-", dir=base_tmp_dir)
@@ -360,7 +359,7 @@ def read_gallery_in_terminal(gallery_id: int):
     def _get_page_path(page: int) -> str | None:
         if page in cached_paths:
             return cached_paths[page]
-        urls = APIFetch.image_urls(meta, page)
+        urls = scraperapi.Fetch.image_urls(meta, page)
         if not urls:
             return None
         url = urls[0]
@@ -452,7 +451,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
-    selected_ids = LoadCache.queued_galleries()
+    selected_ids = scraperapi.LoadCache.queued_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")
         return []
@@ -464,7 +463,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
     if cached_metadata:
         metadata.update({gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata})
 
-    cached_by_ids = LoadCache.id_metadata(unique_ids)
+    cached_by_ids = scraperapi.LoadCache.id_metadata(unique_ids)
     if cached_by_ids:
         for gid in unique_ids:
             if gid not in metadata and gid in cached_by_ids:
@@ -473,7 +472,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
     missing_ids = [gid for gid in unique_ids if gid not in metadata]
     if missing_ids:
         logger.info(f"Fetching metadata for {len(missing_ids)} galleries not in cache...")
-        missing_metadata = APIFetch.all_galleries_metadata(missing_ids)
+        missing_metadata = scraperapi.Fetch.all_galleries_metadata(missing_ids)
         metadata.update(missing_metadata)
     
     if not metadata:
@@ -572,7 +571,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
         print()
         
         # Show summary for active items
-        summary = APIGet.metadata_summary(dict(active_items))
+        summary = scraperapi.Get.metadata_summary(dict(active_items))
         logger.info(
             f"Summary: {summary['total_galleries']} galleries, "
             f"{summary['unique_artists']} artists, "
@@ -1097,7 +1096,7 @@ def interactive_config_menu(current_config: dict) -> dict:
         elif choice == "a":
             confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
             if confirm == 'y':
-                ClearCache.clear()
+                scraperapi.ClearCache.clear()
                 logger.info("Cache cleared successfully.")
             else:
                 logger.info("Cache clear cancelled.")
@@ -1128,13 +1127,13 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
         tuple: (gallery_ids list, cache_key) or ([], None) if all fail
     """
     
-    cache_key = APIGet.cache_keys(search_type, search_value)
+    cache_key = scraperapi.Get.cache_keys(search_type, search_value)
     max_retries = 2
     attempt = 0
     
     while attempt < max_retries:
         try:
-            ids = APIFetch.gallery_ids(
+            ids = scraperapi.Fetch.gallery_ids(
                 search_type,
                 search_value,
                 sort_val,
@@ -1159,7 +1158,7 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
             log_clarification()
             logger.info("Attempting to use cached results...")
             try:
-                cached_metadata = LoadCache.load(cache_key)
+                cached_metadata = scraperapi.LoadCache.load(cache_key)
                 if cached_metadata:
                     cached_ids = list(cached_metadata.keys())
                     logger.info(f"Using {len(cached_ids)} galleries from cache")
@@ -1251,13 +1250,13 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
 
-    APIGet.session(referrer="Interactive", status="build")
+    scraperapi.Get.session(referrer="Interactive", status="build")
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
-        scraperdb.set_queued_galleries([])
+        scraperapi.set_queued_galleries([])
 
-    selected_ids = LoadCache.queued_galleries()
+    selected_ids = scraperapi.LoadCache.queued_galleries()
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
@@ -1265,15 +1264,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
     search_history_max = 10
     search_history = deque(maxlen=search_history_max)  # Each entry is a dict with search details
-    for entry in LoadCache.search_history(search_history_max):
+    for entry in scraperapi.LoadCache.search_history(search_history_max):
         search_history.append(entry)
     selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
 
     def persist_selected_ids():
         nonlocal selected_ids
-        cached_ids = LoadCache.queued_galleries()
+        cached_ids = scraperapi.LoadCache.queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
-        scraperdb.set_queued_galleries(sorted(set(merged)) if merged else [])
+        scraperapi.set_queued_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
 
     if selected_ids:
@@ -1298,7 +1297,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "archive_mode": archive_mode,
         }
         search_history.append(entry)
-        SaveCache.search_history(list(search_history), search_history_max)
+        scraperapi.SaveCache.search_history(list(search_history), search_history_max)
     
     while True:
         clear_screen()
@@ -1331,7 +1330,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            selected_ids = LoadCache.queued_galleries()
+            selected_ids = scraperapi.LoadCache.queued_galleries()
             if selected_ids:
                 break
             else:
@@ -1459,7 +1458,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 continue
             
             if ids and cache_key:
-                cache_key = APIGet.cache_keys("homepage", sort_val)
+                cache_key = scraperapi.Get.cache_keys("homepage", sort_val)
                 add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                 if archive_mode:
                     selected_ids.extend(ids)
@@ -1620,7 +1619,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     continue
                 
                 if ids and cache_key:
-                    cache_key = APIGet.cache_keys("search", search_query)
+                    cache_key = scraperapi.Get.cache_keys("search", search_query)
                     add_search_history("search", search_query, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     if archive_mode:
                         selected_ids.extend(ids)
@@ -1705,7 +1704,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     continue
                 
                 if ids and cache_key:
-                    cache_key = APIGet.cache_keys(query_type, query_value)
+                    cache_key = scraperapi.Get.cache_keys(query_type, query_value)
                     add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     if archive_mode:
                         selected_ids.extend(ids)
@@ -1811,7 +1810,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            selected_ids = LoadCache.queued_galleries()
+            selected_ids = scraperapi.LoadCache.queued_galleries()
             selected_ids = view_queued_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue

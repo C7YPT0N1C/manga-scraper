@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
-from mangascraper.core import database as scraperdb
 from mangascraper.extensions.extension_manager import (
     build_gallery_metadata_summary,
     calculate_extension_download_path,
@@ -819,7 +819,7 @@ def update_creator_manga(meta):
         # Query database for most_popular_tags (top genres) for this creator
         genre_names = []
         try:
-            with scraperdb.lock, scraperdb._connect() as conn:
+            with scraperapi.lock, scraperapi._connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
                 row = cursor.fetchone()
@@ -1079,7 +1079,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         logger.warning(
             f"Gallery {gallery}: Page {page}: All retries failed, rotating Tor node and retrying once more..."
         )
-        downloader_session = APIGet.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
+        downloader_session = scraperapi.Get.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
 
     if not success:

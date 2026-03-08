@@ -11,11 +11,11 @@ from pathlib import Path
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraperdb
+from mangascraper.core import api as scraperapi
 
 def load_queued_galleries() -> list:
     """Fetch queued galleries from GalleriesQueue table in the database."""
-    return scraperdb.get_queued_galleries()
+    return scraperapi.get_queued_galleries()
 
 # Cache TTL: 3 hours (runtime-configured)
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
@@ -111,10 +111,10 @@ def get_cache_key(search_type: str, search_value: str = None) -> str:
 def _load_master_cache() -> dict:
     cutoff = time.time() - TTL
     try:
-        scraperdb.prune_cache_metadata(cutoff)
-        scraperdb.prune_cache_references(time.time())
-        metadata_block = scraperdb.load_cache_metadata_all(cutoff)
-        references = scraperdb.load_cache_references()
+        scraperapi.prune_cache_metadata(cutoff)
+        scraperapi.prune_cache_references(time.time())
+        metadata_block = scraperapi.load_cache_metadata_all(cutoff)
+        references = scraperapi.load_cache_references()
         return {"references": references, "metadata": metadata_block}
     except Exception:
         return {
@@ -126,8 +126,8 @@ def _prune_master_cache(data: dict, save_if_changed: bool = False) -> dict:
     if not isinstance(data, dict):
         return {"references": {}, "metadata": {}}
     if save_if_changed:
-        scraperdb.prune_cache_metadata(time.time() - TTL)
-        scraperdb.prune_cache_references(time.time())
+        scraperapi.prune_cache_metadata(time.time() - TTL)
+        scraperapi.prune_cache_references(time.time())
     return data
 
 def load_all_cached_metadata() -> dict:
@@ -173,10 +173,10 @@ def _save_master_cache(data: dict):
     return
 
 def _update_master_cache(entry_key: str, entry: dict):
-    scraperdb.upsert_cache_reference(entry_key, entry)
+    scraperapi.upsert_cache_reference(entry_key, entry)
 
 def _remove_master_cache_entry(entry_key: str):
-    scraperdb.delete_cache_reference(entry_key)
+    scraperapi.delete_cache_reference(entry_key)
 
 def load_general_metadata_cache() -> dict:
     """Load general metadata stored inside master cache."""
@@ -206,7 +206,7 @@ def save_general_metadata_cache(metadata: dict):
     for gid, entry in safe_metadata.items():
         if not isinstance(entry, dict):
             continue
-        scraperdb.upsert_cache_metadata(
+        scraperapi.upsert_cache_metadata(
             gid,
             now,
             clean_metadata=entry,
@@ -237,7 +237,7 @@ def save_general_raw_metadata_cache(metadata: dict):
     data = _load_master_cache()
     now = time.time()
     for gid, entry in metadata.items():
-        scraperdb.upsert_cache_metadata(
+        scraperapi.upsert_cache_metadata(
             str(gid),
             now,
             clean_metadata=None,
@@ -351,7 +351,7 @@ def save_cache(cache_key: str, metadata: dict):
         # Prune cache files based on database expires_at as well as file timestamp
         from mangascraper.core import database
         now = time.time()
-        scraperdb.prune_cache_references(now)
+        scraperapi.prune_cache_references(now)
         _update_master_cache(
             f"metadata:{cache_key}",
             _build_master_entry(

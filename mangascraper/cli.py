@@ -5,8 +5,7 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core.api import *
-from mangascraper.core import database as scraperdb
+from mangascraper.core import api as scraperapi
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
@@ -418,13 +417,13 @@ def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val:
     """
     Fetch gallery IDs with error handling and fallback to cached results.
     """
-    cache_key = APIGet.cache_keys(query_type, query_value) if query_value else None
+    cache_key = scraperapi.Get.cache_keys(query_type, query_value) if query_value else None
     max_retries = 2
     attempt = 0
     
     while attempt < max_retries:
         try:
-            ids = APIFetch.gallery_ids(
+            ids = scraperapi.Fetch.gallery_ids(
                 query_type,
                 query_value,
                 sort_val,
@@ -446,7 +445,7 @@ def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val:
             if cache_key:
                 try:
                     logger.info("Attempting to use cached results...")
-                    cached_metadata = LoadCache.load(cache_key)
+                    cached_metadata = scraperapi.LoadCache.load(cache_key)
                     if cached_metadata:
                         cached_ids = list(cached_metadata.keys())
                         logger.warning(f"Using {len(cached_ids)} galleries from cache")
@@ -496,7 +495,7 @@ def display_download_summary(gallery_ids: list, show_summary: bool = False, cach
     logger.info(f"Fetching metadata for {len(gallery_ids)} galleries (this may take a moment)...")
     
     # Fetch metadata
-    metadata = APIFetch.all_galleries_metadata(gallery_ids, cache_key=cache_key)
+    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key=cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata. Proceed without summary? (y/n): ", end="")
@@ -747,33 +746,33 @@ def _get_summary_cache_key(args) -> str | None:
             first = str(args.homepage[0]).lower()
             if first in valid_sorts:
                 sort_val = first
-        return APIGet.cache_keys("homepage", sort_val)
+        return scraperapi.Get.cache_keys("homepage", sort_val)
 
     if args.artist and len(args.artist) == 1:
-        return APIGet.cache_keys("artist", str(args.artist[0][0]))
+        return scraperapi.Get.cache_keys("artist", str(args.artist[0][0]))
 
     if args.group and len(args.group) == 1:
-        return APIGet.cache_keys("group", str(args.group[0][0]))
+        return scraperapi.Get.cache_keys("group", str(args.group[0][0]))
 
     if args.tag and len(args.tag) == 1:
-        return APIGet.cache_keys("tag", str(args.tag[0][0]))
+        return scraperapi.Get.cache_keys("tag", str(args.tag[0][0]))
 
     if args.character and len(args.character) == 1:
-        return APIGet.cache_keys("character", str(args.character[0][0]))
+        return scraperapi.Get.cache_keys("character", str(args.character[0][0]))
 
     if args.parody and len(args.parody) == 1:
-        return APIGet.cache_keys("parody", str(args.parody[0][0]))
+        return scraperapi.Get.cache_keys("parody", str(args.parody[0][0]))
 
     if args.search and len(args.search) == 1:
-        return APIGet.cache_keys("search", str(args.search[0][0]))
+        return scraperapi.Get.cache_keys("search", str(args.search[0][0]))
 
     if args.archive and len(args.archive) == 1:
         entry = args.archive[0]
         if isinstance(entry, str):
             entry = [entry]
         if len(entry) == 1 and str(entry[0]).lower() == "all":
-            return APIGet.cache_keys("archive", "all")
-        return APIGet.cache_keys("archive", str(entry[0]))
+            return scraperapi.Get.cache_keys("archive", "all")
+        return scraperapi.Get.cache_keys("archive", str(entry[0]))
 
     return None
 
@@ -932,8 +931,8 @@ def update_config(args):
 # Main
 # ------------------------------------------------------------
 def main():
-    CacheUtil.ensure_files()
-    scraperdb.init_db()
+    scraperapi.CacheUtil.ensure_files()
+    scraperapi.init_db()
     """
     This is one this module's entrypoints.
     """
@@ -1089,7 +1088,7 @@ def main():
         ]
         initial_gallery_list = []
         if any(gallery_args):
-            APIGet.session(referrer="CLI", status="build")
+            scraperapi.Get.session(referrer="CLI", status="build")
             initial_gallery_list = build_gallery_list(args)
 
         # Enter gallery search mode
@@ -1100,7 +1099,7 @@ def main():
             sys.exit(0)
     else:
         # Build initial session.
-        APIGet.session(referrer="CLI", status="build")
+        scraperapi.Get.session(referrer="CLI", status="build")
         
         # Build Gallery List (make sure not empty.)
         gallery_list = build_gallery_list(args)
