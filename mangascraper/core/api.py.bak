@@ -220,13 +220,18 @@ def mark_gallery_completed(gallery_id):
     for gid, entry in cache.items():
         meta = entry.get("clean_metadata") or {}
         break
-    # Compute download_path, cover_path, extension_used
+    # Compute download_path, cover_path, extension_used, started_at with robust fallback
     download_path = None
     cover_path = None
     extension_used = None
     started_at = None
+    # Fallbacks for each field
+    ext_download_path = ""
+    cleaned_creator = "Unknown"
+    gallery_title = f"Gallery_{gallery_id}"
+    ext = "cbz"
+    is_archive = True
     if meta:
-        # Extension download path
         ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or ""
         # Cleaned primary creator name
         primary_creator = None
@@ -236,26 +241,28 @@ def mark_gallery_completed(gallery_id):
             primary_creator = meta["groups"][0]
         else:
             primary_creator = "Unknown"
-        # Clean the creator name
         from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
-        # Gallery title
         gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
-        # Extension used
         extension_used = meta.get("extension_used") or meta.get("extension") or None
-        # Archive or directory
         ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
         is_archive = meta.get("is_archive", True)
-        # Compose download_path
-        if is_archive:
-            download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
-        else:
-            download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-        # Compose cover_path
-        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}.{ext}")
-        # started_at
         started_at = meta.get("started_at")
-    # Update Galleries table
+    # Compose download_path and cover_path
+    if is_archive:
+        download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+    else:
+        download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
+    cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}.{ext}")
+    # If started_at is still None, try to fetch from Galleries table
+    if not started_at:
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT started_at FROM Galleries WHERE id=?", (gallery_id,))
+            row = cursor.fetchone()
+            if row and row[0]:
+                started_at = row[0]
+    # Update Galleries table with all fields
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -368,24 +375,17 @@ def mark_gallery_completed(gallery_id):
             creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
             tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
             language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
-            
-            logger.debug(f"[DATABASE] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
+            logger.debug(f"[DATABASE] Writing to Galleries (partial update): id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
             cursor.execute(
-                "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
                 (
-                    int(gid),
                     gdata["raw_title"],
                     gdata["clean_title"],
                     gdata["num_pages"],
                     json.dumps(creator_ids),
                     json.dumps(language_ids),
                     json.dumps(tag_ids),
-                    gdata["status"],
-                    gdata["started_at"],
-                    gdata["completed_at"],
-                    gdata["download_path"],
-                    gdata["cover_path"],
-                    gdata["extension_used"]
+                    int(gid)
                 )
             )
             cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (int(gid), json.dumps(tag_ids)))

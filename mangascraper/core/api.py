@@ -521,13 +521,13 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         cursor = conn.cursor()
         if cutoff is not None:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+                "SELECT gallery_id, timestamp, raw_metadata, clean_metadata "
                 "FROM CachedMetadata WHERE timestamp >= ?",
                 (cutoff,),
             )
         else:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
+                "SELECT gallery_id, timestamp, raw_metadata, clean_metadata FROM CachedMetadata"
             )
         rows = cursor.fetchall()
     result = {}
@@ -536,8 +536,8 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "clean_metadata": clean,
             "raw_metadata": raw,
+            "clean_metadata": clean,
         }
     return result
 
@@ -549,7 +549,7 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
     placeholders = ",".join("?" for _ in ids)
     params = list(ids)
     query = (
-        "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+        "SELECT gallery_id, timestamp, raw_metadata, clean_metadata "
         "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
     )
     if cutoff is not None:
@@ -565,8 +565,8 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "clean_metadata": clean,
             "raw_metadata": raw,
+            "clean_metadata": clean,
         }
     return result
 
@@ -575,7 +575,7 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
+            "SELECT timestamp, raw_metadata, clean_metadata FROM CachedMetadata WHERE gallery_id = ?",
             (str(gallery_id),),
         )
         row = cursor.fetchone()
@@ -584,19 +584,17 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     timestamp, clean_json, raw_json = row
     clean = json.loads(clean_json) if clean_json else {}
     raw = json.loads(raw_json) if raw_json else {}
-    return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
+    return {"timestamp": timestamp, "raw_metadata": raw, "clean_metadata": clean}
 
-def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
+def upsert_cache_metadata(gallery_id: str, timestamp: float, raw_metadata=None, clean_metadata=None):
     init_db()
     entry = load_cache_metadata_entry(gallery_id) or {
         "timestamp": None,
-        "clean_metadata": {},
         "raw_metadata": {},
+        "clean_metadata": {},
     }
-    # Always update raw_metadata as-is
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
-    # Clean clean_metadata fields: title, artists, groups
     if isinstance(clean_metadata, dict):
         cleaned = dict(clean_metadata)
         from mangascraper.core.api import sanitise_string
@@ -619,13 +617,13 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
             "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(gallery_id) DO UPDATE SET "
             "timestamp=excluded.timestamp, "
-            "clean_metadata=excluded.clean_metadata, "
             "raw_metadata=excluded.raw_metadata",
+            "clean_metadata=excluded.clean_metadata, "
             (
                 str(gallery_id),
                 entry["timestamp"],
-                json.dumps(entry["clean_metadata"], ensure_ascii=False),
                 json.dumps(entry["raw_metadata"], ensure_ascii=False),
+                json.dumps(entry["clean_metadata"], ensure_ascii=False),
             ),
         )
         conn.commit()
@@ -832,64 +830,70 @@ def _build_master_cache_entry(
         size = cache_file.stat().st_size
     except Exception:
         size = None
-    for gid, entry in cache.items():
-        logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
-        raw_meta = entry.get("raw_metadata") or {}
-        clean_meta = entry.get("clean_metadata") or {}
-        # raw_title from raw_metadata, clean_title from clean_metadata
-        raw_title = raw_meta.get("title") or f"Gallery_{gid}"
-        clean_title = clean_meta.get("title") or f"Gallery_{gid}"
-        num_pages = clean_meta.get("num_pages") or clean_meta.get("pages") or 0
-        # Creator Names
-        creator_names = []
-        creator_types = {}
-        if "artists" in clean_meta and isinstance(clean_meta["artists"], list):
-            creator_names.extend(clean_meta["artists"])
-            for artist in clean_meta["artists"]:
-                creator_types[artist] = "artist"
-        if "groups" in clean_meta and isinstance(clean_meta["groups"], list):
-            creator_names.extend(clean_meta["groups"])
-            for group in clean_meta["groups"]:
-                creator_types[group] = "group"
-        # Tags
-        tag_names = clean_meta.get("tags") or []
-        if isinstance(tag_names, str):
-            tag_names = [tag_names]
-        # Languages
-        language_names = clean_meta.get("languages") or clean_meta.get("language") or []
-        if isinstance(language_names, str):
-            language_names = [language_names]
-        status = clean_meta.get("status")
-        started_at = clean_meta.get("started_at")
-        completed_at = clean_meta.get("completed_at")
-        download_path = clean_meta.get("download_path")
-        cover_path = clean_meta.get("cover_path")
-        extension_used = clean_meta.get("extension_used")
-        logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
-        for cname in creator_names:
-            ctype = creator_types.get(cname, None)
-            creators.setdefault(cname, {"display_name": cname, "creator_type": ctype, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
-        for tname in tag_names:
-            tags.setdefault(tname, {"count": 0})
-        for lname in language_names:
-            languages.setdefault(lname, {"count": 0})
-        galleries[gid] = {
-            "id": gid,
-            "raw_title": raw_title,
-            "clean_title": clean_title,
-            "num_pages": num_pages,
-            "creator_names": creator_names,
-            "language_names": language_names,
-            "tag_names": tag_names,
-            "status": status,
-            "started_at": started_at,
-            "completed_at": completed_at,
-            "download_path": download_path,
-            "cover_path": cover_path,
-            "extension_used": extension_used
-        }
-        gallery_tags[gid] = tag_names
-        gallery_languages[gid] = language_names
+    now = time.time()
+    write_time = last_write if last_write is not None else now
+    ttl_default = 10800
+    ttl = ttl_seconds if ttl_seconds is not None else ttl_default
+    expires_at = write_time + ttl if ttl else None
+    entry = {
+        "type": cache_type,
+        "key": key,
+        "path": str(cache_file),
+        "size": size,
+        "last_read": last_read,
+        "last_write": write_time,
+        "ttl": ttl_seconds,
+        "expires_at": expires_at,
+    }
+    if ids is not None:
+        entry["ids"] = ids
+    return entry
+
+def _load_master_cache() -> dict:
+    cutoff = time.time() - TTL
+    try:
+        # Prune metadata entries in the master cache by their own TTL
+        prune_cache_metadata(cutoff)
+        
+        # Prune references to cache files by their own TTL
+        prune_cache_references(time.time())
+        
+        metadata_block = load_cache_metadata_all(cutoff)
+        
+        # Remove expired entries from metadata_block (in-memory prune)
+        if isinstance(metadata_block, dict):
+            expired_keys = []
+            for gid, entry in metadata_block.items():
+                if not isinstance(entry, dict):
+                    continue
+                timestamp = entry.get("timestamp") or 0
+                if (time.time() - timestamp) >= TTL:
+                    expired_keys.append(gid)
+            for gid in expired_keys:
+                metadata_block.pop(gid, None)
+        references = load_cache_references()
+        return {"references": references, "metadata": metadata_block}
+    except Exception:
+        return {"references": {}, "metadata": {}}
+
+def _save_master_cache(data: dict):
+    return
+
+def _update_master_cache(entry_key: str, entry: dict):
+    upsert_cache_reference(entry_key, entry)
+
+def _remove_master_cache_entry(entry_key: str):
+    delete_cache_reference(entry_key)
+    
+def prune_all_caches():
+    """Centralised cache pruning for metadata, references, and files."""
+    now = time.time()
+    # Prune metadata entries in the master cache by their own TTL
+    prune_cache_metadata(now - TTL)
+    # Prune references to cache files by their own TTL
+    prune_cache_references(now)
+
+    cache_dir = get_cache_dir()
     protected = {SEARCH_HISTORY_FILENAME}
     for cache_file in cache_dir.glob("*.json"):
         if cache_file.name == "(master_cache).json":
