@@ -175,16 +175,32 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     now = datetime.now(timezone.utc).isoformat()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-        INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            status=excluded.status,
-            started_at=excluded.started_at,
-            download_path=excluded.download_path,
-            extension_used=excluded.extension_used
-        """, (gallery_id, "started", now, download_path, extension_used))
-        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
+        # Check if extension_used is already set for this gallery
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            # Preserve existing extension_used
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path
+            """, (gallery_id, "started", now, download_path))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
+        else:
+            # Set extension_used if not already set
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path,
+                extension_used=excluded.extension_used
+            """, (gallery_id, "started", now, download_path, extension_used))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
         conn.commit()
 
 def mark_gallery_skipped(gallery_id):
@@ -244,7 +260,6 @@ def mark_gallery_completed(gallery_id):
         from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
         gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
-        extension_used = meta.get("extension_used") or meta.get("extension") or None
         ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
         is_archive = meta.get("is_archive", True)
         started_at = meta.get("started_at")
@@ -262,9 +277,15 @@ def mark_gallery_completed(gallery_id):
             row = cursor.fetchone()
             if row and row[0]:
                 started_at = row[0]
-    # Update Galleries table with all fields
+    # Preserve extension_used if already set
     with lock, _connect() as conn:
         cursor = conn.cursor()
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            extension_used = row[0]
+        else:
+            extension_used = meta.get("extension_used") or meta.get("extension") or None
         cursor.execute("""
         UPDATE Galleries
         SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
