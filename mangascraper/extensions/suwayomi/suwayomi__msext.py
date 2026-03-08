@@ -819,11 +819,15 @@ def update_creator_manga(meta):
             description = f"Latest Doujin: {latest_name}"
 
         # Query database for most_popular_tags (top genres) for this creator
+        logger.debug(f"[DEBUG] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperapi.DB_PATH}")
         genre_names = []
         with scraperapi.lock, scraperapi._connect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
             row = cursor.fetchone()
+            logger.debug(f"[DEBUG] DB row for creator_name={creator_name}: {row}")
+            if not row:
+                logger.warning(f"[details.json] Creator not found in DB: {creator_name} (DB path: {scraperapi.DB_PATH})")
             if row:
                 creator_id = row[0]
                 cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
@@ -837,6 +841,7 @@ def update_creator_manga(meta):
                         cursor.execute(f"SELECT name FROM Tags WHERE id IN ({qmarks})", tag_ids)
                         genre_names = [r[0] for r in cursor.fetchall() if r and r[0]]
                         logger.debug(f"[TESTING] genres names = {genre_names}")
+        logger.debug(f"[DEBUG] Finished DB genre lookup for creator: {creator_name}")
 
         # Debug: Log DB path and genres
         logger.info(f"[details.json] Genres for {creator_name}: {genre_names[:MAX_GENRES_STORED]}")
