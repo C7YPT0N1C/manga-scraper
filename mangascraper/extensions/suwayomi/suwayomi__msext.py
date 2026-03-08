@@ -872,6 +872,7 @@ def update_creator_manga(meta):
                     creator_id = row[0]
                     cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
                     tag_ids_json = cursor.fetchone()
+                    logger.info(f"[details.json] Raw most_popular_tags for {creator_name}: {tag_ids_json}")
                     if tag_ids_json and tag_ids_json[0]:
                         tag_ids = json.loads(tag_ids_json[0])
                         if tag_ids:
