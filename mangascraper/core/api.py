@@ -310,6 +310,7 @@ def mark_gallery_completed(gallery_id):
             extension_used = row[0]
         else:
             extension_used = meta.get("extension_used") or meta.get("extension") or None
+        logger.debug(f"[DEBUG] About to update gallery {gallery_id}:\n  clean_title={gallery_title}\n  download_path={download_path}\n  cover_path={cover_path}\n  ext_download_path={ext_download_path}\n  cleaned_creator={cleaned_creator}\n  ext={ext}")
         cursor.execute("""
         UPDATE Galleries
         SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
