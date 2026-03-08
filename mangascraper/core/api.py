@@ -382,6 +382,9 @@ def mark_gallery_completed(gallery_id):
                 logger.debug(f"[DATABASE] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
                 cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
             # (rest of function unchanged)
+
+def get_queued_galleries():
+    init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM GalleriesQueue")
