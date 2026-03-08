@@ -175,16 +175,32 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     now = datetime.now(timezone.utc).isoformat()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-        INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            status=excluded.status,
-            started_at=excluded.started_at,
-            download_path=excluded.download_path,
-            extension_used=excluded.extension_used
-        """, (gallery_id, "started", now, download_path, extension_used))
-        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
+        # Check if extension_used is already set for this gallery
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            # Preserve existing extension_used
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path
+            """, (gallery_id, "started", now, download_path))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
+        else:
+            # Set extension_used if not already set
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path,
+                extension_used=excluded.extension_used
+            """, (gallery_id, "started", now, download_path, extension_used))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
         conn.commit()
 
 def mark_gallery_skipped(gallery_id):
@@ -244,7 +260,6 @@ def mark_gallery_completed(gallery_id):
         from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
         gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
-        extension_used = meta.get("extension_used") or meta.get("extension") or None
         ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
         is_archive = meta.get("is_archive", True)
         started_at = meta.get("started_at")
@@ -262,9 +277,15 @@ def mark_gallery_completed(gallery_id):
             row = cursor.fetchone()
             if row and row[0]:
                 started_at = row[0]
-    # Update Galleries table with all fields
+    # Preserve extension_used if already set
     with lock, _connect() as conn:
         cursor = conn.cursor()
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            extension_used = row[0]
+        else:
+            extension_used = meta.get("extension_used") or meta.get("extension") or None
         cursor.execute("""
         UPDATE Galleries
         SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
@@ -920,29 +941,6 @@ def _build_symbol_translation_table():
 # Initial symbol translation table at module load
 _build_symbol_translation_table()
 
-def build_gallery_metadata_summary(meta, referrer: str):
-    orchestrator.refresh_globals()
-
-    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
-    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-
-    title = sanitise_string(meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-
-    gallery_language = Get.meta_tags(
-        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
-    ) or ["Unknown Language"]
-
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
-
 def sanitise_string(meta_or_title):
     """
     Clean a gallery/manga title. Accepts either a meta dict or a raw string.
@@ -1041,6 +1039,49 @@ def sanitise_string(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     return title.replace("/", "-").replace("\\", "-").strip()
+
+def build_gallery_metadata_summary(meta, referrer: str):
+    orchestrator.refresh_globals()
+
+    # Extract and clean creators
+    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    creators_clean = [sanitise_string(c) for c in creators]
+
+    # Clean title
+    title = sanitise_string(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+
+    # Extract and clean language(s)
+    gallery_language = Get.meta_tags(
+        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
+    ) or ["Unknown Language"]
+    gallery_language_clean = [sanitise_string(l) for l in gallery_language]
+
+    # Prepare cleaned metadata for DB
+    clean_metadata = {
+        "clean_title": title,
+        "creator_names": creators_clean,
+        "language_names": gallery_language_clean,
+    }
+    # Optionally add more cleaned fields as needed
+
+    # Update DB clean_metadata for this gallery if id is valid
+    try:
+        gid = int(id) if id.isdigit() else id
+        upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
+    except Exception:
+        pass
+
+    return {
+        "creator": creators_clean,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language_clean,
+    }
 
 def _calculate_thread_load_sleep(stage: str, num_items: int, attempt: int, gallery_cap: int = 3750) -> float:
     """

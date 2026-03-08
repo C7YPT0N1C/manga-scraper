@@ -241,12 +241,18 @@ def mark_gallery_completed(gallery_id):
     cover_path = None
     extension_used = None
     started_at = None
-    # Fallbacks for each field
     ext_download_path = ""
     cleaned_creator = "Unknown"
     gallery_title = f"Gallery_{gallery_id}"
     ext = "cbz"
     is_archive = True
+    # Fetch clean_title from Galleries table if possible
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            gallery_title = row[0]
     if meta:
         ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or ""
         # Cleaned primary creator name
@@ -259,16 +265,16 @@ def mark_gallery_completed(gallery_id):
             primary_creator = "Unknown"
         from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
-        gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
         ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
         is_archive = meta.get("is_archive", True)
         started_at = meta.get("started_at")
-    # Compose download_path and cover_path
+    # Compose download_path and cover_path with full extension path
     if is_archive:
         download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
     else:
         download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-    cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}.{ext}")
+    # cover_path: full path, no extension
+    cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
     # If started_at is still None, try to fetch from Galleries table
     if not started_at:
         with lock, _connect() as conn:
