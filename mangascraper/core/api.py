@@ -71,6 +71,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
             display_name TEXT,
+            creator_type TEXT,
             first_seen TEXT,
             last_updated TEXT,
             total_galleries INTEGER,
@@ -130,8 +131,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS CachedMetadata (
             gallery_id TEXT PRIMARY KEY,
             timestamp REAL,
-            clean_metadata TEXT,
             raw_metadata TEXT
+            clean_metadata TEXT,
         );
 
         CREATE TABLE IF NOT EXISTS CachedReferences (
@@ -183,6 +184,7 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
             download_path=excluded.download_path,
             extension_used=excluded.extension_used
         """, (gallery_id, "started", now, download_path, extension_used))
+        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
         conn.commit()
 
 def mark_gallery_skipped(gallery_id):
@@ -212,13 +214,56 @@ def mark_gallery_failed(gallery_id):
 def mark_gallery_completed(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
+    # Load metadata for this gallery to compute paths and extension
+    cache = load_cache_metadata_for_ids([gallery_id])
+    meta = None
+    for gid, entry in cache.items():
+        meta = entry.get("clean_metadata") or {}
+        break
+    # Compute download_path, cover_path, extension_used
+    download_path = None
+    cover_path = None
+    extension_used = None
+    started_at = None
+    if meta:
+        # Extension download path
+        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or ""
+        # Cleaned primary creator name
+        primary_creator = None
+        if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
+            primary_creator = meta["artists"][0]
+        elif "groups" in meta and isinstance(meta["groups"], list) and meta["groups"]:
+            primary_creator = meta["groups"][0]
+        else:
+            primary_creator = "Unknown"
+        # Clean the creator name
+        from mangascraper.core.api import sanitise_string
+        cleaned_creator = sanitise_string(primary_creator)
+        # Gallery title
+        gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
+        # Extension used
+        extension_used = meta.get("extension_used") or meta.get("extension") or None
+        # Archive or directory
+        ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
+        is_archive = meta.get("is_archive", True)
+        # Compose download_path
+        if is_archive:
+            download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+        else:
+            download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
+        # Compose cover_path
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}.{ext}")
+        # started_at
+        started_at = meta.get("started_at")
+    # Update Galleries table
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         UPDATE Galleries
-        SET status = ?, completed_at = ?
+        SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
         WHERE id = ?
-        """, ("completed", now, gallery_id))
+        """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
+        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
         conn.commit()
 
     # Now process all main tables for this gallery
@@ -240,10 +285,15 @@ def mark_gallery_completed(gallery_id):
         
         # Creator Names
         creator_names = []
+        creator_types = {}
         if "artists" in meta and isinstance(meta["artists"], list):
             creator_names.extend(meta["artists"])
+            for artist in meta["artists"]:
+                creator_types[artist] = "artist"
         if "groups" in meta and isinstance(meta["groups"], list):
             creator_names.extend(meta["groups"])
+            for group in meta["groups"]:
+                creator_types[group] = "group"
         
         # Tags
         tag_names = meta.get("tags") or []
@@ -265,7 +315,8 @@ def mark_gallery_completed(gallery_id):
         logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
 
         for cname in creator_names:
-            creators.setdefault(cname, {"display_name": cname, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
+            ctype = creator_types.get(cname, None)
+            creators.setdefault(cname, {"display_name": cname, "creator_type": ctype, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
         for tname in tag_names:
             tags.setdefault(tname, {"count": 0})
         for lname in language_names:
@@ -297,8 +348,9 @@ def mark_gallery_completed(gallery_id):
         now = datetime.now(timezone.utc).isoformat()
 
         for cname, cdata in creators.items():
-            cursor.execute("INSERT OR IGNORE INTO Creators (name, display_name, first_seen, last_updated, total_galleries, most_popular_tags) VALUES (?, ?, ?, ?, ?, ?)",
-                (cname, cdata["display_name"], now, now, 0, json.dumps([])))
+            cursor.execute("INSERT OR IGNORE INTO Creators (name, display_name, creator_type, first_seen, last_updated, total_galleries, most_popular_tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (cname, cdata["display_name"], cdata["creator_type"], now, now, 0, json.dumps([])))
+            cursor.execute("UPDATE Creators SET creator_type=? WHERE name=?", (cdata["creator_type"], cname))
             cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
             creator_id_map[cname] = cursor.fetchone()[0]
 
