@@ -268,17 +268,6 @@ def test_hook():
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
 
-#def _get_latest_id_from_details(creator_folder: str) -> int | None:
-#    details_file = os.path.join(creator_folder, "details.json")
-#    if not os.path.exists(details_file):
-#        return None
-#    try:
-#        with open(details_file, "r", encoding="utf-8") as f:
-#            details = json.load(f)
-#        return parse_gallery_id(details.get("description", ""))
-#    except Exception:
-#        return None
-
 def graphql_request(request: str, variables: dict = None, gql_debugging: bool = False):
     """
     Framework for making requests to GraphQL
@@ -760,42 +749,13 @@ def remove_from_deferred(creator_name: str, metadata: dict = None):
 # Update creator mangas and ensure they are added to Suwayomi
 # ------------------------------------------------------------
 
-# --- Ensure most_popular_tags is updated for a creator after every gallery download ---
-def update_creator_popular_tags(creator_name):
-    try:
-        with scraperapi.lock, scraperapi._connect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
-            row = cursor.fetchone()
-            if not row:
-                return
-            creator_id = row[0]
-            # Find all galleries for this creator
-            cursor.execute("SELECT id FROM Galleries WHERE json_extract(creator_ids, '$') LIKE ?", (f'%{creator_id}%',))
-            gallery_ids = [r[0] for r in cursor.fetchall()]
-            tag_counter = {}
-            for gid in gallery_ids:
-                cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (gid,))
-                row = cursor.fetchone()
-                if row and row[0]:
-                    try:
-                        tag_ids = json.loads(row[0])
-                        for tid in tag_ids:
-                            tag_counter[tid] = tag_counter.get(tid, 0) + 1
-                    except Exception:
-                        continue
-            most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
-            now = datetime.now(timezone.utc).isoformat()
-            cursor.execute("UPDATE Creators SET most_popular_tags=?, last_updated=? WHERE id=?", (json.dumps(most_popular_tag_ids), now, creator_id))
-            conn.commit()
-    except Exception as e:
-        logger.warning(f"[details.json] Could not update most_popular_tags for {creator_name}: {e}")
-
 def update_creator_manga(meta):
     """
     Update a creator's details.json and genre metadata based on a downloaded gallery.
     Also attempt to immediately add the creator's manga to Suwayomi using its ID.
     """
+    
+    logger.debug("[TESTING] UPDATING CREATOR MANGA")
     
     orchestrator.refresh_globals()
         
@@ -829,9 +789,6 @@ def update_creator_manga(meta):
         # --- Try to retrieve manga metadata from Suwayomi ---
         nodes = fetch_creators_suwayomi_metadata(creator_name)
         suwayomi_id = int(nodes[0]["id"]) if nodes else None
-
-        # Always update most_popular_tags for this creator after a gallery download
-        update_creator_popular_tags(creator_name)
 
         if suwayomi_id is not None:
             collected_ids.add(suwayomi_id)

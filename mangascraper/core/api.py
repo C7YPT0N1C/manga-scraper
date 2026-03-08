@@ -1036,8 +1036,8 @@ def sanitise_string(meta_or_title):
         logger.debug(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
         save_broken_symbols(possible_broken_symbols)
         _build_symbol_translation_table()
-    else:
-        logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
+    #else:
+    #    logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
 
     # Remove content inside [] or {} brackets (use pre-compiled regex)
     title = _BRACKET_PATTERN.sub("", title)
