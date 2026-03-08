@@ -241,6 +241,7 @@ def mark_gallery_completed(gallery_id):
             primary_creator = meta["groups"][0]
         else:
             primary_creator = "Unknown"
+        from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
         gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
         extension_used = meta.get("extension_used") or meta.get("extension") or None
@@ -520,13 +521,13 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         cursor = conn.cursor()
         if cutoff is not None:
             cursor.execute(
-                "SELECT gallery_id, timestamp, raw_metadata, clean_metadata "
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
                 "FROM CachedMetadata WHERE timestamp >= ?",
                 (cutoff,),
             )
         else:
             cursor.execute(
-                "SELECT gallery_id, timestamp, raw_metadata, clean_metadata FROM CachedMetadata"
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
             )
         rows = cursor.fetchall()
     result = {}
@@ -535,8 +536,8 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "raw_metadata": raw,
             "clean_metadata": clean,
+            "raw_metadata": raw,
         }
     return result
 
@@ -548,7 +549,7 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
     placeholders = ",".join("?" for _ in ids)
     params = list(ids)
     query = (
-        "SELECT gallery_id, timestamp, raw_metadata, clean_metadata "
+        "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
         "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
     )
     if cutoff is not None:
@@ -564,8 +565,8 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "raw_metadata": raw,
             "clean_metadata": clean,
+            "raw_metadata": raw,
         }
     return result
 
@@ -574,7 +575,7 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT timestamp, raw_metadata, clean_metadata FROM CachedMetadata WHERE gallery_id = ?",
+            "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
             (str(gallery_id),),
         )
         row = cursor.fetchone()
@@ -583,34 +584,19 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     timestamp, clean_json, raw_json = row
     clean = json.loads(clean_json) if clean_json else {}
     raw = json.loads(raw_json) if raw_json else {}
-    return {"timestamp": timestamp, "raw_metadata": raw, "clean_metadata": clean}
+    return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
 
-def upsert_cache_metadata(gallery_id: str, timestamp: float, raw_metadata=None, clean_metadata=None):
+def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
     init_db()
     entry = load_cache_metadata_entry(gallery_id) or {
         "timestamp": None,
-        "raw_metadata": {},
         "clean_metadata": {},
+        "raw_metadata": {},
     }
-    if raw_metadata is not None:
-        entry["raw_metadata"] = raw_metadata
-    
-    #if isinstance(clean_metadata, dict):
-    #    cleaned = dict(clean_metadata)
-    #    # Clean title
-    #    if "title" in cleaned:
-    #        cleaned["title"] = sanitise_string(clean_metadata)
-    #    # Clean artists
-    #    if "artists" in cleaned and isinstance(cleaned["artists"], list):
-    #        cleaned["artists"] = [sanitise_string(a) for a in cleaned["artists"]]
-    #    # Clean groups
-    #    if "groups" in cleaned and isinstance(cleaned["groups"], list):
-    #        cleaned["groups"] = [sanitise_string(g) for g in cleaned["groups"]]
-    #    entry["clean_metadata"].update(cleaned)
-    
     if isinstance(clean_metadata, dict):
         entry["clean_metadata"].update(clean_metadata)
-    
+    if raw_metadata is not None:
+        entry["raw_metadata"] = raw_metadata
     entry["timestamp"] = timestamp
 
     with lock, _connect() as conn:
@@ -620,13 +606,13 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, raw_metadata=None, 
             "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(gallery_id) DO UPDATE SET "
             "timestamp=excluded.timestamp, "
-            "raw_metadata=excluded.raw_metadata",
             "clean_metadata=excluded.clean_metadata, "
+            "raw_metadata=excluded.raw_metadata",
             (
                 str(gallery_id),
                 entry["timestamp"],
-                json.dumps(entry["raw_metadata"], ensure_ascii=False),
                 json.dumps(entry["clean_metadata"], ensure_ascii=False),
+                json.dumps(entry["raw_metadata"], ensure_ascii=False),
             ),
         )
         conn.commit()
