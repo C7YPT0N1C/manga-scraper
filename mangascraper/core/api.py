@@ -1091,14 +1091,17 @@ def build_gallery_metadata_summary(meta, referrer: str):
         "creator_names": creators_clean,
         "language_names": gallery_language_clean,
     }
-    # Optionally add more cleaned fields as needed
+    # Log all cleaned fields
+    import logging
+    logger = logging.getLogger("mangascraper.api")
+    logger.debug(f"[DEBUG] build_gallery_metadata_summary for id={id}: clean_title={title}, creator_names={creators_clean}, language_names={gallery_language_clean}")
 
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
         upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"[ERROR] build_gallery_metadata_summary failed to upsert cache metadata for id={id}: {e}")
 
     return {
         "creator": creators_clean,
