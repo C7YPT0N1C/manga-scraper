@@ -246,15 +246,25 @@ def mark_gallery_completed(gallery_id):
     gallery_title = f"Gallery_{gallery_id}"
     ext = "cbz"
     is_archive = True
-    # Fetch clean_title from Galleries table if possible
+    # Fetch clean_title from Galleries table if possible, else from meta, else fallback
+    gallery_title = None
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
         row = cursor.fetchone()
         if row and row[0]:
             gallery_title = row[0]
+    # If clean_title is not available, leave gallery_title as None
     if meta:
-        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or ""
+        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
+        # Fallback to orchestrator or extension_manager if not absolute
+        if not ext_download_path or not os.path.isabs(ext_download_path):
+            try:
+                from mangascraper.extensions.extension_manager import calculate_extension_download_path
+                ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
+                ext_download_path = calculate_extension_download_path(str(ext_name).lower())
+            except Exception:
+                ext_download_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
         # Cleaned primary creator name
         primary_creator = None
         if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
