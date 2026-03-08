@@ -223,7 +223,7 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
             value = value[0] if value else "Unknown"
         if not isinstance(value, str):
             value = str(value)
-        path_parts.append(sanitise_string(value))
+        path_parts.append(scraperapi.sanitise_string(value))
 
     return os.path.join(*path_parts)
 
@@ -242,7 +242,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
             return
 
         gallery_id = meta.get("id", "Unknown")
-        gallery_title = sanitise_string(meta)
+        gallery_title = scraperapi.sanitise_string(meta)
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
@@ -529,7 +529,7 @@ def process_galleries(batch_ids):
                     )
 
                 # --- Prepare primary folder (first creator only) ---
-                primary_creator = sanitise_string(creators[0]) if creators else "Unknown"
+                primary_creator = scraperapi.sanitise_string(creators[0]) if creators else "Unknown"
                 log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(
                     meta,
@@ -586,7 +586,7 @@ def process_galleries(batch_ids):
 
                 # --- Symlink all additional creators to the finalised path (archive or folder) ---
                 for extra_creator in creators[1:]:
-                    extra_creator_safe = sanitise_string(extra_creator)
+                    extra_creator_safe = scraperapi.sanitise_string(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
                     
                     # If archiving, append the extension for the symlink target

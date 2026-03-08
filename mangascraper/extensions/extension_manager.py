@@ -771,7 +771,7 @@ def build_gallery_metadata_summary(meta, referrer: str):
     groups = scraperapi.Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
     creators = artists or groups or ["Unknown Creator"]
 
-    title = sanitise_string(meta)
+    title = scraperapi.sanitise_string(meta)
     id = str(meta.get("id", "Unknown ID"))
     full_title = f"({id}) {title}"
 
