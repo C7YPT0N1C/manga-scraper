@@ -941,29 +941,6 @@ def _build_symbol_translation_table():
 # Initial symbol translation table at module load
 _build_symbol_translation_table()
 
-def build_gallery_metadata_summary(meta, referrer: str):
-    orchestrator.refresh_globals()
-
-    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
-    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-
-    title = sanitise_string(meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-
-    gallery_language = Get.meta_tags(
-        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
-    ) or ["Unknown Language"]
-
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
-
 def sanitise_string(meta_or_title):
     """
     Clean a gallery/manga title. Accepts either a meta dict or a raw string.
@@ -1062,6 +1039,49 @@ def sanitise_string(meta_or_title):
         title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
     return title.replace("/", "-").replace("\\", "-").strip()
+
+def build_gallery_metadata_summary(meta, referrer: str):
+    orchestrator.refresh_globals()
+
+    # Extract and clean creators
+    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+    creators_clean = [sanitise_string(c) for c in creators]
+
+    # Clean title
+    title = sanitise_string(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+
+    # Extract and clean language(s)
+    gallery_language = Get.meta_tags(
+        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
+    ) or ["Unknown Language"]
+    gallery_language_clean = [sanitise_string(l) for l in gallery_language]
+
+    # Prepare cleaned metadata for DB
+    clean_metadata = {
+        "clean_title": title,
+        "creator_names": creators_clean,
+        "language_names": gallery_language_clean,
+    }
+    # Optionally add more cleaned fields as needed
+
+    # Update DB clean_metadata for this gallery if id is valid
+    try:
+        gid = int(id) if id.isdigit() else id
+        upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
+    except Exception:
+        pass
+
+    return {
+        "creator": creators_clean,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language_clean,
+    }
 
 def _calculate_thread_load_sleep(stage: str, num_items: int, attempt: int, gallery_cap: int = 3750) -> float:
     """
