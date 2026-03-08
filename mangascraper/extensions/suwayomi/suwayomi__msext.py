@@ -19,6 +19,8 @@ from mangascraper.extensions.extension_manager import (
     repair_covers_hook,
 )
 
+# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE. 
+
 ####################################################################################################################
 # Global variables
 ####################################################################################################################
@@ -113,8 +115,8 @@ def pre_run_hook():
     
     orchestrator.refresh_globals()
     DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
-    creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
     update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
+    creators_metadata_file = os.path.join(DEDICATED_DOWNLOAD_PATH, "creators_metadata.json")
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
@@ -129,6 +131,10 @@ SUWAYOMI_TARBALL_URL = "https://github.com/Suwayomi/Suwayomi-Server/releases/dow
 TARBALL_FILENAME = SUWAYOMI_TARBALL_URL.split("/")[-1]
 
 def install_extension():
+    """
+    Install the extension and ensure the dedicated image download path exists.
+    """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     orchestrator.refresh_globals()
@@ -139,6 +145,7 @@ def install_extension():
         return
 
     try:
+        # Ensure extension install path and image download path exists.
         os.makedirs(EXTENSION_INSTALL_PATH, exist_ok=True)
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
 
@@ -196,15 +203,20 @@ WantedBy=multi-user.target
         logger.error(f"{EXTENSION_REFERRER}: Failed to install: {e}")
 
 def uninstall_extension():
+    """
+    Remove the extension and related paths.
+    """
+    
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     orchestrator.refresh_globals()
-
+    
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would uninstall extension and remove paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
         return
-
+    
     try:
+        # Ensure extension install path and image download path is removed.
         subprocess.run(["systemctl", "stop", "suwayomi-server"], check=False)
         subprocess.run(["systemctl", "disable", "suwayomi-server"], check=False)
         service_file = "/etc/systemd/system/suwayomi-server.service"
@@ -241,9 +253,8 @@ def uninstall_extension():
     except Exception as e:
         logger.error(f"Extension {EXTENSION_REFERRER}: Failed to uninstall: {e}")
 
-
 ####################################################################################################################
-# CUSTOM HOOKS (thread-safe)
+# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK. Must be thread-safe.)
 ####################################################################################################################
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
@@ -991,7 +1002,7 @@ def process_deferred_creators(populate: bool = True):
     logger.warning("Unable to process Creators: " + ", ".join(sorted(still_deferred)) if still_deferred else "Sucessfully processed all creators.")
 
 ####################################################################################################################
-# CORE HOOKS (thread-safe)
+# CORE HOOKS (Please add to the functions, try not to change or remove anything. Must be thread-safe.)
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -1336,7 +1347,7 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
-
+    
     def _should_run_post_batch():
         # --- If Total Batches higher than MAX_X_BATCHES, do not run ---
         if total_batch_numbers > MAX_X_BATCHES:

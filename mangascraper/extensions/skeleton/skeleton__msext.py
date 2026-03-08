@@ -37,9 +37,9 @@ SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 # Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly "RUNS_PER_X_BATCHES" times every "EVERY_X_BATCHES" batches.
 # Increase this if the operations in your post batch / run hooks get increasingly demanding the larger the library is.
-MAX_X_BATCHES = 1000
-EVERY_X_BATCHES = 5
-RUNS_PER_X_BATCHES = 2
+MAX_X_BATCHES = 50
+EVERY_X_BATCHES = 10
+RUNS_PER_X_BATCHES = 1
 
 ARCHIVE_WAIT_SECONDS = 120
 ARCHIVE_POLL_INTERVAL = 0.5
@@ -121,15 +121,15 @@ def uninstall_extension():
         if os.path.exists(EXTENSION_INSTALL_PATH):
             os.rmdir(EXTENSION_INSTALL_PATH)
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
-            os.rmdir(DEDICATED_DOWNLOAD_PATH)
-        
-        logger.info(f"{EXTENSION_REFERRER}: Uninstalled successfully. Your galleries folder will NOT be deleted.")
-    
+            shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
+
+        logger.info(f"Extension {EXTENSION_REFERRER}: Uninstalled successfully. Your galleries folder will NOT be deleted.")
+
     except Exception as e:
-        logger.error(f"{EXTENSION_REFERRER}: Failed to uninstall: {e}")
+        logger.error(f"Extension {EXTENSION_REFERRER}: Failed to uninstall: {e}")
 
 ####################################################################################################################
-# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK)
+# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK. Must be thread-safe.)
 ####################################################################################################################
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
@@ -145,7 +145,7 @@ def test_hook():
     log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
 
 ####################################################################################################################
-# CORE HOOKS (Please add to the functions, try not to change or remove anything)
+# CORE HOOKS (Please add to the functions, try not to change or remove anything. Must be thread-safe.)
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
@@ -474,7 +474,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 # Hook for cleaning after downloads
 def cleanup_hook():
     repair_covers_hook(DEDICATED_DOWNLOAD_PATH, referrer=EXTENSION_REFERRER)
-    cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True)
+    cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
 
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
