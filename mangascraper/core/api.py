@@ -231,8 +231,9 @@ def mark_gallery_completed(gallery_id):
     gallery_languages = {}
 
     for gid, entry in cache.items():
+        logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {meta}")
+        
         meta = entry.get("clean_metadata") or {}
-        print(f"[DEBUG] Processing gallery {gid} with metadata: {meta}")
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
         clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
         num_pages = meta.get("num_pages") or meta.get("pages") or 0
@@ -252,7 +253,7 @@ def mark_gallery_completed(gallery_id):
         cover_path = meta.get("cover_path")
         extension_used = meta.get("extension_used")
 
-        print(f"[DEBUG] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
+        logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
 
         for cname in creator_names:
             creators.setdefault(cname, {"display_name": cname, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
@@ -303,10 +304,11 @@ def mark_gallery_completed(gallery_id):
             lang_id_map[lname] = cursor.fetchone()[0]
 
         for gid, gdata in galleries.items():
+            logger.debug(f"[DATABASE] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
+            
             creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
             tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
             language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
-            print(f"[DEBUG] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
             cursor.execute(
                 "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -329,6 +331,8 @@ def mark_gallery_completed(gallery_id):
             cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (int(gid), json.dumps(language_ids)))
 
         for cname, cid in creator_id_map.items():
+            logger.debug(f"[DATABASE] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
+            
             cursor.execute("SELECT id FROM Galleries WHERE json_each.value = ? AND json_valid(creator_ids)", (cid,))
             gallery_ids = [row[0] for row in cursor.fetchall()]
             total_galleries = len(gallery_ids)
@@ -344,10 +348,11 @@ def mark_gallery_completed(gallery_id):
                     except Exception:
                         continue
             most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
-            print(f"[DEBUG] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
             cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
 
         for tname, tid in tag_id_map.items():
+            logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
+
             cursor.execute("SELECT tag_ids FROM GalleryTags")
             count = 0
             for (tag_ids_json,) in cursor.fetchall():
@@ -357,10 +362,11 @@ def mark_gallery_completed(gallery_id):
                         count += tag_ids.count(tid)
                     except Exception:
                         continue
-            print(f"[DEBUG] Updating Tag {tname} (id={tid}): count={count}")
             cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
         for lname, lid in lang_id_map.items():
+            logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
+            
             cursor.execute("SELECT language_ids FROM GalleryLanguages")
             count = 0
             for (lang_ids_json,) in cursor.fetchall():
@@ -370,7 +376,6 @@ def mark_gallery_completed(gallery_id):
                         count += lang_ids.count(lid)
                     except Exception:
                         continue
-            print(f"[DEBUG] Updating Language {lname} (id={lid}): count={count}")
             cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
         conn.commit()
