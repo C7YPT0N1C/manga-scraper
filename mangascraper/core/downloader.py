@@ -764,9 +764,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     for gid in batch_list:
         try:
             meta = scraperapi.Fetch.gallery_metadata(gid)
-            logger.debug(f"TESTING: {meta}")
             num_pages = len(meta.get("images", {}).get("pages", [])) if meta and isinstance(meta, dict) else 0
-            logger.debug(f"TESTING: {num_pages}")
         except Exception:
             num_pages = 0
         gallery_page_counts.append(num_pages)
