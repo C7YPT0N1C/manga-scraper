@@ -340,7 +340,7 @@ def mark_gallery_completed(gallery_id):
             cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (int(gid), json.dumps(language_ids)))
 
         for cname, cid in creator_id_map.items():
-            cursor.execute("SELECT id FROM Galleries WHERE json_each.value = ? AND json_valid(creator_ids)", (cid,))
+            cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))
             gallery_ids = [row[0] for row in cursor.fetchall()]
             total_galleries = len(gallery_ids)
             tag_counter = {}
