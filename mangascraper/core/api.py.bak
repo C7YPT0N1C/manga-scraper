@@ -90,9 +90,9 @@ def init_db():
             status TEXT,
             started_at TEXT,
             completed_at TEXT,
+            extension_used TEXT,
             download_path TEXT,
             cover_path TEXT,
-            extension_used TEXT,
             favourite INTEGER DEFAULT 0,
             rating REAL
         );
