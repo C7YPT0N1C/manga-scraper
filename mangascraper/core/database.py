@@ -46,7 +46,6 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
             display_name TEXT,
-            download_path TEXT,
             first_seen TEXT,
             last_updated TEXT,
             total_galleries INTEGER,
@@ -126,176 +125,8 @@ def init_db():
         conn.commit()
 
 ####################################################################################################################
-# CONSOLIDATED UPDATERS
+# GALLERY UPDATES
 ####################################################################################################################
-
-########################################################################################################
-# Upsert gallery and mapping tables
-########################################################################################################
-
-def upsert_gallery(
-    gallery_id,
-    raw_title,
-    clean_title,
-    num_pages,
-    creator_ids,
-    language_ids,
-    tag_ids,
-    status=None,
-    started_at=None,
-    completed_at=None,
-    download_path=None,
-    cover_path=None,
-    extension_used=None
-):
-    """
-    Insert or update a gallery and its mapping tables (GalleryTags, GalleryLanguages).
-    """
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, num_pages=excluded.num_pages, creator_ids=excluded.creator_ids, language_ids=excluded.language_ids, tag_ids=excluded.tag_ids, status=excluded.status, started_at=excluded.started_at, completed_at=excluded.completed_at, download_path=excluded.download_path, cover_path=excluded.cover_path, extension_used=excluded.extension_used",
-            (
-                gallery_id,
-                raw_title,
-                clean_title,
-                num_pages,
-                json.dumps(creator_ids),
-                json.dumps(language_ids),
-                json.dumps(tag_ids),
-                status,
-                started_at,
-                completed_at,
-                download_path,
-                cover_path,
-                extension_used
-            )
-        )
-        cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gallery_id, json.dumps(tag_ids)))
-        cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gallery_id, json.dumps(language_ids)))
-        conn.commit()
-
-########################################################################################################
-# Update stats for creators
-########################################################################################################
-
-def update_creator_stats(creator_id=None):
-    """
-    Update total_galleries, most_popular_tags, display_name, first_seen, last_updated for creators.
-    If creator_id is None, update all creators.
-    """
-    now = datetime.now(timezone.utc).isoformat()
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        if creator_id is None:
-            cursor.execute("SELECT id, name FROM Creators")
-            creators = cursor.fetchall()
-        else:
-            cursor.execute("SELECT id, name FROM Creators WHERE id=?", (creator_id,))
-            creators = cursor.fetchall()
-        for cid, name in creators:
-            # display_name: cleaned version of name (for now, just use name; replace with cleaning logic if needed)
-            display_name = name
-            # total_galleries
-            cursor.execute("""
-                SELECT COUNT(*) FROM Galleries
-                WHERE EXISTS (
-                    SELECT 1 FROM json_each(Galleries.creator_ids)
-                    WHERE json_each.value = ?
-                )
-            """, (cid,))
-            total_galleries = cursor.fetchone()[0]
-            # most_popular_tags
-            cursor.execute("""
-                SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (
-                    SELECT id FROM Galleries
-                    WHERE EXISTS (
-                        SELECT 1 FROM json_each(Galleries.creator_ids)
-                        WHERE json_each.value = ?
-                    )
-                )
-            """, (cid,))
-            tag_counts = {}
-            for (tag_ids_json,) in cursor.fetchall():
-                if tag_ids_json:
-                    try:
-                        tag_ids = json.loads(tag_ids_json)
-                        for tag_id in tag_ids:
-                            tag_counts[tag_id] = tag_counts.get(tag_id, 0) + 1
-                    except Exception:
-                        continue
-            sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
-            most_popular_tag_ids = [tag_id for tag_id, _ in sorted_tags[:15]]
-            # first_seen
-            cursor.execute("SELECT first_seen FROM Creators WHERE id=?", (cid,))
-            first_seen = cursor.fetchone()[0]
-            if not first_seen:
-                first_seen = now
-            # last_updated
-            last_updated = now
-            cursor.execute(
-                "UPDATE Creators SET display_name=?, total_galleries=?, most_popular_tags=?, first_seen=?, last_updated=? WHERE id=?",
-                (display_name, total_galleries, json.dumps(most_popular_tag_ids), first_seen, last_updated, cid)
-            )
-        conn.commit()
-
-########################################################################################################
-# Update tag counts
-########################################################################################################
-
-def update_tag_stats(tag_id=None):
-    """
-    Update count for tags (number of galleries using the tag). If tag_id is None, update all tags.
-    """
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        if tag_id is None:
-            cursor.execute("SELECT id FROM Tags")
-            tag_ids = [row[0] for row in cursor.fetchall()]
-        else:
-            tag_ids = [tag_id]
-        for tid in tag_ids:
-            cursor.execute("SELECT tag_ids FROM GalleryTags")
-            count = 0
-            for (tag_ids_json,) in cursor.fetchall():
-                if tag_ids_json:
-                    try:
-                        tag_ids_list = json.loads(tag_ids_json)
-                        count += tag_ids_list.count(tid)
-                    except Exception:
-                        continue
-            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
-        conn.commit()
-
-########################################################################################################
-# Update language counts
-########################################################################################################
-
-def update_language_stats(language_id=None):
-    """
-    Update count for languages (number of galleries using the language). If language_id is None, update all languages.
-    """
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        if language_id is None:
-            cursor.execute("SELECT id FROM Languages")
-            lang_ids = [row[0] for row in cursor.fetchall()]
-        else:
-            lang_ids = [language_id]
-        for lid in lang_ids:
-            cursor.execute("SELECT language_ids FROM GalleryLanguages")
-            count = 0
-            for (lang_ids_json,) in cursor.fetchall():
-                if lang_ids_json:
-                    try:
-                        lang_ids_list = json.loads(lang_ids_json)
-                        count += lang_ids_list.count(lid)
-                    except Exception:
-                        continue
-            cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
-        conn.commit()
 
 # GENERIC FIELD UPDATE HELPERS
 def update_field(table, key_field, key_value, field, value):
@@ -310,14 +141,6 @@ def update_field(table, key_field, key_value, field, value):
             (value, key_value)
         )
         conn.commit()
-
-####################################################################################################################
-# GALLERY UPDATES
-####################################################################################################################
-
-# ===============================
-# DOWNLOAD HELPERS
-# ===============================
 
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
@@ -369,10 +192,160 @@ def mark_gallery_completed(gallery_id):
         SET status = ?, completed_at = ?
         WHERE id = ?
         """, ("completed", now, gallery_id))
-        # Update language, tags, cover_path fields
-        # (Assume latest values are passed in via other helpers)
-        # This is a placeholder; actual update should be done via a dedicated update_gallery_metadata function
         conn.commit()
+
+    # Now process all main tables for this gallery
+    cache = load_cache_metadata_for_ids([gallery_id])
+    creators = {}
+    tags = {}
+    languages = {}
+    galleries = {}
+    gallery_tags = {}
+    gallery_languages = {}
+
+    for gid, entry in cache.items():
+        meta = entry.get("clean_metadata") or {}
+        if meta.get("status") != "completed":
+            continue
+        raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
+        clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
+        num_pages = meta.get("num_pages") or meta.get("pages") or 0
+        creator_names = meta.get("creators") or meta.get("creator") or []
+        if isinstance(creator_names, str):
+            creator_names = [creator_names]
+        tag_names = meta.get("tags") or []
+        if isinstance(tag_names, str):
+            tag_names = [tag_names]
+        language_names = meta.get("languages") or meta.get("language") or []
+        if isinstance(language_names, str):
+            language_names = [language_names]
+        status = meta.get("status")
+        started_at = meta.get("started_at")
+        completed_at = meta.get("completed_at")
+        download_path = meta.get("download_path")
+        cover_path = meta.get("cover_path")
+        extension_used = meta.get("extension_used")
+
+        for cname in creator_names:
+            creators.setdefault(cname, {"display_name": cname, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
+        for tname in tag_names:
+            tags.setdefault(tname, {"count": 0})
+        for lname in language_names:
+            languages.setdefault(lname, {"count": 0})
+
+        galleries[gid] = {
+            "id": gid,
+            "raw_title": raw_title,
+            "clean_title": clean_title,
+            "num_pages": num_pages,
+            "creator_names": creator_names,
+            "language_names": language_names,
+            "tag_names": tag_names,
+            "status": status,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "download_path": download_path,
+            "cover_path": cover_path,
+            "extension_used": extension_used
+        }
+        gallery_tags[gid] = tag_names
+        gallery_languages[gid] = language_names
+
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        creator_id_map = {}
+        tag_id_map = {}
+        lang_id_map = {}
+        now = datetime.now(timezone.utc).isoformat()
+
+        for cname, cdata in creators.items():
+            cursor.execute("INSERT OR IGNORE INTO Creators (name, display_name, first_seen, last_updated, total_galleries, most_popular_tags) VALUES (?, ?, ?, ?, ?, ?)",
+                (cname, cdata["display_name"], now, now, 0, json.dumps([])))
+            cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
+            creator_id_map[cname] = cursor.fetchone()[0]
+
+        for tname, tdata in tags.items():
+            cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?)", (tname, 0))
+            cursor.execute("SELECT id FROM Tags WHERE name=?", (tname,))
+            tag_id_map[tname] = cursor.fetchone()[0]
+
+        for lname, ldata in languages.items():
+            cursor.execute("INSERT OR IGNORE INTO Languages (name, count) VALUES (?, ?)", (lname, 0))
+            cursor.execute("SELECT id FROM Languages WHERE name=?", (lname,))
+            lang_id_map[lname] = cursor.fetchone()[0]
+
+        for gid, gdata in galleries.items():
+            creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
+            tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
+            language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+            cursor.execute(
+                "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    int(gid),
+                    gdata["raw_title"],
+                    gdata["clean_title"],
+                    gdata["num_pages"],
+                    json.dumps(creator_ids),
+                    json.dumps(language_ids),
+                    json.dumps(tag_ids),
+                    gdata["status"],
+                    gdata["started_at"],
+                    gdata["completed_at"],
+                    gdata["download_path"],
+                    gdata["cover_path"],
+                    gdata["extension_used"]
+                )
+            )
+            cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (int(gid), json.dumps(tag_ids)))
+            cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (int(gid), json.dumps(language_ids)))
+
+        for cname, cid in creator_id_map.items():
+            cursor.execute("SELECT id FROM Galleries WHERE json_each.value = ? AND json_valid(creator_ids)", (cid,))
+            gallery_ids = [row[0] for row in cursor.fetchall()]
+            total_galleries = len(gallery_ids)
+            tag_counter = {}
+            for gid in gallery_ids:
+                cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (gid,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    try:
+                        tag_ids = json.loads(row[0])
+                        for tid in tag_ids:
+                            tag_counter[tid] = tag_counter.get(tid, 0) + 1
+                    except Exception:
+                        continue
+            most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
+            cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
+
+        for tname, tid in tag_id_map.items():
+            cursor.execute("SELECT tag_ids FROM GalleryTags")
+            count = 0
+            for (tag_ids_json,) in cursor.fetchall():
+                if tag_ids_json:
+                    try:
+                        tag_ids = json.loads(tag_ids_json)
+                        count += tag_ids.count(tid)
+                    except Exception:
+                        continue
+            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
+
+        for lname, lid in lang_id_map.items():
+            cursor.execute("SELECT language_ids FROM GalleryLanguages")
+            count = 0
+            for (lang_ids_json,) in cursor.fetchall():
+                if lang_ids_json:
+                    try:
+                        lang_ids = json.loads(lang_ids_json)
+                        count += lang_ids.count(lid)
+                    except Exception:
+                        continue
+            cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
+
+        conn.commit()
+
+####################################################################################################################
+# other helpers idfk
+####################################################################################################################
 
 def get_queued_galleries():
     init_db()
