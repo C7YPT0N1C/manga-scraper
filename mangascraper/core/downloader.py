@@ -6,8 +6,8 @@ from tqdm.contrib.concurrent import thread_map
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
-from mangascraper.core import database as scraperdb
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
 
 ####################################################################################################
@@ -293,7 +293,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Excluded Tags ---
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
-    gallery_tags = [t.lower() for t in APIGet.meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
+    gallery_tags = [t.lower() for t in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
     
     for tag in gallery_tags:
@@ -302,7 +302,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Allowed Languages ---
     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
-    gallery_langs = [l.lower() for l in APIGet.meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
+    gallery_langs = [l.lower() for l in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
     if allowed_gallery_language:
@@ -447,7 +447,7 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraperdb.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraperapi.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -463,11 +463,11 @@ def process_galleries(batch_ids):
                 log_clarification("debug")
                 logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{orchestrator.max_retries})")
 
-                meta = APIFetch.gallery_metadata(gallery_id)
+                meta = scraperapi.Fetch.gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        scraperdb.mark_gallery_failed(gallery_id)
+                        scraperapi.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -495,7 +495,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraperdb.mark_gallery_skipped(gallery_id)
+                        scraperapi.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -530,7 +530,7 @@ def process_galleries(batch_ids):
                 tasks = []
                 for i in range(num_pages):
                     page = i + 1
-                    img_urls = APIFetch.image_urls(meta, page)
+                    img_urls = scraperapi.Fetch.image_urls(meta, page)
                     if not img_urls:
                         logger.warning(f"Downloader: Skipping Page {page} for {primary_creator}: Failed to get URLs")
                         update_skipped_galleries(False, meta, "Failed to get URLs.")
@@ -546,7 +546,7 @@ def process_galleries(batch_ids):
                         _register_executor(executor)
                         try:
                             if not orchestrator.dry_run:
-                                local_session = APIGet.session(referrer="Downloader", status="return")
+                                local_session = scraperapi.Get.session(referrer="Downloader", status="return")
                                 submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                             else:
                                 for _ in tasks:
@@ -593,7 +593,7 @@ def process_galleries(batch_ids):
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
-                    scraperdb.mark_gallery_completed(gallery_id)
+                    scraperapi.mark_gallery_completed(gallery_id)
                     
                     # Track actual size downloaded
                     actual_bytes = 0
@@ -619,7 +619,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    scraperdb.mark_gallery_failed(gallery_id)
+                    scraperapi.mark_gallery_failed(gallery_id)
 
 ####################################################################################################
 # MAIN
@@ -640,7 +640,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     # Estimate size for each gallery
     for gallery_id in gallery_ids:
         try:
-            meta = APIFetch.gallery_metadata(gallery_id)
+            meta = scraperapi.Fetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
                 estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
                 gallery_sizes.append((gallery_id, estimated_size))
