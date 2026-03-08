@@ -359,8 +359,6 @@ def mark_gallery_completed(gallery_id):
             cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
 
         for tname, tid in tag_id_map.items():
-            logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
-
             cursor.execute("SELECT tag_ids FROM GalleryTags")
             count = 0
             for (tag_ids_json,) in cursor.fetchall():
@@ -370,11 +368,10 @@ def mark_gallery_completed(gallery_id):
                         count += tag_ids.count(tid)
                     except Exception:
                         continue
+            logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
             cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
         for lname, lid in lang_id_map.items():
-            logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
-            
             cursor.execute("SELECT language_ids FROM GalleryLanguages")
             count = 0
             for (lang_ids_json,) in cursor.fetchall():
@@ -384,6 +381,7 @@ def mark_gallery_completed(gallery_id):
                         count += lang_ids.count(lid)
                     except Exception:
                         continue
+            logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
             cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
         conn.commit()
