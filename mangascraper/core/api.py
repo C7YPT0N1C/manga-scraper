@@ -333,10 +333,12 @@ def mark_gallery_completed(gallery_id):
 
     for gid, entry in cache.items():
         logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
-        meta = entry.get("raw_metadata") or {}
+        
+        meta = entry.get("clean_metadata") or {}
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
         clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
         num_pages = meta.get("num_pages") or meta.get("pages") or 0
+        
         # Creator Names
         creator_names = []
         creator_types = {}
@@ -348,14 +350,17 @@ def mark_gallery_completed(gallery_id):
             creator_names.extend(meta["groups"])
             for group in meta["groups"]:
                 creator_types[group] = "group"
+        
         # Tags
         tag_names = meta.get("tags") or []
         if isinstance(tag_names, str):
             tag_names = [tag_names]
+        
         # Languages
         language_names = meta.get("languages") or meta.get("language") or []
         if isinstance(language_names, str):
             language_names = [language_names]
+        
         status = meta.get("status")
         started_at = meta.get("started_at")
         completed_at = meta.get("completed_at")
@@ -1083,7 +1088,22 @@ def build_gallery_metadata_summary(meta, referrer: str):
     ) or ["Unknown Language"]
     gallery_language_clean = [sanitise_string(l) for l in gallery_language]
 
-    # clean_metadata removed
+    # Prepare cleaned metadata for DB
+    clean_metadata = {
+        "clean_title": title,
+        "creator_names": creators_clean,
+        "language_names": gallery_language_clean,
+    }
+    # Log all cleaned fields
+    import logging
+    logger = logging.getLogger("mangascraper.api")
+    
+    # Update DB clean_metadata for this gallery if id is valid
+    try:
+        gid = int(id) if id.isdigit() else id
+        upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
+    except Exception as e:
+        logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
     return {
         "creator": creators_clean,
