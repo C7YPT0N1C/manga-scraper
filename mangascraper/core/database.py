@@ -64,7 +64,7 @@ def init_db():
             status TEXT,
             started_at TEXT,
             completed_at TEXT,
-            download_path TEXT,
+            download_paths TEXT,
             cover_path TEXT,
             extension_used TEXT,
             favourite INTEGER DEFAULT 0,
@@ -208,9 +208,6 @@ def mark_gallery_completed(gallery_id):
     for gid, entry in cache.items():
         meta = entry.get("clean_metadata") or {}
         print(f"[DEBUG] Processing gallery {gid} with metadata: {meta}")
-        if meta.get("status") != "completed":
-            print(f"[DEBUG] Skipping gallery {gid} because status is not completed.")
-            continue
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
         clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
         num_pages = meta.get("num_pages") or meta.get("pages") or 0
@@ -226,7 +223,7 @@ def mark_gallery_completed(gallery_id):
         status = meta.get("status")
         started_at = meta.get("started_at")
         completed_at = meta.get("completed_at")
-        download_path = meta.get("download_path")
+        download_paths = meta.get("download_path")
         cover_path = meta.get("cover_path")
         extension_used = meta.get("extension_used")
 
@@ -250,7 +247,7 @@ def mark_gallery_completed(gallery_id):
             "status": status,
             "started_at": started_at,
             "completed_at": completed_at,
-            "download_path": download_path,
+            "download_paths": download_paths,
             "cover_path": cover_path,
             "extension_used": extension_used
         }
