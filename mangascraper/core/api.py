@@ -593,11 +593,8 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         "clean_metadata": {},
         "raw_metadata": {},
     }
-
-    # Clean the metadata using build_gallery_metadata_summary if provided
     if isinstance(clean_metadata, dict):
-        cleaned = build_gallery_metadata_summary(clean_metadata, referrer="database")
-        entry["clean_metadata"].update(cleaned)
+        entry["clean_metadata"].update(clean_metadata)
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
     entry["timestamp"] = timestamp
