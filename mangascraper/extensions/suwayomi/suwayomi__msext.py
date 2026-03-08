@@ -774,7 +774,8 @@ def update_creator_manga(meta):
         return
 
     gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
-    creators = [scraperapi.sanitise_string(c) for c in gallery_meta.get("creator", [])]
+    #creators = [scraperapi.sanitise_string(c) for c in gallery_meta.get("creator", [])]
+    creators = gallery_meta.get("creator", [])
     if not creators:
         return
 
@@ -1178,7 +1179,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             gallery_format = "directory"
 
         gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
-        creators = [scraperapi.sanitise_string(c) for c in gallery_meta.get("creator", [])]
+        #creators = [scraperapi.sanitise_string(c) for c in gallery_meta.get("creator", [])]
+        creators = gallery_meta.get("creator", [])
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])
 
