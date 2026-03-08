@@ -241,7 +241,6 @@ def mark_gallery_completed(gallery_id):
             primary_creator = meta["groups"][0]
         else:
             primary_creator = "Unknown"
-        from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
         gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
         extension_used = meta.get("extension_used") or meta.get("extension") or None
@@ -597,10 +596,9 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, raw_metadata=None, 
         entry["raw_metadata"] = raw_metadata
     if isinstance(clean_metadata, dict):
         cleaned = dict(clean_metadata)
-        from mangascraper.core.api import sanitise_string
         # Clean title
         if "title" in cleaned:
-            cleaned["title"] = sanitise_string(cleaned["title"])
+            cleaned["title"] = sanitise_string(clean_metadata)
         # Clean artists
         if "artists" in cleaned and isinstance(cleaned["artists"], list):
             cleaned["artists"] = [sanitise_string(a) for a in cleaned["artists"]]
