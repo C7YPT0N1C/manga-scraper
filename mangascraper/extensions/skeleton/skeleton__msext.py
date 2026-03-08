@@ -149,7 +149,7 @@ def test_hook():
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None):
+def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None, page_update_hook=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
@@ -235,6 +235,12 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         )
         downloader_session = scraperapi.Get.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
+    
+    if success and page_update_hook:
+        try:
+            page_update_hook()
+        except Exception as e:
+            logger.warning(f"page_update_hook failed: {e}")
 
     if not success:
         log_clarification()
