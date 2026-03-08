@@ -594,18 +594,23 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, raw_metadata=None, 
     }
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
+    
+    #if isinstance(clean_metadata, dict):
+    #    cleaned = dict(clean_metadata)
+    #    # Clean title
+    #    if "title" in cleaned:
+    #        cleaned["title"] = sanitise_string(clean_metadata)
+    #    # Clean artists
+    #    if "artists" in cleaned and isinstance(cleaned["artists"], list):
+    #        cleaned["artists"] = [sanitise_string(a) for a in cleaned["artists"]]
+    #    # Clean groups
+    #    if "groups" in cleaned and isinstance(cleaned["groups"], list):
+    #        cleaned["groups"] = [sanitise_string(g) for g in cleaned["groups"]]
+    #    entry["clean_metadata"].update(cleaned)
+    
     if isinstance(clean_metadata, dict):
-        cleaned = dict(clean_metadata)
-        # Clean title
-        if "title" in cleaned:
-            cleaned["title"] = sanitise_string(clean_metadata)
-        # Clean artists
-        if "artists" in cleaned and isinstance(cleaned["artists"], list):
-            cleaned["artists"] = [sanitise_string(a) for a in cleaned["artists"]]
-        # Clean groups
-        if "groups" in cleaned and isinstance(cleaned["groups"], list):
-            cleaned["groups"] = [sanitise_string(g) for g in cleaned["groups"]]
-        entry["clean_metadata"].update(cleaned)
+        entry["clean_metadata"].update(clean_metadata)
+    
     entry["timestamp"] = timestamp
 
     with lock, _connect() as conn:
