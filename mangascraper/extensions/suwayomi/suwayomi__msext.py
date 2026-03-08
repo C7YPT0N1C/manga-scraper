@@ -847,6 +847,9 @@ def update_creator_manga(meta):
         except Exception as e:
             logger.warning(f"Could not fetch top genres from database for {creator_name}: {e}")
 
+        # Debug: Log DB path and genres
+        logger.info(f"[details.json] Using DB path: {scraperapi.DB_PATH}")
+        logger.info(f"[details.json] Genres for {creator_name}: {genre_names[:MAX_GENRES_STORED]}")
         details = {
             "title": creator_name,
             "author": creator_name,
