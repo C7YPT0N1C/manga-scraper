@@ -247,14 +247,14 @@ def mark_gallery_completed(gallery_id):
     ext = "cbz"
     is_archive = True
     # Fetch clean_title from Galleries table if possible, else from meta, else fallback
-    gallery_title = None
+    gallery_title = ""
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
         row = cursor.fetchone()
-        if row and row[0]:
-            gallery_title = row[0]
-    # If clean_title is not available, leave gallery_title as None
+        if row and isinstance(row[0], str) and row[0].strip():
+            gallery_title = row[0].strip()
+    # If clean_title is missing or empty, leave gallery_title as empty string
     if meta:
         ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
         # Fallback to orchestrator or extension_manager if not absolute
@@ -279,12 +279,16 @@ def mark_gallery_completed(gallery_id):
         is_archive = meta.get("is_archive", True)
         started_at = meta.get("started_at")
     # Compose download_path and cover_path with full extension path
-    if is_archive:
-        download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+    if gallery_title:
+        if is_archive:
+            download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+        else:
+            download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
+        # cover_path: full path, no extension
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
     else:
-        download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-    # cover_path: full path, no extension
-    cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
+        download_path = ""
+        cover_path = ""
     # If started_at is still None, try to fetch from Galleries table
     if not started_at:
         with lock, _connect() as conn:
