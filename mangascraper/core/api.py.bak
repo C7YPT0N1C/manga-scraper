@@ -920,6 +920,29 @@ def _build_symbol_translation_table():
 # Initial symbol translation table at module load
 _build_symbol_translation_table()
 
+def build_gallery_metadata_summary(meta, referrer: str):
+    orchestrator.refresh_globals()
+
+    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+
+    title = sanitise_string(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+
+    gallery_language = Get.meta_tags(
+        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
+    ) or ["Unknown Language"]
+
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language,
+    }
+
 def sanitise_string(meta_or_title):
     """
     Clean a gallery/manga title. Accepts either a meta dict or a raw string.
