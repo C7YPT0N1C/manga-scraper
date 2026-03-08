@@ -89,7 +89,7 @@ def init_db():
             status TEXT,
             started_at TEXT,
             completed_at TEXT,
-            download_paths TEXT,
+            download_path TEXT,
             cover_path TEXT,
             extension_used TEXT,
             favourite INTEGER DEFAULT 0,
@@ -248,7 +248,7 @@ def mark_gallery_completed(gallery_id):
         status = meta.get("status")
         started_at = meta.get("started_at")
         completed_at = meta.get("completed_at")
-        download_paths = meta.get("download_path")
+        download_path = meta.get("download_path")
         cover_path = meta.get("cover_path")
         extension_used = meta.get("extension_used")
 
@@ -272,7 +272,7 @@ def mark_gallery_completed(gallery_id):
             "status": status,
             "started_at": started_at,
             "completed_at": completed_at,
-            "download_paths": download_paths,
+            "download_path": download_path,
             "cover_path": cover_path,
             "extension_used": extension_used
         }
