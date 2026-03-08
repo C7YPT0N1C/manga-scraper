@@ -337,13 +337,20 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
     Submit download tasks for a single creator's pages.
     """
     
-    futures = [
-        executor.submit(
+    # Accepts optional page_update_hook via kwargs
+    import inspect
+    # Check if the hook supports page_update_hook
+    hook_accepts_page_update = 'page_update_hook' in inspect.signature(active_extension.download_images_hook).parameters
+    def submit_task(page, urls, path):
+        kwargs = {}
+        if hook_accepts_page_update and 'page_update_hook' in submit_creator_tasks.__dict__:
+            kwargs['page_update_hook'] = submit_creator_tasks.page_update_hook
+        return executor.submit(
             active_extension.download_images_hook,
-            gallery_id, page, urls, path, local_session, None, safe_creator_name
+            gallery_id, page, urls, path, local_session, None, safe_creator_name,
+            **kwargs
         )
-        for page, urls, path, _ in creator_tasks
-    ]
+    futures = [submit_task(page, urls, path) for page, urls, path, _ in creator_tasks]
     # Wait for completion, but abort if shutdown event is set
     for f in concurrent.futures.as_completed(futures):
         if _shutdown_event.is_set():
@@ -804,17 +811,8 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
             page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
             page_progress.update(1)
 
-    # Patch the download_images_hook to call our page_update_hook after each page
-    orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
-    def wrapped_download_images_hook(*args, **kwargs):
-        if _shutdown_event.is_set():
-            logger.warning("Shutdown event detected in download_images_hook, aborting page download.")
-            return None
-        result = orig_download_images_hook(*args, **kwargs)
-        page_update_hook()
-        return result
-    if orig_download_images_hook:
-        active_extension.download_images_hook = wrapped_download_images_hook
+    # Pass page_update_hook to submit_creator_tasks via function attribute
+    submit_creator_tasks.page_update_hook = page_update_hook
 
     # Each gallery is processed in parallel with its own thread
     with concurrent.futures.ThreadPoolExecutor(max_workers=orchestrator.threads_galleries) as executor:
@@ -824,9 +822,9 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                 logger.warning("Shutdown event detected in batch, aborting remaining galleries.")
                 break
 
-    # Restore original hook
-    if orig_download_images_hook:
-        active_extension.download_images_hook = orig_download_images_hook
+    # Clean up
+    if hasattr(submit_creator_tasks, 'page_update_hook'):
+        del submit_creator_tasks.page_update_hook
     page_progress.close()
     active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
 
