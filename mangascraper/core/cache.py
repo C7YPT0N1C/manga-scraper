@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/core/cache.py
+# mangascraper/core/cache.py#
 """
 Caching utilities for metadata and search results.
 Stores cache by search criteria (artist, tag, group, etc.) rather than individual galleries.
