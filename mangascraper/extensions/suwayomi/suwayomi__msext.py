@@ -820,26 +820,23 @@ def update_creator_manga(meta):
 
         # Query database for most_popular_tags (top genres) for this creator
         genre_names = []
-        try:
-            with scraperapi.lock, scraperapi._connect() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
-                row = cursor.fetchone()
-                if row:
-                    creator_id = row[0]
-                    cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
-                    tag_ids_json = cursor.fetchone()
-                    logger.info(f"[details.json] Raw most_popular_tags for {creator_name}: {tag_ids_json}")
-                    if tag_ids_json and tag_ids_json[0]:
-                        tag_ids = json.loads(tag_ids_json[0])
-                        if tag_ids:
-                            # Resolve tag names from tag ids
-                            qmarks = ",".join(["?"] * len(tag_ids))
-                            cursor.execute(f"SELECT name FROM Tags WHERE id IN ({qmarks})", tag_ids)
-                            genre_names = [r[0] for r in cursor.fetchall() if r and r[0]]
-                            logger.debug(f"[TESTING] genres names = {genre_names}")
-        except Exception as e:
-            logger.warning(f"Could not fetch top genres from database for {creator_name}: {e}")
+        with scraperapi.lock, scraperapi._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
+            row = cursor.fetchone()
+            if row:
+                creator_id = row[0]
+                cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
+                tag_ids_json = cursor.fetchone()
+                logger.info(f"[details.json] Raw most_popular_tags for {creator_name}: {tag_ids_json}")
+                if tag_ids_json and tag_ids_json[0]:
+                    tag_ids = json.loads(tag_ids_json[0])
+                    if tag_ids:
+                        # Resolve tag names from tag ids
+                        qmarks = ",".join(["?"] * len(tag_ids))
+                        cursor.execute(f"SELECT name FROM Tags WHERE id IN ({qmarks})", tag_ids)
+                        genre_names = [r[0] for r in cursor.fetchall() if r and r[0]]
+                        logger.debug(f"[TESTING] genres names = {genre_names}")
 
         # Debug: Log DB path and genres
         logger.info(f"[details.json] Genres for {creator_name}: {genre_names[:MAX_GENRES_STORED]}")
