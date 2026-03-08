@@ -1202,9 +1202,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     with _gallery_meta_lock:
         _collected_gallery_metas.append(meta)
     
-    # Update creator's popular genres
-    update_creator_manga(meta)
-    
     # Extract cover and delete original gallery folder after archiving
     try:
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
@@ -1369,6 +1366,9 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     
     except Exception as e:
         logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
+    
+    # Update creator's popular genres
+    update_creator_manga(meta)
 
 # Hook for cleaning after downloads
 def cleanup_hook():
