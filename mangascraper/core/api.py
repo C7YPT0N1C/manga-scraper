@@ -233,7 +233,7 @@ def mark_gallery_completed(gallery_id):
     cache = load_cache_metadata_for_ids([gallery_id])
     meta = None
     for gid, entry in cache.items():
-        meta = {}  # clean_metadata removed
+        meta = entry.get("clean_metadata") or {}
         break
     # Compute download_path, cover_path, extension_used, started_at with robust fallback
     download_path = None
@@ -246,7 +246,11 @@ def mark_gallery_completed(gallery_id):
     is_archive = True
     # Always update Galleries table with latest clean_title from clean_metadata if available
     gallery_title = ""
-    # clean_metadata removed
+    if meta and meta.get("clean_title"):
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE Galleries SET clean_title=? WHERE id=?", (meta["clean_title"], gallery_id))
+            conn.commit()
     # Now fetch clean_title from Galleries table
     with lock, _connect() as conn:
         cursor = conn.cursor()
@@ -255,19 +259,32 @@ def mark_gallery_completed(gallery_id):
         if row and isinstance(row[0], str) and row[0].strip():
             gallery_title = row[0].strip()
     if meta:
-        ext_download_path = None
+        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
+        # Always resolve to absolute path
         base_ext_path = None
         try:
             from mangascraper.extensions.extension_manager import calculate_extension_download_path
-            ext_name = getattr(orchestrator, "extension", "skeleton")
+            ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
             base_ext_path = calculate_extension_download_path(str(ext_name).lower())
         except Exception:
             base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
-        ext_download_path = base_ext_path
-        cleaned_creator = "Unknown"
-        ext = "cbz"
-        is_archive = True
-        started_at = None
+        if not ext_download_path:
+            ext_download_path = base_ext_path
+        elif not os.path.isabs(ext_download_path):
+            ext_download_path = os.path.join(base_ext_path, ext_download_path)
+        # Cleaned primary creator name
+        primary_creator = None
+        if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
+            primary_creator = meta["artists"][0]
+        elif "groups" in meta and isinstance(meta["groups"], list) and meta["groups"]:
+            primary_creator = meta["groups"][0]
+        else:
+            primary_creator = "Unknown"
+        from mangascraper.core.api import sanitise_string
+        cleaned_creator = sanitise_string(primary_creator)
+        ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
+        is_archive = meta.get("is_archive", True)
+        started_at = meta.get("started_at")
     # Compose download_path and cover_path with full extension path
     if gallery_title:
         if is_archive:
@@ -315,12 +332,10 @@ def mark_gallery_completed(gallery_id):
 
     for gid, entry in cache.items():
         logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
-        
-        meta = {}  # clean_metadata removed
-        raw_title = f"Gallery_{gid}"
-        clean_title = f"Gallery_{gid}"
-        num_pages = 0
-        
+        meta = entry.get("raw_metadata") or {}
+        raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
+        clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
+        num_pages = meta.get("num_pages") or meta.get("pages") or 0
         # Creator Names
         creator_names = []
         creator_types = {}
@@ -332,17 +347,14 @@ def mark_gallery_completed(gallery_id):
             creator_names.extend(meta["groups"])
             for group in meta["groups"]:
                 creator_types[group] = "group"
-        
         # Tags
         tag_names = meta.get("tags") or []
         if isinstance(tag_names, str):
             tag_names = [tag_names]
-        
         # Languages
         language_names = meta.get("languages") or meta.get("language") or []
         if isinstance(language_names, str):
             language_names = [language_names]
-        
         status = meta.get("status")
         started_at = meta.get("started_at")
         completed_at = meta.get("completed_at")
@@ -552,22 +564,20 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
         cursor = conn.cursor()
         if cutoff is not None:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+                "SELECT gallery_id, timestamp, raw_metadata "
                 "FROM CachedMetadata WHERE timestamp >= ?",
                 (cutoff,),
             )
         else:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
+                "SELECT gallery_id, timestamp, raw_metadata FROM CachedMetadata"
             )
         rows = cursor.fetchall()
     result = {}
-    for gallery_id, timestamp, clean_json, raw_json in rows:
-        clean = json.loads(clean_json) if clean_json else {}
+    for gallery_id, timestamp, raw_json in rows:
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "clean_metadata": clean,
             "raw_metadata": raw,
         }
     return result
@@ -1061,9 +1071,6 @@ def build_gallery_metadata_summary(meta, referrer: str):
         f"{referrer}: Build_gallery_metadata_summary", meta, "language"
     ) or ["Unknown Language"]
     gallery_language_clean = [sanitise_string(l) for l in gallery_language]
-
-    # Prepare cleaned metadata for DB
-    # clean_metadata removed
 
     return {
         "creator": creators_clean,
