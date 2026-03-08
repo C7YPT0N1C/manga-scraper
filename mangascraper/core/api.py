@@ -131,8 +131,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS CachedMetadata (
             gallery_id TEXT PRIMARY KEY,
             timestamp REAL,
-            raw_metadata TEXT,
-            clean_metadata TEXT
+            raw_metadata TEXT
         );
 
         CREATE TABLE IF NOT EXISTS CachedReferences (
@@ -234,7 +233,7 @@ def mark_gallery_completed(gallery_id):
     cache = load_cache_metadata_for_ids([gallery_id])
     meta = None
     for gid, entry in cache.items():
-        meta = entry.get("clean_metadata") or {}
+        meta = {}  # clean_metadata removed
         break
     # Compute download_path, cover_path, extension_used, started_at with robust fallback
     download_path = None
@@ -247,11 +246,7 @@ def mark_gallery_completed(gallery_id):
     is_archive = True
     # Always update Galleries table with latest clean_title from clean_metadata if available
     gallery_title = ""
-    if meta and meta.get("clean_title"):
-        with lock, _connect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE Galleries SET clean_title=? WHERE id=?", (meta["clean_title"], gallery_id))
-            conn.commit()
+    # clean_metadata removed
     # Now fetch clean_title from Galleries table
     with lock, _connect() as conn:
         cursor = conn.cursor()
@@ -260,32 +255,19 @@ def mark_gallery_completed(gallery_id):
         if row and isinstance(row[0], str) and row[0].strip():
             gallery_title = row[0].strip()
     if meta:
-        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
-        # Always resolve to absolute path
+        ext_download_path = None
         base_ext_path = None
         try:
             from mangascraper.extensions.extension_manager import calculate_extension_download_path
-            ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
+            ext_name = getattr(orchestrator, "extension", "skeleton")
             base_ext_path = calculate_extension_download_path(str(ext_name).lower())
         except Exception:
             base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
-        if not ext_download_path:
-            ext_download_path = base_ext_path
-        elif not os.path.isabs(ext_download_path):
-            ext_download_path = os.path.join(base_ext_path, ext_download_path)
-        # Cleaned primary creator name
-        primary_creator = None
-        if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
-            primary_creator = meta["artists"][0]
-        elif "groups" in meta and isinstance(meta["groups"], list) and meta["groups"]:
-            primary_creator = meta["groups"][0]
-        else:
-            primary_creator = "Unknown"
-        from mangascraper.core.api import sanitise_string
-        cleaned_creator = sanitise_string(primary_creator)
-        ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
-        is_archive = meta.get("is_archive", True)
-        started_at = meta.get("started_at")
+        ext_download_path = base_ext_path
+        cleaned_creator = "Unknown"
+        ext = "cbz"
+        is_archive = True
+        started_at = None
     # Compose download_path and cover_path with full extension path
     if gallery_title:
         if is_archive:
@@ -334,10 +316,10 @@ def mark_gallery_completed(gallery_id):
     for gid, entry in cache.items():
         logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
         
-        meta = entry.get("clean_metadata") or {}
-        raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
-        clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
-        num_pages = meta.get("num_pages") or meta.get("pages") or 0
+        meta = {}  # clean_metadata removed
+        raw_title = f"Gallery_{gid}"
+        clean_title = f"Gallery_{gid}"
+        num_pages = 0
         
         # Creator Names
         creator_names = []
@@ -598,7 +580,7 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
     placeholders = ",".join("?" for _ in ids)
     params = list(ids)
     query = (
-        "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+        "SELECT gallery_id, timestamp, raw_metadata "
         "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
     )
     if cutoff is not None:
@@ -609,12 +591,10 @@ def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> 
         cursor.execute(query, params)
         rows = cursor.fetchall()
     result = {}
-    for gallery_id, timestamp, clean_json, raw_json in rows:
-        clean = json.loads(clean_json) if clean_json else {}
+    for gallery_id, timestamp, raw_json in rows:
         raw = json.loads(raw_json) if raw_json else {}
         result[str(gallery_id)] = {
             "timestamp": timestamp,
-            "clean_metadata": clean,
             "raw_metadata": raw,
         }
     return result
@@ -624,26 +604,22 @@ def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
+            "SELECT timestamp, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
             (str(gallery_id),),
         )
         row = cursor.fetchone()
     if not row:
         return None
-    timestamp, clean_json, raw_json = row
-    clean = json.loads(clean_json) if clean_json else {}
+    timestamp, raw_json = row
     raw = json.loads(raw_json) if raw_json else {}
-    return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
+    return {"timestamp": timestamp, "raw_metadata": raw}
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
     init_db()
     entry = load_cache_metadata_entry(gallery_id) or {
         "timestamp": None,
-        "clean_metadata": {},
         "raw_metadata": {},
     }
-    if isinstance(clean_metadata, dict):
-        entry["clean_metadata"].update(clean_metadata)
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
     entry["timestamp"] = timestamp
@@ -651,16 +627,14 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
-            "VALUES (?, ?, ?, ?) "
+            "INSERT INTO CachedMetadata (gallery_id, timestamp, raw_metadata) "
+            "VALUES (?, ?, ?) "
             "ON CONFLICT(gallery_id) DO UPDATE SET "
             "timestamp=excluded.timestamp, "
-            "clean_metadata=excluded.clean_metadata, "
             "raw_metadata=excluded.raw_metadata",
             (
                 str(gallery_id),
                 entry["timestamp"],
-                json.dumps(entry["clean_metadata"], ensure_ascii=False),
                 json.dumps(entry["raw_metadata"], ensure_ascii=False),
             ),
         )
@@ -1089,21 +1063,7 @@ def build_gallery_metadata_summary(meta, referrer: str):
     gallery_language_clean = [sanitise_string(l) for l in gallery_language]
 
     # Prepare cleaned metadata for DB
-    clean_metadata = {
-        "clean_title": title,
-        "creator_names": creators_clean,
-        "language_names": gallery_language_clean,
-    }
-    # Log all cleaned fields
-    import logging
-    logger = logging.getLogger("mangascraper.api")
-    
-    # Update DB clean_metadata for this gallery if id is valid
-    try:
-        gid = int(id) if id.isdigit() else id
-        upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
-    except Exception as e:
-        logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
+    # clean_metadata removed
 
     return {
         "creator": creators_clean,

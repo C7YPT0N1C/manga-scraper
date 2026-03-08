@@ -292,8 +292,8 @@ def mark_gallery_completed(gallery_id):
             download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
         else:
             download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-        # cover_path: full path, no extension
-        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
+        # cover_path: full path, no extension, include gallery id
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"({gallery_id}) {gallery_title}")
     else:
         download_path = ""
         cover_path = ""
