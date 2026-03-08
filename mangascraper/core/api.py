@@ -237,15 +237,24 @@ def mark_gallery_completed(gallery_id):
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
         clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
         num_pages = meta.get("num_pages") or meta.get("pages") or 0
-        creator_names = meta.get("creators") or meta.get("creator") or []
-        if isinstance(creator_names, str):
-            creator_names = [creator_names]
+        
+        # Creator Names
+        creator_names = []
+        if "artists" in meta and isinstance(meta["artists"], list):
+            creator_names.extend(meta["artists"])
+        if "groups" in meta and isinstance(meta["groups"], list):
+            creator_names.extend(meta["groups"])
+        
+        # Tags
         tag_names = meta.get("tags") or []
         if isinstance(tag_names, str):
             tag_names = [tag_names]
+        
+        # Languages
         language_names = meta.get("languages") or meta.get("language") or []
         if isinstance(language_names, str):
             language_names = [language_names]
+        
         status = meta.get("status")
         started_at = meta.get("started_at")
         completed_at = meta.get("completed_at")
