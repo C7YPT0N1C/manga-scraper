@@ -241,14 +241,38 @@ def mark_gallery_completed(gallery_id):
     cover_path = None
     extension_used = None
     started_at = None
-    # Fallbacks for each field
     ext_download_path = ""
     cleaned_creator = "Unknown"
-    gallery_title = f"Gallery_{gallery_id}"
     ext = "cbz"
     is_archive = True
+    # Always update Galleries table with latest clean_title from clean_metadata if available
+    gallery_title = ""
+    if meta and meta.get("clean_title"):
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE Galleries SET clean_title=? WHERE id=?", (meta["clean_title"], gallery_id))
+            conn.commit()
+    # Now fetch clean_title from Galleries table
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and isinstance(row[0], str) and row[0].strip():
+            gallery_title = row[0].strip()
     if meta:
-        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or ""
+        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
+        # Always resolve to absolute path
+        base_ext_path = None
+        try:
+            from mangascraper.extensions.extension_manager import calculate_extension_download_path
+            ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
+            base_ext_path = calculate_extension_download_path(str(ext_name).lower())
+        except Exception:
+            base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
+        if not ext_download_path:
+            ext_download_path = base_ext_path
+        elif not os.path.isabs(ext_download_path):
+            ext_download_path = os.path.join(base_ext_path, ext_download_path)
         # Cleaned primary creator name
         primary_creator = None
         if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
@@ -259,16 +283,20 @@ def mark_gallery_completed(gallery_id):
             primary_creator = "Unknown"
         from mangascraper.core.api import sanitise_string
         cleaned_creator = sanitise_string(primary_creator)
-        gallery_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gallery_id}"
         ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
         is_archive = meta.get("is_archive", True)
         started_at = meta.get("started_at")
-    # Compose download_path and cover_path
-    if is_archive:
-        download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+    # Compose download_path and cover_path with full extension path
+    if gallery_title:
+        if is_archive:
+            download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+        else:
+            download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
+        # cover_path: full path, no extension
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
     else:
-        download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-    cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}.{ext}")
+        download_path = ""
+        cover_path = ""
     # If started_at is still None, try to fetch from Galleries table
     if not started_at:
         with lock, _connect() as conn:
@@ -1066,14 +1094,16 @@ def build_gallery_metadata_summary(meta, referrer: str):
         "creator_names": creators_clean,
         "language_names": gallery_language_clean,
     }
-    # Optionally add more cleaned fields as needed
-
+    # Log all cleaned fields
+    import logging
+    logger = logging.getLogger("mangascraper.api")
+    
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
         upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
     return {
         "creator": creators_clean,

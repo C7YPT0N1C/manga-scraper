@@ -292,8 +292,8 @@ def mark_gallery_completed(gallery_id):
             download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
         else:
             download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-        # cover_path: full path, no extension
-        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"{gallery_title}")
+        # cover_path: full path, no extension, include gallery id
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"({gallery_id}) {gallery_title}")
     else:
         download_path = ""
         cover_path = ""
@@ -314,7 +314,6 @@ def mark_gallery_completed(gallery_id):
             extension_used = row[0]
         else:
             extension_used = meta.get("extension_used") or meta.get("extension") or None
-        logger.debug(f"[TESTING] About to update gallery {gallery_id}:\n  clean_title={gallery_title}\n  download_path={download_path}\n  cover_path={cover_path}\n  ext_download_path={ext_download_path}\n  cleaned_creator={cleaned_creator}\n  ext={ext}")
         cursor.execute("""
         UPDATE Galleries
         SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
@@ -1098,14 +1097,13 @@ def build_gallery_metadata_summary(meta, referrer: str):
     # Log all cleaned fields
     import logging
     logger = logging.getLogger("mangascraper.api")
-    logger.debug(f"[TESTING] build_gallery_metadata_summary for id={id}: clean_title={title}, creator_names={creators_clean}, language_names={gallery_language_clean}")
-
+    
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
         upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
     except Exception as e:
-        logger.error(f"[TESTING] build_gallery_metadata_summary failed to upsert cache metadata for id={id}: {e}")
+        logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
     return {
         "creator": creators_clean,
