@@ -590,11 +590,6 @@ def process_galleries(batch_ids):
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
-                    #active_extension.after_completed_gallery_download_hook(meta, gallery_id)
-                    #if use_local_archive and os.path.isdir(primary_folder):
-                    #    shutil.rmtree(primary_folder, ignore_errors=True)
-                    #scraperapi.mark_gallery_completed(gallery_id)
-
                     scraperapi.mark_gallery_completed(gallery_id)
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
