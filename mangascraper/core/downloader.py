@@ -925,6 +925,6 @@ def start_downloader(gallery_list=None):
         try:
             if os.path.exists(ARCHIVE_TEMP_ROOT):
                 shutil.rmtree(ARCHIVE_TEMP_ROOT)
-                logger.info(f"Cleaned up temp archive folder: {ARCHIVE_TEMP_ROOT}")
+                logger.debug(f"Cleaned up temp archive folder: {ARCHIVE_TEMP_ROOT}")
         except Exception as e:
             logger.warning(f"Failed to clean up temp archive folder: {e}")

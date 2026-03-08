@@ -239,7 +239,7 @@ archiving = DEFAULT_RANGE_END
 # ------------------------------------------------------------
 # Filters
 # ------------------------------------------------------------
-DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,ai generated,vore,miniguy"
+DEFAULT_EXCLUDED_TAGS = "snuff,cuntboy,guro,cuntbusting,scat,coprophagia,vore,miniguy"
 # normalised into a list at import
 excluded_tags = [t.strip().lower() for t in DEFAULT_EXCLUDED_TAGS.split(",") if t.strip()]
 

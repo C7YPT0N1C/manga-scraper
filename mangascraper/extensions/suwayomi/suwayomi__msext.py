@@ -1167,7 +1167,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         languages = gallery_meta.get("languages", [])
 
         # --- Consolidated database update call ---
-        scraperdb.update_gallery_metadata(
+        scraperdb.update_gallery(
             gallery_id=gallery_id,
             raw_title=gallery_meta.get("raw_title"),
             clean_title=gallery_meta.get("clean_title"),

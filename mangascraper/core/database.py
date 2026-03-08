@@ -87,13 +87,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS Tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            count TEXT
+            count INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS Languages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
-            popularity INTEGER
+            count INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS BrokenSymbols (
@@ -129,169 +129,172 @@ def init_db():
 # CONSOLIDATED UPDATERS
 ####################################################################################################################
 
-# Creator metadata
-def update_creator_metadata(creator_name, display_name, download_path=None):
-    """
-    Update all relevant fields for a creator, using the latest metadata.
-    - display_name: cleaned creator name (from latest gallery metadata, fallback to CachedMetadata)
-    - download_path: path to creator's download folder
-    - first_seen: set if not already set
-    - last_updated: always set to now
-    - total_galleries: count of galleries linked to this creator
-    - most_popular_tags: top 15 tags by count across all galleries for this creator
-    """
-    now = datetime.now(timezone.utc).isoformat()
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        # Upsert creator
-        cursor.execute(
-            "INSERT INTO Creators (name, display_name, download_path, first_seen, last_updated, total_galleries, most_popular_tags) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(name) DO NOTHING",
-            (creator_name, display_name, download_path, now, now, 0, "[]")
-        )
-        cursor.execute("SELECT id, first_seen FROM Creators WHERE name=?", (creator_name,))
-        row = cursor.fetchone()
-        if not row:
-            return
-        creator_id, first_seen = row
-        # Count total galleries (search for creator_id in creator_ids JSON array)
-        cursor.execute("""
-            SELECT COUNT(*) FROM Galleries
-            WHERE EXISTS (
-                SELECT 1 FROM json_each(Galleries.creator_ids)
-                WHERE json_each.value = ?
-            )
-        """, (creator_id,))
-        total_galleries = cursor.fetchone()[0]
-        # Calculate most popular tags (by tag id)
-        cursor.execute("""
-            SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (
-                SELECT id FROM Galleries
-                WHERE EXISTS (
-                    SELECT 1 FROM json_each(Galleries.creator_ids)
-                    WHERE json_each.value = ?
-                )
-            )
-        """, (creator_id,))
-        tag_counts = {}
-        for (tag_ids_json,) in cursor.fetchall():
-            if tag_ids_json:
-                try:
-                    tag_ids = json.loads(tag_ids_json)
-                    for tag_id in tag_ids:
-                        tag_counts[tag_id] = tag_counts.get(tag_id, 0) + 1
-                except Exception:
-                    continue
-        sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
-        most_popular_tag_ids = [tag_id for tag_id, _ in sorted_tags[:15]]
-        # Update all fields except notes
-        cursor.execute(
-            "UPDATE Creators SET display_name=?, download_path=?, last_updated=?, total_galleries=?, most_popular_tags=?, first_seen=COALESCE(first_seen, ?) WHERE id=?",
-            (display_name, download_path, now, total_galleries, json.dumps(most_popular_tag_ids), first_seen or now, creator_id)
-        )
-        # Update Tags table: update count field for each tag used by this creator
-        for tag_id, count in tag_counts.items():
-            cursor.execute("SELECT count FROM Tags WHERE id=?", (tag_id,))
-            row = cursor.fetchone()
-            creator_counts = []
-            if row and row[0]:
-                try:
-                    creator_counts = json.loads(row[0])
-                except Exception:
-                    creator_counts = []
-            # Remove any previous entry for this creator
-            creator_counts = [d for d in creator_counts if str(creator_id) not in d]
-            creator_counts.append({str(creator_id): count})
-            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (json.dumps(creator_counts), tag_id))
-        conn.commit()
+########################################################################################################
+# Upsert gallery and mapping tables
+########################################################################################################
 
-# Gallery metadata
-def update_gallery_metadata(gallery_id, raw_title, clean_title, language, tags, cover_path, creator_name=None, download_path=None, extension_used=None, num_pages=None):
+def upsert_gallery(
+    gallery_id,
+    raw_title,
+    clean_title,
+    num_pages,
+    creator_ids,
+    language_ids,
+    tag_ids,
+    status=None,
+    started_at=None,
+    completed_at=None,
+    download_path=None,
+    cover_path=None,
+    extension_used=None
+):
     """
-    Update all relevant fields for a gallery, always overwriting with latest values.
+    Insert or update a gallery and its mapping tables (GalleryTags, GalleryLanguages).
     """
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        # Upsert creators, tags, languages, and get their ids
-        creator_ids = []
-        if creator_name:
-            # Accepts a single creator or list
-            names = creator_name if isinstance(creator_name, list) else [creator_name]
-            for name in names:
-                cursor.execute("INSERT OR IGNORE INTO Creators (name) VALUES (?)", (name,))
-                cursor.execute("SELECT id FROM Creators WHERE name=?", (name,))
-                row = cursor.fetchone()
-                if row:
-                    creator_ids.append(row[0])
-        tag_ids = []
-        for tag in tags or []:
-            cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?) ", (tag, "[]"))
-            cursor.execute("SELECT id FROM Tags WHERE name=?", (tag,))
-            row = cursor.fetchone()
-            if row:
-                tag_ids.append(row[0])
-        language_ids = []
-        for lang in language or []:
-            cursor.execute("INSERT OR IGNORE INTO Languages (name, popularity) VALUES (?, ?) ", (lang, 0))
-            cursor.execute("SELECT id FROM Languages WHERE name=?", (lang,))
-            row = cursor.fetchone()
-            if row:
-                language_ids.append(row[0])
-        # Insert/update Galleries
         cursor.execute(
-            "INSERT INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, download_path, cover_path, extension_used) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, num_pages=excluded.num_pages, creator_ids=excluded.creator_ids, language_ids=excluded.language_ids, tag_ids=excluded.tag_ids, download_path=excluded.download_path, cover_path=excluded.cover_path, extension_used=excluded.extension_used",
-            (gallery_id, raw_title, clean_title, num_pages, json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), download_path, cover_path, extension_used)
+            "INSERT INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET raw_title=excluded.raw_title, clean_title=excluded.clean_title, num_pages=excluded.num_pages, creator_ids=excluded.creator_ids, language_ids=excluded.language_ids, tag_ids=excluded.tag_ids, status=excluded.status, started_at=excluded.started_at, completed_at=excluded.completed_at, download_path=excluded.download_path, cover_path=excluded.cover_path, extension_used=excluded.extension_used",
+            (
+                gallery_id,
+                raw_title,
+                clean_title,
+                num_pages,
+                json.dumps(creator_ids),
+                json.dumps(language_ids),
+                json.dumps(tag_ids),
+                status,
+                started_at,
+                completed_at,
+                download_path,
+                cover_path,
+                extension_used
+            )
         )
-        # Update GalleryTags and GalleryLanguages
         cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gallery_id, json.dumps(tag_ids)))
         cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gallery_id, json.dumps(language_ids)))
         conn.commit()
 
-# Update or insert a language and its popularity
-def update_language_metadata(language_name, popularity=0):
+########################################################################################################
+# Update stats for creators
+########################################################################################################
+
+def update_creator_stats(creator_id=None):
     """
-    Update or insert a language and its popularity.
+    Update total_galleries, most_popular_tags, display_name, first_seen, last_updated for creators.
+    If creator_id is None, update all creators.
     """
+    now = datetime.now(timezone.utc).isoformat()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Languages (name, popularity) VALUES (?, ?) "
-            "ON CONFLICT(name) DO UPDATE SET popularity=excluded.popularity",
-            (language_name, popularity)
-        )
+        if creator_id is None:
+            cursor.execute("SELECT id, name FROM Creators")
+            creators = cursor.fetchall()
+        else:
+            cursor.execute("SELECT id, name FROM Creators WHERE id=?", (creator_id,))
+            creators = cursor.fetchall()
+        for cid, name in creators:
+            # display_name: cleaned version of name (for now, just use name; replace with cleaning logic if needed)
+            display_name = name
+            # total_galleries
+            cursor.execute("""
+                SELECT COUNT(*) FROM Galleries
+                WHERE EXISTS (
+                    SELECT 1 FROM json_each(Galleries.creator_ids)
+                    WHERE json_each.value = ?
+                )
+            """, (cid,))
+            total_galleries = cursor.fetchone()[0]
+            # most_popular_tags
+            cursor.execute("""
+                SELECT tag_ids FROM GalleryTags WHERE gallery_id IN (
+                    SELECT id FROM Galleries
+                    WHERE EXISTS (
+                        SELECT 1 FROM json_each(Galleries.creator_ids)
+                        WHERE json_each.value = ?
+                    )
+                )
+            """, (cid,))
+            tag_counts = {}
+            for (tag_ids_json,) in cursor.fetchall():
+                if tag_ids_json:
+                    try:
+                        tag_ids = json.loads(tag_ids_json)
+                        for tag_id in tag_ids:
+                            tag_counts[tag_id] = tag_counts.get(tag_id, 0) + 1
+                    except Exception:
+                        continue
+            sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+            most_popular_tag_ids = [tag_id for tag_id, _ in sorted_tags[:15]]
+            # first_seen
+            cursor.execute("SELECT first_seen FROM Creators WHERE id=?", (cid,))
+            first_seen = cursor.fetchone()[0]
+            if not first_seen:
+                first_seen = now
+            # last_updated
+            last_updated = now
+            cursor.execute(
+                "UPDATE Creators SET display_name=?, total_galleries=?, most_popular_tags=?, first_seen=?, last_updated=? WHERE id=?",
+                (display_name, total_galleries, json.dumps(most_popular_tag_ids), first_seen, last_updated, cid)
+            )
         conn.commit()
 
-# Update or insert a tag and its count (per creator)
-def update_tag_metadata(tag_name, creator_id=None, count=1):
+########################################################################################################
+# Update tag counts
+########################################################################################################
+
+def update_tag_stats(tag_id=None):
     """
-    Update or insert a tag and increment/update its count for a creator.
+    Update count for tags (number of galleries using the tag). If tag_id is None, update all tags.
     """
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Tags (name, count) VALUES (?, ?) "
-            "ON CONFLICT(name) DO NOTHING",
-            (tag_name, "[]")
-        )
-        cursor.execute("SELECT id, count FROM Tags WHERE name=?", (tag_name,))
-        row = cursor.fetchone()
-        if not row:
-            return
-        tag_id, count_json = row
-        creator_counts = []
-        if count_json:
-            try:
-                creator_counts = json.loads(count_json)
-            except Exception:
-                creator_counts = []
-        if creator_id is not None:
-            # Remove any previous entry for this creator
-            creator_counts = [d for d in creator_counts if str(creator_id) not in d]
-            creator_counts.append({str(creator_id): count})
-            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (json.dumps(creator_counts), tag_id))
+        if tag_id is None:
+            cursor.execute("SELECT id FROM Tags")
+            tag_ids = [row[0] for row in cursor.fetchall()]
+        else:
+            tag_ids = [tag_id]
+        for tid in tag_ids:
+            cursor.execute("SELECT tag_ids FROM GalleryTags")
+            count = 0
+            for (tag_ids_json,) in cursor.fetchall():
+                if tag_ids_json:
+                    try:
+                        tag_ids_list = json.loads(tag_ids_json)
+                        count += tag_ids_list.count(tid)
+                    except Exception:
+                        continue
+            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
+        conn.commit()
+
+########################################################################################################
+# Update language counts
+########################################################################################################
+
+def update_language_stats(language_id=None):
+    """
+    Update count for languages (number of galleries using the language). If language_id is None, update all languages.
+    """
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        if language_id is None:
+            cursor.execute("SELECT id FROM Languages")
+            lang_ids = [row[0] for row in cursor.fetchall()]
+        else:
+            lang_ids = [language_id]
+        for lid in lang_ids:
+            cursor.execute("SELECT language_ids FROM GalleryLanguages")
+            count = 0
+            for (lang_ids_json,) in cursor.fetchall():
+                if lang_ids_json:
+                    try:
+                        lang_ids_list = json.loads(lang_ids_json)
+                        count += lang_ids_list.count(lid)
+                    except Exception:
+                        continue
+            cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
         conn.commit()
 
 # GENERIC FIELD UPDATE HELPERS
@@ -315,6 +318,7 @@ def update_field(table, key_field, key_value, field, value):
 # ===============================
 # DOWNLOAD HELPERS
 # ===============================
+
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
@@ -411,6 +415,7 @@ def list_galleries(status=None):
 # ===============================
 # BROKEN SYMBOLS MANAGEMENT
 # ===============================
+
 def load_broken_symbols() -> dict[str, str]:
     """Load all detected broken symbols as { symbol: '_' }."""
     init_db()
@@ -441,6 +446,7 @@ def save_broken_symbols(symbol_map: dict[str, str]):
 # ===============================
 # CACHE METADATA
 # ===============================
+
 def load_cache_metadata_all(cutoff: float | None = None) -> dict:
     init_db()
     with lock, _connect() as conn:
@@ -556,6 +562,7 @@ def prune_cache_metadata(cutoff: float):
 # ===============================
 # CACHE REFERENCES
 # ===============================
+
 def load_cache_references() -> dict:
     init_db()
     with lock, _connect() as conn:
