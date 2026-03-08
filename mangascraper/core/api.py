@@ -375,24 +375,17 @@ def mark_gallery_completed(gallery_id):
             creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
             tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
             language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
-            
-            logger.debug(f"[DATABASE] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
+            logger.debug(f"[DATABASE] Writing to Galleries (partial update): id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
             cursor.execute(
-                "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
                 (
-                    int(gid),
                     gdata["raw_title"],
                     gdata["clean_title"],
                     gdata["num_pages"],
                     json.dumps(creator_ids),
                     json.dumps(language_ids),
                     json.dumps(tag_ids),
-                    gdata["status"],
-                    gdata["started_at"],
-                    gdata["completed_at"],
-                    gdata["download_path"],
-                    gdata["cover_path"],
-                    gdata["extension_used"]
+                    int(gid)
                 )
             )
             cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (int(gid), json.dumps(tag_ids)))
