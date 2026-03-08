@@ -134,6 +134,8 @@ def update_field(table, key_field, key_value, field, value):
     Update a single field in a table for a given key.
     Example: update_field('Creators', 'name', 'John Doe', 'display_name', 'John D.')
     """
+    init_db()
+    now = datetime.now(timezone.utc).isoformat()
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -205,7 +207,9 @@ def mark_gallery_completed(gallery_id):
 
     for gid, entry in cache.items():
         meta = entry.get("clean_metadata") or {}
+        print(f"[DEBUG] Processing gallery {gid} with metadata: {meta}")
         if meta.get("status") != "completed":
+            print(f"[DEBUG] Skipping gallery {gid} because status is not completed.")
             continue
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
         clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
@@ -225,6 +229,8 @@ def mark_gallery_completed(gallery_id):
         download_path = meta.get("download_path")
         cover_path = meta.get("cover_path")
         extension_used = meta.get("extension_used")
+
+        print(f"[DEBUG] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
 
         for cname in creator_names:
             creators.setdefault(cname, {"display_name": cname, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
@@ -278,6 +284,7 @@ def mark_gallery_completed(gallery_id):
             creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
             tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
             language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+            print(f"[DEBUG] Writing to Galleries: id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
             cursor.execute(
                 "INSERT OR REPLACE INTO Galleries (id, raw_title, clean_title, num_pages, creator_ids, language_ids, tag_ids, status, started_at, completed_at, download_path, cover_path, extension_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -315,6 +322,7 @@ def mark_gallery_completed(gallery_id):
                     except Exception:
                         continue
             most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
+            print(f"[DEBUG] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
             cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
 
         for tname, tid in tag_id_map.items():
@@ -327,6 +335,7 @@ def mark_gallery_completed(gallery_id):
                         count += tag_ids.count(tid)
                     except Exception:
                         continue
+            print(f"[DEBUG] Updating Tag {tname} (id={tid}): count={count}")
             cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
         for lname, lid in lang_id_map.items():
@@ -339,6 +348,7 @@ def mark_gallery_completed(gallery_id):
                         count += lang_ids.count(lid)
                     except Exception:
                         continue
+            print(f"[DEBUG] Updating Language {lname} (id={lid}): count={count}")
             cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
         conn.commit()

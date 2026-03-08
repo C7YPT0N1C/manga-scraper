@@ -1166,20 +1166,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])
 
-        # --- Consolidated database update call ---
-        scraperdb.upsert_gallery(
-            gallery_id=gallery_id,
-            raw_title=gallery_meta.get("raw_title"),
-            clean_title=gallery_meta.get("clean_title"),
-            language=languages,
-            tags=tags,
-            cover_path=gallery_meta.get("cover_path"),
-            creator_name=creators,
-            download_path=gallery_meta.get("download_path"),
-            extension_used=gallery_meta.get("extension_used"),
-            num_pages=gallery_meta.get("num_pages")
-        )
-
         cover_source = None
         cover_gallery_name = None
         cover_ext = None
