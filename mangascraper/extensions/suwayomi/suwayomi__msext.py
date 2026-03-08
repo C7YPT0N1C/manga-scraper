@@ -10,7 +10,6 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
 from mangascraper.extensions.extension_manager import (
-    build_gallery_metadata_summary,
     calculate_extension_download_path,
     cleanup_download_tree,
     find_latest_cover_id,
@@ -1347,7 +1346,7 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     
     log_clarification("debug")
     log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
-    
+
     def _should_run_post_batch():
         # --- If Total Batches higher than MAX_X_BATCHES, do not run ---
         if total_batch_numbers > MAX_X_BATCHES:

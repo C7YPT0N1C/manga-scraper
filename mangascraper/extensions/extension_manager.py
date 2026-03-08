@@ -764,28 +764,6 @@ def calculate_extension_download_path(extension_name: str) -> str:
 #######################################################################
 # Shared Extension Helpers (Non-Hook)
 #######################################################################
-def build_gallery_metadata_summary(meta, referrer: str):
-    orchestrator.refresh_globals()
-
-    artists = scraperapi.Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
-    groups = scraperapi.Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
-    creators = artists or groups or ["Unknown Creator"]
-
-    title = scraperapi.sanitise_string(meta)
-    id = str(meta.get("id", "Unknown ID"))
-    full_title = f"({id}) {title}"
-
-    gallery_language = scraperapi.Get.meta_tags(
-        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
-    ) or ["Unknown Language"]
-
-    return {
-        "creator": creators,
-        "title": full_title,
-        "short_title": title,
-        "id": id,
-        "language": gallery_language,
-    }
 
 def parse_gallery_id(text: str) -> int | None:
     if not text:

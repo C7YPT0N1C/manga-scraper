@@ -593,8 +593,11 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         "clean_metadata": {},
         "raw_metadata": {},
     }
+
+    # Clean the metadata using build_gallery_metadata_summary if provided
     if isinstance(clean_metadata, dict):
-        entry["clean_metadata"].update(clean_metadata)
+        cleaned = build_gallery_metadata_summary(clean_metadata, referrer="database")
+        entry["clean_metadata"].update(cleaned)
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
     entry["timestamp"] = timestamp
@@ -919,6 +922,29 @@ def _build_symbol_translation_table():
 
 # Initial symbol translation table at module load
 _build_symbol_translation_table()
+
+def build_gallery_metadata_summary(meta, referrer: str):
+    orchestrator.refresh_globals()
+
+    artists = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "artist")
+    groups = Get.meta_tags(f"{referrer}: Build_gallery_metadata_summary", meta, "group")
+    creators = artists or groups or ["Unknown Creator"]
+
+    title = sanitise_string(meta)
+    id = str(meta.get("id", "Unknown ID"))
+    full_title = f"({id}) {title}"
+
+    gallery_language = Get.meta_tags(
+        f"{referrer}: Build_gallery_metadata_summary", meta, "language"
+    ) or ["Unknown Language"]
+
+    return {
+        "creator": creators,
+        "title": full_title,
+        "short_title": title,
+        "id": id,
+        "language": gallery_language,
+    }
 
 def sanitise_string(meta_or_title):
     """

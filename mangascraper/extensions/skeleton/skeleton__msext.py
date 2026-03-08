@@ -8,7 +8,6 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
 from mangascraper.extensions.extension_manager import (
-    build_gallery_metadata_summary,
     calculate_extension_download_path,
     cleanup_download_tree,
     find_latest_cover_id,
