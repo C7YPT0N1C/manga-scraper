@@ -188,7 +188,8 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
                 started_at=excluded.started_at,
                 download_path=excluded.download_path
             """, (gallery_id, "started", now, download_path))
-            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
+            logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
         else:
             # Set extension_used if not already set
             cursor.execute("""
@@ -200,7 +201,8 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
                 download_path=excluded.download_path,
                 extension_used=excluded.extension_used
             """, (gallery_id, "started", now, download_path, extension_used))
-            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
+            logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
         conn.commit()
 
 def mark_gallery_skipped(gallery_id):
@@ -319,7 +321,8 @@ def mark_gallery_completed(gallery_id):
         SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
         WHERE id = ?
         """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
-        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
+        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
+        logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
         conn.commit()
 
     # Now process all main tables for this gallery
@@ -332,7 +335,7 @@ def mark_gallery_completed(gallery_id):
     gallery_languages = {}
 
     for gid, entry in cache.items():
-        logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
+        #logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
         
         meta = entry.get("clean_metadata") or {}
         raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
@@ -368,7 +371,7 @@ def mark_gallery_completed(gallery_id):
         cover_path = meta.get("cover_path")
         extension_used = meta.get("extension_used")
 
-        logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
+        #logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
 
         for cname in creator_names:
             ctype = creator_types.get(cname, None)
@@ -456,7 +459,7 @@ def mark_gallery_completed(gallery_id):
                     except Exception:
                         continue
             most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
-            logger.debug(f"[DATABASE] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
+            #logger.debug(f"[DATABASE] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
             cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
 
         for tname, tid in tag_id_map.items():
@@ -469,7 +472,7 @@ def mark_gallery_completed(gallery_id):
                         count += tag_ids.count(tid)
                     except Exception:
                         continue
-            logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
+            #logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
             cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
         for lname, lid in lang_id_map.items():
@@ -482,7 +485,7 @@ def mark_gallery_completed(gallery_id):
                         count += lang_ids.count(lid)
                     except Exception:
                         continue
-            logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
+            #logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
             cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
         conn.commit()
@@ -1036,8 +1039,8 @@ def sanitise_string(meta_or_title):
         logger.debug(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
         save_broken_symbols(possible_broken_symbols)
         _build_symbol_translation_table()
-    else:
-        logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
+    #else:
+    #    logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
 
     # Remove content inside [] or {} brackets (use pre-compiled regex)
     title = _BRACKET_PATTERN.sub("", title)
