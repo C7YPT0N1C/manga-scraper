@@ -446,20 +446,8 @@ def process_galleries(batch_ids):
     
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
-        # Build the intended download path for this gallery (primary creator)
-        meta_for_path = scraperapi.Fetch.gallery_metadata(gallery_id)
-        gallery_metas_for_path = active_extension.build_gallery_metadata_summary(
-            meta_for_path,
-            active_extension.EXTENSION_REFERRER,
-        ) if meta_for_path else {}
-        creators_for_path = gallery_metas_for_path.get("creator", ["Unknown"])
-        primary_folder_for_path = build_gallery_path(
-            meta_for_path,
-            {"creator": [creators_for_path[0]]} if creators_for_path else None,
-        ) if meta_for_path else download_location
         if not orchestrator.dry_run:
-            logger.debug(f"[DATABASE] Marking gallery {gallery_id} as started with download_path={primary_folder_for_path}, extension_used={extension_name}")
-            scraperapi.mark_gallery_started(gallery_id, primary_folder_for_path, extension_name)
+            scraperapi.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -576,20 +564,6 @@ def process_galleries(batch_ids):
                             orchestrator.gallery_format,
                             final_parent_dir=archive_parent_dir,
                         )
-                # Determine cover_path (first image in folder or archive)
-                cover_path = None
-                try:
-                    if orchestrator.gallery_format == "directory":
-                        images = sorted([
-                            f for f in os.listdir(finalised_path)
-                            if os.path.isfile(os.path.join(finalised_path, f)) and f.split('.')[-1].lower() in ("jpg", "jpeg", "png", "webp", "gif")
-                        ])
-                        if images:
-                            cover_path = os.path.join(finalised_path, images[0])
-                    else:
-                        cover_path = finalised_path  # archive itself as cover
-                except Exception as e:
-                    logger.debug(f"[DATABASE] Could not determine cover_path for gallery {gallery_id}: {e}")
 
                 # --- Symlink all additional creators to the finalised path (archive or folder) ---
                 for extra_creator in creators[1:]:
@@ -619,24 +593,8 @@ def process_galleries(batch_ids):
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
-                    # Update the cache metadata with final fields for this gallery
-                    # (status, completed_at, download_path, cover_path, extension_used)
-                    now = datetime.now(timezone.utc).isoformat()
-                    # Load and update cache
-                    cache = scraperapi.load_cache_metadata_for_ids([gallery_id])
-                    if str(gallery_id) in cache:
-                        entry = cache[str(gallery_id)]
-                        meta_cache = entry.get("clean_metadata") or {}
-                        meta_cache["status"] = "completed"
-                        meta_cache["completed_at"] = now
-                        meta_cache["download_path"] = finalised_path
-                        meta_cache["cover_path"] = cover_path
-                        meta_cache["extension_used"] = extension_name
-                        scraperapi.upsert_cache_metadata(gallery_id, meta_cache, entry.get("raw_metadata"))
-                        logger.debug(f"[DATABASE] Updated cache metadata for gallery {gallery_id} with status, completed_at, download_path, cover_path, extension_used")
-                    else:
-                        logger.debug(f"[DATABASE] No cache metadata found for gallery {gallery_id} to update before completion.")
                     scraperapi.mark_gallery_completed(gallery_id)
+                    
                     # Track actual size downloaded
                     actual_bytes = 0
                     try:
@@ -650,6 +608,7 @@ def process_galleries(batch_ids):
                                     actual_bytes += os.path.getsize(os.path.join(root, f))
                     except Exception:
                         actual_bytes = estimated_size  # Use estimate if we can't measure
+                    
                     space_monitor["total_actual_bytes"] += actual_bytes
                     space_monitor["galleries_processed"] += 1
 
