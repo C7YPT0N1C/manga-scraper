@@ -1177,10 +1177,6 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
     
     return [], None
 
-####################################################################################################
-# INTERACTIVE SEARCH MODE
-####################################################################################################
-
 def _handle_search_error(search_type: str, search_value: str = ""):
     """
     Handle search errors consistently and return user to config menu.
@@ -1343,9 +1339,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 logger.warning("No galleries selected yet.")
         
         elif choice == "r":
-            # Return to config menu
-            from mangascraper.interactive import interactive_config_menu
-            
             current_config = {
                 'extension': config.get('EXTENSION', DEFAULT_EXTENSION),
                 'use_tor': config.get('USE_TOR', DEFAULT_USE_TOR),

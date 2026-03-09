@@ -5,6 +5,7 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.interactive import interactive_config_menu, interactive_gallery_search
 from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.downloader import start_downloader
@@ -1012,8 +1013,6 @@ def main():
     
     # --- Handle --interactive mode (before building gallery list) ---
     if args.interactive:
-        from mangascraper.interactive import interactive_config_menu, interactive_gallery_search
-        
         log_clarification()
         logger.info("Entering interactive mode...")
         log_clarification()
