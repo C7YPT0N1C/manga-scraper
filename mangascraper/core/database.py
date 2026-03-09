@@ -270,7 +270,7 @@ def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
         "languages": Get.languages(meta),
         "pages": Get.page_count(meta),
     }
-    logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
+    #logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
     return entry
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):

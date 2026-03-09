@@ -94,6 +94,8 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         tuple: (selected_gallery_ids, metadata_dict) where metadata_dict maps gid to metadata
     """
     
+    logger.debug(f"[TESTING]: display_gallery_results cache_key = {cache_key}")
+    
     if not gallery_ids:
         return [], {}
     
@@ -452,6 +454,9 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
+    
+    logger.debug(f"[TESTING]: view_queued_galleries cached_metadata = {cached_metadata}")
+    
     selected_ids = scraperapi.Fetch.queued_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")

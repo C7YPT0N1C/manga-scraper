@@ -485,6 +485,9 @@ def display_download_summary(gallery_ids: list, show_summary: bool = False, cach
     Display gallery summary with size estimate and get confirmation.
     Returns True if user wants to proceed, False otherwise.
     """
+    
+    logger.debug(f"[TESTING]: display_download_summary cache_key = {cache_key}")
+    
     if not show_summary:
         return True
     

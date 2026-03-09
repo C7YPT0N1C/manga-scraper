@@ -1181,7 +1181,7 @@ class Fetch:
         if failed_ids:
             logger.warning(f"Failed to fetch metadata for {len(failed_ids)} galleries (they will be skipped)")
         
-        logger.debug(f"[TESTING]: cache_key = {cache_key}")
+        logger.debug(f"[TESTING]: all_galleries_metadata cache_key = {cache_key}")
         
         # Save to cache
         if metadata and cache_key:
