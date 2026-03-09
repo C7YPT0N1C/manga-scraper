@@ -1264,10 +1264,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         selected_ids = list(dict.fromkeys(selected_ids))
         if selected_ids:
             logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
-    search_history_max = 10
-    search_history = deque(maxlen=search_history_max)  # Each entry is a dict with search details
-    for entry in scraperapi.Caching.Load.search_history(search_history_max):
-        search_history.append(entry)
+    
+    # Search history removed
+    
     selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
 
     def persist_selected_ids():
@@ -1280,26 +1279,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     if selected_ids:
         persist_selected_ids()
 
-    def add_search_history(
-        search_type: str,
-        search_value: str,
-        cache_key: str | None,
-        sort_val: str | None = None,
-        start_page: int | None = None,
-        end_page: int | None = None,
-        archive_mode: bool = False,
-    ):
-        entry = {
-            "type": search_type,
-            "value": search_value,
-            "cache_key": cache_key,
-            "sort": sort_val,
-            "start_page": start_page,
-            "end_page": end_page,
-            "archive_mode": archive_mode,
-        }
-        search_history.append(entry)
-        scraperapi.Caching.Save.search_history(list(search_history), search_history_max)
+    # add_search_history removed
     
     while True:
         clear_screen()
@@ -1458,7 +1438,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             
             if ids and cache_key:
                 cache_key = scraperapi.Get.cache_keys("homepage", sort_val)
-                add_search_history("homepage", sort_val, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                 if archive_mode:
                     selected_ids.extend(ids)
                     logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1619,7 +1598,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 if ids and cache_key:
                     cache_key = scraperapi.Get.cache_keys("search", search_query)
-                    add_search_history("search", search_query, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     if archive_mode:
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1704,7 +1682,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 if ids and cache_key:
                     cache_key = scraperapi.Get.cache_keys(query_type, query_value)
-                    add_search_history(query_type, query_value, cache_key, sort_val, start_page, end_page, archive_mode=archive_mode)
                     if archive_mode:
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1723,98 +1700,15 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                             break  # Break out to config menu
                     else:
                         logger.info(f"No galleries found for {query_type}={query_value}")
-
-        elif choice == "w":
-            # View recent searches
-            if search_history:
-                log_clarification()
-                print("Recent searches (most recent first):\n")
-                for idx, entry in enumerate(reversed(list(search_history)), 1):
-                    label = f"{entry['type']}: {entry['value']}"
-                    if entry.get("archive_mode"):
-                        label = f"archive {entry['type']}: {entry['value']}"
-                    print(f"  [{idx}] {label}")
-                
-                try:
-                    selection = int(input("\nSelect search to re-run (1-{}) or 0 to cancel: ".format(len(search_history))).strip())
-                    if 1 <= selection <= len(search_history):
-                        selected_search = list(reversed(list(search_history)))[selection - 1]
-                        search_type = selected_search["type"]
-                        search_value = selected_search["value"]
-                        cache_key = selected_search.get("cache_key")
-                        archive_mode = bool(selected_search.get("archive_mode", False))
-                        default_sort = selected_search.get("sort") or DEFAULT_PAGE_SORT
-                        default_start = selected_search.get("start_page") or DEFAULT_PAGE_RANGE_START
-                        default_end = selected_search.get("end_page")
-                        default_end_display = "all" if default_end is None else default_end
-                        
-                        sort_val = input(
-                            f"Enter sort (1=date, 2=popular-today, 3=popular-week, 4=popular-all-time, default: {default_sort}): "
-                        ).strip() or default_sort
-                        sort_val = get_valid_sort_value(sort_val)
-                        start_page_input = input(f"Enter start page (default: {default_start}): ").strip()
-                        end_page_input = input(
-                            f"Enter end page (default: {default_end_display}, or 'all' for all pages): "
-                        ).strip()
-                        
-                        start_page = int(start_page_input) if start_page_input.isdigit() else default_start
-                        if end_page_input == "":
-                            end_page = default_end
-                            if end_page is None:
-                                end_page = None
-                            elif not isinstance(end_page, int):
-                                end_page = DEFAULT_PAGE_RANGE_END
-                        else:
-                            fallback_end = default_end if isinstance(default_end, int) else DEFAULT_PAGE_RANGE_END
-                            end_page = parse_end_page(end_page_input, fallback_end)
-                        
-                        logger.info(f"Re-running search: {search_type}={search_value}...")
-                        fetch_all_pages = archive_mode or end_page is None
-                        ids, rerun_cache_key = fetch_gallery_ids_with_fallback(
-                            search_type,
-                            search_value,
-                            sort_val,
-                            start_page,
-                            end_page,
-                            fetch_as_archival=fetch_all_pages,
-                        )
-                        
-                        # Check for search errors
-                        if rerun_cache_key is None:
-                            logger.error(
-                                f"Failed to fetch {search_type}={search_value}.\n"
-                                f"Check the log file for details: {RUNTIME_LOG_FILE}"
-                            )
-                            logger.info("Returning to menu. Please try a different search or check your connection.")
-                            log_clarification()
-                            continue
-                        
-                        if ids:
-                            use_cache_key = rerun_cache_key or cache_key
-                            new_ids, new_metadata = display_gallery_results(ids, use_cache_key)
-                            if new_ids:
-                                selected_ids.extend(new_ids)
-                                selected_metadata.update(new_metadata)
-                                logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
-                                persist_selected_ids()
-                        else:
-                            if _check_no_results_and_prompt_filters():
-                                break  # Break out to config menu
-                            else:
-                                logger.info(f"No galleries found for {search_type}={search_value}")
-                except ValueError:
-                    logger.warning("Invalid selection")
-            else:
-                logger.info("No recent searches yet.")
         
-        elif choice == "e":
+        elif choice == "w":
             # View selected galleries
             selected_ids = scraperapi.Fetch.queued_galleries()
             selected_ids = view_queued_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
 
-        elif choice == "q":
+        elif choice == "e":
             gallery_input = input("Enter a single gallery ID to read (press Enter to cancel): ").strip()
             if not gallery_input:
                 continue
@@ -1825,7 +1719,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             continue
         
         else:
-            logger.warning("Invalid choice. Enter 1-9, q, w, e, r, or 0.")
+            logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
         
         log_clarification()
     

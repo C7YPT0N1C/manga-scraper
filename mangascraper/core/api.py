@@ -1269,40 +1269,6 @@ class Caching:
     
     class Load:
         @staticmethod
-        def search_history(max_items: int = scraperdb.SEARCH_HISTORY_MAX) -> list[dict]:
-            """Load Search History from CacheReferences in the database."""
-            references = scraperdb.load_cache_references()
-            ref_entry = references.get("search_history")
-            if not ref_entry or not isinstance(ref_entry, dict):
-                return []
-            items = ref_entry.get("items", [])
-            if not isinstance(items, list):
-                return []
-            cleaned = []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                search_type = item.get('type')
-                search_value = item.get('value')
-                if not search_type or search_value is None:
-                    continue
-                cleaned.append({
-                    'type': str(search_type),
-                    'value': str(search_value),
-                    'cache_key': item.get('cache_key'),
-                    'sort': item.get('sort'),
-                    'start_page': item.get('start_page'),
-                    'end_page': item.get('end_page'),
-                    'archive_mode': bool(item.get('archive_mode', False)),
-                })
-            capped = scraperdb.SEARCH_HISTORY_MAX
-            if max_items is not None:
-                capped = min(int(max_items), scraperdb.SEARCH_HISTORY_MAX)
-            if capped and len(cleaned) > capped:
-                cleaned = cleaned[-capped:]
-            return cleaned
-        
-        @staticmethod
         def general_metadata() -> dict:
             data = scraperdb.read_cache()
             metadata = data.get("metadata", {})
@@ -1374,46 +1340,6 @@ class Caching:
                 return {row[0]: "_" for row in rows if row[0].strip()}
 
     class Save:
-        @staticmethod
-        def search_history(items: list[dict], max_items: int = scraperdb.SEARCH_HISTORY_MAX):
-            """Save Search History to CacheReferences in the database."""
-            try:
-                if not isinstance(items, list):
-                    return
-                safe_items = []
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    search_type = item.get('type')
-                    search_value = item.get('value')
-                    if not search_type or search_value is None:
-                        continue
-                    safe_items.append({
-                        'type': str(search_type),
-                        'value': str(search_value),
-                        'cache_key': item.get('cache_key'),
-                        'sort': item.get('sort'),
-                        'start_page': item.get('start_page'),
-                        'end_page': item.get('end_page'),
-                        'archive_mode': bool(item.get('archive_mode', False)),
-                    })
-                capped = scraperdb.SEARCH_HISTORY_MAX
-                if max_items is not None:
-                    capped = min(int(max_items), scraperdb.SEARCH_HISTORY_MAX)
-                if capped and len(safe_items) > capped:
-                    safe_items = safe_items[-capped:]
-                saved_at = time.time()
-                entry = {
-                    "type": "search_history",
-                    "key": "search_history",
-                    "ids": safe_items,
-                    "ttl": scraperdb.TTL,
-                    "expires_at": saved_at + scraperdb.TTL if scraperdb.TTL else None,
-                }
-                scraperdb.upsert_cache_reference("search_history", entry)
-            except Exception:
-                pass
-        
         @staticmethod
         def general_metadata(metadata: dict):
             if not isinstance(metadata, dict):

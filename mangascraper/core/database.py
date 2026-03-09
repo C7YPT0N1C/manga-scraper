@@ -19,7 +19,6 @@ _thread_local = threading.local()
 
 DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
-SEARCH_HISTORY_MAX = 10
 
 # Cache TTL: 3 hours (runtime-configured)
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
