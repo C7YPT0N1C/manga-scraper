@@ -302,147 +302,6 @@ def display_gallery_results(gallery_ids: list, received_cache_key: str = None) -
         logger.warning("Invalid choice. Returning without selection.")
         return [], {}
 
-
-def read_gallery_in_terminal(gallery_id: int):
-    def prompt_reader_settings():
-        choice = input("Reader quality (ultra/high/medium/low, default ultra): ").strip().lower()
-        if choice in ("medium", "m"):
-            READER_SETTINGS.update({"quality": "medium", "colors": 16})
-        elif choice in ("low", "l"):
-            READER_SETTINGS.update({"quality": "low", "colors": 8})
-        elif choice in ("high", "h"):
-            READER_SETTINGS.update({"quality": "high", "colors": 256})
-        elif choice in ("ultra", "u", ""):
-            pass
-        else:
-            logger.warning("Unknown quality option. Keeping default (ultra).")
-
-        oversample = input("Enable oversample render scale (may be slow)? (y/n): ").strip().lower()
-        READER_SETTINGS["oversample"] = oversample in ("y", "yes")
-
-        clamp = input("Clamp to terminal size (recommended)? (y/n): ").strip().lower()
-        READER_SETTINGS["clamp_to_terminal"] = clamp in ("y", "yes", "")
-
-        preserve = input("Preserve aspect ratio (recommended)? (y/n): ").strip().lower()
-        READER_SETTINGS["preserve_aspect"] = preserve in ("y", "yes", "")
-
-    if not sys.platform.startswith("linux"):
-        logger.warning("Read mode is Linux-only. Skipping.")
-        return
-    if not sys.stdout.isatty():
-        logger.warning("Read mode requires a TTY. Skipping.")
-        return
-    if shutil.which("chafa") is None:
-        install = input("chafa is required for reader. Install now? (y/n): ").strip().lower()
-        if install in ("y", "yes"):
-            subprocess.run(["sudo", "apt-get", "install", "-y", "chafa"], check=False)
-        if shutil.which("chafa") is None:
-            logger.warning("Read mode requires 'chafa' on PATH. Skipping.")
-            return
-
-    meta = scraperapi.Fetch.gallery_metadata(gallery_id)
-    if not meta or not isinstance(meta, dict):
-        logger.warning(f"Failed to fetch metadata for Gallery {gallery_id}")
-        return
-
-    pages = meta.get("images", {}).get("pages", [])
-    total_pages = len(pages)
-    if total_pages == 0:
-        logger.warning(f"Gallery {gallery_id} has no pages to display")
-        return
-
-    prompt_reader_settings()
-
-    session = scraperapi.Get.session(referrer="Interactive Reader", status="return")
-    base_tmp_dir = "/tmp/manga-scraper"
-    os.makedirs(base_tmp_dir, exist_ok=True)
-    temp_dir = tempfile.mkdtemp(prefix=f"mangascraper-read-{gallery_id}-", dir=base_tmp_dir)
-    cached_paths = {}
-
-    def _get_page_path(page: int) -> str | None:
-        if page in cached_paths:
-            return cached_paths[page]
-        urls = scraperapi.Fetch.image_urls(meta, page)
-        if not urls:
-            return None
-        url = urls[0]
-        ext = os.path.splitext(url.split("?")[0])[1]
-        if not ext:
-            ext = ".jpg"
-        target = os.path.join(temp_dir, f"{page}{ext}")
-        try:
-            resp = session.get(url, timeout=(60, 60), stream=True)
-            resp.raise_for_status()
-            with open(target, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-        except Exception as e:
-            logger.warning(f"Failed to fetch page {page} for Gallery {gallery_id}: {e}")
-            return None
-        cached_paths[page] = target
-        return target
-
-    current_page = 1
-    try:
-        while True:
-            clear_screen()
-            print(f"Gallery {gallery_id} - Page {current_page}/{total_pages}\n")
-            page_path = _get_page_path(current_page)
-            if page_path:
-                term_size = shutil.get_terminal_size(fallback=(80, 24))
-                if READER_SETTINGS["clamp_to_terminal"]:
-                    render_cols = max(20, term_size.columns)
-                    render_rows = max(10, term_size.lines - 4)
-                else:
-                    render_cols = max(1, term_size.columns)
-                    render_rows = max(1, term_size.lines)
-
-                chafa_args = [
-                    "chafa",
-                    f"--size={render_cols}x{render_rows}",
-                    f"--symbols={READER_SETTINGS['symbols']}",
-                    f"--colors={READER_SETTINGS['colors']}",
-                    f"--dither={READER_SETTINGS['dither']}",
-                    page_path,
-                ]
-                if not READER_SETTINGS["preserve_aspect"]:
-                    chafa_args.insert(-1, "--stretch")
-                if READER_SETTINGS["oversample"]:
-                    chafa_args.insert(-1, "--scale=2")
-                result = subprocess.run(chafa_args, check=False)
-                if result.returncode != 0 and READER_SETTINGS["oversample"]:
-                    fallback_args = [arg for arg in chafa_args if arg != "--scale=2"]
-                    subprocess.run(fallback_args, check=False)
-            else:
-                logger.warning("Unable to display this page.")
-
-            print("\nOptions: [n]ext | [p]revious | [g]oto | [s]ettings | [q]uit")
-            choice = input("Choice: ").strip().lower()
-            if choice in ("q", "quit"):
-                break
-            if choice in ("n", "next"):
-                if current_page < total_pages:
-                    current_page += 1
-                continue
-            if choice in ("p", "prev", "previous"):
-                if current_page > 1:
-                    current_page -= 1
-                continue
-            if choice in ("g", "goto"):
-                page_input = input(f"Go to page (1-{total_pages}): ").strip()
-                if page_input.isdigit():
-                    page_num = int(page_input)
-                    if 1 <= page_num <= total_pages:
-                        current_page = page_num
-                continue
-            if choice in ("s", "settings"):
-                prompt_reader_settings()
-                continue
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
 def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
     """
     Display selected galleries in paginated format with removal capability.
@@ -1297,7 +1156,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [7] Search by tag\n"
             "  [8] Search by character\n"
             "  [9] Search by parody\n"
-            "  [q] Read a gallery (don't expect high quality lmfaoooo)\n"
             "\n"
             "Options:\n"
             "  [w] View selected galleries\n"
@@ -1707,16 +1565,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             persist_selected_ids()
             continue
 
-        elif choice == "e":
-            gallery_input = input("Enter a single gallery ID to read (press Enter to cancel): ").strip()
-            if not gallery_input:
-                continue
-            if not gallery_input.isdigit():
-                logger.warning("Invalid gallery ID. Enter numbers only.")
-                continue
-            read_gallery_in_terminal(int(gallery_input))
-            continue
-        
         else:
             logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
         
