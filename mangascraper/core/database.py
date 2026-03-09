@@ -373,24 +373,16 @@ def upsert_cache_reference(entry_key: str, entry: dict):
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
             "cache_key=excluded.cache_key, "
-            "path=excluded.path, "
-            "size=excluded.size, "
-            "last_read=excluded.last_read, "
-            "last_write=excluded.last_write, "
+            "ids=excluded.ids",
             "ttl=excluded.ttl, "
             "expires_at=excluded.expires_at, "
-            "ids=excluded.ids",
             (
                 str(entry_key),
                 entry.get("type"),
                 entry.get("key"),
-                entry.get("path"),
-                entry.get("size"),
-                entry.get("last_read"),
-                entry.get("last_write"),
+                ids_json,
                 entry.get("ttl"),
                 entry.get("expires_at"),
-                ids_json,
             ),
         )
         conn.commit()
