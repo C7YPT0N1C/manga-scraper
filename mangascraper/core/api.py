@@ -56,16 +56,11 @@ def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
 def _build_master_cache_entry(
     cache_type: str,
     key: str,
-    cache_file: Path,
     ttl_seconds: int | None,
     last_read: float | None = None,
     last_write: float | None = None,
     ids: list[int] | None = None,
 ) -> dict:
-    try:
-        size = cache_file.stat().st_size
-    except Exception:
-        size = None
     now = time.time()
     write_time = last_write if last_write is not None else now
     ttl_default = 10800
@@ -74,8 +69,8 @@ def _build_master_cache_entry(
     entry = {
         "type": cache_type,
         "key": key,
-        "path": str(cache_file),
-        "size": size,
+        "path": "db:CachedMetadata",
+        "size": None,
         "last_read": last_read,
         "last_write": write_time,
         "ttl": ttl_seconds,
@@ -83,7 +78,7 @@ def _build_master_cache_entry(
     }
     if ids is not None:
         entry["ids"] = ids
-    logger.debug(f"[TESTING]: BUILT NEW MASTER CACHE METADATA ENTRY:\n{entry}")
+    logger.debug(f"[TESTING]: BUILT NEW CACHE REFERENCES ENTRY (DB):\n{entry}")
     return entry
 
 ################################################################################################################
