@@ -126,13 +126,9 @@ def init_db():
             entry_key TEXT PRIMARY KEY,
             cache_type TEXT,
             cache_key TEXT,
-            path TEXT,
-            size INTEGER,
-            last_read REAL,
-            last_write REAL,
+            ids TEXT,
             ttl INTEGER,
-            expires_at REAL,
-            ids TEXT
+            expires_at REAL
         );
         """)
         conn.commit()
@@ -226,29 +222,6 @@ def list_galleries(status=None):
 # CACHING HELPERS
 ####################################################################################################################
 
-def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
-    from mangascraper.core.api import Get
-    
-    if not meta or not isinstance(meta, dict):
-        return None
-    artists = Get.meta_tags("api", meta, "artist")
-    groups = Get.meta_tags("api", meta, "group")
-    languages = Get.meta_tags("api", meta, "language")
-    
-    entry = {
-        "id": gallery_id,
-        "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
-        "artists": Get.artists(meta),
-        "groups": Get.groups(meta),
-        "tags": Get.tags(meta),
-        "characters": Get.characters(meta),
-        "parodies": Get.parodies(meta),
-        "languages": Get.languages(meta),
-        "pages": Get.page_count(meta),
-    }
-    logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
-    return entry
-
 def build_master_cache_entry(
     cache_type: str,
     key: str,
@@ -275,6 +248,29 @@ def build_master_cache_entry(
     if ids is not None:
         entry["ids"] = ids
     logger.debug(f"[TESTING]: BUILT NEW CACHE REFERENCES ENTRY (DB):\n{entry}")
+    return entry
+
+def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
+    from mangascraper.core.api import Get
+    
+    if not meta or not isinstance(meta, dict):
+        return None
+    artists = Get.meta_tags("api", meta, "artist")
+    groups = Get.meta_tags("api", meta, "group")
+    languages = Get.meta_tags("api", meta, "language")
+    
+    entry = {
+        "id": gallery_id,
+        "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
+        "artists": Get.artists(meta),
+        "groups": Get.groups(meta),
+        "tags": Get.tags(meta),
+        "characters": Get.characters(meta),
+        "parodies": Get.parodies(meta),
+        "languages": Get.languages(meta),
+        "pages": Get.page_count(meta),
+    }
+    logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
     return entry
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
@@ -419,7 +415,7 @@ def prune_cache_references(now: float):
 def get_cache_dir() -> Path:
     """
     Get or create cache directory for metadata.
-    Uses /opt/manga-scraper/mangascraper/core/data/ if available,
+    Uses /opt/manga-scraper/mangascraper/core/ if available,
     otherwise uses package-relative path as fallback.
     """
     primary_cache = Path("/opt/manga-scraper/mangascraper/core/data")
