@@ -985,7 +985,7 @@ class Fetch:
                     logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                     return None
 
-                cached_entry = _build_cached_metadata_entry(data, gallery_id)
+                cached_entry = scraperdb.build_cached_metadata_entry(data, gallery_id)
                 if cached_entry:
                     general_metadata = Caching.Load.general_metadata()
                     general_metadata[gallery_id] = cached_entry
@@ -1169,7 +1169,7 @@ class Fetch:
             try:
                 meta = Fetch.gallery_metadata(gallery_id)
                 if meta and isinstance(meta, dict):
-                    meta_entry = _build_cached_metadata_entry(meta, gallery_id)
+                    meta_entry = scraperdb.build_cached_metadata_entry(meta, gallery_id)
                     if meta_entry:
                         metadata[gallery_id] = meta_entry
                 else:
@@ -1332,7 +1332,7 @@ class Caching:
                         cleaned = cleaned[-capped:]
                     scraperdb._update_master_cache(
                         "search_history",
-                        _build_master_cache_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
+                        scraperdb.build_master_cache_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
                     )
                     return cleaned
             except Exception:
@@ -1448,7 +1448,7 @@ class Caching:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 scraperdb._update_master_cache(
                     "search_history",
-                    _build_master_cache_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
+                    scraperdb.build_master_cache_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
                 )
             except Exception:
                 pass

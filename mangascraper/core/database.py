@@ -227,7 +227,7 @@ def list_galleries(status=None):
 # CACHING HELPERS
 ####################################################################################################################
 
-def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
+def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
     from mangascraper.core.api import Get
     
     if not meta or not isinstance(meta, dict):
@@ -250,7 +250,7 @@ def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
     logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
     return entry
 
-def _build_master_cache_entry(
+def build_master_cache_entry(
     cache_type: str,
     key: str,
     ttl_seconds: int | None,
