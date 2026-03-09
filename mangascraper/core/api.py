@@ -135,7 +135,7 @@ def init_db():
             clean_metadata TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS CachedReferences (
+        CREATE TABLE IF NOT EXISTS CacheReferences (
             entry_key TEXT PRIMARY KEY,
             cache_type TEXT,
             cache_key TEXT,
@@ -689,7 +689,7 @@ def load_cache_references() -> dict:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
-            "FROM CachedReferences"
+            "FROM CacheReferences"
         )
         rows = cursor.fetchall()
     result = {}
@@ -733,7 +733,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CachedReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
+            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
@@ -764,7 +764,7 @@ def delete_cache_reference(entry_key: str):
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM CachedReferences WHERE entry_key = ?", (str(entry_key),))
+        cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
         conn.commit()
 
 def prune_cache_references(now: float):
@@ -772,7 +772,7 @@ def prune_cache_references(now: float):
     with lock, _connect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM CachedReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
             (now,),
         )
         conn.commit()
@@ -1365,42 +1365,24 @@ def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
 class LoadCache:
     @staticmethod
     def load(cache_key: str) -> dict:
-        cache_file = get_cache_dir() / f"{cache_key}.json"
-        if cache_file.exists():
-            try:
-                with open(cache_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if time.time() - data.get('timestamp', 0) < TTL:
-                        metadata = data.get('metadata', {})
-                        ids = []
-                        if isinstance(metadata, dict):
-                            for gid in metadata.keys():
-                                try:
-                                    ids.append(int(gid))
-                                except Exception:
-                                    continue
-                            ids = sorted(set(ids))
-                        _update_master_cache(
-                            f"metadata:{cache_key}",
-                            _build_master_cache_entry(
-                                "metadata",
-                                cache_key,
-                                cache_file,
-                                TTL,
-                                last_read=time.time(),
-                                last_write=data.get('timestamp', None),
-                                ids=ids,
-                            ),
-                        )
-                        return metadata
-                    try:
-                        cache_file.unlink()
-                    except Exception:
-                        pass
-                    _remove_master_cache_entry(f"metadata:{cache_key}")
-            except Exception:
-                pass
-        return {}
+        # Look up CacheReferences entry for this cache_key
+        entry_key = f"metadata:{cache_key}"
+        references = load_cache_references()
+        ref_entry = references.get(entry_key)
+        if not ref_entry or not isinstance(ref_entry, dict):
+            return {}
+        ids = ref_entry.get("ids")
+        if not ids or not isinstance(ids, list):
+            return {}
+        # Fetch metadata for all IDs from CachedMetadata
+        meta_dict = load_cache_metadata_for_ids(ids)
+        # Return only the clean_metadata for each gallery
+        result = {}
+        for gid, entry in meta_dict.items():
+            clean = entry.get("clean_metadata")
+            if isinstance(clean, dict):
+                result[gid] = clean
+        return result
     
     @staticmethod
     def general_metadata() -> dict:
@@ -1480,109 +1462,28 @@ class LoadCache:
 
     @staticmethod
     def all_metadata() -> dict:
-        """Load and merge all cached metadata entries from the master cache registry."""
-        data = _load_master_cache()
-        references = data.get("references", {})
-        if not isinstance(references, dict):
-            return {}
+        """Load all cached metadata entries from the CachedMetadata table."""
+        # Just return all clean_metadata from CachedMetadata
+        all_entries = load_cache_metadata_all()
         merged = {}
-        general_block = data.get("metadata", {})
-        if isinstance(general_block, dict):
-            for gid, entry in general_block.items():
-                if not isinstance(entry, dict):
-                    continue
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
-                    continue
-                clean = entry.get("clean_metadata")
-                if isinstance(clean, dict):
-                    merged[gid] = clean
-        for entry in references.values():
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("type") != "metadata":
-                continue
-            path = entry.get("path")
-            if not path:
-                continue
-            try:
-                cache_file = Path(path)
-                if not cache_file.exists():
-                    continue
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                metadata = data.get("metadata", {})
-                if isinstance(metadata, dict):
-                    merged.update(metadata)
-            except Exception:
-                continue
+        for gid, entry in all_entries.items():
+            clean = entry.get("clean_metadata")
+            if isinstance(clean, dict):
+                merged[gid] = clean
         return merged
 
     @staticmethod
     def id_metadata(ids: list[int]) -> dict:
         if not ids:
             return {}
-        wanted = set()
-        for gid in ids:
-            try:
-                wanted.add(int(gid))
-            except Exception:
-                continue
-        if not wanted:
-            return {}
-        data = _load_master_cache()
-        references = data.get("references", {})
-        if not isinstance(references, dict):
-            return {}
-        merged = {}
-        general_block = data.get("metadata", {})
-        if isinstance(general_block, dict):
-            for gid in wanted:
-                gid_str = str(gid)
-                entry = general_block.get(gid_str)
-                if not isinstance(entry, dict):
-                    continue
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
-                    continue
-                clean = entry.get("clean_metadata")
-                if isinstance(clean, dict):
-                    merged[gid] = clean
-        for entry in references.values():
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("type") != "metadata":
-                continue
-            entry_ids = entry.get("ids")
-            if not isinstance(entry_ids, list):
-                continue
-            try:
-                entry_set = {int(gid) for gid in entry_ids}
-            except Exception:
-                continue
-            if not (wanted & entry_set):
-                continue
-            path = entry.get("path")
-            if not path:
-                continue
-            try:
-                cache_file = Path(path)
-                if not cache_file.exists():
-                    continue
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                metadata = data.get("metadata", {})
-                if not isinstance(metadata, dict):
-                    continue
-                for gid in wanted:
-                    if gid in merged:
-                        continue
-                    gid_str = str(gid)
-                    if gid_str in metadata:
-                        merged[gid] = metadata[gid_str]
-            except Exception:
-                continue
-        return merged
+        # Fetch metadata for all IDs from CachedMetadata
+        meta_dict = load_cache_metadata_for_ids(ids)
+        result = {}
+        for gid, entry in meta_dict.items():
+            clean = entry.get("clean_metadata")
+            if isinstance(clean, dict):
+                result[gid] = clean
+        return result
     
     @staticmethod
     def queued_galleries() -> list:
@@ -1593,7 +1494,6 @@ class SaveCache:
     @staticmethod
     def save(cache_key: str, metadata: dict):
         try:
-            cache_file = get_cache_dir() / f"{cache_key}.json"
             timestamp = time.time()
             safe_metadata = {str(k): v for k, v in metadata.items()}
             ids = []
@@ -1603,26 +1503,27 @@ class SaveCache:
                 except Exception:
                     continue
             ids = sorted(set(ids))
-            data = {
-                'timestamp': timestamp,
-                'metadata': safe_metadata
-            }
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            from mangascraper.core import database
+            
+            # Write all metadata to CachedMetadata table
             now = time.time()
+            for gid, entry in safe_metadata.items():
+                upsert_cache_metadata(gid, now, clean_metadata=entry)
             prune_cache_references(now)
-            _update_master_cache(
-                f"metadata:{cache_key}",
-                _build_master_cache_entry(
-                    "metadata",
-                    cache_key,
-                    cache_file,
-                    TTL,
-                    last_write=timestamp,
-                    ids=ids,
-                ),
-            )
+            
+            # Upsert CacheReferences entry for this search
+            entry_key = f"metadata:{cache_key}"
+            cache_reference_entry = {
+                "type": "metadata",
+                "key": cache_key,
+                "path": "db:CachedMetadata",
+                "size": None,
+                "last_read": None,
+                "last_write": timestamp,
+                "ttl": TTL,
+                "expires_at": timestamp + TTL if TTL else None,
+                "ids": ids,
+            }
+            upsert_cache_reference(entry_key, cache_reference_entry)
         except Exception:
             pass
     
