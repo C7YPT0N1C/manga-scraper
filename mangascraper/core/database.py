@@ -223,10 +223,60 @@ def list_galleries(status=None):
             cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries")
         return cursor.fetchall()
 
-
-################################################################################################################
+####################################################################################################################
 # CACHING HELPERS
-################################################################################################################
+####################################################################################################################
+
+def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
+    from mangascraper.core.api import Get
+    
+    if not meta or not isinstance(meta, dict):
+        return None
+    artists = Get.meta_tags("api", meta, "artist")
+    groups = Get.meta_tags("api", meta, "group")
+    languages = Get.meta_tags("api", meta, "language")
+    
+    entry = {
+        "id": gallery_id,
+        "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
+        "artists": Get.artists(meta),
+        "groups": Get.groups(meta),
+        "tags": Get.tags(meta),
+        "characters": Get.characters(meta),
+        "parodies": Get.parodies(meta),
+        "languages": Get.languages(meta),
+        "pages": Get.page_count(meta),
+    }
+    logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
+    return entry
+
+def _build_master_cache_entry(
+    cache_type: str,
+    key: str,
+    ttl_seconds: int | None,
+    last_read: float | None = None,
+    last_write: float | None = None,
+    ids: list[int] | None = None,
+) -> dict:
+    now = time.time()
+    write_time = last_write if last_write is not None else now
+    ttl_default = 10800
+    ttl = ttl_seconds if ttl_seconds is not None else ttl_default
+    expires_at = write_time + ttl if ttl else None
+    entry = {
+        "type": cache_type,
+        "key": key,
+        "path": "db:CachedMetadata",
+        "size": None,
+        "last_read": last_read,
+        "last_write": write_time,
+        "ttl": ttl_seconds,
+        "expires_at": expires_at,
+    }
+    if ids is not None:
+        entry["ids"] = ids
+    logger.debug(f"[TESTING]: BUILT NEW CACHE REFERENCES ENTRY (DB):\n{entry}")
+    return entry
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
     init_db()
@@ -420,8 +470,10 @@ def _remove_master_cache_entry(entry_key: str):
 def prune_all_caches():
     """Centralised cache pruning for metadata, references, and files."""
     now = time.time()
+    
     # Prune metadata entries in the master cache by their own TTL
     prune_cache_metadata(now - TTL)
+    
     # Prune references to cache files by their own TTL
     prune_cache_references(now)
 
