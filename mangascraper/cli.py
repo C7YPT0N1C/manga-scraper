@@ -481,13 +481,13 @@ def estimate_download_size(metadata: dict) -> tuple[int, str]:
     
     return total_bytes, f"{total_bytes:.2f} TB"
 
-def display_download_summary(gallery_ids: list, show_summary: bool = False, cache_key: str | None = None) -> bool:
+def display_download_summary(gallery_ids: list, show_summary: bool = False, received_cache_key: str | None = None) -> bool:
     """
     Display gallery summary with size estimate and get confirmation.
     Returns True if user wants to proceed, False otherwise.
     """
     
-    logger.debug(f"[TESTING]: display_download_summary cache_key = {cache_key}")
+    logger.debug(f"[TESTING]: display_download_summary cache_key = {received_cache_key}")
     
     if not show_summary:
         return True
@@ -500,7 +500,7 @@ def display_download_summary(gallery_ids: list, show_summary: bool = False, cach
     logger.info(f"Fetching metadata for {len(gallery_ids)} galleries (this may take a moment)...")
     
     # Fetch metadata
-    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key=cache_key)
+    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key=received_cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata. Proceed without summary? (y/n): ", end="")

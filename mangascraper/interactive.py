@@ -81,7 +81,7 @@ def display_metadata_summary(summary: dict):
     )
     log_clarification()
 
-def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[list, dict]:
+def display_gallery_results(gallery_ids: list, received_cache_key: str = None) -> tuple[list, dict]:
     """
     Display found galleries in a paginated table with titles, offer detail view, and collect user selection.
     Uses dynamic terminal size to determine how many galleries fit per page.
@@ -94,13 +94,13 @@ def display_gallery_results(gallery_ids: list, cache_key: str = None) -> tuple[l
         tuple: (selected_gallery_ids, metadata_dict) where metadata_dict maps gid to metadata
     """
     
-    logger.debug(f"[TESTING]: display_gallery_results cache_key = {cache_key}")
+    logger.debug(f"[TESTING]: display_gallery_results cache_key = {received_cache_key}")
     
     if not gallery_ids:
         return [], {}
     
     # Fetch metadata for all found galleries (uses cache if available)
-    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key)
+    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, received_cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata for any galleries")

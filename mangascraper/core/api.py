@@ -445,8 +445,6 @@ class Get:
             Cache key suitable for filename (e.g., "artist_john", "tag_schoolgirl")
         """
         
-        logger.debug(f"[TESTING]: GETTING CACHE KEY: search_type = {search_type}, search_value = {search_value}")
-        
         if search_value:
             # For multi-word searches, sort terms alphabetically to ensure order-independence
             # E.g., "THREE TWO ONE" and "ONE TWO THREE" both become "one_three_two"
@@ -455,6 +453,7 @@ class Get:
             sorted_value = "_".join(terms)
             # Sanitise for use as filename (remove special chars)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
+            logger.debug(f"[TESTING]: GETTING CACHE KEY: {search_type}:{safe_value}")
             return f"{search_type}:{safe_value}"
         return search_type
     
