@@ -1216,6 +1216,7 @@ class Caching:
     @staticmethod
     def save(cache_key: str, metadata: dict):
         """Save the metadata for this cache_key to a CacheReferences entry, using search type and value."""
+        logger.debug("[TESTING] SAVING CACHE")
         try:
             timestamp = time.time()
             safe_metadata = {str(k): v for k, v in metadata.items()}
