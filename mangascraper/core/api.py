@@ -1646,6 +1646,22 @@ class Caching:
                     raw_metadata=entry,
                 )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class Get:
     @staticmethod
     def cache_keys(search_type: str, search_value: str = None) -> str:
@@ -2392,6 +2408,7 @@ class Fetch:
         # Save to cache
         if metadata and cache_key:
             Caching.save(cache_key, metadata)
+            logger.debug(f"[TESTING]: cache_key = {cache_key}, metadata = {metadata}")
         elif metadata:
             general_metadata = Caching.Load.general_metadata()
             logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
