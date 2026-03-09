@@ -84,13 +84,13 @@ def display_gallery_results(gallery_ids: list, received_cache_key: str = None) -
         tuple: (selected_gallery_ids, metadata_dict) where metadata_dict maps gid to metadata
     """
     
-    logger.debug(f"[TESTING]: display_gallery_results cache_key = {received_cache_key}")
-    
     if not gallery_ids:
         return [], {}
     
     # Fetch metadata for all found galleries (uses cache if available)
     metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, received_cache_key)
+    
+    logger.debug(f"[TESTING]: display_gallery_results cache_key = {received_cache_key}, metadata = {metadata}")
     
     if not metadata:
         logger.warning("Could not fetch metadata for any galleries")
