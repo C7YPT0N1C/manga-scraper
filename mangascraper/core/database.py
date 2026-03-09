@@ -133,7 +133,8 @@ def init_db():
 # DATABASE HELPERS
 ################################################################################################################
 
-def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
+def load_cached_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
+    """Loads and returns the Cached Metadata corresponding to each ID in a given list"""
     if not ids:
         return {}
     init_db()
@@ -245,7 +246,7 @@ def mark_gallery_completed(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
     # Load metadata for this gallery to compute paths and extension
-    cache = load_cache_metadata_for_ids([gallery_id])
+    cache = load_cached_metadata_for_ids([gallery_id])
     meta = None
     for gid, entry in cache.items():
         meta = entry.get("clean_metadata") or {}
@@ -338,7 +339,7 @@ def mark_gallery_completed(gallery_id):
         conn.commit()
 
     # Now process all main tables for this gallery
-    cache = load_cache_metadata_for_ids([gallery_id])
+    cache = load_cached_metadata_for_ids([gallery_id])
     creators = {}
     tags = {}
     languages = {}

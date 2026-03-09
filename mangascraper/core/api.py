@@ -1612,7 +1612,7 @@ class Caching:
         if not ids or not isinstance(ids, list):
             return {}
         # Fetch metadata for all IDs from CachedMetadata
-        meta_dict = load_cache_metadata_for_ids(ids)
+        meta_dict = scraperdb.load_cached_metadata_for_ids(ids)
         # Return only the clean_metadata for each gallery
         result = {}
         for gid, entry in meta_dict.items():
@@ -1774,7 +1774,7 @@ class Caching:
             if not ids:
                 return {}
             # Fetch metadata for all IDs from CachedMetadata
-            meta_dict = load_cache_metadata_for_ids(ids)
+            meta_dict = scraperdb.load_cached_metadata_for_ids(ids)
             result = {}
             for gid, entry in meta_dict.items():
                 clean = entry.get("clean_metadata")
