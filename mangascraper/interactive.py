@@ -292,7 +292,7 @@ def display_gallery_results(gallery_ids: list, received_cache_key: str = None) -
         logger.warning("Invalid choice. Returning without selection.")
         return [], {}
 
-def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
+def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = None) -> list:
     """
     Display selected galleries in paginated format with removal capability.
     
@@ -304,7 +304,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
         list: Updated list of selected IDs (after any removals)
     """
     
-    logger.debug(f"[TESTING]: view_queued_galleries cached_metadata = {cached_metadata}")
+    logger.debug(f"[TESTING]: view_selected_galleries cached_metadata = {cached_metadata}")
     
     selected_ids = scraperapi.Fetch.queued_galleries()
     if not selected_ids:
@@ -1000,7 +1000,7 @@ def fetch_gallery_ids(search_type: str, search_value: str, sort_val: str, start_
     """
 
     cache_key = scraperapi.Get.cache_keys(search_type, search_value)
-    logger.debug(f"[TESTING] fetch_gallery_ids_with_fallback cache_key = {cache_key}")
+    logger.debug(f"[TESTING] fetch_gallery_ids cache_key = {cache_key}")
 
     # 1. Check cache references for this key
     references = scraperdb.load_cache_references()
@@ -1534,7 +1534,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         elif choice == "q":
             # View selected galleries
             selected_ids = scraperapi.Fetch.queued_galleries()
-            selected_ids = view_queued_galleries(selected_ids, selected_metadata)
+            selected_ids = view_selected_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
         
