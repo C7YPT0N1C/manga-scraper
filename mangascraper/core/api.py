@@ -1041,16 +1041,12 @@ class Fetch:
                 cached_entry = _build_cached_metadata_entry(data, gallery_id)
                 if cached_entry:
                     general_metadata = Caching.Load.general_metadata()
-                    logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
                     general_metadata[gallery_id] = cached_entry
                     Caching.Save.general_metadata(general_metadata)
-                    logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
 
                 raw_cache = Caching.Load.raw_metadata()
-                logger.debug(f"[TESTING]: raw_cache = {raw_cache}")
                 raw_cache[str(gallery_id)] = data
                 Caching.Save.raw_metadata(raw_cache)
-                logger.debug(f"[TESTING]: raw_cache = {raw_cache}")
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
@@ -1181,10 +1177,8 @@ class Fetch:
 
         if cache_key:
             cached_metadata = Caching.load(cache_key)
-            logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
         else:
             cached_metadata = Caching.Load.id_metadata(gallery_ids)
-            logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
 
         if cached_metadata:
             normalised_cached = {}
@@ -1243,13 +1237,10 @@ class Fetch:
         # Save to cache
         if metadata and cache_key:
             Caching.save(cache_key, metadata)
-            logger.debug(f"[TESTING]: cache_key = {cache_key}, metadata = {metadata}")
         elif metadata:
             general_metadata = Caching.Load.general_metadata()
-            logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
             general_metadata.update(metadata)
             Caching.Save.general_metadata(general_metadata)
-            logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
         
         return metadata
 

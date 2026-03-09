@@ -465,7 +465,6 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
         metadata.update({gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata})
 
     cached_by_ids = scraperapi.Caching.Load.id_metadata(unique_ids)
-    logger.debug(f"[TESTING]: cached_by_ids = {cached_by_ids}")
     if cached_by_ids:
         for gid in unique_ids:
             if gid not in metadata and gid in cached_by_ids:
@@ -1161,7 +1160,6 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
             logger.info("Attempting to use cached results...")
             try:
                 cached_metadata = scraperapi.Caching.load(cache_key)
-                logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
                 if cached_metadata:
                     cached_ids = list(cached_metadata.keys())
                     logger.info(f"Using {len(cached_ids)} galleries from cache")
