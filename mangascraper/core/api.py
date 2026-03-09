@@ -37,10 +37,6 @@ session_lock = threading.Lock()
 # CACHING HELPERS
 ################################################################################################################
 
-def init_db():
-    """Wrapper for Database Intialiser"""
-    scraperdb.init_db()
-
 def load_cache_metadata_all(cutoff: float | None = None) -> dict:
     scraperdb.init_db()
     with scraperdb.lock, scraperdb.dbconnect() as conn:
@@ -369,7 +365,7 @@ def prune_all_caches():
 ####################################################################################################################
 
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
-    init_db()
+    scraperdb.init_db()
     now = datetime.now(timezone.utc).isoformat()
     with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
@@ -404,7 +400,7 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
         conn.commit()
 
 def mark_gallery_skipped(gallery_id):
-    init_db()
+    scraperdb.init_db()
     now = datetime.now(timezone.utc).isoformat()
     with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
@@ -416,7 +412,7 @@ def mark_gallery_skipped(gallery_id):
         conn.commit()
 
 def mark_gallery_failed(gallery_id):
-    init_db()
+    scraperdb.init_db()
     now = datetime.now(timezone.utc).isoformat()
     with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
@@ -428,7 +424,7 @@ def mark_gallery_failed(gallery_id):
         conn.commit()
 
 def mark_gallery_completed(gallery_id):
-    init_db()
+    scraperdb.init_db()
     now = datetime.now(timezone.utc).isoformat()
     # Load metadata for this gallery to compute paths and extension
     cache = scraperdb.load_cached_metadata_for_ids([gallery_id])

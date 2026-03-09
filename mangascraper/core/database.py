@@ -134,24 +134,30 @@ def init_db():
 
 def load_cached_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
     """Loads and returns the Cached Metadata corresponding to each ID in a given list"""
+    
     if not ids:
         return {}
+    
     init_db()
     ids = [str(gid) for gid in ids]
     placeholders = ",".join("?" for _ in ids)
     params = list(ids)
+    
     query = (
         "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
         "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
     )
+    
     if cutoff is not None:
         query += " AND timestamp >= ?"
         params.append(cutoff)
+    
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
     result = {}
+    
     for gallery_id, timestamp, clean_json, raw_json in rows:
         clean = json.loads(clean_json) if clean_json else {}
         raw = json.loads(raw_json) if raw_json else {}
