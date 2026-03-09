@@ -1362,7 +1362,33 @@ def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
 ################################################################################################################
 # NAMESPACED API
 ################################################################################################################
-class LoadCache:
+
+class Caching:
+    @staticmethod
+    def ensure():
+        prune_all_caches()
+        cache_dir = get_cache_dir()
+        cache_file = cache_dir / SEARCH_HISTORY_FILENAME
+        if cache_file.exists():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                items = data.get("items", []) if isinstance(data, dict) else []
+                if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
+                    data["items"] = items[-SEARCH_HISTORY_MAX:]
+                    data["saved_at"] = time.time()
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+        else:
+            try:
+                data = {"saved_at": None, "items": []}
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+    
     @staticmethod
     def load(cache_key: str) -> dict:
         # Look up CacheReferences entry for this cache_key
@@ -1384,113 +1410,6 @@ class LoadCache:
                 result[gid] = clean
         return result
     
-    @staticmethod
-    def general_metadata() -> dict:
-        data = _load_master_cache()
-        metadata = data.get("metadata", {})
-        if not isinstance(metadata, dict):
-            return {}
-        cleaned = {}
-        for gid, entry in metadata.items():
-            if not isinstance(entry, dict):
-                continue
-            timestamp = entry.get("timestamp") or 0
-            if (time.time() - timestamp) >= TTL:
-                continue
-            clean = entry.get("clean_metadata")
-            if isinstance(clean, dict):
-                cleaned[gid] = clean
-        return cleaned
-
-    @staticmethod
-    def raw_metadata() -> dict:
-        data = _load_master_cache()
-        raw_block = data.get("metadata", {})
-        if not isinstance(raw_block, dict):
-            return {}
-        metadata = {}
-        for gid, entry in raw_block.items():
-            if not isinstance(entry, dict):
-                continue
-            timestamp = entry.get("timestamp") or 0
-            if (time.time() - timestamp) >= TTL:
-                continue
-            if "raw_metadata" in entry:
-                metadata[gid] = entry.get("raw_metadata")
-        return metadata
-
-    @staticmethod
-    def search_history(max_items: int = SEARCH_HISTORY_MAX) -> list[dict]:
-        cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
-        if not cache_file.exists():
-            return []
-        try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                items = data.get('items', [])
-                if not isinstance(items, list):
-                    return []
-                cleaned = []
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    search_type = item.get('type')
-                    search_value = item.get('value')
-                    if not search_type or search_value is None:
-                        continue
-                    cleaned.append({
-                        'type': str(search_type),
-                        'value': str(search_value),
-                        'cache_key': item.get('cache_key'),
-                        'sort': item.get('sort'),
-                        'start_page': item.get('start_page'),
-                        'end_page': item.get('end_page'),
-                        'archive_mode': bool(item.get('archive_mode', False)),
-                    })
-                capped = SEARCH_HISTORY_MAX
-                if max_items is not None:
-                    capped = min(int(max_items), SEARCH_HISTORY_MAX)
-                if capped and len(cleaned) > capped:
-                    cleaned = cleaned[-capped:]
-                _update_master_cache(
-                    "search_history",
-                    _build_master_cache_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
-                )
-                return cleaned
-        except Exception:
-            return []
-
-    @staticmethod
-    def all_metadata() -> dict:
-        """Load all cached metadata entries from the CachedMetadata table."""
-        # Just return all clean_metadata from CachedMetadata
-        all_entries = load_cache_metadata_all()
-        merged = {}
-        for gid, entry in all_entries.items():
-            clean = entry.get("clean_metadata")
-            if isinstance(clean, dict):
-                merged[gid] = clean
-        return merged
-
-    @staticmethod
-    def id_metadata(ids: list[int]) -> dict:
-        if not ids:
-            return {}
-        # Fetch metadata for all IDs from CachedMetadata
-        meta_dict = load_cache_metadata_for_ids(ids)
-        result = {}
-        for gid, entry in meta_dict.items():
-            clean = entry.get("clean_metadata")
-            if isinstance(clean, dict):
-                result[gid] = clean
-        return result
-    
-    @staticmethod
-    def queued_galleries() -> list:
-        """Fetch queued galleries from GalleriesQueue table in the database."""
-        return get_queued_galleries()
-
-class SaveCache:
     @staticmethod
     def save(cache_key: str, metadata: dict):
         try:
@@ -1526,125 +1445,206 @@ class SaveCache:
             upsert_cache_reference(entry_key, cache_reference_entry)
         except Exception:
             pass
+        
+        @staticmethod
+        def clear(cache_key: str = None):
+            try:
+                cache_dir = get_cache_dir()
+                if cache_key:
+                    cache_file = cache_dir / f"{cache_key}.json"
+                    if cache_file.exists():
+                        cache_file.unlink()
+                    _remove_master_cache_entry(f"metadata:{cache_key}")
+                else:
+                    for cache_file in cache_dir.glob("*.json"):
+                        cache_file.unlink()
+                    MASTER_CACHE_FILENAME = "(master_cache).json"
+                    master_file = cache_dir / MASTER_CACHE_FILENAME
+                    if master_file.exists():
+                        master_file.unlink()
+            except Exception:
+                pass
     
-    @staticmethod
-    def general_metadata(metadata: dict):
-        if not isinstance(metadata, dict):
-            return
-        data = _load_master_cache()
-        safe_metadata = {str(k): v for k, v in metadata.items()}
-        now = time.time()
-        for gid, entry in safe_metadata.items():
-            if not isinstance(entry, dict):
-                continue
-            upsert_cache_metadata(
-                gid,
-                now,
-                clean_metadata=entry,
-                raw_metadata=None,
-            )
+    class Load:
+        @staticmethod
+        def queued_galleries() -> list:
+            """Fetch queued galleries from GalleriesQueue table in the database."""
+            return get_queued_galleries()
 
-    @staticmethod
-    def raw_metadata(metadata: dict):
-        if not isinstance(metadata, dict):
-            return
-        data = _load_master_cache()
-        now = time.time()
-        for gid, entry in metadata.items():
-            upsert_cache_metadata(
-                str(gid),
-                now,
-                clean_metadata=None,
-                raw_metadata=entry,
-            )
-
-    @staticmethod
-    def search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
-        try:
-            if not isinstance(items, list):
-                return
-            safe_items = []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                search_type = item.get('type')
-                search_value = item.get('value')
-                if not search_type or search_value is None:
-                    continue
-                safe_items.append({
-                    'type': str(search_type),
-                    'value': str(search_value),
-                    'cache_key': item.get('cache_key'),
-                    'sort': item.get('sort'),
-                    'start_page': item.get('start_page'),
-                    'end_page': item.get('end_page'),
-                    'archive_mode': bool(item.get('archive_mode', False)),
-                })
-            capped = SEARCH_HISTORY_MAX
-            if max_items is not None:
-                capped = min(int(max_items), SEARCH_HISTORY_MAX)
-            if capped and len(safe_items) > capped:
-                safe_items = safe_items[-capped:]
+        @staticmethod
+        def search_history(max_items: int = SEARCH_HISTORY_MAX) -> list[dict]:
             cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
-            saved_at = time.time()
-            data = {
-                'saved_at': saved_at,
-                'items': safe_items,
-            }
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            _update_master_cache(
-                "search_history",
-                _build_master_cache_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
-            )
-        except Exception:
-            pass
-
-class ClearCache:
-    @staticmethod
-    def clear(cache_key: str = None):
-        try:
-            cache_dir = get_cache_dir()
-            if cache_key:
-                cache_file = cache_dir / f"{cache_key}.json"
-                if cache_file.exists():
-                    cache_file.unlink()
-                _remove_master_cache_entry(f"metadata:{cache_key}")
-            else:
-                for cache_file in cache_dir.glob("*.json"):
-                    cache_file.unlink()
-                MASTER_CACHE_FILENAME = "(master_cache).json"
-                master_file = cache_dir / MASTER_CACHE_FILENAME
-                if master_file.exists():
-                    master_file.unlink()
-        except Exception:
-            pass
-
-class CacheUtil:
-    @staticmethod
-    def ensure_files():
-        prune_all_caches()
-        cache_dir = get_cache_dir()
-        cache_file = cache_dir / SEARCH_HISTORY_FILENAME
-        if cache_file.exists():
+            if not cache_file.exists():
+                return []
             try:
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                items = data.get("items", []) if isinstance(data, dict) else []
-                if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
-                    data["items"] = items[-SEARCH_HISTORY_MAX:]
-                    data["saved_at"] = time.time()
-                    with open(cache_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    items = data.get('items', [])
+                    if not isinstance(items, list):
+                        return []
+                    cleaned = []
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        search_type = item.get('type')
+                        search_value = item.get('value')
+                        if not search_type or search_value is None:
+                            continue
+                        cleaned.append({
+                            'type': str(search_type),
+                            'value': str(search_value),
+                            'cache_key': item.get('cache_key'),
+                            'sort': item.get('sort'),
+                            'start_page': item.get('start_page'),
+                            'end_page': item.get('end_page'),
+                            'archive_mode': bool(item.get('archive_mode', False)),
+                        })
+                    capped = SEARCH_HISTORY_MAX
+                    if max_items is not None:
+                        capped = min(int(max_items), SEARCH_HISTORY_MAX)
+                    if capped and len(cleaned) > capped:
+                        cleaned = cleaned[-capped:]
+                    _update_master_cache(
+                        "search_history",
+                        _build_master_cache_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
+                    )
+                    return cleaned
             except Exception:
-                pass
-        else:
+                return []
+        
+        @staticmethod
+        def general_metadata() -> dict:
+            data = _load_master_cache()
+            metadata = data.get("metadata", {})
+            if not isinstance(metadata, dict):
+                return {}
+            cleaned = {}
+            for gid, entry in metadata.items():
+                if not isinstance(entry, dict):
+                    continue
+                timestamp = entry.get("timestamp") or 0
+                if (time.time() - timestamp) >= TTL:
+                    continue
+                clean = entry.get("clean_metadata")
+                if isinstance(clean, dict):
+                    cleaned[gid] = clean
+            return cleaned
+
+        @staticmethod
+        def raw_metadata() -> dict:
+            data = _load_master_cache()
+            raw_block = data.get("metadata", {})
+            if not isinstance(raw_block, dict):
+                return {}
+            metadata = {}
+            for gid, entry in raw_block.items():
+                if not isinstance(entry, dict):
+                    continue
+                timestamp = entry.get("timestamp") or 0
+                if (time.time() - timestamp) >= TTL:
+                    continue
+                if "raw_metadata" in entry:
+                    metadata[gid] = entry.get("raw_metadata")
+            return metadata
+
+        @staticmethod
+        def all_metadata() -> dict:
+            """Load all cached metadata entries from the CachedMetadata table."""
+            # Just return all clean_metadata from CachedMetadata
+            all_entries = load_cache_metadata_all()
+            merged = {}
+            for gid, entry in all_entries.items():
+                clean = entry.get("clean_metadata")
+                if isinstance(clean, dict):
+                    merged[gid] = clean
+            return merged
+
+        @staticmethod
+        def id_metadata(ids: list[int]) -> dict:
+            if not ids:
+                return {}
+            # Fetch metadata for all IDs from CachedMetadata
+            meta_dict = load_cache_metadata_for_ids(ids)
+            result = {}
+            for gid, entry in meta_dict.items():
+                clean = entry.get("clean_metadata")
+                if isinstance(clean, dict):
+                    result[gid] = clean
+            return result
+
+    class Save:
+        @staticmethod
+        def search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
             try:
-                data = {"saved_at": None, "items": []}
-                with open(cache_file, "w", encoding="utf-8") as f:
+                if not isinstance(items, list):
+                    return
+                safe_items = []
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    search_type = item.get('type')
+                    search_value = item.get('value')
+                    if not search_type or search_value is None:
+                        continue
+                    safe_items.append({
+                        'type': str(search_type),
+                        'value': str(search_value),
+                        'cache_key': item.get('cache_key'),
+                        'sort': item.get('sort'),
+                        'start_page': item.get('start_page'),
+                        'end_page': item.get('end_page'),
+                        'archive_mode': bool(item.get('archive_mode', False)),
+                    })
+                capped = SEARCH_HISTORY_MAX
+                if max_items is not None:
+                    capped = min(int(max_items), SEARCH_HISTORY_MAX)
+                if capped and len(safe_items) > capped:
+                    safe_items = safe_items[-capped:]
+                cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
+                saved_at = time.time()
+                data = {
+                    'saved_at': saved_at,
+                    'items': safe_items,
+                }
+                with open(cache_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
+                _update_master_cache(
+                    "search_history",
+                    _build_master_cache_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
+                )
             except Exception:
                 pass
+        
+        @staticmethod
+        def general_metadata(metadata: dict):
+            if not isinstance(metadata, dict):
+                return
+            data = _load_master_cache()
+            safe_metadata = {str(k): v for k, v in metadata.items()}
+            now = time.time()
+            for gid, entry in safe_metadata.items():
+                if not isinstance(entry, dict):
+                    continue
+                upsert_cache_metadata(
+                    gid,
+                    now,
+                    clean_metadata=entry,
+                    raw_metadata=None,
+                )
+
+        @staticmethod
+        def raw_metadata(metadata: dict):
+            if not isinstance(metadata, dict):
+                return
+            data = _load_master_cache()
+            now = time.time()
+            for gid, entry in metadata.items():
+                upsert_cache_metadata(
+                    str(gid),
+                    now,
+                    clean_metadata=None,
+                    raw_metadata=entry,
+                )
 
 class Get:
     @staticmethod
@@ -2154,7 +2154,7 @@ class Fetch:
     def gallery_metadata(gallery_id: int):
         orchestrator.refresh_globals()
 
-        raw_cache = LoadCache.raw_metadata()
+        raw_cache = Caching.Load.raw_metadata()
         cached_meta = raw_cache.get(str(gallery_id))
         if cached_meta and isinstance(cached_meta, dict):
             return cached_meta
@@ -2189,13 +2189,17 @@ class Fetch:
 
                 cached_entry = _build_cached_metadata_entry(data, gallery_id)
                 if cached_entry:
-                    general_metadata = LoadCache.general_metadata()
+                    general_metadata = Caching.Load.general_metadata()
+                    logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
                     general_metadata[gallery_id] = cached_entry
-                    SaveCache.general_metadata(general_metadata)
+                    Caching.Save.general_metadata(general_metadata)
+                    logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
 
-                raw_cache = LoadCache.raw_metadata()
+                raw_cache = Caching.Load.raw_metadata()
+                logger.debug(f"[TESTING]: raw_cache = {raw_cache}")
                 raw_cache[str(gallery_id)] = data
-                SaveCache.raw_metadata(raw_cache)
+                Caching.Save.raw_metadata(raw_cache)
+                logger.debug(f"[TESTING]: raw_cache = {raw_cache}")
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
@@ -2325,9 +2329,11 @@ class Fetch:
             return required_keys.issubset(meta.keys())
 
         if cache_key:
-            cached_metadata = LoadCache.load(cache_key)
+            cached_metadata = Caching.load(cache_key)
+            logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
         else:
-            cached_metadata = LoadCache.id_metadata(gallery_ids)
+            cached_metadata = Caching.Load.id_metadata(gallery_ids)
+            logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
 
         if cached_metadata:
             normalised_cached = {}
@@ -2385,11 +2391,13 @@ class Fetch:
         
         # Save to cache
         if metadata and cache_key:
-            SaveCache.save(cache_key, metadata)
+            Caching.save(cache_key, metadata)
         elif metadata:
-            general_metadata = LoadCache.general_metadata()
+            general_metadata = Caching.Load.general_metadata()
+            logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
             general_metadata.update(metadata)
-            SaveCache.general_metadata(general_metadata)
+            Caching.Save.general_metadata(general_metadata)
+            logger.debug(f"[TESTING]: general_metadata = {general_metadata}")
         
         return metadata
 
@@ -2397,9 +2405,6 @@ class Fetch:
 # EXPORTED API
 ################################################################################################################
 
-load = LoadCache()
-save = SaveCache()
-clear = ClearCache()
-util = CacheUtil()
+cache = Caching()
 get = Get()
 fetch = Fetch()
