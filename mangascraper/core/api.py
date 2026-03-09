@@ -1238,13 +1238,9 @@ class Caching:
             cache_reference_entry = {
                 "type": "metadata",
                 "key": cache_key,
-                "path": "db:CachedMetadata",
-                "size": None,
-                "last_read": None,
-                "last_write": timestamp,
+                "ids": ids,
                 "ttl": scraperdb.TTL,
                 "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
-                "ids": ids,
             }
             scraperdb.upsert_cache_reference(entry_key, cache_reference_entry)
         except Exception:
@@ -1409,13 +1405,9 @@ class Caching:
                 entry = {
                     "type": "search_history",
                     "key": "search_history",
-                    "path": "db:CacheReferences",
-                    "size": None,
-                    "last_read": None,
-                    "last_write": saved_at,
+                    "ids": safe_items,
                     "ttl": scraperdb.TTL,
                     "expires_at": saved_at + scraperdb.TTL if scraperdb.TTL else None,
-                    "items": safe_items,
                 }
                 scraperdb.upsert_cache_reference("search_history", entry)
             except Exception:

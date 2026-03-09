@@ -323,7 +323,7 @@ def load_cache_references() -> dict:
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
+            "SELECT entry_key, cache_type, cache_key, ids, ttl, expires_at "
             "FROM CacheReferences"
         )
         rows = cursor.fetchall()
@@ -368,7 +368,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
+            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, ids, ttl, expires_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
