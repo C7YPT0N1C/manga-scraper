@@ -5,7 +5,6 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
@@ -933,7 +932,7 @@ def update_config(args):
 # ------------------------------------------------------------
 def main():
     scraperapi.Caching.ensure()
-    scraperdb.init_db()
+    scraperapi.init_db()
     """
     This is one this module's entrypoints.
     """
