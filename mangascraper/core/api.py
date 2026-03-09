@@ -455,7 +455,7 @@ class Get:
             sorted_value = "_".join(terms)
             # Sanitise for use as filename (remove special chars)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
-            return f"{search_type}_{safe_value}"
+            return f"{search_type}:{safe_value}"
         return search_type
     
     ################################################################################################################
