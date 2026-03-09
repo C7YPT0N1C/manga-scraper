@@ -1264,7 +1264,7 @@ class Caching:
                 cache_file = cache_dir / f"{cache_key}.json"
                 if cache_file.exists():
                     cache_file.unlink()
-                scraperdb._remove_master_cache_entry(f"metadata:{cache_key}")
+                scraperdb.delete_cache_reference(f"metadata:{cache_key}")
             else:
                 for cache_file in cache_dir.glob("*.json"):
                     cache_file.unlink()

@@ -440,19 +440,12 @@ def _load_master_cache() -> dict:
                     expired_keys.append(gid)
             for gid in expired_keys:
                 metadata_block.pop(gid, None)
+        logger.debug(f"[TESTING]: references = {references}")
+        logger.debug(f"[TESTING]: metadata_block = {metadata_block}")
         references = load_cache_references()
         return {"references": references, "metadata": metadata_block}
     except Exception:
         return {"references": {}, "metadata": {}}
-
-def _save_master_cache(data: dict):
-    return
-
-def _update_master_cache(entry_key: str, entry: dict):
-    upsert_cache_reference(entry_key, entry)
-
-def _remove_master_cache_entry(entry_key: str):
-    delete_cache_reference(entry_key)
     
 def prune_all_caches():
     """Centralised cache pruning for metadata, references, and files."""
@@ -479,7 +472,7 @@ def prune_all_caches():
             if (now - timestamp) >= TTL:
                 # Remove master cache reference if present
                 cache_key = cache_file.stem
-                _remove_master_cache_entry(f"metadata:{cache_key}")
+                delete_cache_reference(f"metadata:{cache_key}")
                 cache_file.unlink()
         except Exception:
             continue
