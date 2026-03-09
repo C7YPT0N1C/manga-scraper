@@ -932,7 +932,6 @@ def update_config(args):
 # Main
 # ------------------------------------------------------------
 def main():
-    scraperapi.Caching.ensure()
     scraperdb.init_db()
     """
     This is one this module's entrypoints.

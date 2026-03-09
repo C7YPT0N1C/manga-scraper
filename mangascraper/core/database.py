@@ -22,8 +22,6 @@ DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 
 # Cache TTL: 3 hours (runtime-configured)
 TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
-SEARCH_HISTORY_FILENAME = "(search_history).json"
-SEARCH_HISTORY_MAX = 10
 
 ####################################################################################################################
 # DB INITIALISATION
@@ -478,15 +476,12 @@ def prune_all_caches():
     prune_cache_references(now)
 
     cache_dir = get_cache_dir()
-    protected = {SEARCH_HISTORY_FILENAME}
     for cache_file in cache_dir.glob("*.json"):
         if cache_file.name == "(master_cache).json":
             try:
                 cache_file.unlink()
             except Exception:
                 pass
-            continue
-        if cache_file.name in protected:
             continue
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
