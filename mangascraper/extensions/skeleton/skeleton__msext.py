@@ -234,7 +234,8 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         )
         downloader_session = scraperapi.Get.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
-    
+
+    # Explicitly call page_update_hook after each page download if provided
     if success and page_update_hook:
         try:
             page_update_hook()

@@ -335,7 +335,6 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
     Submit download tasks for a single creator's pages.
     """
     
-    from tqdm import tqdm
     futures = [
         executor.submit(
             active_extension.download_images_hook,
@@ -343,10 +342,9 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
         )
         for page, urls, path, _ in creator_tasks
     ]
-    # Show progress bar for page downloads
-    with tqdm(total=len(futures), desc=f"Gallery {gallery_id} ({safe_creator_name})", unit="page") as pbar:
-        for _ in concurrent.futures.as_completed(futures):
-            pbar.update(1)
+    # No per-gallery progress bar here; progress is handled by the batch-wide tqdm in start_batch via page_update_hook
+    for _ in concurrent.futures.as_completed(futures):
+        pass
 
 ####################################################################################################
 # ARCHIVE CONVERSION
