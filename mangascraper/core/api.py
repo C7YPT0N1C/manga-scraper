@@ -1216,6 +1216,8 @@ class Caching:
     @staticmethod
     def save(cache_key: str, metadata: dict):
         """Save the metadata for this cache_key to a CacheReferences entry, using search type and value."""
+        import logging
+        logger = logging.getLogger("mangascraper.api.Caching")
         try:
             timestamp = time.time()
             safe_metadata = {str(k): v for k, v in metadata.items()}
@@ -1251,9 +1253,11 @@ class Caching:
                 "ttl": scraperdb.TTL,
                 "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
             }
+            logger.debug(f"[TESTING] Called with cache_key={cache_key}, entry_key={entry_key}, ids={ids}, cache_reference_entry={cache_reference_entry}")
             scraperdb.upsert_cache_reference(entry_key, cache_reference_entry)
-        except Exception:
-            pass
+            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {entry_key} with {len(ids)} ids.")
+        except Exception as e:
+            logger.error(f"[TESTING] Exception while saving cache reference for {cache_key}: {e}")
         
     @staticmethod
     def clear(cache_key: str = None):
