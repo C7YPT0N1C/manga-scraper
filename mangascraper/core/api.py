@@ -1215,7 +1215,7 @@ class Caching:
     
     @staticmethod
     def save(cache_key: str, metadata: dict):
-        """Save the metadata for this cache_key to a CacheReferences entry"""
+        """Save the metadata for this cache_key to a CacheReferences entry, using search type and value."""
         try:
             timestamp = time.time()
             safe_metadata = {str(k): v for k, v in metadata.items()}
@@ -1226,18 +1226,27 @@ class Caching:
                 except Exception:
                     continue
             ids = sorted(set(ids))
-            
             # Write all metadata to CachedMetadata table
             now = time.time()
             for gid, entry in safe_metadata.items():
                 scraperdb.upsert_cache_metadata(gid, now, clean_metadata=entry)
             scraperdb.prune_cache_references(now)
-            
-            # Upsert CacheReferences entry for this search
+
+            # Parse search type and value from cache_key
+            search_types = ["artist", "group", "tag", "character", "parody", "search", "archive", "homepage"]
+            cache_type = "metadata"
             entry_key = f"metadata:{cache_key}"
+            key_value = cache_key
+            for st in search_types:
+                if cache_key.startswith(f"{st}:"):
+                    cache_type = st
+                    key_value = cache_key[len(st)+1:]
+                    entry_key = f"{st}:{key_value}"
+                    break
+
             cache_reference_entry = {
-                "type": "metadata",
-                "key": cache_key,
+                "type": cache_type,
+                "key": key_value,
                 "ids": ids,
                 "ttl": scraperdb.TTL,
                 "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
