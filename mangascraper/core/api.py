@@ -37,6 +37,9 @@ session_lock = threading.Lock()
 # CACHE METADATA
 # ===============================
 
+def init_db():
+    scraperdb.init_db()
+
 def load_cache_metadata_all(cutoff: float | None = None) -> dict:
     scraperdb.init_db()
     with scraperdb.lock, scraperdb.dbconnect() as conn:
