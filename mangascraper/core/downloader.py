@@ -335,6 +335,7 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
     Submit download tasks for a single creator's pages.
     """
     
+    from tqdm import tqdm
     futures = [
         executor.submit(
             active_extension.download_images_hook,
@@ -342,9 +343,10 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
         )
         for page, urls, path, _ in creator_tasks
     ]
-    # Just wait for completion
-    for _ in concurrent.futures.as_completed(futures):
-        pass
+    # Show progress bar for page downloads
+    with tqdm(total=len(futures), desc=f"Gallery {gallery_id} ({safe_creator_name})", unit="page") as pbar:
+        for _ in concurrent.futures.as_completed(futures):
+            pbar.update(1)
 
 ####################################################################################################
 # ARCHIVE CONVERSION
@@ -743,22 +745,77 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     )
     log_clarification()
 
-    # Create custom description with space info
-    def postfix_func():
-        """Generate postfix showing space usage."""
-        if space_monitor["galleries_processed"] > 0:
-            return f"Est: {_format_bytes(space_monitor['total_estimated_bytes'])}, Act: {_format_bytes(space_monitor['total_actual_bytes'])}"
-        return ""
-    
-    # Each gallery is processed in parallel with its own thread
-    pbar = thread_map(
-        lambda gid: process_galleries([gid]),
-        batch_list,
-        max_workers=orchestrator.threads_galleries,
-        desc=f"Batch {current_batch_number}/{total_batch_numbers}",
-        unit="gallery"
+    # --- Calculate total pages and gallery page ranges ---
+    from tqdm import tqdm
+    import threading
+    gallery_page_counts = []
+    total_pages = 0
+    for gid in batch_list:
+        try:
+            meta = scraperapi.Fetch.gallery_metadata(gid)
+            num_pages = len(meta.get("images", {}).get("pages", [])) if meta and isinstance(meta, dict) else 0
+        except Exception:
+            num_pages = 0
+        gallery_page_counts.append(num_pages)
+        total_pages += num_pages
+
+    bar_format = (
+        "{desc:<} {percentage:3.0f}%|{bar}| [{n_fmt}/{total_fmt} Pages, {rate_fmt}{postfix}, {elapsed}<{remaining}]"
+    )
+    page_progress = tqdm(
+        total=total_pages,
+        desc=f"Gallery 1 / {len(batch_list)}",
+        unit="page",
+        bar_format=bar_format,
+        position=0,
+        dynamic_ncols=True
     )
 
+    # Precompute gallery page milestones
+    gallery_milestones = []
+    running = 0
+    for count in gallery_page_counts:
+        running += count
+        gallery_milestones.append(running)
+
+    # Shared state for progress
+    page_lock = threading.Lock()
+    progress_state = {"pages": 0, "gallery": 1}
+
+    def page_update_hook():
+        with page_lock:
+            progress_state["pages"] += 1
+            # Check if we crossed a gallery milestone
+            while (progress_state["gallery"] <= len(gallery_milestones) and
+                   progress_state["pages"] > gallery_milestones[progress_state["gallery"] - 1]):
+                progress_state["gallery"] += 1
+            page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
+            page_progress.update(1)
+
+    # Patch the download_images_hook to call our page_update_hook after each page
+    orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
+    def wrapped_download_images_hook(*args, **kwargs):
+        if _shutdown_event and _shutdown_event.is_set():
+            logger.warning("Shutdown event detected in download_images_hook, aborting page download.")
+            return None
+        result = orig_download_images_hook(*args, **kwargs)
+        page_update_hook()
+        return result
+    if orig_download_images_hook:
+        active_extension.download_images_hook = wrapped_download_images_hook
+
+    # Each gallery is processed in parallel with its own thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=orchestrator.threads_galleries) as executor:
+        futures = [executor.submit(process_galleries, [gid]) for gid in batch_list]
+        for f in concurrent.futures.as_completed(futures):
+            if _shutdown_event and _shutdown_event.is_set():
+                logger.warning("Shutdown event detected in batch, aborting remaining galleries.")
+                break
+
+    # Restore original hook
+    if orig_download_images_hook:
+        active_extension.download_images_hook = orig_download_images_hook
+    page_progress.close()
     active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
 
 def start_downloader(gallery_list=None):

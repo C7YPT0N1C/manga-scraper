@@ -999,7 +999,7 @@ def process_deferred_creators(populate: bool = True):
 ####################################################################################################################
 
 # Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
-def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None, page_update_hook=None):
+def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None):
     """
     Downloads an image from one of the provided URLs to the given path.
     Tries mirrors in order until one succeeds, with retries per mirror.
