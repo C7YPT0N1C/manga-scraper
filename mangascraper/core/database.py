@@ -17,7 +17,7 @@ from mangascraper.core.orchestrator import *
 lock = threading.Lock()
 _thread_local = threading.local()
 
-DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core/data")
+DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 SEARCH_HISTORY_MAX = 10
 
