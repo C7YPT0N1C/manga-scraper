@@ -1158,8 +1158,8 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             "  [9] Search by parody\n"
             "\n"
             "Options:\n"
-            "  [w] View selected galleries\n"
-            "  [e] Return to configuration menu\n"
+            "  [q] View selected galleries\n"
+            "  [w] Return to configuration menu\n"
             "  [0] Proceed with selected galleries\n"
             "\n"
             "Tip: Press Enter without input to cancel/go back during prompts\n"
@@ -1174,48 +1174,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 break
             else:
                 logger.warning("No galleries selected yet.")
-        
-        elif choice == "r":
-            current_config = {
-                'extension': config.get('EXTENSION', DEFAULT_EXTENSION),
-                'use_tor': config.get('USE_TOR', DEFAULT_USE_TOR),
-                'dry_run': config.get('DRY_RUN', DEFAULT_DRY_RUN),
-                'threads_galleries': config.get('THREADS_GALLERIES', DEFAULT_THREADS_GALLERIES),
-                'threads_images': config.get('THREADS_IMAGES', DEFAULT_THREADS_IMAGES),
-                'format': config.get('GALLERY_FORMAT', DEFAULT_GALLERY_FORMAT),
-                'language': config.get('LANGUAGE', DEFAULT_LANGUAGE),
-                'title_type': config.get('TITLE_TYPE', DEFAULT_TITLE_TYPE),
-                'excluded_tags': config.get('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS),
-                'mirrors': config.get('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS),
-                'output_folder': config.get('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH),
-                'max_retries': config.get('MAX_RETRIES', DEFAULT_MAX_RETRIES),
-                'calm': config.get('CALM', DEFAULT_CALM),
-                'verify_ssl': config.get('VERIFY_SSL', DEFAULT_VERIFY_SSL),
-                'use_daemon_threads': config.get('USE_DAEMON_THREADS', DEFAULT_USE_DAEMON_THREADS),
-            }
-            
-            modified_config = interactive_config_menu(current_config)
-            
-            # Update orchestrator config
-            update_env('EXTENSION', modified_config.get('extension'))
-            update_env('USE_TOR', modified_config.get('use_tor'))
-            update_env('DRY_RUN', modified_config.get('dry_run'))
-            update_env('THREADS_GALLERIES', modified_config.get('threads_galleries'))
-            update_env('THREADS_IMAGES', modified_config.get('threads_images'))
-            update_env('GALLERY_FORMAT', modified_config.get('format'))
-            update_env('LANGUAGE', modified_config.get('language'))
-            update_env('TITLE_TYPE', modified_config.get('title_type'))
-            update_env('EXCLUDED_TAGS', modified_config.get('excluded_tags'))
-            update_env('NHENTAI_MIRRORS', modified_config.get('mirrors'))
-            update_env('DOWNLOAD_PATH', modified_config.get('output_folder'))
-            update_env('MAX_RETRIES', modified_config.get('max_retries'))
-            update_env('CALM', modified_config.get('calm'))
-            update_env('VERIFY_SSL', modified_config.get('verify_ssl'))
-            update_env('USE_DAEMON_THREADS', modified_config.get('use_daemon_threads'))
-            refresh_globals()
-            
-            logger.info("Configuration updated.")
-            continue
         
         elif choice == "1":
             # Homepage
@@ -1558,11 +1516,53 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     else:
                         logger.info(f"No galleries found for {query_type}={query_value}")
         
-        elif choice == "w":
+        elif choice == "q":
             # View selected galleries
             selected_ids = scraperapi.Fetch.queued_galleries()
             selected_ids = view_queued_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
+            continue
+        
+        elif choice == "w":
+            current_config = {
+                'extension': config.get('EXTENSION', DEFAULT_EXTENSION),
+                'use_tor': config.get('USE_TOR', DEFAULT_USE_TOR),
+                'dry_run': config.get('DRY_RUN', DEFAULT_DRY_RUN),
+                'threads_galleries': config.get('THREADS_GALLERIES', DEFAULT_THREADS_GALLERIES),
+                'threads_images': config.get('THREADS_IMAGES', DEFAULT_THREADS_IMAGES),
+                'format': config.get('GALLERY_FORMAT', DEFAULT_GALLERY_FORMAT),
+                'language': config.get('LANGUAGE', DEFAULT_LANGUAGE),
+                'title_type': config.get('TITLE_TYPE', DEFAULT_TITLE_TYPE),
+                'excluded_tags': config.get('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS),
+                'mirrors': config.get('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS),
+                'output_folder': config.get('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH),
+                'max_retries': config.get('MAX_RETRIES', DEFAULT_MAX_RETRIES),
+                'calm': config.get('CALM', DEFAULT_CALM),
+                'verify_ssl': config.get('VERIFY_SSL', DEFAULT_VERIFY_SSL),
+                'use_daemon_threads': config.get('USE_DAEMON_THREADS', DEFAULT_USE_DAEMON_THREADS),
+            }
+            
+            modified_config = interactive_config_menu(current_config)
+            
+            # Update orchestrator config
+            update_env('EXTENSION', modified_config.get('extension'))
+            update_env('USE_TOR', modified_config.get('use_tor'))
+            update_env('DRY_RUN', modified_config.get('dry_run'))
+            update_env('THREADS_GALLERIES', modified_config.get('threads_galleries'))
+            update_env('THREADS_IMAGES', modified_config.get('threads_images'))
+            update_env('GALLERY_FORMAT', modified_config.get('format'))
+            update_env('LANGUAGE', modified_config.get('language'))
+            update_env('TITLE_TYPE', modified_config.get('title_type'))
+            update_env('EXCLUDED_TAGS', modified_config.get('excluded_tags'))
+            update_env('NHENTAI_MIRRORS', modified_config.get('mirrors'))
+            update_env('DOWNLOAD_PATH', modified_config.get('output_folder'))
+            update_env('MAX_RETRIES', modified_config.get('max_retries'))
+            update_env('CALM', modified_config.get('calm'))
+            update_env('VERIFY_SSL', modified_config.get('verify_ssl'))
+            update_env('USE_DAEMON_THREADS', modified_config.get('use_daemon_threads'))
+            refresh_globals()
+            
+            logger.info("Configuration updated.")
             continue
 
         else:
