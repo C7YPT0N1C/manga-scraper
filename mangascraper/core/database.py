@@ -369,7 +369,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, ids, ttl, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entry_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
             "cache_key=excluded.cache_key, "
