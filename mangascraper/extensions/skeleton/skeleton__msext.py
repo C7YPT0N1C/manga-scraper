@@ -5,6 +5,7 @@ import os, time, json, requests, math, shutil, re
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
 from mangascraper.extensions.extension_manager import (

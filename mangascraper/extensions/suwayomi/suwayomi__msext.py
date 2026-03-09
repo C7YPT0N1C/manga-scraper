@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
 from mangascraper.extensions.extension_manager import (
@@ -817,7 +818,7 @@ def update_creator_manga(meta):
             description = f"Latest Doujin: {latest_name}"
 
         # Query database for most_popular_tags (top genres) for this creator
-        logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperapi.DB_PATH}")
+        logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperdb.DB_PATH}")
         genre_names = []
         with scraperapi.lock, scraperapi._connect() as conn:
             cursor = conn.cursor()
@@ -825,7 +826,7 @@ def update_creator_manga(meta):
             row = cursor.fetchone()
             logger.debug(f"[details.json] DB row for creator_name={creator_name}: {row}")
             if not row:
-                logger.warning(f"[details.json] Creator not found in DB: {creator_name} (DB path: {scraperapi.DB_PATH})")
+                logger.warning(f"[details.json] Creator not found in DB: {creator_name} (DB path: {scraperdb.DB_PATH})")
             if row:
                 creator_id = row[0]
                 cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/database.py
 
-import os, sqlite3, threading, atexit, json, re
-from datetime import datetime, timezone
+import os, sqlite3, threading, atexit, json
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
