@@ -652,6 +652,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
             gallery_sizes.append((gallery_id, default_size))
             total_estimated += default_size
     
+    total_estimated * 2 # idk just keep these here lmfao
 
     # Always check available space on the actual download location (network share or not)
     available_on_target = get_available_disk_space(download_location)
