@@ -820,7 +820,7 @@ def update_creator_manga(meta):
         # Query database for most_popular_tags (top genres) for this creator
         logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperdb.DB_PATH}")
         genre_names = []
-        with scraperapi.lock, scraperapi._connect() as conn:
+        with scraperdb.lock, scraperdb.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
             row = cursor.fetchone()
