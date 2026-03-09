@@ -1231,7 +1231,7 @@ class Caching:
             now = time.time()
             for gid, entry in safe_metadata.items():
                 scraperdb.upsert_cache_metadata(gid, now, clean_metadata=entry)
-            scraperdb.prune_cache_references(now)
+            scraperdb.prune_all_caches()
 
             # Parse search type and value from cache_key
             search_types = ["artist", "group", "tag", "character", "parody", "search", "archive", "homepage"]
@@ -1261,22 +1261,7 @@ class Caching:
     @staticmethod
     def clear(cache_key: str = None):
         """Clear the cache"""
-        try:
-            cache_dir = scraperdb.get_cache_dir()
-            if cache_key:
-                cache_file = cache_dir / f"{cache_key}.json"
-                if cache_file.exists():
-                    cache_file.unlink()
-                scraperdb.delete_cache_reference(f"metadata:{cache_key}")
-            else:
-                for cache_file in cache_dir.glob("*.json"):
-                    cache_file.unlink()
-                MASTER_CACHE_FILENAME = "(master_cache).json"
-                master_file = cache_dir / MASTER_CACHE_FILENAME
-                if master_file.exists():
-                    master_file.unlink()
-        except Exception:
-            pass
+        pass
     
     class Load:
         @staticmethod
@@ -1315,7 +1300,7 @@ class Caching:
         
         @staticmethod
         def general_metadata() -> dict:
-            data = scraperdb._load_master_cache()
+            data = scraperdb.read_cache()
             metadata = data.get("metadata", {})
             if not isinstance(metadata, dict):
                 return {}
@@ -1333,7 +1318,7 @@ class Caching:
 
         @staticmethod
         def raw_metadata() -> dict:
-            data = scraperdb._load_master_cache()
+            data = scraperdb.read_cache()
             raw_block = data.get("metadata", {})
             if not isinstance(raw_block, dict):
                 return {}
@@ -1429,7 +1414,7 @@ class Caching:
         def general_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = scraperdb._load_master_cache()
+            data = scraperdb.read_cache()
             safe_metadata = {str(k): v for k, v in metadata.items()}
             now = time.time()
             for gid, entry in safe_metadata.items():
@@ -1446,7 +1431,7 @@ class Caching:
         def raw_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = scraperdb._load_master_cache()
+            data = scraperdb.read_cache()
             now = time.time()
             for gid, entry in metadata.items():
                 scraperdb.upsert_cache_metadata(

@@ -304,16 +304,6 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         )
         conn.commit()
 
-def prune_cache_metadata(cutoff: float):
-    init_db()
-    with lock, dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM CachedMetadata WHERE timestamp IS NULL OR timestamp < ?",
-            (cutoff,),
-        )
-        conn.commit()
-
 # ===============================
 # CACHE REFERENCES
 # ===============================
@@ -394,8 +384,10 @@ def delete_cache_reference(entry_key: str):
         cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
         conn.commit()
 
-def prune_cache_references(now: float):
+def prune_all_caches():
+    """Should remove expired entries in CacheReferences and CachedMetadata"""
     init_db()
+    now = time.time()
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -403,79 +395,6 @@ def prune_cache_references(now: float):
             (now,),
         )
         conn.commit()
-
-def get_cache_dir() -> Path:
-    """
-    Get or create cache directory for metadata.
-    Uses /opt/manga-scraper/mangascraper/core/ if available,
-    otherwise uses package-relative path as fallback.
-    """
-    primary_cache = Path("/opt/manga-scraper/mangascraper/core/data")
-    if primary_cache.parent.exists():
-        primary_cache.mkdir(parents=True, exist_ok=True)
-        return primary_cache
-    fallback_cache = Path(__file__).parent / "data"
-    fallback_cache.mkdir(parents=True, exist_ok=True)
-    return fallback_cache
-
-def _load_master_cache() -> dict:
-    cutoff = time.time() - TTL
-    try:
-        # Prune metadata entries in the master cache by their own TTL
-        prune_cache_metadata(cutoff)
-        
-        # Prune references to cache files by their own TTL
-        prune_cache_references(time.time())
-        
-        metadata_block = all_cached_metadata(cutoff)
-        
-        # Remove expired entries from metadata_block (in-memory prune)
-        if isinstance(metadata_block, dict):
-            expired_keys = []
-            for gid, entry in metadata_block.items():
-                if not isinstance(entry, dict):
-                    continue
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
-                    expired_keys.append(gid)
-            for gid in expired_keys:
-                metadata_block.pop(gid, None)
-        logger.debug(f"[TESTING]: references = {references}")
-        logger.debug(f"[TESTING]: metadata_block = {metadata_block}")
-        references = load_cache_references()
-        return {"references": references, "metadata": metadata_block}
-    except Exception:
-        return {"references": {}, "metadata": {}}
-    
-def prune_all_caches():
-    """Centralised cache pruning for metadata, references, and files."""
-    now = time.time()
-    
-    # Prune metadata entries in the master cache by their own TTL
-    prune_cache_metadata(now - TTL)
-    
-    # Prune references to cache files by their own TTL
-    prune_cache_references(now)
-
-    cache_dir = get_cache_dir()
-    for cache_file in cache_dir.glob("*.json"):
-        if cache_file.name == "(master_cache).json":
-            try:
-                cache_file.unlink()
-            except Exception:
-                pass
-            continue
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            timestamp = data.get("timestamp") or 0
-            if (now - timestamp) >= TTL:
-                # Remove master cache reference if present
-                cache_key = cache_file.stem
-                delete_cache_reference(f"metadata:{cache_key}")
-                cache_file.unlink()
-        except Exception:
-            continue
 
 def cached_metadata_entry(gallery_id: str) -> dict | None:
         """Loads and returns metadata for a single gallery ID, or None if it doesn't exist."""
@@ -520,6 +439,32 @@ def all_cached_metadata(cutoff: float | None = None) -> dict:
                 "raw_metadata": raw,
             }
         return result
+
+def read_cache() -> dict:
+    cutoff = time.time() - TTL
+    try:
+        # Prune references to cache files by their own TTL
+        prune_all_caches()
+        
+        metadata_block = all_cached_metadata(cutoff)
+        
+        # Remove expired entries from metadata_block (in-memory prune)
+        if isinstance(metadata_block, dict):
+            expired_keys = []
+            for gid, entry in metadata_block.items():
+                if not isinstance(entry, dict):
+                    continue
+                timestamp = entry.get("timestamp") or 0
+                if (time.time() - timestamp) >= TTL:
+                    expired_keys.append(gid)
+            for gid in expired_keys:
+                metadata_block.pop(gid, None)
+        logger.debug(f"[TESTING]: references = {references}")
+        logger.debug(f"[TESTING]: metadata_block = {metadata_block}")
+        references = load_cache_references()
+        return {"references": references, "metadata": metadata_block}
+    except Exception:
+        return {"references": {}, "metadata": {}}
 
 ####################################################################################################################
 # GALLERY UPDATES
