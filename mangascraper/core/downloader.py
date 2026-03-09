@@ -672,7 +672,8 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     avg_gallery_size = total_estimated / max(1, len(gallery_ids))
     parallel_galleries = min(len(gallery_ids), max(1, orchestrator.threads_galleries))
     parallel_buffer = avg_gallery_size * parallel_galleries
-    safety_buffer = max(512 * 1024 * 1024, total_estimated * 0.1)
+    #safety_buffer = max(512 * 1024 * 1024, total_estimated * 0.1)
+    safety_buffer = total_estimated * 0.2
     required_with_buffer = total_estimated + parallel_buffer + safety_buffer
     
     log(
