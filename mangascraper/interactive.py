@@ -5,7 +5,7 @@ Interactive gallery selection and filtering system.
 Handles pre-fetching metadata, displaying summaries, and allowing users to filter results.
 """
 
-import sys, os, shutil, json, re, subprocess, tempfile
+import sys, os, time, shutil, json, re, subprocess, tempfile
 from collections import deque
 
 from mangascraper.core import orchestrator
@@ -17,16 +17,6 @@ from mangascraper.extensions.extension_manager import get_extension_download_pat
 ####################################################################################################
 # DISPLAY UTILITIES
 ####################################################################################################
-
-READER_SETTINGS = {
-    "quality": "ultra",
-    "colors": "full",
-    "symbols": "block",
-    "dither": "none",
-    "oversample": False,
-    "clamp_to_terminal": True,
-    "preserve_aspect": True,
-}
 
 def clear_screen():
     """Clear the terminal screen using ANSI escape codes."""
@@ -817,6 +807,7 @@ def interactive_config_menu(current_config: dict) -> dict:
         
         if choice == "0":
             break
+        
         elif choice == "1":
             extensions = _get_extension_choices()
             if extensions:
@@ -866,26 +857,31 @@ def interactive_config_menu(current_config: dict) -> dict:
                     config['output_folder'] = ext_download_path
                     logger.info(f"Extension updated to {config['extension']}.")
                     logger.info(f"Output Folder set to: {ext_download_path}")
+        
         elif choice == "2":
             mirrors = input(f"Mirrors (comma-separated URLs, current: {config.get('mirrors', DEFAULT_NHENTAI_MIRRORS)}): ").strip()
             if mirrors:
                 config['mirrors'] = mirrors
+        
         elif choice == "3":
             val = input(f"Verify SSL Certificates? (y/n, current: {config.get('verify_ssl', DEFAULT_VERIFY_SSL)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['verify_ssl'] = val == 'y'
             else:
                 logger.warning("Invalid input")
+        
         elif choice == "4":
             langs = input(f"Language(s) (comma-separated, current: {config.get('language', DEFAULT_LANGUAGE)}): ").strip()
             if langs:
                 config['language'] = langs
+        
         elif choice == "5":
             ttype = input(f"Title type (english/japanese/pretty, current: {config.get('title_type', DEFAULT_TITLE_TYPE)}): ").strip().lower()
             if ttype in ('english', 'japanese', 'pretty'):
                 config['title_type'] = ttype
             else:
                 logger.warning("Invalid title type")
+        
         elif choice == "6":
             current_tags = config.get('excluded_tags', DEFAULT_EXCLUDED_TAGS)
             tags = input(f"Excluded tags (comma-separated, current: {current_tags}): ").strip()
@@ -893,10 +889,12 @@ def interactive_config_menu(current_config: dict) -> dict:
                 config['excluded_tags'] = tags
             elif not current_tags:
                 config['excluded_tags'] = DEFAULT_EXCLUDED_TAGS
+        
         elif choice == "7":
             output_folder = input(f"Output folder path (current: {config.get('output_folder', DEFAULT_DOWNLOAD_PATH)}): ").strip()
             if output_folder:
                 config['output_folder'] = output_folder
+        
         elif choice == "8":
             log_clarification()
             print(
@@ -911,14 +909,17 @@ def interactive_config_menu(current_config: dict) -> dict:
                 config['format'] = fmt_map[fmt_choice]
             else:
                 logger.warning("Invalid format")
+        
         elif choice == "9":
             val = input(f"Use Tor? (y/n, current: {config.get('use_tor', DEFAULT_USE_TOR)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['use_tor'] = val == 'y'
+        
         elif choice == "q":
             val = input(f"Dry Run? (y/n, current: {config.get('dry_run', DEFAULT_DRY_RUN)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['dry_run'] = val == 'y'
+        
         elif choice == "w":
             try:
                 val = int(input(f"Gallery threads (current: {config.get('threads_galleries', DEFAULT_THREADS_GALLERIES)}): ").strip())
@@ -928,6 +929,7 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be greater than 0")
             except ValueError:
                 logger.warning("Invalid number")
+        
         elif choice == "e":
             try:
                 val = int(input(f"Image threads (current: {config.get('threads_images', DEFAULT_THREADS_IMAGES)}): ").strip())
@@ -937,12 +939,14 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be greater than 0")
             except ValueError:
                 logger.warning("Invalid number")
+        
         elif choice == "r":
             val = input(f"Allow Background Processing? (y/n, current: {config.get('use_daemon_threads', DEFAULT_USE_DAEMON_THREADS)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['use_daemon_threads'] = val == 'y'
             else:
                 logger.warning("Invalid input")
+        
         elif choice == "t":
             try:
                 val = int(input(f"Max retries (current: {config.get('max_retries', DEFAULT_MAX_RETRIES)}): ").strip())
@@ -952,12 +956,14 @@ def interactive_config_menu(current_config: dict) -> dict:
                     logger.warning("Must be 0 or greater")
             except ValueError:
                 logger.warning("Invalid number")
+        
         elif choice == "y":
             val = input(f"Reduce Logs? (y/n, current: {config.get('calm', DEFAULT_CALM)}): ").strip().lower()
             if val in ('y', 'n'):
                 config['calm'] = val == 'y'
             else:
                 logger.warning("Invalid input")
+        
         elif choice == "a":
             confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
             if confirm == 'y':
@@ -965,6 +971,7 @@ def interactive_config_menu(current_config: dict) -> dict:
                 logger.info("Cache cleared successfully.")
             else:
                 logger.info("Cache clear cancelled.")
+        
         else:
             logger.warning("Invalid choice. Enter 0-9, q, w, e, r, t, y, or a.")
         
@@ -976,7 +983,7 @@ def interactive_config_menu(current_config: dict) -> dict:
 # INTERACTIVE SEARCH MODE
 ####################################################################################################
 
-def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> dict:
+def fetch_gallery_ids(search_type: str, search_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> dict:
     """
     Fetch gallery IDs with error handling and fallback to cached results.
     
@@ -991,11 +998,35 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
     Returns:
         tuple: (gallery_ids list, cache_key) or ([], None) if all fail
     """
-    
+
     cache_key = scraperapi.Get.cache_keys(search_type, search_value)
+    logger.debug(f"[TESTING] fetch_gallery_ids_with_fallback cache_key = {cache_key}")
+
+    # 1. Check cache references for this key
+    references = scraperdb.load_cache_references()
+    cache_entry = references.get(cache_key)
+    now = time.time()
+    if cache_entry:
+        expires_at = cache_entry.get("expires_at")
+        ids = cache_entry.get("ids", [])
+        if expires_at is None or expires_at > now:
+            # Cache is valid
+            logger.info(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
+            # Try to fetch metadata for these IDs from cache
+            cached_metadata = scraperdb.load_cached_metadata_for_ids(ids)
+            if cached_metadata and len(cached_metadata) == len(ids):
+                logger.info(f"Fetched all metadata from cache for {len(ids)} galleries.")
+                return ids, cache_key
+            else:
+                logger.info(f"Some metadata missing from cache, will fetch missing from API if needed.")
+                # Optionally, could fetch missing metadata from API here
+                return ids, cache_key
+        else:
+            logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
+
+    # 2. If no valid cache, fetch from API
     max_retries = 2
     attempt = 0
-    
     while attempt < max_retries:
         try:
             ids = scraperapi.Fetch.gallery_ids(
@@ -1007,33 +1038,19 @@ def fetch_gallery_ids_with_fallback(search_type: str, search_value: str, sort_va
                 fetch_as_archival=fetch_as_archival,
             )
             if ids:
-                return ids, cache_key
+                logger.info(f"Fetched {len(ids)} gallery IDs from API for key {cache_key}")
+                return ids, cache_key # Optionally: update cache here
             else:
                 logger.warning("No galleries found for this search")
                 return [], cache_key
         except Exception as e:
             attempt += 1
             logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
-            
             if attempt < max_retries:
                 if input(f"Retry? (y/n): ").strip().lower() == "y":
                     continue
-            
-            # Try to fallback to cached results
-            log_clarification()
-            logger.info("Attempting to use cached results...")
-            try:
-                cached_metadata = scraperapi.Caching.load(cache_key)
-                if cached_metadata:
-                    cached_ids = list(cached_metadata.keys())
-                    logger.info(f"Using {len(cached_ids)} galleries from cache")
-                    return cached_ids, cache_key
-            except:
-                pass
-            
             logger.warning("No cached results available. Search failed.")
             return [], None
-    
     return [], None
 
 def _handle_search_error(search_type: str, search_value: str = ""):
@@ -1137,8 +1154,6 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     if selected_ids:
         persist_selected_ids()
-
-    # add_search_history removed
     
     while True:
         clear_screen()
@@ -1232,7 +1247,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
             fetch_all_pages = archive_mode or fetch_all or end_page is None
-            ids, cache_key = fetch_gallery_ids_with_fallback(
+            ids, cache_key = fetch_gallery_ids(
                 "homepage",
                 sort_val,
                 sort_val,
@@ -1392,7 +1407,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = fetch_gallery_ids_with_fallback(
+                ids, cache_key = fetch_gallery_ids(
                     "search",
                     search_query,
                     sort_val,
@@ -1476,7 +1491,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = fetch_gallery_ids_with_fallback(
+                ids, cache_key = fetch_gallery_ids(
                     query_type,
                     query_value,
                     sort_val,
@@ -1566,7 +1581,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             continue
 
         else:
-            logger.warning("Invalid choice. Enter 1-9, q, w, e, or 0.")
+            logger.warning("Invalid choice. Enter 1-9, q, w, or 0.")
         
         log_clarification()
     

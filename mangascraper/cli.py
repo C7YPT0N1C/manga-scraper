@@ -415,7 +415,7 @@ def _parse_galleries_arg(galleries_value: str, warn_invalid: bool = True) -> lis
 # CLI Helper Functions
 ####################################################################################################
 
-def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> list[int]:
+def fetch_gallery_ids(query_type: str, query_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> list[int]:
     """
     Fetch gallery IDs with error handling and fallback to cached results.
     """
@@ -622,7 +622,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
                     end_page = int(m_homepage.group(1))
-                    gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -639,7 +639,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids_with_fallback(qtype, qvalue, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 elif m_search:
@@ -648,7 +648,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids_with_fallback("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 else:
@@ -676,7 +676,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", sort_val, start_page, end_page))
+        gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page))
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -721,7 +721,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 end_page = int(entry[2])
 
         archival_flag = archive_mode or force_archive
-        gallery_ids.update(fetch_gallery_ids_with_fallback(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
+        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
 
     return gallery_ids
 
@@ -852,7 +852,7 @@ def build_gallery_list(args):
             gallery_ids.update(_handle_gallery_args(archive_entries, "archive"))
         if archive_all:
             # Same as homepage crawl but infinite
-            gallery_ids.update(fetch_gallery_ids_with_fallback("homepage", "", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
+            gallery_ids.update(fetch_gallery_ids("homepage", "", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
 
     # --- Final sorted list (Processes highest gallery ID (latest gallery) first.) ---
     # Deduplicate while preserving highest-ID-first order

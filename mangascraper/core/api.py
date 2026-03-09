@@ -1166,7 +1166,6 @@ class Fetch:
         failed_ids = []
         
         # Fetch missing galleries with progress bar
-        # Note: Filtering already applied in fetch_gallery_ids(), so we just extract metadata here
         for gallery_id in tqdm(ids_to_fetch, desc="Fetching gallery metadata", unit="gallery"):
             try:
                 meta = Fetch.gallery_metadata(gallery_id)
