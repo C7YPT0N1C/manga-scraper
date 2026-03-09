@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile
+import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile, threading
+from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
 
 from mangascraper.core import orchestrator
@@ -481,7 +482,7 @@ def process_galleries(batch_ids):
                 
                 # Estimate size for progress tracking
                 estimated_size, _, img_count = estimate_gallery_size(meta, use_head_requests=False)
-                space_monitor["total_estimated_bytes"] += estimated_size
+                space_monitor["total_estimated_bytes"] += estimated_size * 2 # keep this here i think
                 
                 time.sleep(dynamic_sleep("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
 
@@ -652,7 +653,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
             gallery_sizes.append((gallery_id, default_size))
             total_estimated += default_size
     
-    total_estimated * 2 # idk just keep these here lmfao
+    total_estimated = total_estimated * 2 # idk just keep this here lmfao
 
     # Always check available space on the actual download location (network share or not)
     available_on_target = get_available_disk_space(download_location)
@@ -745,8 +746,6 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     log_clarification()
 
     # --- Calculate total pages and gallery page ranges ---
-    from tqdm import tqdm
-    import threading
     gallery_page_counts = []
     total_pages = 0
     for gid in batch_list:
