@@ -154,22 +154,6 @@ def init_db():
 # GALLERY UPDATES
 ####################################################################################################################
 
-# GENERIC FIELD UPDATE HELPERS
-def update_field(table, key_field, key_value, field, value):
-    """
-    Update a single field in a table for a given key.
-    Example: update_field('Creators', 'name', 'John Doe', 'display_name', 'John D.')
-    """
-    init_db()
-    now = datetime.now(timezone.utc).isoformat()
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"UPDATE {table} SET {field}=? WHERE {key_field}=?",
-            (value, key_value)
-        )
-        conn.commit()
-
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
