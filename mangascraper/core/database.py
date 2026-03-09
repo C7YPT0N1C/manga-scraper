@@ -450,8 +450,26 @@ def mark_gallery_completed(gallery_id):
         conn.commit()
 
 ####################################################################################################################
-# OTHER DATABASE HELPERS
+# DATABASE HELPERS
 ####################################################################################################################
+
+def get_gallery_status(gallery_id):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+def list_galleries(status=None):
+    init_db()
+    with lock, _connect() as conn:
+        cursor = conn.cursor()
+        if status:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries WHERE status=?", (status,))
+        else:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries")
+        return cursor.fetchall()
 
 # ===============================
 # CACHE METADATA

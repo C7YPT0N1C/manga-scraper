@@ -34,6 +34,22 @@ _SYMBOL_TRANSLATION_TABLE = None
 session = None
 session_lock = threading.Lock()
 
+####################################################################################################################
+# DATABASE HELPERS
+####################################################################################################################
+
+def set_queued_galleries(ids):
+    scraperdb.init_db()
+    with scraperdb.lock, scraperdb._connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM GalleriesQueue")
+        for gid in set(ids or []):
+            try:
+                cursor.execute("INSERT INTO GalleriesQueue (id) VALUES (?)", (int(gid),))
+            except Exception:
+                continue
+        conn.commit()
+
 ################################################################################################################
 # INTERNAL CACHING HELPERS
 ################################################################################################################
