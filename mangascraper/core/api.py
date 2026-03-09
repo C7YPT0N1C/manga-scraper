@@ -491,16 +491,8 @@ def mark_gallery_completed(gallery_id):
         conn.commit()
 
 ####################################################################################################################
-# other helpers idfk
+# OTHER DATABASE HELPERS
 ####################################################################################################################
-
-def get_queued_galleries():
-    init_db()
-    with lock, _connect() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM GalleriesQueue")
-        rows = cursor.fetchall()
-        return sorted({int(row[0]) for row in rows})
 
 def set_queued_galleries(ids):
     init_db()
@@ -531,37 +523,27 @@ def list_galleries(status=None):
         else:
             cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries")
         return cursor.fetchall()
-    
-# ===============================
-# BROKEN SYMBOLS MANAGEMENT
-# ===============================
 
-def load_broken_symbols() -> dict[str, str]:
-    """Load all detected broken symbols as { symbol: '_' }."""
-    init_db()
-    with lock, _connect() as conn:
-        c = conn.cursor()
-        c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
-        rows = c.fetchall()
-        return {row[0]: "_" for row in rows if row[0].strip()}
 
-def save_broken_symbols(symbol_map: dict[str, str]):
-    """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
-    if not symbol_map:
-        return
-    init_db()
-    now = datetime.now(timezone.utc).isoformat()
-    with lock, _connect() as conn:
-        c = conn.cursor()
-        for symbol in symbol_map.keys():
-            c.execute("""
-                INSERT INTO BrokenSymbols (symbol, date_detected, fixed)
-                VALUES (?, ?, 0)
-                ON CONFLICT(symbol) DO UPDATE SET
-                    fixed=0,
-                    date_detected=excluded.date_detected
-            """, (symbol, now))
-        conn.commit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ===============================
 # CACHE METADATA
@@ -1004,7 +986,7 @@ def sanitise_string(meta_or_title):
         )
     
     # Load persisted broken symbols (mapping)
-    possible_broken_symbols = load_broken_symbols()
+    possible_broken_symbols = Caching.Load.broken_symbols()
 
     # Determine if input is a dict or string
     if isinstance(meta_or_title, dict):
@@ -1037,7 +1019,7 @@ def sanitise_string(meta_or_title):
         for s in new_broken:
             possible_broken_symbols[s] = "_"
         logger.debug(f"[BrokenSymbols] New broken symbols detected: {sorted(new_broken)}. Updating database.")
-        save_broken_symbols(possible_broken_symbols)
+        Caching.Save.broken_symbols(possible_broken_symbols)
         _build_symbol_translation_table()
     #else:
     #    logger.debug("[BrokenSymbols] No new broken symbols detected. No database update needed.")
@@ -1611,7 +1593,12 @@ class Fetch:
     @staticmethod
     def queued_galleries() -> list:
         """Fetch queued galleries from GalleriesQueue table in the database."""
-        return get_queued_galleries()
+        init_db()
+        with lock, _connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM GalleriesQueue")
+            rows = cursor.fetchall()
+            return sorted({int(row[0]) for row in rows})
     
     @staticmethod
     def gallery_ids(
@@ -2331,6 +2318,16 @@ class Caching:
                 if isinstance(clean, dict):
                     result[gid] = clean
             return result
+        
+        @staticmethod
+        def broken_symbols() -> dict[str, str]:
+            """Load all detected broken symbols as { symbol: '_' }."""
+            init_db()
+            with lock, _connect() as conn:
+                c = conn.cursor()
+                c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
+                rows = c.fetchall()
+                return {row[0]: "_" for row in rows if row[0].strip()}
 
     class Save:
         @staticmethod
@@ -2406,6 +2403,25 @@ class Caching:
                     clean_metadata=None,
                     raw_metadata=entry,
                 )
+        
+        @staticmethod
+        def broken_symbols(symbol_map: dict[str, str]):
+            """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
+            if not symbol_map:
+                return
+            init_db()
+            now = datetime.now(timezone.utc).isoformat()
+            with lock, _connect() as conn:
+                c = conn.cursor()
+                for symbol in symbol_map.keys():
+                    c.execute("""
+                        INSERT INTO BrokenSymbols (symbol, date_detected, fixed)
+                        VALUES (?, ?, 0)
+                        ON CONFLICT(symbol) DO UPDATE SET
+                            fixed=0,
+                            date_detected=excluded.date_detected
+                    """, (symbol, now))
+                conn.commit()
 
 ################################################################################################################
 # EXPORTED API
