@@ -451,7 +451,7 @@ def view_queued_galleries(selected_ids: list, cached_metadata: dict | None = Non
     Returns:
         list: Updated list of selected IDs (after any removals)
     """
-    selected_ids = scraperapi.Caching.Load.queued_galleries()
+    selected_ids = scraperapi.Fetch.queued_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")
         return []
@@ -1258,7 +1258,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
     if (not initial_ids) and (not unattended):
         scraperapi.set_queued_galleries([])
 
-    selected_ids = scraperapi.Caching.Load.queued_galleries()
+    selected_ids = scraperapi.Fetch.queued_galleries()
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
@@ -1272,7 +1272,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     def persist_selected_ids():
         nonlocal selected_ids
-        cached_ids = scraperapi.Caching.Load.queued_galleries()
+        cached_ids = scraperapi.Fetch.queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
         scraperapi.set_queued_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
@@ -1332,7 +1332,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            selected_ids = scraperapi.Caching.Load.queued_galleries()
+            selected_ids = scraperapi.Fetch.queued_galleries()
             if selected_ids:
                 break
             else:
@@ -1812,7 +1812,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         
         elif choice == "e":
             # View selected galleries
-            selected_ids = scraperapi.Caching.Load.queued_galleries()
+            selected_ids = scraperapi.Fetch.queued_galleries()
             selected_ids = view_queued_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue

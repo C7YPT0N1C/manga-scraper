@@ -1391,7 +1391,7 @@ class Caching:
     
     @staticmethod
     def load(cache_key: str) -> dict:
-        # Look up CacheReferences entry for this cache_key
+        """Load the CacheReferences entry for this cache_key"""
         entry_key = f"metadata:{cache_key}"
         references = load_cache_references()
         ref_entry = references.get(entry_key)
@@ -1412,6 +1412,7 @@ class Caching:
     
     @staticmethod
     def save(cache_key: str, metadata: dict):
+        """Save the metadata for this cache_key to a CacheReferences entry"""
         try:
             timestamp = time.time()
             safe_metadata = {str(k): v for k, v in metadata.items()}
@@ -1446,33 +1447,30 @@ class Caching:
         except Exception:
             pass
         
-        @staticmethod
-        def clear(cache_key: str = None):
-            try:
-                cache_dir = get_cache_dir()
-                if cache_key:
-                    cache_file = cache_dir / f"{cache_key}.json"
-                    if cache_file.exists():
-                        cache_file.unlink()
-                    _remove_master_cache_entry(f"metadata:{cache_key}")
-                else:
-                    for cache_file in cache_dir.glob("*.json"):
-                        cache_file.unlink()
-                    MASTER_CACHE_FILENAME = "(master_cache).json"
-                    master_file = cache_dir / MASTER_CACHE_FILENAME
-                    if master_file.exists():
-                        master_file.unlink()
-            except Exception:
-                pass
+    @staticmethod
+    def clear(cache_key: str = None):
+        """Clear the cache"""
+        try:
+            cache_dir = get_cache_dir()
+            if cache_key:
+                cache_file = cache_dir / f"{cache_key}.json"
+                if cache_file.exists():
+                    cache_file.unlink()
+                _remove_master_cache_entry(f"metadata:{cache_key}")
+            else:
+                for cache_file in cache_dir.glob("*.json"):
+                    cache_file.unlink()
+                MASTER_CACHE_FILENAME = "(master_cache).json"
+                master_file = cache_dir / MASTER_CACHE_FILENAME
+                if master_file.exists():
+                    master_file.unlink()
+        except Exception:
+            pass
     
     class Load:
         @staticmethod
-        def queued_galleries() -> list:
-            """Fetch queued galleries from GalleriesQueue table in the database."""
-            return get_queued_galleries()
-
-        @staticmethod
         def search_history(max_items: int = SEARCH_HISTORY_MAX) -> list[dict]:
+            """Load Search History"""
             cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
             if not cache_file.exists():
                 return []
@@ -1561,6 +1559,7 @@ class Caching:
 
         @staticmethod
         def id_metadata(ids: list[int]) -> dict:
+            """Load each metadata entry from the CachedMetadata table corresponding to the IDs in a given list."""
             if not ids:
                 return {}
             # Fetch metadata for all IDs from CachedMetadata
@@ -1575,6 +1574,7 @@ class Caching:
     class Save:
         @staticmethod
         def search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
+            """Save Search History"""
             try:
                 if not isinstance(items, list):
                     return
@@ -1906,6 +1906,11 @@ class Fetch:
     ################################################################################################################
     # GALLERY ID FETCHING
     ################################################################################################################
+    
+    @staticmethod
+    def queued_galleries() -> list:
+        """Fetch queued galleries from GalleriesQueue table in the database."""
+        return get_queued_galleries()
     
     @staticmethod
     def gallery_ids(

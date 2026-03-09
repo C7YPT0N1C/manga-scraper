@@ -446,7 +446,6 @@ def fetch_gallery_ids_with_fallback(query_type: str, query_value: str, sort_val:
                 try:
                     logger.info("Attempting to use cached results...")
                     cached_metadata = scraperapi.Caching.load(cache_key)
-                    logger.debug(f"[TESTING]: cached_metadata = {cached_metadata}")
                     if cached_metadata:
                         cached_ids = list(cached_metadata.keys())
                         logger.warning(f"Using {len(cached_ids)} galleries from cache")
