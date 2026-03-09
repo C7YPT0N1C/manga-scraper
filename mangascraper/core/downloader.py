@@ -24,6 +24,7 @@ skipped_galleries = []
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
+
 def load_extension(suppess_pre_run_hook: bool = False):
     global active_extension, download_location
     
@@ -199,6 +200,115 @@ def _is_network_share(path: str) -> bool:
         logger.warning(f"Failed to determine if '{path}' is a network share: {e}")
         return False
 
+def estimate_total_download_size(gallery_ids: list) -> tuple:
+    """
+    Estimate total download size for all galleries.
+    Returns (total_estimated_bytes, galleries_list_to_download).
+    
+    If insufficient space, prompts user to download as many as fit.
+    """
+    log(f"Estimating download size for {len(gallery_ids)} galleries...")
+    
+    download_estimated = 0
+    gallery_sizes = []  # List of (gallery_id, estimated_bytes)
+    
+    # Estimate size for each gallery
+    for gallery_id in gallery_ids:
+        try:
+            meta = scraperapi.Fetch.gallery_metadata(gallery_id)
+            if meta and isinstance(meta, dict):
+                estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
+                gallery_sizes.append((gallery_id, estimated_size))
+                download_estimated += estimated_size
+        except Exception as e:
+            logger.debug(f"Failed to estimate size for Gallery {gallery_id}: {e}")
+            # Use a default estimate if we can't fetch metadata
+            default_size = 1024 * 1024 * 16  # ~16 MB default
+            gallery_sizes.append((gallery_id, default_size))
+            download_estimated += default_size
+    
+    download_estimated = download_estimated * 2 # idk just keep this here lmfao
+
+    # Always check available space on the actual download location (network share or not)
+    available_on_target = get_available_disk_space(download_location)
+    available_on_staging = None
+    use_staging = False
+    if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
+        os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
+        available_on_staging = get_available_disk_space(ARCHIVE_TEMP_ROOT)
+        use_staging = True
+    else:
+        available_on_staging = available_on_target  # fallback, not used
+
+    available = available_on_target
+
+    # Add buffer for parallel downloads and temporary overhead
+    avg_gallery_size = download_estimated / max(1, len(gallery_ids))
+    parallel_galleries = min(len(gallery_ids), max(1, orchestrator.threads_galleries))
+    parallel_buffer = avg_gallery_size * parallel_galleries
+    safety_buffer = download_estimated * 0.2
+    required_with_buffer = download_estimated + parallel_buffer + safety_buffer
+    
+    total_estimated = download_estimated + required_with_buffer
+    
+    log(
+        f"Space Usage Estimate:\n"
+        f"-     Total download size: {_format_bytes(total_estimated)}\n"
+        f"-     Available disk space (target): {_format_bytes(available_on_target)}\n"
+        + (f"-     Available disk space (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
+        + f"-     Estimated download size: {_format_bytes(download_estimated)}\n"
+        + f"-     Required with buffer: {_format_bytes(required_with_buffer)}\n"
+    )
+    
+    # If sufficient space on the target, return all galleries
+    if available_on_target < 0 or available_on_target >= required_with_buffer:
+        log("Sufficient space available. Proceeding with download.\n")
+        return download_estimated, gallery_ids
+    
+    # Insufficient space - ask user if they want to download as many as fit
+    logger.warning(
+        f"Insufficient space for all galleries!\n"
+        f"  Total estimated download size: {_format_bytes(total_estimated)}\n"
+        f"  Available (target): {_format_bytes(available_on_target)}\n"
+        + (f"  Available (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
+    )
+
+    # Calculate how many galleries can fit on the target
+    running_total = 0
+    available_for_galleries = max(0, available_on_target - parallel_buffer - safety_buffer)
+    galleries_that_fit = []
+    for gallery_id, size in gallery_sizes:
+        if running_total + size <= available_for_galleries:
+            galleries_that_fit.append(gallery_id)
+            running_total += size
+        else:
+            break
+
+    # If using a staging folder, warn if it may not have enough space for the largest gallery
+    if use_staging and galleries_that_fit:
+        largest_gallery = max([size for _, size in gallery_sizes], default=0)
+        if available_on_staging is not None and available_on_staging < largest_gallery:
+            logger.warning(
+                f"Staging folder ({ARCHIVE_TEMP_ROOT}) may not have enough space for the largest gallery (needs {_format_bytes(largest_gallery)}, has {_format_bytes(available_on_staging)}). "
+                "Will fall back to downloading and zipping directly on the network share for those galleries."
+            )
+    
+    log_clarification()
+    logger.info(
+        f"You can download {len(galleries_that_fit)} out of {len(gallery_ids)} galleries "
+        f"({_format_bytes(running_total)} total, buffered)"
+    )
+    
+    # Prompt user
+    user_input = input(f"\nDownload {len(galleries_that_fit)} galleries that fit? (y/n): ").strip().lower()
+    
+    if user_input == 'y':
+        logger.info(f"Proceeding with {len(galleries_that_fit)} galleries.")
+        return running_total, galleries_that_fit
+    else:
+        logger.info("Download cancelled by user.")
+        return 0, []
+
 def build_gallery_path(meta, iteration: dict = None, base_path: str | None = None):
     """
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
@@ -347,10 +457,9 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
     for _ in concurrent.futures.as_completed(futures):
         pass
 
-####################################################################################################
+#----------------------
 # ARCHIVE CONVERSION
-####################################################################################################
-
+#----------------------
 def finalise_gallery_format(
     gallery_id: int,
     gallery_folder: str,
@@ -440,15 +549,16 @@ def finalise_gallery_format(
         return gallery_folder
 
 ####################################################################################################
-# CORE
+# MAIN
 ####################################################################################################
+
 def process_galleries(batch_ids):
     orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraperapi.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraperdb.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -468,7 +578,7 @@ def process_galleries(batch_ids):
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        scraperapi.mark_gallery_failed(gallery_id)
+                        scraperdb.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -496,7 +606,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraperapi.mark_gallery_skipped(gallery_id)
+                        scraperdb.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -591,7 +701,7 @@ def process_galleries(batch_ids):
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
-                    scraperapi.mark_gallery_completed(gallery_id)
+                    scraperdb.mark_gallery_completed(gallery_id)
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
@@ -620,120 +730,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    scraperapi.mark_gallery_failed(gallery_id)
-
-####################################################################################################
-# MAIN
-####################################################################################################
-
-def estimate_total_download_size(gallery_ids: list) -> tuple:
-    """
-    Estimate total download size for all galleries.
-    Returns (total_estimated_bytes, galleries_list_to_download).
-    
-    If insufficient space, prompts user to download as many as fit.
-    """
-    log(f"Estimating download size for {len(gallery_ids)} galleries...")
-    
-    download_estimated = 0
-    gallery_sizes = []  # List of (gallery_id, estimated_bytes)
-    
-    # Estimate size for each gallery
-    for gallery_id in gallery_ids:
-        try:
-            meta = scraperapi.Fetch.gallery_metadata(gallery_id)
-            if meta and isinstance(meta, dict):
-                estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
-                gallery_sizes.append((gallery_id, estimated_size))
-                download_estimated += estimated_size
-        except Exception as e:
-            logger.debug(f"Failed to estimate size for Gallery {gallery_id}: {e}")
-            # Use a default estimate if we can't fetch metadata
-            default_size = 1024 * 1024 * 16  # ~16 MB default
-            gallery_sizes.append((gallery_id, default_size))
-            download_estimated += default_size
-    
-    download_estimated = download_estimated * 2 # idk just keep this here lmfao
-
-    # Always check available space on the actual download location (network share or not)
-    available_on_target = get_available_disk_space(download_location)
-    available_on_staging = None
-    use_staging = False
-    if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
-        os.makedirs(ARCHIVE_TEMP_ROOT, exist_ok=True)
-        available_on_staging = get_available_disk_space(ARCHIVE_TEMP_ROOT)
-        use_staging = True
-    else:
-        available_on_staging = available_on_target  # fallback, not used
-
-    available = available_on_target
-
-    # Add buffer for parallel downloads and temporary overhead
-    avg_gallery_size = download_estimated / max(1, len(gallery_ids))
-    parallel_galleries = min(len(gallery_ids), max(1, orchestrator.threads_galleries))
-    parallel_buffer = avg_gallery_size * parallel_galleries
-    safety_buffer = download_estimated * 0.2
-    required_with_buffer = download_estimated + parallel_buffer + safety_buffer
-    
-    total_estimated = download_estimated + required_with_buffer
-    
-    log(
-        f"Space Usage Estimate:\n"
-        f"-     Total estimated download size: {_format_bytes(total_estimated)}\n"
-        f"-     Available disk space (target): {_format_bytes(available_on_target)}\n"
-        + (f"-     Available disk space (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
-        + f"-     Estimated download size: {_format_bytes(download_estimated)}\n"
-        + f"-     Required with buffer: {_format_bytes(required_with_buffer)}\n"
-    )
-    
-    # If sufficient space on the target, return all galleries
-    if available_on_target < 0 or available_on_target >= required_with_buffer:
-        log("Sufficient space available. Proceeding with download.\n")
-        return download_estimated, gallery_ids
-    
-    # Insufficient space - ask user if they want to download as many as fit
-    logger.warning(
-        f"Insufficient space for all galleries!\n"
-        f"  Total estimated download size: {_format_bytes(total_estimated)}\n"
-        f"  Available (target): {_format_bytes(available_on_target)}\n"
-        + (f"  Available (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
-    )
-
-    # Calculate how many galleries can fit on the target
-    running_total = 0
-    available_for_galleries = max(0, available_on_target - parallel_buffer - safety_buffer)
-    galleries_that_fit = []
-    for gallery_id, size in gallery_sizes:
-        if running_total + size <= available_for_galleries:
-            galleries_that_fit.append(gallery_id)
-            running_total += size
-        else:
-            break
-
-    # If using a staging folder, warn if it may not have enough space for the largest gallery
-    if use_staging and galleries_that_fit:
-        largest_gallery = max([size for _, size in gallery_sizes], default=0)
-        if available_on_staging is not None and available_on_staging < largest_gallery:
-            logger.warning(
-                f"Staging folder ({ARCHIVE_TEMP_ROOT}) may not have enough space for the largest gallery (needs {_format_bytes(largest_gallery)}, has {_format_bytes(available_on_staging)}). "
-                "Will fall back to downloading and zipping directly on the network share for those galleries."
-            )
-    
-    log_clarification()
-    logger.info(
-        f"You can download {len(galleries_that_fit)} out of {len(gallery_ids)} galleries "
-        f"({_format_bytes(running_total)} total, buffered)"
-    )
-    
-    # Prompt user
-    user_input = input(f"\nDownload {len(galleries_that_fit)} galleries that fit? (y/n): ").strip().lower()
-    
-    if user_input == 'y':
-        logger.info(f"Proceeding with {len(galleries_that_fit)} galleries.")
-        return running_total, galleries_that_fit
-    else:
-        logger.info("Download cancelled by user.")
-        return 0, []
+                    scraperdb.mark_gallery_failed(gallery_id)
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
@@ -897,8 +894,8 @@ def start_downloader(gallery_list=None):
         log(
             f"Space Usage Summary:\n"
             f"-     Galleries processed: {space_monitor['galleries_processed']}\n"
-            f"-     Total estimated: {_format_bytes(space_monitor['total_estimated_bytes'])}\n"
-            f"-     Total actual: {_format_bytes(space_monitor['total_actual_bytes'])}\n"
+            f"-     Total download size: {_format_bytes(space_monitor['total_actual_bytes'])}\n"
+            f"-     Estimated download size: {_format_bytes(space_monitor['total_estimated_bytes'])}\n"
             f"-     Average per gallery: {_format_bytes(space_monitor['total_actual_bytes'] // space_monitor['galleries_processed'])}\n"
         )
     
