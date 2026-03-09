@@ -43,7 +43,7 @@ def init_db():
 
 def load_cache_metadata_all(cutoff: float | None = None) -> dict:
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         if cutoff is not None:
             cursor.execute(
@@ -69,7 +69,7 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
 
 def load_cache_metadata_entry(gallery_id: str) -> dict | None:
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
@@ -96,7 +96,7 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         entry["raw_metadata"] = raw_metadata
     entry["timestamp"] = timestamp
 
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
@@ -116,7 +116,7 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
 
 def prune_cache_metadata(cutoff: float):
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM CachedMetadata WHERE timestamp IS NULL OR timestamp < ?",
@@ -130,7 +130,7 @@ def prune_cache_metadata(cutoff: float):
 
 def load_cache_references() -> dict:
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
@@ -175,7 +175,7 @@ def upsert_cache_reference(entry_key: str, entry: dict):
     if not isinstance(ids, list):
         ids = [] if ids is None else [ids]
     ids_json = json.dumps(ids)
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
@@ -207,14 +207,14 @@ def upsert_cache_reference(entry_key: str, entry: dict):
 
 def delete_cache_reference(entry_key: str):
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
         conn.commit()
 
 def prune_cache_references(now: float):
     scraperdb.init_db()
-    with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+    with scraperdb.lock, scraperdb.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
@@ -1377,7 +1377,7 @@ class Fetch:
     def queued_galleries() -> list:
         """Fetch queued galleries from GalleriesQueue table in the database."""
         scraperdb.init_db()
-        with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+        with scraperdb.lock, scraperdb.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM GalleriesQueue")
             rows = cursor.fetchall()
@@ -2106,7 +2106,7 @@ class Caching:
         def broken_symbols() -> dict[str, str]:
             """Load all detected broken symbols as { symbol: '_' }."""
             scraperdb.init_db()
-            with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+            with scraperdb.lock, scraperdb.dbconnect() as conn:
                 c = conn.cursor()
                 c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
                 rows = c.fetchall()
@@ -2194,7 +2194,7 @@ class Caching:
                 return
             scraperdb.init_db()
             now = datetime.now(timezone.utc).isoformat()
-            with scraperdb.scraperdb.lock, scraperdb.scraperdb.dbconnect() as conn:
+            with scraperdb.lock, scraperdb.dbconnect() as conn:
                 c = conn.cursor()
                 for symbol in symbol_map.keys():
                     c.execute("""
