@@ -479,6 +479,7 @@ def mark_gallery_completed(gallery_id):
 ####################################################################################################################
 
 def set_queued_galleries(ids):
+    """Write a list of Gallery IDs into the database gallery queue"""
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
@@ -491,6 +492,7 @@ def set_queued_galleries(ids):
         conn.commit()
 
 def get_gallery_status(gallery_id):
+    """Get the status of a Gallery via its ID"""
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
@@ -499,6 +501,14 @@ def get_gallery_status(gallery_id):
         return row[0] if row else None
 
 def list_galleries(status=None):
+    """
+    List all Galleries that match a certain status.
+    Statues:
+    -   started
+    -   skipped
+    -   completed
+    """
+    
     init_db()
     with lock, _connect() as conn:
         cursor = conn.cursor()
@@ -560,6 +570,7 @@ def load_cache_metadata_all(cutoff: float | None = None) -> dict:
     return result
 
 def load_cache_metadata_for_ids(ids: list[int], cutoff: float | None = None) -> dict:
+    """Loads and returns the Cached Metadata corresponding to each ID in a given list"""
     if not ids:
         return {}
     init_db()

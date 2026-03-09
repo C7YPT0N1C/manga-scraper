@@ -11,14 +11,9 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core import database as scraperdb
 
-################################################################################################################
+####################################################################################################################
 # GLOBAL VARIABLES
-################################################################################################################
-
-# Cache TTL: 3 hours (runtime-configured)
-TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
-SEARCH_HISTORY_FILENAME = "(search_history).json"
-SEARCH_HISTORY_MAX = 10
+####################################################################################################################
 
 possible_broken_symbols_lock = threading.Lock()
 
@@ -33,204 +28,9 @@ _SYMBOL_TRANSLATION_TABLE = None
 session = None
 session_lock = threading.Lock()
 
-################################################################################################################
+####################################################################################################################
 # CACHING HELPERS
-################################################################################################################
-
-def load_cache_metadata_all(cutoff: float | None = None) -> dict:
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        if cutoff is not None:
-            cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
-                "FROM CachedMetadata WHERE timestamp >= ?",
-                (cutoff,),
-            )
-        else:
-            cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
-            )
-        rows = cursor.fetchall()
-    result = {}
-    for gallery_id, timestamp, clean_json, raw_json in rows:
-        clean = json.loads(clean_json) if clean_json else {}
-        raw = json.loads(raw_json) if raw_json else {}
-        result[str(gallery_id)] = {
-            "timestamp": timestamp,
-            "clean_metadata": clean,
-            "raw_metadata": raw,
-        }
-    return result
-
-def load_cache_metadata_entry(gallery_id: str) -> dict | None:
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
-            (str(gallery_id),),
-        )
-        row = cursor.fetchone()
-    if not row:
-        return None
-    timestamp, clean_json, raw_json = row
-    clean = json.loads(clean_json) if clean_json else {}
-    raw = json.loads(raw_json) if raw_json else {}
-    return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
-
-def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
-    scraperdb.init_db()
-    entry = load_cache_metadata_entry(gallery_id) or {
-        "timestamp": None,
-        "clean_metadata": {},
-        "raw_metadata": {},
-    }
-    if isinstance(clean_metadata, dict):
-        entry["clean_metadata"].update(clean_metadata)
-    if raw_metadata is not None:
-        entry["raw_metadata"] = raw_metadata
-    entry["timestamp"] = timestamp
-
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
-            "VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(gallery_id) DO UPDATE SET "
-            "timestamp=excluded.timestamp, "
-            "clean_metadata=excluded.clean_metadata, "
-            "raw_metadata=excluded.raw_metadata",
-            (
-                str(gallery_id),
-                entry["timestamp"],
-                json.dumps(entry["clean_metadata"], ensure_ascii=False),
-                json.dumps(entry["raw_metadata"], ensure_ascii=False),
-            ),
-        )
-        conn.commit()
-
-def prune_cache_metadata(cutoff: float):
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM CachedMetadata WHERE timestamp IS NULL OR timestamp < ?",
-            (cutoff,),
-        )
-        conn.commit()
-
-# ===============================
-# CACHE REFERENCES
-# ===============================
-
-def load_cache_references() -> dict:
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids "
-            "FROM CacheReferences"
-        )
-        rows = cursor.fetchall()
-    result = {}
-    for row in rows:
-        (
-            entry_key,
-            cache_type,
-            cache_key,
-            path,
-            size,
-            last_read,
-            last_write,
-            ttl,
-            expires_at,
-            ids_json,
-        ) = row
-        entry = {
-            "type": cache_type,
-            "key": cache_key,
-            "path": path,
-            "size": size,
-            "last_read": last_read,
-            "last_write": last_write,
-            "ttl": ttl,
-            "expires_at": expires_at,
-        }
-        if ids_json:
-            try:
-                entry["ids"] = json.loads(ids_json)
-            except Exception:
-                entry["ids"] = []
-        result[str(entry_key)] = entry
-    return result
-
-def upsert_cache_reference(entry_key: str, entry: dict):
-    scraperdb.init_db()
-    ids = entry.get("ids")
-    if not isinstance(ids, list):
-        ids = [] if ids is None else [ids]
-    ids_json = json.dumps(ids)
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, path, size, last_read, last_write, ttl, expires_at, ids) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(entry_key) DO UPDATE SET "
-            "cache_type=excluded.cache_type, "
-            "cache_key=excluded.cache_key, "
-            "path=excluded.path, "
-            "size=excluded.size, "
-            "last_read=excluded.last_read, "
-            "last_write=excluded.last_write, "
-            "ttl=excluded.ttl, "
-            "expires_at=excluded.expires_at, "
-            "ids=excluded.ids",
-            (
-                str(entry_key),
-                entry.get("type"),
-                entry.get("key"),
-                entry.get("path"),
-                entry.get("size"),
-                entry.get("last_read"),
-                entry.get("last_write"),
-                entry.get("ttl"),
-                entry.get("expires_at"),
-                ids_json,
-            ),
-        )
-        conn.commit()
-
-def delete_cache_reference(entry_key: str):
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
-        conn.commit()
-
-def prune_cache_references(now: float):
-    scraperdb.init_db()
-    with scraperdb.lock, scraperdb.dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
-            (now,),
-        )
-        conn.commit()
-
-def get_cache_dir() -> Path:
-    """
-    Get or create cache directory for metadata.
-    Uses /opt/manga-scraper/mangascraper/core/data/ if available,
-    otherwise uses package-relative path as fallback.
-    """
-    primary_cache = Path("/opt/manga-scraper/mangascraper/core/data")
-    if primary_cache.parent.exists():
-        primary_cache.mkdir(parents=True, exist_ok=True)
-        return primary_cache
-    fallback_cache = Path(__file__).parent / "data"
-    fallback_cache.mkdir(parents=True, exist_ok=True)
-    return fallback_cache
+####################################################################################################################
 
 def _build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
     if not meta or not isinstance(meta, dict):
@@ -292,73 +92,6 @@ def _build_master_cache_entry(
     if ids is not None:
         entry["ids"] = ids
     return entry
-
-def _load_master_cache() -> dict:
-    cutoff = time.time() - TTL
-    try:
-        # Prune metadata entries in the master cache by their own TTL
-        prune_cache_metadata(cutoff)
-        
-        # Prune references to cache files by their own TTL
-        prune_cache_references(time.time())
-        
-        metadata_block = load_cache_metadata_all(cutoff)
-        
-        # Remove expired entries from metadata_block (in-memory prune)
-        if isinstance(metadata_block, dict):
-            expired_keys = []
-            for gid, entry in metadata_block.items():
-                if not isinstance(entry, dict):
-                    continue
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
-                    expired_keys.append(gid)
-            for gid in expired_keys:
-                metadata_block.pop(gid, None)
-        references = load_cache_references()
-        return {"references": references, "metadata": metadata_block}
-    except Exception:
-        return {"references": {}, "metadata": {}}
-
-def _save_master_cache(data: dict):
-    return
-
-def _update_master_cache(entry_key: str, entry: dict):
-    upsert_cache_reference(entry_key, entry)
-
-def _remove_master_cache_entry(entry_key: str):
-    delete_cache_reference(entry_key)
-    
-def prune_all_caches():
-    """Centralised cache pruning for metadata, references, and files."""
-    now = time.time()
-    # Prune metadata entries in the master cache by their own TTL
-    prune_cache_metadata(now - TTL)
-    # Prune references to cache files by their own TTL
-    prune_cache_references(now)
-
-    cache_dir = get_cache_dir()
-    protected = {SEARCH_HISTORY_FILENAME}
-    for cache_file in cache_dir.glob("*.json"):
-        if cache_file.name == "(master_cache).json":
-            try:
-                cache_file.unlink()
-            except Exception:
-                pass
-            continue
-        if cache_file.name in protected:
-            continue
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            timestamp = data.get("timestamp") or 0
-            if (now - timestamp) >= TTL:
-                # Remove master cache reference if present
-                cache_key = cache_file.stem
-                _remove_master_cache_entry(f"metadata:{cache_key}")
-                cache_file.unlink()
-        except Exception:
-            continue
 
 ####################################################################################################################
 # GALLERY UPDATES
@@ -865,7 +598,7 @@ def build_gallery_metadata_summary(meta, referrer: str):
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
-        upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
+        scraperdb.upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
     except Exception as e:
         logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
@@ -1893,16 +1626,16 @@ class Fetch:
 class Caching:
     @staticmethod
     def ensure():
-        prune_all_caches()
-        cache_dir = get_cache_dir()
-        cache_file = cache_dir / SEARCH_HISTORY_FILENAME
+        scraperdb.prune_all_caches()
+        cache_dir = scraperdb.get_cache_dir()
+        cache_file = cache_dir / scraperdb.SEARCH_HISTORY_FILENAME
         if cache_file.exists():
             try:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 items = data.get("items", []) if isinstance(data, dict) else []
-                if isinstance(items, list) and len(items) > SEARCH_HISTORY_MAX:
-                    data["items"] = items[-SEARCH_HISTORY_MAX:]
+                if isinstance(items, list) and len(items) > scraperdb.SEARCH_HISTORY_MAX:
+                    data["items"] = items[-scraperdb.SEARCH_HISTORY_MAX:]
                     data["saved_at"] = time.time()
                     with open(cache_file, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1920,7 +1653,7 @@ class Caching:
     def load(cache_key: str) -> dict:
         """Load the CacheReferences entry for this cache_key"""
         entry_key = f"metadata:{cache_key}"
-        references = load_cache_references()
+        references = scraperdb.load_cache_references()
         ref_entry = references.get(entry_key)
         if not ref_entry or not isinstance(ref_entry, dict):
             return {}
@@ -1954,8 +1687,8 @@ class Caching:
             # Write all metadata to CachedMetadata table
             now = time.time()
             for gid, entry in safe_metadata.items():
-                upsert_cache_metadata(gid, now, clean_metadata=entry)
-            prune_cache_references(now)
+                scraperdb.upsert_cache_metadata(gid, now, clean_metadata=entry)
+            scraperdb.prune_cache_references(now)
             
             # Upsert CacheReferences entry for this search
             entry_key = f"metadata:{cache_key}"
@@ -1966,11 +1699,11 @@ class Caching:
                 "size": None,
                 "last_read": None,
                 "last_write": timestamp,
-                "ttl": TTL,
-                "expires_at": timestamp + TTL if TTL else None,
+                "ttl": scraperdb.TTL,
+                "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
                 "ids": ids,
             }
-            upsert_cache_reference(entry_key, cache_reference_entry)
+            scraperdb.upsert_cache_reference(entry_key, cache_reference_entry)
         except Exception:
             pass
         
@@ -1978,12 +1711,12 @@ class Caching:
     def clear(cache_key: str = None):
         """Clear the cache"""
         try:
-            cache_dir = get_cache_dir()
+            cache_dir = scraperdb.get_cache_dir()
             if cache_key:
                 cache_file = cache_dir / f"{cache_key}.json"
                 if cache_file.exists():
                     cache_file.unlink()
-                _remove_master_cache_entry(f"metadata:{cache_key}")
+                scraperdb._remove_master_cache_entry(f"metadata:{cache_key}")
             else:
                 for cache_file in cache_dir.glob("*.json"):
                     cache_file.unlink()
@@ -1996,9 +1729,9 @@ class Caching:
     
     class Load:
         @staticmethod
-        def search_history(max_items: int = SEARCH_HISTORY_MAX) -> list[dict]:
+        def search_history(max_items: int = scraperdb.SEARCH_HISTORY_MAX) -> list[dict]:
             """Load Search History"""
-            cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
+            cache_file = scraperdb.get_cache_dir() / scraperdb.SEARCH_HISTORY_FILENAME
             if not cache_file.exists():
                 return []
             try:
@@ -2024,12 +1757,12 @@ class Caching:
                             'end_page': item.get('end_page'),
                             'archive_mode': bool(item.get('archive_mode', False)),
                         })
-                    capped = SEARCH_HISTORY_MAX
+                    capped = scraperdb.SEARCH_HISTORY_MAX
                     if max_items is not None:
-                        capped = min(int(max_items), SEARCH_HISTORY_MAX)
+                        capped = min(int(max_items), scraperdb.SEARCH_HISTORY_MAX)
                     if capped and len(cleaned) > capped:
                         cleaned = cleaned[-capped:]
-                    _update_master_cache(
+                    scraperdb._update_master_cache(
                         "search_history",
                         _build_master_cache_entry("search_history", "search_history", cache_file, None, last_read=time.time()),
                     )
@@ -2039,7 +1772,7 @@ class Caching:
         
         @staticmethod
         def general_metadata() -> dict:
-            data = _load_master_cache()
+            data = scraperdb._load_master_cache()
             metadata = data.get("metadata", {})
             if not isinstance(metadata, dict):
                 return {}
@@ -2048,7 +1781,7 @@ class Caching:
                 if not isinstance(entry, dict):
                     continue
                 timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
+                if (time.time() - timestamp) >= scraperdb.TTL:
                     continue
                 clean = entry.get("clean_metadata")
                 if isinstance(clean, dict):
@@ -2057,7 +1790,7 @@ class Caching:
 
         @staticmethod
         def raw_metadata() -> dict:
-            data = _load_master_cache()
+            data = scraperdb._load_master_cache()
             raw_block = data.get("metadata", {})
             if not isinstance(raw_block, dict):
                 return {}
@@ -2066,7 +1799,7 @@ class Caching:
                 if not isinstance(entry, dict):
                     continue
                 timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
+                if (time.time() - timestamp) >= scraperdb.TTL:
                     continue
                 if "raw_metadata" in entry:
                     metadata[gid] = entry.get("raw_metadata")
@@ -2076,7 +1809,7 @@ class Caching:
         def all_metadata() -> dict:
             """Load all cached metadata entries from the CachedMetadata table."""
             # Just return all clean_metadata from CachedMetadata
-            all_entries = load_cache_metadata_all()
+            all_entries = scraperdb.all_cached_metadata()
             merged = {}
             for gid, entry in all_entries.items():
                 clean = entry.get("clean_metadata")
@@ -2110,7 +1843,7 @@ class Caching:
 
     class Save:
         @staticmethod
-        def search_history(items: list[dict], max_items: int = SEARCH_HISTORY_MAX):
+        def search_history(items: list[dict], max_items: int = scraperdb.SEARCH_HISTORY_MAX):
             """Save Search History"""
             try:
                 if not isinstance(items, list):
@@ -2132,12 +1865,12 @@ class Caching:
                         'end_page': item.get('end_page'),
                         'archive_mode': bool(item.get('archive_mode', False)),
                     })
-                capped = SEARCH_HISTORY_MAX
+                capped = scraperdb.SEARCH_HISTORY_MAX
                 if max_items is not None:
-                    capped = min(int(max_items), SEARCH_HISTORY_MAX)
+                    capped = min(int(max_items), scraperdb.SEARCH_HISTORY_MAX)
                 if capped and len(safe_items) > capped:
                     safe_items = safe_items[-capped:]
-                cache_file = get_cache_dir() / SEARCH_HISTORY_FILENAME
+                cache_file = scraperdb.get_cache_dir() / scraperdb.SEARCH_HISTORY_FILENAME
                 saved_at = time.time()
                 data = {
                     'saved_at': saved_at,
@@ -2145,7 +1878,7 @@ class Caching:
                 }
                 with open(cache_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                _update_master_cache(
+                scraperdb._update_master_cache(
                     "search_history",
                     _build_master_cache_entry("search_history", "search_history", cache_file, None, last_write=saved_at),
                 )
@@ -2156,13 +1889,13 @@ class Caching:
         def general_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = _load_master_cache()
+            data = scraperdb._load_master_cache()
             safe_metadata = {str(k): v for k, v in metadata.items()}
             now = time.time()
             for gid, entry in safe_metadata.items():
                 if not isinstance(entry, dict):
                     continue
-                upsert_cache_metadata(
+                scraperdb.upsert_cache_metadata(
                     gid,
                     now,
                     clean_metadata=entry,
@@ -2173,10 +1906,10 @@ class Caching:
         def raw_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = _load_master_cache()
+            data = scraperdb._load_master_cache()
             now = time.time()
             for gid, entry in metadata.items():
-                upsert_cache_metadata(
+                scraperdb.upsert_cache_metadata(
                     str(gid),
                     now,
                     clean_metadata=None,
