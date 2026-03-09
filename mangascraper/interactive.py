@@ -10,6 +10,7 @@ from collections import deque
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.extensions.extension_manager import get_extension_download_path
 
@@ -1256,7 +1257,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
-        scraperapi.set_queued_galleries([])
+        scraperdb.set_queued_galleries([])
 
     selected_ids = scraperapi.Fetch.queued_galleries()
     if initial_ids:
@@ -1274,7 +1275,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         nonlocal selected_ids
         cached_ids = scraperapi.Fetch.queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
-        scraperapi.set_queued_galleries(sorted(set(merged)) if merged else [])
+        scraperdb.set_queued_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
 
     if selected_ids:
