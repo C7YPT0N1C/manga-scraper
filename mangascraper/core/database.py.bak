@@ -115,7 +115,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS CachedMetadata (
-            gallery_id TEXT PRIMARY KEY,
+            gallery_id INTEGER PRIMARY KEY,
             timestamp REAL,
             raw_metadata TEXT,
             clean_metadata TEXT
@@ -130,6 +130,7 @@ def init_db():
             expires_at REAL
         );
         """)
+
         conn.commit()
 
 ################################################################################################################
@@ -170,6 +171,11 @@ def _safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+def _safe_text(value, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value)
 
 def set_queued_galleries(ids):
     """Write a list of Gallery IDs into the database gallery queue"""
@@ -292,11 +298,11 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
         if ids is not None:
             if not ids:
                 return {}
-            ids_str = [str(gid) for gid in _normalise_integer_list(ids)]
-            if not ids_str:
+            ids_list = _normalise_integer_list(ids)
+            if not ids_list:
                 return {}
-            placeholders = ",".join("?" for _ in ids_str)
-            params = list(ids_str)
+            placeholders = ",".join("?" for _ in ids_list)
+            params = list(ids_list)
             query = (
                 "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
                 "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
@@ -325,7 +331,7 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 return None
             cursor.execute(
                 "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
-                (str(gid),),
+                (gid,),
             )
             row = cursor.fetchone()
             if not row:
@@ -392,6 +398,7 @@ def prune_all_caches():
 
 def split_cache_key(cache_key):
     """Splits a cache_key into cache_type and cache_target. E.g., "artist:abc" → ("artist", "abc")"""
+    cache_key = _safe_text(cache_key)
     if ":" in cache_key:
         cache_type, cache_target = cache_key.split(":", 1)
     else:
@@ -412,7 +419,7 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
     if isinstance(clean_metadata, dict):
         entry["clean_metadata"].update(clean_metadata)
     if raw_metadata is not None:
-        entry["raw_metadata"] = raw_metadata
+        entry["raw_metadata"] = _safe_json_dict(raw_metadata)
     entry["timestamp"] = _safe_float(timestamp)
 
     with lock, dbconnect() as conn:
@@ -425,7 +432,7 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
             "clean_metadata=excluded.clean_metadata, "
             "raw_metadata=excluded.raw_metadata",
             (
-                str(gid),
+                gid,
                 entry["timestamp"],
                 json.dumps(entry["clean_metadata"], ensure_ascii=False),
                 json.dumps(entry["raw_metadata"], ensure_ascii=False),
@@ -435,11 +442,13 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
 
 def upsert_cache_reference(cache_key: str, entry: dict):
     init_db()
-    cache_key = str(cache_key)
+    cache_key = _safe_text(cache_key)
     ids = _normalise_integer_list(entry.get("ids"))
-    cache_type = str(entry.get("cache_type") or "")
-    cache_target = str(entry.get("cache_target") or "")
-    ttl = _safe_float(entry.get("ttl"))
+    cache_type = _safe_text(entry.get("cache_type"), "")
+    cache_target = _safe_text(entry.get("cache_target"), "")
+    ttl = _normalise_integer(entry.get("ttl"))
+    if ttl is None:
+        ttl = 0
     expires_at = _safe_float(entry.get("expires_at"))
     ids_json = json.dumps(ids)
     with lock, dbconnect() as conn:
@@ -470,6 +479,11 @@ def upsert_cache_reference(cache_key: str, entry: dict):
 
 def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
     init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
+    download_path = _safe_text(download_path, "")
+    extension_used = _safe_text(extension_used, "")
     now = datetime.now(timezone.utc).isoformat()
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
@@ -505,6 +519,9 @@ def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
 
 def mark_gallery_skipped(gallery_id):
     init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
     now = datetime.now(timezone.utc).isoformat()
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
@@ -517,6 +534,9 @@ def mark_gallery_skipped(gallery_id):
 
 def mark_gallery_failed(gallery_id):
     init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
     now = datetime.now(timezone.utc).isoformat()
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
@@ -529,6 +549,9 @@ def mark_gallery_failed(gallery_id):
 
 def mark_gallery_completed(gallery_id):
     init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
     now = datetime.now(timezone.utc).isoformat()
     # Load metadata for this gallery to compute paths and extension
     cache = read_cached_metadata_entry(ids=[gallery_id])
@@ -566,7 +589,7 @@ def mark_gallery_completed(gallery_id):
         try:
             from mangascraper.extensions.extension_manager import calculate_extension_download_path
             ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
-            base_ext_path = calculate_extension_download_path(str(ext_name).lower())
+            base_ext_path = calculate_extension_download_path(ext_name)
         except Exception:
             base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
         if not ext_download_path:
@@ -636,9 +659,9 @@ def mark_gallery_completed(gallery_id):
         #logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
         
         meta = entry.get("clean_metadata") or {}
-        raw_title = meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}"
-        clean_title = meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}"
-        num_pages = meta.get("num_pages") or meta.get("pages") or 0
+        raw_title = _safe_text(meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}")
+        clean_title = _safe_text(meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}")
+        num_pages = _normalise_integer(meta.get("num_pages") or meta.get("pages") or 0) or 0
         
         # Creator Names
         creator_names = []
@@ -662,12 +685,12 @@ def mark_gallery_completed(gallery_id):
         if isinstance(language_names, str):
             language_names = [language_names]
         
-        status = meta.get("status")
-        started_at = meta.get("started_at")
-        completed_at = meta.get("completed_at")
-        download_path = meta.get("download_path")
-        cover_path = meta.get("cover_path")
-        extension_used = meta.get("extension_used")
+        status = _safe_text(meta.get("status"), "")
+        started_at = _safe_text(meta.get("started_at"), "")
+        completed_at = _safe_text(meta.get("completed_at"), "")
+        download_path = _safe_text(meta.get("download_path"), "")
+        cover_path = _safe_text(meta.get("cover_path"), "")
+        extension_used = _safe_text(meta.get("extension_used"), "")
 
         #logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
 
@@ -735,11 +758,11 @@ def mark_gallery_completed(gallery_id):
                     json.dumps(creator_ids),
                     json.dumps(language_ids),
                     json.dumps(tag_ids),
-                    int(gid)
+                    gid
                 )
             )
-            cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (int(gid), json.dumps(tag_ids)))
-            cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (int(gid), json.dumps(language_ids)))
+            cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
+            cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gid, json.dumps(language_ids)))
 
         for cname, cid in creator_id_map.items():
             cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))

@@ -2,10 +2,8 @@
 # mangascraper/dashboard/routes/database_routes.py
 
 import os, time, random
-
 from flask import Blueprint, jsonify, request
 
-from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 
 db_bp = Blueprint("database", __name__)
@@ -13,7 +11,7 @@ db_bp = Blueprint("database", __name__)
 @db_bp.route("/list", methods=["GET"])
 def list_all():
     status = request.args.get("status")
-    galleries = scraperdb.list_galleries(status=status)
+    galleries = scraperapi.list_galleries(status=status)
     return jsonify({"galleries": galleries})
 
 @db_bp.route("/get/<int:gallery_id>", methods=["GET"])

@@ -698,9 +698,10 @@ def get_extension_manifest_info(extension_name: str) -> dict | None:
     Returns:
         dict: The extension's manifest entry, or None if not found
     """
+    extension_name = str(extension_name or "").lower()
     manifest = load_local_manifest()
     for ext in manifest.get("extensions", []):
-        if ext.get("name") == extension_name.lower():
+        if ext.get("name") == extension_name:
             return ext
     return None
 
@@ -725,6 +726,7 @@ def calculate_extension_download_path(extension_name: str) -> str:
         DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
     """
 
+    extension_name = str(extension_name or "").lower()
     orchestrator.refresh_globals()
     override_download_path = getattr(orchestrator, "extension_download_path", None)
     default_path = DEFAULT_EXTENSION_DOWNLOAD_PATH

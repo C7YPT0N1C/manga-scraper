@@ -559,7 +559,7 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraperdb.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraperapi.mark_gallery_started(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -579,7 +579,7 @@ def process_galleries(batch_ids):
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        scraperdb.mark_gallery_failed(gallery_id)
+                        scraperapi.mark_gallery_failed(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -611,7 +611,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraperdb.mark_gallery_skipped(gallery_id)
+                        scraperapi.mark_gallery_skipped(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -706,7 +706,7 @@ def process_galleries(batch_ids):
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
-                    scraperdb.mark_gallery_completed(gallery_id)
+                    scraperapi.mark_gallery_completed(gallery_id)
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
@@ -735,7 +735,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    scraperdb.mark_gallery_failed(gallery_id)
+                    scraperapi.mark_gallery_failed(gallery_id)
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.

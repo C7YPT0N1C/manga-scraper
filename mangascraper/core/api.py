@@ -10,13 +10,21 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraperdb
 
 ####################################################################################################################
 # GLOBAL VARIABLES
 ####################################################################################################################
 
+# Locks
+lock = threading.Lock()
+_thread_local = threading.local()
 possible_broken_symbols_lock = threading.Lock()
+
+DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core")
+DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
+
+# Cache TTL: 3 hours (runtime-configured)
+TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
 
 # Pre-compile regex patterns for title cleaning (avoid recompilation on every call)
 _BRACKET_PATTERN = re.compile(r"(\[.*?\]|\{.*?\})")
@@ -28,6 +36,813 @@ _SYMBOL_TRANSLATION_TABLE = None
 
 session = None
 session_lock = threading.Lock()
+
+####################################################################################################################
+# DB INITIALISATION
+####################################################################################################################
+
+def dbconnect():
+    conn = getattr(_thread_local, "connection", None)
+    if conn is None:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("PRAGMA foreign_keys = ON")
+        _thread_local.connection = conn
+    return conn
+
+def close_connection():
+    conn = getattr(_thread_local, "connection", None)
+    if conn is not None:
+        conn.close()
+        _thread_local.connection = None
+
+atexit.register(close_connection)
+
+def init_db():
+    orchestrator.refresh_globals()
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with lock, dbconnect() as conn:
+        c = conn.cursor()
+        c.executescript(f"""
+        CREATE TABLE IF NOT EXISTS GalleriesQueue (
+            id INTEGER PRIMARY KEY
+        );
+        CREATE TABLE IF NOT EXISTS Creators (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            display_name TEXT,
+            creator_type TEXT,
+            first_seen TEXT,
+            last_updated TEXT,
+            total_galleries INTEGER,
+            most_popular_tags TEXT,
+            notes TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS Galleries (
+            id INTEGER PRIMARY KEY,
+            raw_title TEXT,
+            clean_title TEXT,
+            num_pages INTEGER,
+            creator_ids TEXT, -- JSON array of creator ids
+            language_ids TEXT, -- JSON array of language ids
+            tag_ids TEXT, -- JSON array of tag ids
+            status TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            extension_used TEXT,
+            download_path TEXT,
+            cover_path TEXT,
+            favourite INTEGER DEFAULT 0,
+            rating REAL
+        );
+
+        CREATE TABLE IF NOT EXISTS GalleryTags (
+            gallery_id INTEGER PRIMARY KEY,
+            tag_ids TEXT,
+            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS GalleryLanguages (
+            gallery_id INTEGER PRIMARY KEY,
+            language_ids TEXT,
+            FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS Tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            count INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS Languages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            count INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS BrokenSymbols (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT UNIQUE,
+            date_detected TEXT,
+            fixed INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS CachedMetadata (
+            gallery_id INTEGER PRIMARY KEY,
+            timestamp REAL,
+            raw_metadata TEXT,
+            clean_metadata TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS CacheReferences (
+            cache_key TEXT PRIMARY KEY,
+            cache_type TEXT,
+            cache_target TEXT,
+            ids TEXT,
+            ttl INTEGER,
+            expires_at REAL
+        );
+        """)
+
+        conn.commit()
+
+################################################################################################################
+# DATABASE HELPERS
+################################################################################################################
+
+def _normalise_integer(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+def _normalise_integer_list(values) -> list[int]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        values = [values]
+    normalised = []
+    for value in values:
+        gid = _normalise_integer(value)
+        if gid is not None:
+            normalised.append(gid)
+    return normalised
+
+def _safe_json_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            loaded = json.loads(value)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def _safe_text(value, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value)
+
+def _safe_text_list(values) -> list[str]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        values = [values]
+    result = []
+    for value in values:
+        text = _safe_text(value).strip()
+        if text:
+            result.append(text)
+    return result
+
+def set_queued_galleries(ids):
+    """Write a list of Gallery IDs into the database gallery queue"""
+    init_db()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM GalleriesQueue")
+        for gid in set(ids or []):
+            try:
+                cursor.execute("INSERT INTO GalleriesQueue (id) VALUES (?)", (int(gid),))
+            except Exception:
+                continue
+        conn.commit()
+
+def list_galleries(status=None):
+    """
+    List all Galleries that match a certain status.
+    
+    Statues:
+    -   started
+    -   skipped
+    -   completed
+    """
+    
+    init_db()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        if status:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries WHERE status=?", (status,))
+        else:
+            cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries")
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            gid = _normalise_integer(row[0])
+            if gid is None:
+                continue
+            result.append((gid, _safe_text(row[1], ""), _safe_text(row[2], ""), _safe_text(row[3], "")))
+        return result
+
+####################################################################################################################
+# CACHING HELPERS
+####################################################################################################################
+
+def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cutoff: float = None, ids: list = None) -> dict | None:
+    """
+    Loads and returns metadata from CachedMetadata or entries from CacheReferences.
+    - If ids is given (list of gallery IDs), returns metadata for those galleries as a dict.
+    - If gallery_id is given, returns metadata for that gallery (or None if not found).
+    - If cutoff is given, returns all metadata entries newer than cutoff as a dict keyed by gallery ID.
+    - If cache_key is given, returns the CacheReferences entry for that key (or None if not found).
+    - If no parameter is given, returns all entries in CacheReferences as a dict.
+    """
+    init_db()
+
+    # CacheReferences logic
+    if cache_key is not None or (gallery_id is None and cutoff is None and ids is None):
+        with lock, dbconnect() as conn:
+            cursor = conn.cursor()
+            if cache_key is not None:
+                cursor.execute(
+                    "SELECT cache_key, cache_type, cache_target, ids, ttl, expires_at FROM CacheReferences WHERE cache_key = ?",
+                    (str(cache_key),),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                (
+                    cache_key_val,
+                    cache_type,
+                    cache_target,
+                    ids_json,
+                    ttl,
+                    expires_at,
+                ) = row
+                parsed_ids = []
+                if ids_json:
+                    try:
+                        parsed_ids = _normalise_integer_list(json.loads(ids_json))
+                    except Exception:
+                        parsed_ids = []
+                entry = {
+                    "cache_type": str(cache_type or ""),
+                    "cache_key": str(cache_key_val),
+                    "cache_target": str(cache_target or ""),
+                    "ids": parsed_ids,
+                    "ttl": _safe_float(ttl),
+                    "expires_at": _safe_float(expires_at),
+                }
+                return entry
+            else:
+                # Return all CacheReferences entries
+                cursor.execute(
+                    "SELECT cache_key, cache_type, cache_target, ids, ttl, expires_at FROM CacheReferences"
+                )
+                rows = cursor.fetchall()
+                result = {}
+                for row in rows:
+                    (
+                        cache_key_val,
+                        cache_type,
+                        cache_target,
+                        ids_json,
+                        ttl,
+                        expires_at,
+                    ) = row
+                    parsed_ids = []
+                    if ids_json:
+                        try:
+                            parsed_ids = _normalise_integer_list(json.loads(ids_json))
+                        except Exception:
+                            parsed_ids = []
+                    entry = {
+                        "cache_type": str(cache_type or ""),
+                        "cache_key": str(cache_key_val),
+                        "cache_target": str(cache_target or ""),
+                        "ids": parsed_ids,
+                        "ttl": _safe_float(ttl),
+                        "expires_at": _safe_float(expires_at),
+                    }
+                    result[str(cache_key_val)] = entry
+                return result
+
+    # CachedMetadata logic
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        if ids is not None:
+            if not ids:
+                return {}
+            ids_list = _normalise_integer_list(ids)
+            if not ids_list:
+                return {}
+            placeholders = ",".join("?" for _ in ids_list)
+            params = list(ids_list)
+            query = (
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+                "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
+            )
+            if cutoff is not None:
+                query += " AND timestamp >= ?"
+                params.append(cutoff)
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            result = {}
+            for gallery_id, timestamp, clean_json, raw_json in rows:
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
+                    "clean_metadata": clean,
+                    "raw_metadata": raw,
+                }
+            return result
+        if gallery_id is not None:
+            gid = _normalise_integer(gallery_id)
+            if gid is None:
+                return None
+            cursor.execute(
+                "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
+                (gid,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            timestamp, clean_json, raw_json = row
+            clean = _safe_json_dict(clean_json)
+            raw = _safe_json_dict(raw_json)
+            return {"timestamp": _safe_float(timestamp), "clean_metadata": clean, "raw_metadata": raw}
+        elif cutoff is not None:
+            cursor.execute(
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE timestamp >= ?",
+                (cutoff,),
+            )
+            rows = cursor.fetchall()
+            result = {}
+            for gallery_id, timestamp, clean_json, raw_json in rows:
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
+                    "clean_metadata": clean,
+                    "raw_metadata": raw,
+                }
+            return result
+        else:
+            cursor.execute(
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
+            )
+            rows = cursor.fetchall()
+            result = {}
+            for gallery_id, timestamp, clean_json, raw_json in rows:
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
+                    "clean_metadata": clean,
+                    "raw_metadata": raw,
+                }
+            return result
+        
+def prune_all_caches():
+    """Removes expired entries in CacheReferences and CachedMetadata, and deletes any cache reference whose TTL has expired."""
+    init_db()
+    now = time.time()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        # Delete expired cache references by expires_at
+        cursor.execute(
+            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now,),
+        )
+        # Also delete any cache reference whose TTL has expired (redundant with expires_at, but explicit)
+        cursor.execute(
+            "DELETE FROM CacheReferences WHERE ttl IS NOT NULL AND expires_at IS NOT NULL AND (expires_at - ttl) <= ?",
+            (now,),
+        )
+        conn.commit()
+
+def split_cache_key(cache_key):
+    """Splits a cache_key into cache_type and cache_target. E.g., "artist:abc" → ("artist", "abc")"""
+    cache_key = _safe_text(cache_key)
+    if ":" in cache_key:
+        cache_type, cache_target = cache_key.split(":", 1)
+    else:
+        cache_type, cache_target = cache_key, ""
+    return cache_type, cache_target
+
+def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
+    init_db()
+    gid = _normalise_integer(gallery_id)
+    if gid is None:
+        return
+
+    entry = read_cached_metadata_entry(gallery_id=gid) or {
+        "timestamp": None,
+        "clean_metadata": {},
+        "raw_metadata": {},
+    }
+    if isinstance(clean_metadata, dict):
+        entry["clean_metadata"].update(clean_metadata)
+    if raw_metadata is not None:
+        entry["raw_metadata"] = _safe_json_dict(raw_metadata)
+    entry["timestamp"] = _safe_float(timestamp)
+
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(gallery_id) DO UPDATE SET "
+            "timestamp=excluded.timestamp, "
+            "clean_metadata=excluded.clean_metadata, "
+            "raw_metadata=excluded.raw_metadata",
+            (
+                gid,
+                entry["timestamp"],
+                json.dumps(entry["clean_metadata"], ensure_ascii=False),
+                json.dumps(entry["raw_metadata"], ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+
+def upsert_cache_reference(cache_key: str, entry: dict):
+    init_db()
+    cache_key = _safe_text(cache_key)
+    ids = _normalise_integer_list(entry.get("ids"))
+    cache_type = _safe_text(entry.get("cache_type"), "")
+    cache_target = _safe_text(entry.get("cache_target"), "")
+    ttl = _normalise_integer(entry.get("ttl"))
+    if ttl is None:
+        ttl = 0
+    expires_at = _safe_float(entry.get("expires_at"))
+    ids_json = json.dumps(ids)
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO CacheReferences (cache_key, cache_type, cache_target, ids, ttl, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(cache_key) DO UPDATE SET "
+            "cache_type=excluded.cache_type, "
+            "cache_target=excluded.cache_target, "
+            "ids=excluded.ids, "
+            "ttl=excluded.ttl, "
+            "expires_at=excluded.expires_at",
+            (
+                cache_key,
+                cache_type,
+                cache_target,
+                ids_json,
+                ttl,
+                expires_at,
+            ),
+        )
+        conn.commit()
+
+####################################################################################################################
+# GALLERY STATUS UPDATERS
+####################################################################################################################
+
+def mark_gallery_started(gallery_id, download_path=None, extension_used=None):
+    init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
+    download_path = _safe_text(download_path, "")
+    extension_used = _safe_text(extension_used, "")
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        # Check if extension_used is already set for this gallery
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            # Preserve existing extension_used
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path
+            """, (gallery_id, "started", now, download_path))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
+            logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
+        else:
+            # Set extension_used if not already set
+            cursor.execute("""
+            INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status=excluded.status,
+                started_at=excluded.started_at,
+                download_path=excluded.download_path,
+                extension_used=excluded.extension_used
+            """, (gallery_id, "started", now, download_path, extension_used))
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
+            logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
+        conn.commit()
+
+def mark_gallery_skipped(gallery_id):
+    init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE Galleries
+        SET status = ?, completed_at = ?
+        WHERE id = ?
+        """, ("skipped", now, gallery_id))
+        conn.commit()
+
+def mark_gallery_failed(gallery_id):
+    init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE Galleries
+        SET status = ?, completed_at = ?
+        WHERE id = ?
+        """, ("failed", now, gallery_id))
+        conn.commit()
+
+def mark_gallery_completed(gallery_id):
+    init_db()
+    gallery_id = _normalise_integer(gallery_id)
+    if gallery_id is None:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    # Load metadata for this gallery to compute paths and extension
+    cache = read_cached_metadata_entry(ids=[gallery_id])
+    meta = None
+    for gid, entry in cache.items():
+        meta = entry.get("clean_metadata") or {}
+        break
+    # Compute download_path, cover_path, extension_used, started_at with robust fallback
+    download_path = None
+    cover_path = None
+    extension_used = None
+    started_at = None
+    ext_download_path = ""
+    cleaned_creator = "Unknown"
+    ext = "cbz"
+    is_archive = True
+    # Always update Galleries table with latest clean_title from clean_metadata if available
+    gallery_title = ""
+    if meta and meta.get("clean_title"):
+        with lock, dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE Galleries SET clean_title=? WHERE id=?", (meta["clean_title"], gallery_id))
+            conn.commit()
+    # Now fetch clean_title from Galleries table
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and isinstance(row[0], str) and row[0].strip():
+            gallery_title = row[0].strip()
+    if meta:
+        ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
+        # Always resolve to absolute path
+        base_ext_path = None
+        try:
+            from mangascraper.extensions.extension_manager import calculate_extension_download_path
+            ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
+            base_ext_path = calculate_extension_download_path(ext_name)
+        except Exception:
+            base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
+        if not ext_download_path:
+            ext_download_path = base_ext_path
+        elif not os.path.isabs(ext_download_path):
+            ext_download_path = os.path.join(base_ext_path, ext_download_path)
+        # Cleaned primary creator name
+        primary_creator = None
+        if "artists" in meta and isinstance(meta["artists"], list) and meta["artists"]:
+            primary_creator = meta["artists"][0]
+        elif "groups" in meta and isinstance(meta["groups"], list) and meta["groups"]:
+            primary_creator = meta["groups"][0]
+        else:
+            primary_creator = "Unknown"
+        from mangascraper.core.api import sanitise_string
+        cleaned_creator = sanitise_string(primary_creator)
+        ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
+        is_archive = meta.get("is_archive", True)
+        started_at = meta.get("started_at")
+    # Compose download_path and cover_path with full extension path
+    if gallery_title:
+        if is_archive:
+            download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+        else:
+            download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
+        # cover_path: full path, no extension, include gallery id
+        cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"({gallery_id}) {gallery_title}")
+    else:
+        download_path = ""
+        cover_path = ""
+    # If started_at is still None, try to fetch from Galleries table
+    if not started_at:
+        with lock, dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT started_at FROM Galleries WHERE id=?", (gallery_id,))
+            row = cursor.fetchone()
+            if row and row[0]:
+                started_at = row[0]
+    # Preserve extension_used if already set
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            extension_used = row[0]
+        else:
+            extension_used = meta.get("extension_used") or meta.get("extension") or None
+        cursor.execute("""
+        UPDATE Galleries
+        SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
+        WHERE id = ?
+        """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
+        logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
+        logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
+        conn.commit()
+
+    # Now process all main tables for this gallery
+    cache = read_cached_metadata_entry(ids=[gallery_id])
+    creators = {}
+    tags = {}
+    languages = {}
+    galleries = {}
+    gallery_tags = {}
+    gallery_languages = {}
+
+    for gid, entry in cache.items():
+        #logger.debug(f"[DATABASE] Processing gallery {gid} with metadata: {entry}")
+        
+        meta = entry.get("clean_metadata") or {}
+        raw_title = _safe_text(meta.get("raw_title") or meta.get("title") or f"Gallery_{gid}")
+        clean_title = _safe_text(meta.get("clean_title") or meta.get("title") or f"Gallery_{gid}")
+        num_pages = _normalise_integer(meta.get("num_pages") or meta.get("pages") or 0) or 0
+        
+        # Creator Names
+        creator_names = []
+        creator_types = {}
+        if "artists" in meta and isinstance(meta["artists"], list):
+            creator_names.extend(meta["artists"])
+            for artist in meta["artists"]:
+                creator_types[artist] = "artist"
+        if "groups" in meta and isinstance(meta["groups"], list):
+            creator_names.extend(meta["groups"])
+            for group in meta["groups"]:
+                creator_types[group] = "group"
+        
+        # Tags
+        tag_names = meta.get("tags") or []
+        if isinstance(tag_names, str):
+            tag_names = [tag_names]
+        
+        # Languages
+        language_names = meta.get("languages") or meta.get("language") or []
+        if isinstance(language_names, str):
+            language_names = [language_names]
+        
+        status = _safe_text(meta.get("status"), "")
+        started_at = _safe_text(meta.get("started_at"), "")
+        completed_at = _safe_text(meta.get("completed_at"), "")
+        download_path = _safe_text(meta.get("download_path"), "")
+        cover_path = _safe_text(meta.get("cover_path"), "")
+        extension_used = _safe_text(meta.get("extension_used"), "")
+
+        #logger.debug(f"[DATABASE] Gallery fields: raw_title={raw_title}, clean_title={clean_title}, num_pages={num_pages}, creators={creator_names}, tags={tag_names}, languages={language_names}")
+
+        for cname in creator_names:
+            ctype = creator_types.get(cname, None)
+            creators.setdefault(cname, {"display_name": cname, "creator_type": ctype, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
+        for tname in tag_names:
+            tags.setdefault(tname, {"count": 0})
+        for lname in language_names:
+            languages.setdefault(lname, {"count": 0})
+
+        galleries[gid] = {
+            "id": gid,
+            "raw_title": raw_title,
+            "clean_title": clean_title,
+            "num_pages": num_pages,
+            "creator_names": creator_names,
+            "language_names": language_names,
+            "tag_names": tag_names,
+            "status": status,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "download_path": download_path,
+            "cover_path": cover_path,
+            "extension_used": extension_used
+        }
+        gallery_tags[gid] = tag_names
+        gallery_languages[gid] = language_names
+
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        creator_id_map = {}
+        tag_id_map = {}
+        lang_id_map = {}
+        now = datetime.now(timezone.utc).isoformat()
+
+        for cname, cdata in creators.items():
+            cursor.execute("INSERT OR IGNORE INTO Creators (name, display_name, creator_type, first_seen, last_updated, total_galleries, most_popular_tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (cname, cdata["display_name"], cdata["creator_type"], now, now, 0, json.dumps([])))
+            cursor.execute("UPDATE Creators SET creator_type=? WHERE name=?", (cdata["creator_type"], cname))
+            cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
+            creator_id_map[cname] = cursor.fetchone()[0]
+
+        for tname, tdata in tags.items():
+            cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?)", (tname, 0))
+            cursor.execute("SELECT id FROM Tags WHERE name=?", (tname,))
+            tag_id_map[tname] = cursor.fetchone()[0]
+
+        for lname, ldata in languages.items():
+            cursor.execute("INSERT OR IGNORE INTO Languages (name, count) VALUES (?, ?)", (lname, 0))
+            cursor.execute("SELECT id FROM Languages WHERE name=?", (lname,))
+            lang_id_map[lname] = cursor.fetchone()[0]
+
+        for gid, gdata in galleries.items():
+            creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
+            tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
+            language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+            logger.debug(f"[DATABASE] Writing to Galleries (partial update): id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
+            cursor.execute(
+                "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
+                (
+                    gdata["raw_title"],
+                    gdata["clean_title"],
+                    gdata["num_pages"],
+                    json.dumps(creator_ids),
+                    json.dumps(language_ids),
+                    json.dumps(tag_ids),
+                    gid
+                )
+            )
+            cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
+            cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gid, json.dumps(language_ids)))
+
+        for cname, cid in creator_id_map.items():
+            cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))
+            gallery_ids = [row[0] for row in cursor.fetchall()]
+            total_galleries = len(gallery_ids)
+            tag_counter = {}
+            for gid in gallery_ids:
+                cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (gid,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    try:
+                        tag_ids = json.loads(row[0])
+                        for tid in tag_ids:
+                            tag_counter[tid] = tag_counter.get(tid, 0) + 1
+                    except Exception:
+                        continue
+            most_popular_tag_ids = [tid for tid, _ in sorted(tag_counter.items(), key=lambda x: x[1], reverse=True)[:15]]
+            #logger.debug(f"[DATABASE] Updating Creator {cname} (id={cid}): total_galleries={total_galleries}, most_popular_tags={most_popular_tag_ids}")
+            cursor.execute("UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?", (total_galleries, json.dumps(most_popular_tag_ids), now, cid))
+
+        for tname, tid in tag_id_map.items():
+            cursor.execute("SELECT tag_ids FROM GalleryTags")
+            count = 0
+            for (tag_ids_json,) in cursor.fetchall():
+                if tag_ids_json:
+                    try:
+                        tag_ids = json.loads(tag_ids_json)
+                        count += tag_ids.count(tid)
+                    except Exception:
+                        continue
+            #logger.debug(f"[DATABASE] Updating Tag {tname} (id={tid}): count={count}")
+            cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
+
+        for lname, lid in lang_id_map.items():
+            cursor.execute("SELECT language_ids FROM GalleryLanguages")
+            count = 0
+            for (lang_ids_json,) in cursor.fetchall():
+                if lang_ids_json:
+                    try:
+                        lang_ids = json.loads(lang_ids_json)
+                        count += lang_ids.count(lid)
+                    except Exception:
+                        continue
+            #logger.debug(f"[DATABASE] Updating Language {lname} (id={lid}): count={count}")
+            cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
+
+        conn.commit()
 
 ################################################################################################################
 # INTERNAL API HELPERS
@@ -171,7 +986,7 @@ def build_gallery_metadata_summary(meta, referrer: str):
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
-        scraperdb.upsert_cached_metadata(gid, time.time(), clean_metadata=clean_metadata)
+        upsert_cached_metadata(gid, time.time(), clean_metadata=clean_metadata)
     except Exception as e:
         logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
@@ -436,12 +1251,15 @@ class Get:
     @staticmethod
     def gallery_status(gallery_id):
         """Get the status of a Gallery keyed by its ID"""
-        scraperdb.init_db()
-        with scraperdb.lock, scraperdb.dbconnect() as conn:
+        gallery_id = _normalise_integer(gallery_id)
+        if gallery_id is None:
+            return None
+        init_db()
+        with lock, dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
             row = cursor.fetchone()
-            return row[0] if row else None
+            return _safe_text(row[0], "") if row else None
     
     @staticmethod
     def cache_keys(search_type: str, search_value: str = None) -> str:
@@ -452,6 +1270,10 @@ class Get:
         Returns:
             Cache key suitable for filename (e.g., "artist_john", "tag_schoolgirl")
         """
+        search_type = str(search_type or "")
+        if search_value is not None:
+            search_value = str(search_value)
+
         if search_value:
             # Split into words/tokens, sort alphanumerically, join with underscores
             terms = [t for t in search_value.lower().split() if t]
@@ -591,11 +1413,19 @@ class Get:
         - Returns [] if none found.
         """
         
-        if not meta or "tags" not in meta:
+        if not isinstance(meta, dict):
             return []
 
+        tags = meta.get("tags")
+        if not isinstance(tags, list):
+            return []
+
+        tag_type = _safe_text(tag_type)
+
         names = []
-        for tag in meta["tags"]:
+        for tag in tags:
+            if not isinstance(tag, dict):
+                continue
             if tag.get("type") == tag_type and tag.get("name"):
                 parts = [t.strip() for t in tag["name"].split("|") if t.strip()]
                 names.extend(parts)
@@ -606,30 +1436,32 @@ class Get:
     # Utility functions for metadata extraction
     @staticmethod
     def artists(meta):
-        return Get.meta_tags("api", meta, "artist") or ["Unknown Artist"]
+        return _safe_text_list(Get.meta_tags("api", meta, "artist")) or ["Unknown Artist"]
 
     @staticmethod
     def groups(meta):
-        return Get.meta_tags("api", meta, "group") or ["Unknown Group"]
+        return _safe_text_list(Get.meta_tags("api", meta, "group")) or ["Unknown Group"]
 
     @staticmethod
     def tags(meta):
-        return Get.meta_tags("api", meta, "tag") or []
+        return _safe_text_list(Get.meta_tags("api", meta, "tag"))
 
     @staticmethod
     def characters(meta):
-        return Get.meta_tags("api", meta, "character") or []
+        return _safe_text_list(Get.meta_tags("api", meta, "character"))
 
     @staticmethod
     def parodies(meta):
-        return Get.meta_tags("api", meta, "parody") or []
+        return _safe_text_list(Get.meta_tags("api", meta, "parody"))
 
     @staticmethod
     def languages(meta):
-        return Get.meta_tags("api", meta, "language") or ["Unknown Language"]
+        return _safe_text_list(Get.meta_tags("api", meta, "language")) or ["Unknown Language"]
 
     @staticmethod
     def page_count(meta):
+        if not isinstance(meta, dict):
+            return 0
         return len(meta.get("images", {}).get("pages", []))
     
     ################################################################################################################
@@ -714,9 +1546,7 @@ class Fetch:
             if cache_entry:
                 expires_at = cache_entry.get("expires_at")
                 
-                ids = cache_entry.get("ids", [])
-                # Ensure all IDs are integers
-                ids = [int(gid) for gid in ids]
+                ids = _normalise_integer_list(cache_entry.get("ids", []))
                 
                 if expires_at is None or expires_at > now:
                     logger.debug(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
@@ -836,7 +1666,10 @@ class Fetch:
                                 blocked_langs = gallery_langs[:]
                                 log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug")
                                 continue
-                        batch.append(int(g["id"]))
+                        gid = _normalise_integer(g.get("id"))
+                        if gid is None:
+                            continue
+                        batch.append(gid)
                         images = g.get("images", {})
                         num_pages = len(images.get("pages", []))
                         orchestrator.total_gallery_images += num_pages
@@ -853,7 +1686,7 @@ class Fetch:
                     page += 1
                 log(f"Fetched total {len(ids_set)} Galleries for {qt}{query_str}", "warning")
                 log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
-                ids = list(ids_set)
+                ids = list(sorted(ids_set))
                 return (cache_key, ids)
             except Exception as e:
                 attempt += 1
@@ -879,6 +1712,11 @@ class Fetch:
         """
         
         orchestrator.refresh_globals()
+        if not isinstance(meta, dict):
+            return None
+        page = _normalise_integer(page)
+        if page is None or page < 1:
+            return None
         
         try:
             #log(f"Fetcher: Building image URLs for Gallery {meta.get('id','?')}: Page {page}", "debug") # NOTE: DEBUGGING
@@ -929,8 +1767,12 @@ class Fetch:
     def gallery_metadata(gallery_id: int):
         orchestrator.refresh_globals()
 
+        gallery_id = _normalise_integer(gallery_id)
+        if gallery_id is None:
+            return None
+
         raw_cache = Caching.Load.cached_metadata()
-        cached_meta = raw_cache.get(str(gallery_id))
+        cached_meta = raw_cache.get(gallery_id)
         if cached_meta and isinstance(cached_meta, dict):
             return cached_meta
 
@@ -969,7 +1811,7 @@ class Fetch:
                     general_metadata[gallery_id] = cached_entry
                     Caching.Save.cached_metadata(general_metadata, clean=True)
                 raw_cache = Caching.Load.cached_metadata()
-                raw_cache[str(gallery_id)] = data
+                raw_cache[gallery_id] = data
                 Caching.Save.cached_metadata(raw_cache)
 
                 log_clarification("debug")
@@ -991,7 +1833,8 @@ class Fetch:
                         try:
                             resp = metadata_session.get(url, timeout=(60, 60))
                             resp.raise_for_status()
-                            return resp.json()
+                            retry_data = resp.json()
+                            return retry_data if isinstance(retry_data, dict) else None
                         except Exception as e2:
                             logger.warning(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}")
                     return None
@@ -1010,7 +1853,8 @@ class Fetch:
                         try:
                             resp = metadata_session.get(url, timeout=(60, 60))
                             resp.raise_for_status()
-                            return resp.json()
+                            retry_data = resp.json()
+                            return retry_data if isinstance(retry_data, dict) else None
                         except Exception as e2:
                             logger.warning(f"Gallery: {gallery_id}: Still failed after Tor rotate: {e2}")
                     return None
@@ -1036,7 +1880,9 @@ class Fetch:
             return {}
 
         # Ensure all gallery IDs are integers
-        gallery_ids = [int(gid) for gid in gallery_ids]
+        gallery_ids = _normalise_integer_list(gallery_ids)
+        if not gallery_ids:
+            return {}
 
         metadata = {}
         failed_ids = []
@@ -1176,13 +2022,13 @@ class Caching:
     def clear_cache(cache_key: str = None):
         """Clear / prune the cache"""
         # Prune references to cache files by their own TTL
-        scraperdb.prune_all_caches()
+        prune_all_caches()
     
     @staticmethod
     def _read_cache() -> dict:
-        cutoff = time.time() - scraperdb.TTL
+        cutoff = time.time() - TTL
         try:
-            cache_entry = scraperdb.read_cached_metadata_entry(cutoff=cutoff)
+            cache_entry = read_cached_metadata_entry(cutoff=cutoff)
             
             # Remove expired entries from cache_entry (in-memory prune)
             if isinstance(cache_entry, dict):
@@ -1191,11 +2037,11 @@ class Caching:
                     if not isinstance(entry, dict):
                         continue
                     timestamp = entry.get("timestamp") or 0
-                    if (time.time() - timestamp) >= scraperdb.TTL:
+                    if (time.time() - timestamp) >= TTL:
                         expired_keys.append(gid)
                 for gid in expired_keys:
                     cache_entry.pop(gid, None)
-            references = scraperdb.read_cached_metadata_entry()
+            references = read_cached_metadata_entry()
             logger.debug(f"[TESTING]: cache_entry = {cache_entry}, references = {references}")
             return {"references": references, "metadata": cache_entry}
         except Exception:
@@ -1213,7 +2059,7 @@ class Caching:
             
             # Return the list of Gallery IDs for a specific cache_key
             if cache_key is not None:
-                references_entry = scraperdb.read_cached_metadata_entry(cache_key=cache_key)
+                references_entry = read_cached_metadata_entry(cache_key=cache_key)
                 if not references_entry or not isinstance(references_entry, dict):
                     return []
                 ids = references_entry.get("ids")
@@ -1229,14 +2075,15 @@ class Caching:
             
             # Return clean metadata for a specific Gallery ID
             elif gallery_id is not None:
-                cache_entry = scraperdb.read_cached_metadata_entry(gallery_id=gallery_id)
+                cache_entry = read_cached_metadata_entry(gallery_id=gallery_id)
                 if not cache_entry:
                     return None
-                return cache_entry.get("clean_metadata")
+                clean_meta = cache_entry.get("clean_metadata")
+                return clean_meta if isinstance(clean_meta, dict) else None
             
             # Return all cache references as a dict
             else:
-                return scraperdb.read_cached_metadata_entry()
+                return read_cached_metadata_entry()
         
         @staticmethod
         def cached_metadata(clean: bool = False) -> dict:
@@ -1256,7 +2103,7 @@ class Caching:
                     continue
                 
                 timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= scraperdb.TTL:
+                if (time.time() - timestamp) >= TTL:
                     continue
                 
                 if clean:
@@ -1265,50 +2112,55 @@ class Caching:
                         result[gid] = clean_meta
                 
                 else:
-                    if "raw_metadata" in entry:
-                        result[gid] = entry.get("raw_metadata")
+                    raw_meta = entry.get("raw_metadata")
+                    if isinstance(raw_meta, dict):
+                        result[gid] = raw_meta
             
             return result
         
         @staticmethod
         def broken_symbols() -> dict[str, str]:
             """Load all detected broken symbols as { symbol: '_' }."""
-            scraperdb.init_db()
-            with scraperdb.lock, scraperdb.dbconnect() as conn:
+            init_db()
+            with lock, dbconnect() as conn:
                 c = conn.cursor()
                 c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
                 rows = c.fetchall()
-                return {row[0]: "_" for row in rows if row[0].strip()}
+                result = {}
+                for row in rows:
+                    symbol = _safe_text(row[0], "").strip()
+                    if symbol:
+                        result[symbol] = "_"
+                return result
         
         @staticmethod
         def queued_galleries() -> list:
             """Fetch queued galleries from GalleriesQueue table in the database."""
-            scraperdb.init_db()
-            with scraperdb.lock, scraperdb.dbconnect() as conn:
+            init_db()
+            with lock, dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM GalleriesQueue")
                 rows = cursor.fetchall()
-                return sorted({int(row[0]) for row in rows})
+                ids = []
+                for row in rows:
+                    gid = _normalise_integer(row[0])
+                    if gid is not None:
+                        ids.append(gid)
+                return sorted(set(ids))
 
         @staticmethod
         def all_metadata() -> dict:
             """Load all cached metadata entries from the CachedMetadata table."""
-            # Just return all clean_metadata from CachedMetadata
-            all_entries = scraperdb.Caching.Load.cache()
-            merged = {}
-            for gid, entry in all_entries.items():
-                clean = entry.get("clean_metadata")
-                if isinstance(clean, dict):
-                    merged[gid] = clean
-            return merged
+            return Caching.Load.cached_metadata(clean=True)
 
         @staticmethod
         def id_metadata(ids: list[int]) -> dict:
             """Load each metadata entry from the CachedMetadata table corresponding to the IDs in a given list."""
+            ids = _normalise_integer_list(ids)
             if not ids:
                 return {}
             # Fetch metadata for all IDs from CachedMetadata
-            meta_dict = scraperdb.read_cached_metadata_entry(ids=ids)
+            meta_dict = read_cached_metadata_entry(ids=ids)
             result = {}
             for gid, entry in meta_dict.items():
                 clean = entry.get("clean_metadata")
@@ -1329,14 +2181,28 @@ class Caching:
             now = time.time()
             entry = None
 
+            # Backward-compatible call shape: cache(meta, gallery_id)
+            if isinstance(cache_key, dict) and meta is None:
+                meta = cache_key
+                cache_key = None
+                if gallery_ids is not None and "id" not in meta:
+                    gid = _normalise_integer(gallery_ids)
+                    if gid is not None:
+                        meta["id"] = gid
+                gallery_ids = None
+
             # If meta is provided, extract gallery_id from meta
-            if meta is not None:
-                gid = meta.get("id")
+            if isinstance(meta, dict):
+                gid = _normalise_integer(meta.get("id"))
                 if gid is not None:
-                    gid = int(gid)
+                    title_obj = meta.get("title")
+                    if isinstance(title_obj, dict):
+                        title = _safe_text(title_obj.get("english"), f"Gallery {gid}")
+                    else:
+                        title = _safe_text(title_obj, f"Gallery {gid}")
                     entry = {
                         "id": gid,
-                        "title": meta.get("title", {}).get("english", f"Gallery {gid}"),
+                        "title": title,
                         "artists": Get.artists(meta),
                         "groups": Get.groups(meta),
                         "tags": Get.tags(meta),
@@ -1345,7 +2211,7 @@ class Caching:
                         "languages": Get.languages(meta),
                         "pages": Get.page_count(meta),
                     }
-                    scraperdb.upsert_cached_metadata(
+                    upsert_cached_metadata(
                         gallery_id=gid,
                         timestamp=now,
                         clean_metadata=entry,
@@ -1354,13 +2220,8 @@ class Caching:
             
             # If cache_key and gallery_ids are provided, update CacheReferences
             if cache_key and gallery_ids is not None:
-                cache_type, cache_target = scraperdb.split_cache_key(cache_key)
-                ids = []
-                for gid in gallery_ids:
-                    try:
-                        ids.append(int(gid))
-                    except (TypeError, ValueError):
-                        continue
+                cache_type, cache_target = split_cache_key(cache_key)
+                ids = _normalise_integer_list(gallery_ids)
                 ids = list(sorted(set(ids)))
                 ttl_default = 10800
                 expires_at = now + ttl_default
@@ -1372,7 +2233,7 @@ class Caching:
                     "ttl": ttl_default,
                     "expires_at": expires_at,
                 }
-                scraperdb.upsert_cache_reference(cache_key, entry_ref)
+                upsert_cache_reference(cache_key, entry_ref)
             
             return entry
         
@@ -1392,16 +2253,16 @@ class Caching:
                     continue
                 
                 if clean:
-                    scraperdb.upsert_cached_metadata(
-                        str(gid),
+                    upsert_cached_metadata(
+                        gid,
                         now,
                         clean_metadata=entry,
                         raw_metadata=None,
                     )
                 
                 else:
-                    scraperdb.upsert_cached_metadata(
-                        str(gid),
+                    upsert_cached_metadata(
+                        gid,
                         now,
                         clean_metadata=None,
                         raw_metadata=entry,
@@ -1412,9 +2273,9 @@ class Caching:
             """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
             if not symbol_map:
                 return
-            scraperdb.init_db()
+            init_db()
             now = datetime.now(timezone.utc).isoformat()
-            with scraperdb.lock, scraperdb.dbconnect() as conn:
+            with lock, dbconnect() as conn:
                 c = conn.cursor()
                 for symbol in symbol_map.keys():
                     c.execute("""
