@@ -136,6 +136,41 @@ def init_db():
 # DATABASE HELPERS
 ################################################################################################################
 
+def _normalise_integer(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+def _normalise_integer_list(values) -> list[int]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        values = [values]
+    normalised = []
+    for value in values:
+        gid = _normalise_integer(value)
+        if gid is not None:
+            normalised.append(gid)
+    return normalised
+
+def _safe_json_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            loaded = json.loads(value)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 def set_queued_galleries(ids):
     """Write a list of Gallery IDs into the database gallery queue"""
     init_db()
@@ -172,7 +207,7 @@ def list_galleries(status=None):
 # CACHING HELPERS
 ####################################################################################################################
 
-def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cutoff: float = None, ids: list = None) -> dict | None:
+def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cutoff: float = None, ids: list = None) -> dict | None:
     """
     Loads and returns metadata from CachedMetadata or entries from CacheReferences.
     - If ids is given (list of gallery IDs), returns metadata for those galleries as a dict.
@@ -203,18 +238,20 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
                     ttl,
                     expires_at,
                 ) = row
-                entry = {
-                    "cache_type": cache_type,
-                    "cache_key": cache_key_val,
-                    "cache_target": cache_target,
-                    "ttl": ttl,
-                    "expires_at": expires_at,
-                }
+                parsed_ids = []
                 if ids_json:
                     try:
-                        entry["ids"] = json.loads(ids_json)
+                        parsed_ids = _normalise_integer_list(json.loads(ids_json))
                     except Exception:
-                        entry["ids"] = []
+                        parsed_ids = []
+                entry = {
+                    "cache_type": str(cache_type or ""),
+                    "cache_key": str(cache_key_val),
+                    "cache_target": str(cache_target or ""),
+                    "ids": parsed_ids,
+                    "ttl": _safe_float(ttl),
+                    "expires_at": _safe_float(expires_at),
+                }
                 return entry
             else:
                 # Return all CacheReferences entries
@@ -232,18 +269,20 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
                         ttl,
                         expires_at,
                     ) = row
-                    entry = {
-                        "cache_type": cache_type,
-                        "cache_key": cache_key_val,
-                        "cache_target": cache_target,
-                        "ttl": ttl,
-                        "expires_at": expires_at,
-                    }
+                    parsed_ids = []
                     if ids_json:
                         try:
-                            entry["ids"] = json.loads(ids_json)
+                            parsed_ids = _normalise_integer_list(json.loads(ids_json))
                         except Exception:
-                            entry["ids"] = []
+                            parsed_ids = []
+                    entry = {
+                        "cache_type": str(cache_type or ""),
+                        "cache_key": str(cache_key_val),
+                        "cache_target": str(cache_target or ""),
+                        "ids": parsed_ids,
+                        "ttl": _safe_float(ttl),
+                        "expires_at": _safe_float(expires_at),
+                    }
                     result[str(cache_key_val)] = entry
                 return result
 
@@ -253,7 +292,9 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
         if ids is not None:
             if not ids:
                 return {}
-            ids_str = [str(gid) for gid in ids]
+            ids_str = [str(gid) for gid in _normalise_integer_list(ids)]
+            if not ids_str:
+                return {}
             placeholders = ",".join("?" for _ in ids_str)
             params = list(ids_str)
             query = (
@@ -267,26 +308,32 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
             rows = cursor.fetchall()
             result = {}
             for gallery_id, timestamp, clean_json, raw_json in rows:
-                clean = json.loads(clean_json) if clean_json else {}
-                raw = json.loads(raw_json) if raw_json else {}
-                result[str(gallery_id)] = {
-                    "timestamp": timestamp,
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
             return result
         if gallery_id is not None:
+            gid = _normalise_integer(gallery_id)
+            if gid is None:
+                return None
             cursor.execute(
                 "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
-                (str(gallery_id),),
+                (str(gid),),
             )
             row = cursor.fetchone()
             if not row:
                 return None
             timestamp, clean_json, raw_json = row
-            clean = json.loads(clean_json) if clean_json else {}
-            raw = json.loads(raw_json) if raw_json else {}
-            return {"timestamp": timestamp, "clean_metadata": clean, "raw_metadata": raw}
+            clean = _safe_json_dict(clean_json)
+            raw = _safe_json_dict(raw_json)
+            return {"timestamp": _safe_float(timestamp), "clean_metadata": clean, "raw_metadata": raw}
         elif cutoff is not None:
             cursor.execute(
                 "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE timestamp >= ?",
@@ -295,10 +342,13 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
             rows = cursor.fetchall()
             result = {}
             for gallery_id, timestamp, clean_json, raw_json in rows:
-                clean = json.loads(clean_json) if clean_json else {}
-                raw = json.loads(raw_json) if raw_json else {}
-                result[str(gallery_id)] = {
-                    "timestamp": timestamp,
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
@@ -310,10 +360,13 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: str = None, cu
             rows = cursor.fetchall()
             result = {}
             for gallery_id, timestamp, clean_json, raw_json in rows:
-                clean = json.loads(clean_json) if clean_json else {}
-                raw = json.loads(raw_json) if raw_json else {}
-                result[str(gallery_id)] = {
-                    "timestamp": timestamp,
+                gid = _normalise_integer(gallery_id)
+                if gid is None:
+                    continue
+                clean = _safe_json_dict(clean_json)
+                raw = _safe_json_dict(raw_json)
+                result[gid] = {
+                    "timestamp": _safe_float(timestamp),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
@@ -347,7 +400,11 @@ def split_cache_key(cache_key):
 
 def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
     init_db()
-    entry = read_cached_metadata_entry(gallery_id) or {
+    gid = _normalise_integer(gallery_id)
+    if gid is None:
+        return
+
+    entry = read_cached_metadata_entry(gallery_id=gid) or {
         "timestamp": None,
         "clean_metadata": {},
         "raw_metadata": {},
@@ -356,7 +413,7 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
         entry["clean_metadata"].update(clean_metadata)
     if raw_metadata is not None:
         entry["raw_metadata"] = raw_metadata
-    entry["timestamp"] = timestamp
+    entry["timestamp"] = _safe_float(timestamp)
 
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
@@ -368,7 +425,7 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
             "clean_metadata=excluded.clean_metadata, "
             "raw_metadata=excluded.raw_metadata",
             (
-                str(gallery_id),
+                str(gid),
                 entry["timestamp"],
                 json.dumps(entry["clean_metadata"], ensure_ascii=False),
                 json.dumps(entry["raw_metadata"], ensure_ascii=False),
@@ -378,9 +435,12 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
 
 def upsert_cache_reference(cache_key: str, entry: dict):
     init_db()
-    ids = entry.get("ids")
-    if not isinstance(ids, list):
-        ids = [] if ids is None else [ids]
+    cache_key = str(cache_key)
+    ids = _normalise_integer_list(entry.get("ids"))
+    cache_type = str(entry.get("cache_type") or "")
+    cache_target = str(entry.get("cache_target") or "")
+    ttl = _safe_float(entry.get("ttl"))
+    expires_at = _safe_float(entry.get("expires_at"))
     ids_json = json.dumps(ids)
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
@@ -394,12 +454,12 @@ def upsert_cache_reference(cache_key: str, entry: dict):
             "ttl=excluded.ttl, "
             "expires_at=excluded.expires_at",
             (
-                str(cache_key),
-                entry.get("cache_type"),
-                entry.get("cache_target"),
+                cache_key,
+                cache_type,
+                cache_target,
                 ids_json,
-                entry.get("ttl"),
-                entry.get("expires_at"),
+                ttl,
+                expires_at,
             ),
         )
         conn.commit()
@@ -471,7 +531,7 @@ def mark_gallery_completed(gallery_id):
     init_db()
     now = datetime.now(timezone.utc).isoformat()
     # Load metadata for this gallery to compute paths and extension
-    cache = read_cached_metadata_entry([gallery_id])
+    cache = read_cached_metadata_entry(ids=[gallery_id])
     meta = None
     for gid, entry in cache.items():
         meta = entry.get("clean_metadata") or {}
@@ -564,7 +624,7 @@ def mark_gallery_completed(gallery_id):
         conn.commit()
 
     # Now process all main tables for this gallery
-    cache = read_cached_metadata_entry([gallery_id])
+    cache = read_cached_metadata_entry(ids=[gallery_id])
     creators = {}
     tags = {}
     languages = {}

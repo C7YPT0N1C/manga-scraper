@@ -1182,7 +1182,7 @@ class Caching:
     def _read_cache() -> dict:
         cutoff = time.time() - scraperdb.TTL
         try:
-            cache_entry = scraperdb.read_cached_metadata_entry(cutoff)
+            cache_entry = scraperdb.read_cached_metadata_entry(cutoff=cutoff)
             
             # Remove expired entries from cache_entry (in-memory prune)
             if isinstance(cache_entry, dict):
@@ -1195,9 +1195,8 @@ class Caching:
                         expired_keys.append(gid)
                 for gid in expired_keys:
                     cache_entry.pop(gid, None)
-            logger.debug(f"[TESTING]: references = {references}")
-            logger.debug(f"[TESTING]: cache_entry = {cache_entry}")
             references = scraperdb.read_cached_metadata_entry()
+            logger.debug(f"[TESTING]: cache_entry = {cache_entry}, references = {references}")
             return {"references": references, "metadata": cache_entry}
         except Exception:
             return {"references": {}, "metadata": {}}
@@ -1214,17 +1213,23 @@ class Caching:
             
             # Return the list of Gallery IDs for a specific cache_key
             if cache_key is not None:
-                references_entry = scraperdb.read_cached_metadata_entry(cache_key)
+                references_entry = scraperdb.read_cached_metadata_entry(cache_key=cache_key)
                 if not references_entry or not isinstance(references_entry, dict):
                     return []
                 ids = references_entry.get("ids")
                 if not ids or not isinstance(ids, list):
                     return []
-                return ids
+                normalised_ids = []
+                for gid in ids:
+                    try:
+                        normalised_ids.append(int(gid))
+                    except (TypeError, ValueError):
+                        continue
+                return normalised_ids
             
             # Return clean metadata for a specific Gallery ID
             elif gallery_id is not None:
-                cache_entry = scraperdb.read_cached_metadata_entry(gallery_id)
+                cache_entry = scraperdb.read_cached_metadata_entry(gallery_id=gallery_id)
                 if not cache_entry:
                     return None
                 return cache_entry.get("clean_metadata")
@@ -1303,7 +1308,7 @@ class Caching:
             if not ids:
                 return {}
             # Fetch metadata for all IDs from CachedMetadata
-            meta_dict = scraperdb.read_cached_metadata_entry(ids)
+            meta_dict = scraperdb.read_cached_metadata_entry(ids=ids)
             result = {}
             for gid, entry in meta_dict.items():
                 clean = entry.get("clean_metadata")
@@ -1328,6 +1333,7 @@ class Caching:
             if meta is not None:
                 gid = meta.get("id")
                 if gid is not None:
+                    gid = int(gid)
                     entry = {
                         "id": gid,
                         "title": meta.get("title", {}).get("english", f"Gallery {gid}"),
@@ -1340,7 +1346,7 @@ class Caching:
                         "pages": Get.page_count(meta),
                     }
                     scraperdb.upsert_cached_metadata(
-                        gallery_id=str(gid),
+                        gallery_id=gid,
                         timestamp=now,
                         clean_metadata=entry,
                         raw_metadata=meta,
@@ -1349,7 +1355,13 @@ class Caching:
             # If cache_key and gallery_ids are provided, update CacheReferences
             if cache_key and gallery_ids is not None:
                 cache_type, cache_target = scraperdb.split_cache_key(cache_key)
-                ids = list(sorted(set(int(gid) for gid in gallery_ids)))
+                ids = []
+                for gid in gallery_ids:
+                    try:
+                        ids.append(int(gid))
+                    except (TypeError, ValueError):
+                        continue
+                ids = list(sorted(set(ids)))
                 ttl_default = 10800
                 expires_at = now + ttl_default
                 entry_ref = {
