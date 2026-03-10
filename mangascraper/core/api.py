@@ -713,7 +713,11 @@ class Fetch:
             now = time.time()
             if cache_entry:
                 expires_at = cache_entry.get("expires_at")
+                
                 ids = cache_entry.get("ids", [])
+                # Ensure all IDs are integers
+                ids = [int(gid) for gid in ids]
+                
                 if expires_at is None or expires_at > now:
                     logger.debug(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
                     return (cache_key, ids)
@@ -1030,16 +1034,19 @@ class Fetch:
         
         if not gallery_ids:
             return {}
-        
+
+        # Ensure all gallery IDs are integers
+        gallery_ids = [int(gid) for gid in gallery_ids]
+
         metadata = {}
         failed_ids = []
-        
+
         # Use thread pool for parallel fetching
         max_workers = min(10, len(gallery_ids))  # Cap at 10 parallel requests
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(Fetch.gallery_metadata, gid): gid for gid in gallery_ids}
-            
+
             # Use tqdm for progress
             for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching metadata", unit="gallery"):
                 gallery_id = futures[future]
@@ -1050,10 +1057,10 @@ class Fetch:
                 except Exception as e:
                     logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {e}")
                     failed_ids.append(gallery_id)
-        
+
         if failed_ids:
             logger.warning(f"Failed to fetch metadata for {len(failed_ids)}/{len(gallery_ids)} galleries")
-        
+
         return metadata
 
     def all_galleries_metadata(gallery_ids: list, cache_key: str = None) -> dict:
@@ -1072,8 +1079,8 @@ class Fetch:
         
         if not gallery_ids:
             return {}
-        
-        # Deduplicate gallery IDs to prevent redundant API calls
+
+        # Ensure all gallery IDs are integers and deduplicate
         normalised_ids = []
         for gid in gallery_ids:
             try:

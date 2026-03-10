@@ -207,6 +207,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
     
     If insufficient space, prompts user to download as many as fit.
     """
+    
     log(f"Estimating download size for {len(gallery_ids)} galleries...")
     
     download_estimated = 0
@@ -842,6 +843,8 @@ def start_downloader(gallery_list=None):
         if not gallery_list:
             logger.warning("No galleries queued in database; no galleries to download.")
 
+    # Ensure all gallery IDs are integers
+    gallery_list = [int(gid) for gid in gallery_list]
     orchestrator.galleries = gallery_list
     
     start_time = time.perf_counter()  # Start timer
