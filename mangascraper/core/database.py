@@ -122,9 +122,9 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS CacheReferences (
-            entry_key TEXT PRIMARY KEY,
+            cache_key TEXT PRIMARY KEY,
             cache_type TEXT,
-            cache_key TEXT,
+            cache_target TEXT,
             ids TEXT,
             ttl INTEGER,
             expires_at REAL
@@ -221,43 +221,22 @@ def list_galleries(status=None):
 # CACHING HELPERS
 ####################################################################################################################
 
-def build_master_cache_entry(
-    cache_type: str,
-    key: str,
-    ttl_seconds: int | None,
-    last_read: float | None = None,
-    last_write: float | None = None,
-    ids: list[int] | None = None,
-) -> dict:
-    now = time.time()
-    write_time = last_write if last_write is not None else now
-    ttl_default = 10800
-    ttl = ttl_seconds if ttl_seconds is not None else ttl_default
-    expires_at = write_time + ttl if ttl else None
-    entry = {
-        "type": cache_type,
-        "key": key,
-        "path": "db:CachedMetadata",
-        "size": None,
-        "last_read": last_read,
-        "last_write": write_time,
-        "ttl": ttl_seconds,
-        "expires_at": expires_at,
-    }
-    if ids is not None:
-        entry["ids"] = ids
-    logger.debug(f"[TESTING]: BUILT NEW CACHE REFERENCES ENTRY (DB):\n{entry}")
-    return entry
-
-def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
+def write_to_cache(meta: dict, gallery_id: int, cache_key: str = None):
+    """
+    Write metadata to CachedMetadata and, if cache_key is provided, update CacheReferences as well.
+    Args:
+        meta: Metadata dictionary for the gallery
+        gallery_id: Gallery ID (int)
+        cache_key: Optional cache key (string)
+    Returns:
+        The clean metadata entry written.
+    """
     from mangascraper.core.api import Get
-    
+    now = time.time()
     if not meta or not isinstance(meta, dict):
         return None
-    artists = Get.meta_tags("api", meta, "artist")
-    groups = Get.meta_tags("api", meta, "group")
-    languages = Get.meta_tags("api", meta, "language")
     
+    # Build clean metadata entry
     entry = {
         "id": gallery_id,
         "title": meta.get("title", {}).get("english", f"Gallery {gallery_id}"),
@@ -269,7 +248,44 @@ def build_cached_metadata_entry(meta: dict, gallery_id: int) -> dict | None:
         "languages": Get.languages(meta),
         "pages": Get.page_count(meta),
     }
-    #logger.debug(f"[TESTING]: BUILT NEW CACHE METADATA ENTRY:\n{entry}")
+    
+    # Update CachedMetadata
+    upsert_cache_metadata(
+        gallery_id=str(gallery_id),
+        timestamp=now,
+        clean_metadata=entry,
+        raw_metadata=meta,
+    )
+    
+    # If cache_key is provided, update CacheReferences
+    if cache_key:
+        # Parse cache_type and cache_target from cache_key
+        # Example: cache_key = "artist:abc" → cache_type = "artist", cache_target = "abc"
+        if ":" in cache_key:
+            cache_type, cache_target = cache_key.split(":", 1)
+        else:
+            cache_type, cache_target = cache_key, ""
+        # Load all gallery IDs for this cache_key
+        references = load_cache_references()
+        ids = [int(gallery_id)]
+        if cache_key in references:
+            # Merge with existing IDs if present
+            existing_ids = references[cache_key].get("ids", [])
+            if isinstance(existing_ids, list):
+                ids = sorted(set(existing_ids + [int(gallery_id)]))
+        # Build new cache reference entry
+        ttl_default = 10800
+        expires_at = now + ttl_default
+        entry_ref = {
+            "cache_key": cache_key,
+            "cache_type": cache_type,
+            "cache_target": cache_target,
+            "ids": ids,
+            "ttl": ttl_default,
+            "expires_at": expires_at,
+        }
+        upsert_cache_reference(cache_key, entry_ref)
+    
     return entry
 
 def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):

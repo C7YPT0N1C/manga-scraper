@@ -960,14 +960,14 @@ class Fetch:
                     return None
                 
                 # Update cache
-                #cached_entry = scraperdb.build_cached_metadata_entry(data, gallery_id)
-                #if cached_entry:
-                #    general_metadata = Caching.Load.general_metadata()
-                #    general_metadata[gallery_id] = cached_entry
-                #    Caching.Save.general_metadata(general_metadata)
-                #raw_cache = Caching.Load.raw_metadata()
-                #raw_cache[str(gallery_id)] = data
-                #Caching.Save.raw_metadata(raw_cache)
+                cached_entry = scraperdb.write_to_cache(data, gallery_id)
+                if cached_entry:
+                    general_metadata = Caching.Load.general_metadata()
+                    general_metadata[gallery_id] = cached_entry
+                    Caching.Save.general_metadata(general_metadata)
+                raw_cache = Caching.Load.raw_metadata()
+                raw_cache[str(gallery_id)] = data
+                Caching.Save.raw_metadata(raw_cache)
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
@@ -1141,7 +1141,7 @@ class Fetch:
             try:
                 meta = Fetch.gallery_metadata(gallery_id)
                 if meta and isinstance(meta, dict):
-                    meta_entry = scraperdb.build_cached_metadata_entry(meta, gallery_id)
+                    meta_entry = scraperdb.write_to_cache(meta, gallery_id)
                     if meta_entry:
                         metadata[gallery_id] = meta_entry
                 else:
