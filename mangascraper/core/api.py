@@ -925,7 +925,7 @@ class Fetch:
     def gallery_metadata(gallery_id: int):
         orchestrator.refresh_globals()
 
-        raw_cache = Caching.Load.raw_metadata()
+        raw_cache = Caching.Load.cached_metadata()
         cached_meta = raw_cache.get(str(gallery_id))
         if cached_meta and isinstance(cached_meta, dict):
             return cached_meta
@@ -961,12 +961,12 @@ class Fetch:
                 # Update cache
                 cached_entry = Caching.Save.cache(data, gallery_id)
                 if cached_entry:
-                    general_metadata = Caching.Load.general_metadata()
+                    general_metadata = Caching.Load.cached_metadata(clean=True)
                     general_metadata[gallery_id] = cached_entry
-                    Caching.Save.general_metadata(general_metadata)
-                raw_cache = Caching.Load.raw_metadata()
+                    Caching.Save.cached_metadata(general_metadata, clean=True)
+                raw_cache = Caching.Load.cached_metadata()
                 raw_cache[str(gallery_id)] = data
-                Caching.Save.raw_metadata(raw_cache)
+                Caching.Save.cached_metadata(raw_cache)
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
@@ -1158,9 +1158,9 @@ class Fetch:
         if metadata and cache_key:
             Caching.Save.cache(cache_key, gallery_ids)
         elif metadata:
-            general_metadata = Caching.Load.general_metadata()
+            general_metadata = Caching.Load.cached_metadata(clean=True)
             general_metadata.update(metadata)
-            Caching.Save.general_metadata(general_metadata)
+            Caching.Save.cached_metadata(general_metadata, clean=True)
         
         return metadata
 
@@ -1227,39 +1227,36 @@ class Caching:
                 return scraperdb.read_cache_references()
         
         @staticmethod
-        def general_metadata() -> dict:
+        def cached_metadata(clean: bool = False) -> dict:
+            """
+            Returns cached metadata for all galleries.
+            By default returns raw metadata. If clean=True, returns clean metadata.
+            """
+            
             data = Caching._read_cache()
-            metadata = data.get("metadata", {})
-            if not isinstance(metadata, dict):
+            metadata_block = data.get("metadata", {})
+            if not isinstance(metadata_block, dict):
                 return {}
-            cleaned = {}
-            for gid, entry in metadata.items():
+            result = {}
+            
+            for gid, entry in metadata_block.items():
                 if not isinstance(entry, dict):
                     continue
+                
                 timestamp = entry.get("timestamp") or 0
                 if (time.time() - timestamp) >= scraperdb.TTL:
                     continue
-                clean = entry.get("clean_metadata")
-                if isinstance(clean, dict):
-                    cleaned[gid] = clean
-            return cleaned
-
-        @staticmethod
-        def raw_metadata() -> dict:
-            data = Caching._read_cache()
-            raw_block = data.get("metadata", {})
-            if not isinstance(raw_block, dict):
-                return {}
-            metadata = {}
-            for gid, entry in raw_block.items():
-                if not isinstance(entry, dict):
-                    continue
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= scraperdb.TTL:
-                    continue
-                if "raw_metadata" in entry:
-                    metadata[gid] = entry.get("raw_metadata")
-            return metadata
+                
+                if clean:
+                    clean_meta = entry.get("clean_metadata")
+                    if isinstance(clean_meta, dict):
+                        result[gid] = clean_meta
+                
+                else:
+                    if "raw_metadata" in entry:
+                        result[gid] = entry.get("raw_metadata")
+            
+            return result
         
         @staticmethod
         def broken_symbols() -> dict[str, str]:
@@ -1361,35 +1358,35 @@ class Caching:
             return entry
         
         @staticmethod
-        def general_metadata(metadata: dict):
+        def cached_metadata(metadata: dict, clean: bool = False):
+            """
+            Updates cached metadata for all galleries.
+            If clean=True, updates clean_metadata. Otherwise, updates raw_metadata.
+            """
+            
+            now = time.time()
             if not isinstance(metadata, dict):
                 return
-            data = Caching._read_cache()
-            safe_metadata = {str(k): v for k, v in metadata.items()}
-            now = time.time()
-            for gid, entry in safe_metadata.items():
+            
+            for gid, entry in metadata.items():
                 if not isinstance(entry, dict):
                     continue
-                scraperdb.upsert_cached_metadata(
-                    gid,
-                    now,
-                    clean_metadata=entry,
-                    raw_metadata=None,
-                )
-
-        @staticmethod
-        def raw_metadata(metadata: dict):
-            if not isinstance(metadata, dict):
-                return
-            data = Caching._read_cache()
-            now = time.time()
-            for gid, entry in metadata.items():
-                scraperdb.upsert_cached_metadata(
-                    str(gid),
-                    now,
-                    clean_metadata=None,
-                    raw_metadata=entry,
-                )
+                
+                if clean:
+                    scraperdb.upsert_cached_metadata(
+                        str(gid),
+                        now,
+                        clean_metadata=entry,
+                        raw_metadata=None,
+                    )
+                
+                else:
+                    scraperdb.upsert_cached_metadata(
+                        str(gid),
+                        now,
+                        clean_metadata=None,
+                        raw_metadata=entry,
+                    )
         
         @staticmethod
         def broken_symbols(symbol_map: dict[str, str]):
