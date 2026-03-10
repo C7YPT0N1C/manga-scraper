@@ -435,6 +435,7 @@ def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
 ################################################################################################################
 
 class Get:
+    """Get a resource, usually generated."""
     @staticmethod
     def cache_keys(search_type: str, search_value: str = None) -> str:
         """Generate cache key based on search criteria.
@@ -677,6 +678,7 @@ class Get:
         }
 
 class Fetch:
+    """Fetch a resource"""
     ################################################################################################################
     # GALLERY ID FETCHING
     ################################################################################################################
@@ -701,10 +703,10 @@ class Fetch:
         end_page: int | None = None,
         file_used: bool = False,
         fetch_as_archival: bool = DEFAULT_ARCHIVING,
-    ) -> list[int]:
+    ) -> tuple[str | None, list[int]]:
         """
         Unified fetch_gallery_ids for CLI and Interactive: tries cache key(s) first, then falls back to API if needed.
-        Returns a list of IDs.
+        Returns a tuple (cache_key, list of IDs).
         """
         import time
         
@@ -721,7 +723,7 @@ class Fetch:
                 ids = cache_entry.get("ids", [])
                 if expires_at is None or expires_at > now:
                     logger.info(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
-                    return ids
+                    return (cache_key, ids)
                 else:
                     logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
 
@@ -851,7 +853,7 @@ class Fetch:
                 log(f"Fetched total {len(ids_set)} Galleries for {qt}{query_str}", "warning")
                 log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
                 ids = list(ids_set)
-                return ids
+                return (cache_key, ids)
             except Exception as e:
                 attempt += 1
                 logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
@@ -860,8 +862,8 @@ class Fetch:
                     time.sleep(2)
                     continue
                 logger.warning(f"Failed to fetch galleries for {query_type}={query_value}. Skipping.")
-                return []
-        return ids
+                return (cache_key, [])
+        return (cache_key, ids)
 
     ################################################################################################################
     # IMAGE URL FETCHING

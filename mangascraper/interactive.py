@@ -1177,7 +1177,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
             fetch_all_pages = archive_mode or fetch_all or end_page is None
-            ids, cache_key = scraperapi.Fetch.gallery_ids(
+            cache_key, ids = scraperapi.Fetch.gallery_ids(
                 "homepage",
                 sort_val,
                 sort_val,
@@ -1343,7 +1343,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 
                 logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = scraperapi.Fetch.gallery_ids(
+                cache_key, ids = scraperapi.Fetch.gallery_ids(
                     "search",
                     search_query,
                     sort_val,
@@ -1430,7 +1430,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 
                 logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = scraperapi.Fetch.gallery_ids(
+                cache_key, ids = scraperapi.Fetch.gallery_ids(
                     query_type,
                     query_value,
                     sort_val,
