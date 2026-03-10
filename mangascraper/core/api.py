@@ -2279,7 +2279,7 @@ class Cache:
         @staticmethod
         def broken_symbols() -> dict[str, str]:
             """Load all detected broken symbols as { symbol: '_' }."""
-            DB.init_db()
+            # Do NOT call DB.init_db() here to avoid self-recursion.
             with db_lock, DB.dbconnect() as conn:
                 c = conn.cursor()
                 c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
@@ -2429,7 +2429,7 @@ class Cache:
             """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
             if not symbol_map:
                 return
-            DB.init_db()
+            # Do NOT call DB.init_db() here to avoid self-recursion.
             now = datetime.now(timezone.utc).isoformat()
             with db_lock, DB.dbconnect() as conn:
                 c = conn.cursor()
