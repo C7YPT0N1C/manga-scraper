@@ -834,7 +834,7 @@ def interactive_config_menu(current_config: dict) -> dict:
         
         print(
             "╔════════════════════════════════════════════════════════╗\n"
-            "║        Interactive Configuration Menu                  ║\n"
+            "║             Interactive Configuration Menu             ║\n"
             "╚════════════════════════════════════════════════════════╝\n"
             "Current Settings:\n"
             f"  [1] Extension: {config.get('extension', DEFAULT_EXTENSION)}\n"
@@ -868,7 +868,7 @@ def interactive_config_menu(current_config: dict) -> dict:
                 log_clarification()
                 print(
                     "╔════════════════════════════════════════════════════════╗\n"
-                    "║        Interactive Configuration Menu                  ║\n"
+                    "║             Interactive Configuration Menu             ║\n"
                     "╚════════════════════════════════════════════════════════╝\n"
                     "Available extensions:\n"
                 )
@@ -953,7 +953,7 @@ def interactive_config_menu(current_config: dict) -> dict:
             log_clarification()
             print(
                 "╔════════════════════════════════════════════════════════╗\n"
-                "║        Interactive Configuration Menu                  ║\n"
+                "║             Interactive Configuration Menu             ║\n"
                 "╚════════════════════════════════════════════════════════╝\n"
                 "Output formats:\n  [1] directory\n  [2] zip\n  [3] cbz"
             )
@@ -1081,9 +1081,9 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
     while True:
         clear_screen()
         print(
-            "╔════════════════════════════════════════════════════════╗\n"
-            "║                 Interactive Search Menu                ║\n"
-            "╚════════════════════════════════════════════════════════╝\n"
+            "╔═════════════════════════════════════════════════════════╗\n"
+            "║                 Interactive Search Menu                 ║\n"
+            "╚═════════════════════════════════════════════════════════╝\n"
             "Search Options:\n"
             "  [1] Homepage\n"
             "  [2] Browse by ID range\n"
