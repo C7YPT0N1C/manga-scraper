@@ -1190,7 +1190,7 @@ class Caching:
                     cache_entry.pop(gid, None)
             logger.debug(f"[TESTING]: references = {references}")
             logger.debug(f"[TESTING]: cache_entry = {cache_entry}")
-            references = scraperdb.read_cache_references()
+            references = scraperdb.read_cached_metadata_entry()
             return {"references": references, "metadata": cache_entry}
         except Exception:
             return {"references": {}, "metadata": {}}
@@ -1224,7 +1224,7 @@ class Caching:
             
             # Return all cache references as a dict
             else:
-                return scraperdb.read_cache_references()
+                return scraperdb.read_cached_metadata_entry()
         
         @staticmethod
         def cached_metadata(clean: bool = False) -> dict:
