@@ -319,6 +319,34 @@ def upsert_cache_metadata(gallery_id: str, timestamp: float, clean_metadata=None
         )
         conn.commit()
 
+def upsert_cache_reference(cache_key: str, entry: dict):
+    init_db()
+    ids = entry.get("ids")
+    if not isinstance(ids, list):
+        ids = [] if ids is None else [ids]
+    ids_json = json.dumps(ids)
+    with lock, dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO CacheReferences (cache_key, cache_type, cache_key, ids, ttl, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(cache_key) DO UPDATE SET "
+            "cache_type=excluded.cache_type, "
+            "cache_key=excluded.cache_key, "
+            "ids=excluded.ids",
+            "ttl=excluded.ttl, "
+            "expires_at=excluded.expires_at, "
+            (
+                str(cache_key),
+                entry.get("type"),
+                entry.get("key"),
+                ids_json,
+                entry.get("ttl"),
+                entry.get("expires_at"),
+            ),
+        )
+        conn.commit()
+
 # ===============================
 # CACHE REFERENCES
 # ===============================
@@ -328,14 +356,14 @@ def load_cache_references() -> dict:
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT entry_key, cache_type, cache_key, ids, ttl, expires_at "
+            "SELECT cache_key, cache_type, cache_key, ids, ttl, expires_at "
             "FROM CacheReferences"
         )
         rows = cursor.fetchall()
     result = {}
     for row in rows:
         (
-            entry_key,
+            cache_key,
             cache_type,
             cache_key,
             path,
@@ -361,42 +389,14 @@ def load_cache_references() -> dict:
                 entry["ids"] = json.loads(ids_json)
             except Exception:
                 entry["ids"] = []
-        result[str(entry_key)] = entry
+        result[str(cache_key)] = entry
     return result
 
-def upsert_cache_reference(entry_key: str, entry: dict):
-    init_db()
-    ids = entry.get("ids")
-    if not isinstance(ids, list):
-        ids = [] if ids is None else [ids]
-    ids_json = json.dumps(ids)
-    with lock, dbconnect() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO CacheReferences (entry_key, cache_type, cache_key, ids, ttl, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(entry_key) DO UPDATE SET "
-            "cache_type=excluded.cache_type, "
-            "cache_key=excluded.cache_key, "
-            "ids=excluded.ids",
-            "ttl=excluded.ttl, "
-            "expires_at=excluded.expires_at, "
-            (
-                str(entry_key),
-                entry.get("type"),
-                entry.get("key"),
-                ids_json,
-                entry.get("ttl"),
-                entry.get("expires_at"),
-            ),
-        )
-        conn.commit()
-
-def delete_cache_reference(entry_key: str):
+def delete_cache_reference(cache_key: str):
     init_db()
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM CacheReferences WHERE entry_key = ?", (str(entry_key),))
+        cursor.execute("DELETE FROM CacheReferences WHERE cache_key = ?", (str(cache_key),))
         conn.commit()
 
 def prune_all_caches():

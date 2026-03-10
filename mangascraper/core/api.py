@@ -1169,9 +1169,9 @@ class Caching:
     @staticmethod
     def load(cache_key: str) -> dict:
         """Load the CacheReferences entry for this cache_key"""
-        entry_key = f"metadata:{cache_key}"
+        cache_key = f"metadata:{cache_key}"
         references = scraperdb.load_cache_references()
-        ref_entry = references.get(entry_key)
+        ref_entry = references.get(cache_key)
         if not ref_entry or not isinstance(ref_entry, dict):
             return {}
         ids = ref_entry.get("ids")
@@ -1210,13 +1210,13 @@ class Caching:
             # Parse search type and value from cache_key
             search_types = ["artist", "group", "tag", "character", "parody", "search", "archive", "homepage"]
             cache_type = "metadata"
-            entry_key = f"metadata:{cache_key}"
+            cache_key = f"metadata:{cache_key}"
             key_value = cache_key
             for st in search_types:
                 if cache_key.startswith(f"{st}:"):
                     cache_type = st
                     key_value = cache_key[len(st)+1:]
-                    entry_key = f"{st}:{key_value}"
+                    cache_key = f"{st}:{key_value}"
                     break
 
             cache_reference_entry = {
@@ -1226,9 +1226,9 @@ class Caching:
                 "ttl": scraperdb.TTL,
                 "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
             }
-            logger.debug(f"[TESTING] Called with cache_key={cache_key}, entry_key={entry_key}, ids={ids}, cache_reference_entry={cache_reference_entry}")
-            scraperdb.upsert_cache_reference(entry_key, cache_reference_entry)
-            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {entry_key} with {len(ids)} ids.")
+            logger.debug(f"[TESTING] Called with cache_key={cache_key}, cache_key={cache_key}, ids={ids}, cache_reference_entry={cache_reference_entry}")
+            scraperdb.upsert_cache_reference(cache_key, cache_reference_entry)
+            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {cache_key} with {len(ids)} ids.")
         except Exception as e:
             logger.error(f"[TESTING] Exception while saving cache reference for {cache_key}: {e}")
         
