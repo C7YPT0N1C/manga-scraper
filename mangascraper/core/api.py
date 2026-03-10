@@ -1536,7 +1536,10 @@ class Fetch:
         Returns a tuple (cache_key, list of IDs).
         """
         
-        cache_key = Get.cache_keys(query_type, query_value) if query_value else None
+        cache_target = query_value
+        if query_type == "homepage":
+            cache_target = sort_value or DEFAULT_PAGE_SORT
+        cache_key = Get.cache_keys(query_type, cache_target)
         
         # 1. Try cache first
         if cache_key:
@@ -1687,6 +1690,8 @@ class Fetch:
                 log(f"Fetched total {len(ids_set)} Galleries for {qt}{query_str}", "warning")
                 log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
                 ids = list(sorted(ids_set))
+                if cache_key and ids:
+                    Caching.Save.cache(cache_key=cache_key, gallery_ids=ids)
                 return (cache_key, ids)
             except Exception as e:
                 attempt += 1
@@ -1696,7 +1701,7 @@ class Fetch:
                     time.sleep(2)
                     continue
                 logger.warning(f"Failed to fetch galleries for {query_type}={query_value}. Skipping.")
-                return (cache_key, [])
+                return (None, [])
         return (cache_key, ids)
 
     ################################################################################################################
@@ -2042,7 +2047,7 @@ class Caching:
                 for gid in expired_keys:
                     cache_entry.pop(gid, None)
             references = read_cached_metadata_entry()
-            logger.debug(f"[TESTING]: cache_entry = {cache_entry}, references = {references}")
+            logger.debug(f"[TESTING]: references = {references}, cache_entry = {cache_entry}")
             return {"references": references, "metadata": cache_entry}
         except Exception:
             return {"references": {}, "metadata": {}}
