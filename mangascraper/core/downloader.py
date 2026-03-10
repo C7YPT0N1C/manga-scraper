@@ -587,7 +587,11 @@ def process_galleries(batch_ids):
                     meta,
                     active_extension.EXTENSION_REFERRER,
                 )
+                
                 creators = gallery_metas["creator"]
+                # Ensure creators is always a list
+                if not isinstance(creators, list):
+                    creators = [creators]
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
