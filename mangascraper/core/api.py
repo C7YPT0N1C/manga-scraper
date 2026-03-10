@@ -2296,6 +2296,154 @@ class Caching:
 # EXPORTED API
 ################################################################################################################
 
+def test_cache() -> bool:
+    """
+    Run a cache self-test suite covering core cache read/write flows.
+    Returns True when all tests pass, else False.
+    """
+    # Test inputs
+    TEST_CACHE_KEY = "test:cache_sanity"
+    TEST_GALLERY_ID = 99999999
+    TEST_IDS = [11111111, 22222222, 33333333]
+    TEST_SEARCH_TYPE = "search"
+    TEST_SEARCH_VALUE = "language:english"
+    TEST_SEARCH_SORT = DEFAULT_PAGE_SORT
+    TEST_SEARCH_START = 1
+    TEST_SEARCH_END = 1
+
+    passed = 0
+    failed = 0
+
+    def _report(name: str, ok: bool, details: str = ""):
+        nonlocal passed, failed
+        status = "PASS" if ok else "FAIL"
+        line = f"[CACHE TEST] {status}: {name}"
+        if details:
+            line = f"{line} | {details}"
+
+        # Terminal output
+        print(line)
+        if ok:
+            logger.info(line)
+        else:
+            logger.warning(line)
+
+        # Log file output (debug)
+        logger.debug(line)
+
+        if ok:
+            passed += 1
+        else:
+            failed += 1
+
+    init_db()
+
+    # 1) Read all references shape
+    try:
+        refs = read_cached_metadata_entry()
+        ok = isinstance(refs, dict)
+        _report("read_cached_metadata_entry(all references)", ok, f"type={type(refs).__name__}")
+    except Exception as e:
+        _report("read_cached_metadata_entry(all references)", False, f"exception={e}")
+
+    # 2) Upsert/read CacheReferences
+    try:
+        now = time.time()
+        upsert_cache_reference(TEST_CACHE_KEY, {
+            "cache_key": TEST_CACHE_KEY,
+            "cache_type": "test",
+            "cache_target": "cache_sanity",
+            "ids": TEST_IDS,
+            "ttl": 300,
+            "expires_at": now + 300,
+        })
+        entry = read_cached_metadata_entry(cache_key=TEST_CACHE_KEY)
+        ok = (
+            isinstance(entry, dict)
+            and isinstance(entry.get("ids"), list)
+            and all(isinstance(gid, int) for gid in entry.get("ids", []))
+        )
+        _report("upsert_cache_reference + read_cached_metadata_entry(cache_key)", ok, f"entry={entry}")
+    except Exception as e:
+        _report("upsert_cache_reference + read_cached_metadata_entry(cache_key)", False, f"exception={e}")
+
+    # 3) Upsert/read CachedMetadata by ID
+    try:
+        raw_meta = {"id": TEST_GALLERY_ID, "title": {"english": "Cache Test Gallery"}}
+        clean_meta = {"id": TEST_GALLERY_ID, "title": "Cache Test Gallery", "pages": 1}
+        upsert_cached_metadata(TEST_GALLERY_ID, time.time(), clean_metadata=clean_meta, raw_metadata=raw_meta)
+        entry = read_cached_metadata_entry(gallery_id=TEST_GALLERY_ID)
+        ok = (
+            isinstance(entry, dict)
+            and isinstance(entry.get("timestamp"), float)
+            and isinstance(entry.get("clean_metadata"), dict)
+            and isinstance(entry.get("raw_metadata"), dict)
+        )
+        _report("upsert_cached_metadata + read_cached_metadata_entry(gallery_id)", ok, f"entry_keys={list(entry.keys()) if isinstance(entry, dict) else None}")
+    except Exception as e:
+        _report("upsert_cached_metadata + read_cached_metadata_entry(gallery_id)", False, f"exception={e}")
+
+    # 4) Read CachedMetadata by IDs list
+    try:
+        batch = read_cached_metadata_entry(ids=[TEST_GALLERY_ID])
+        ok = isinstance(batch, dict) and TEST_GALLERY_ID in batch
+        _report("read_cached_metadata_entry(ids=[...])", ok, f"keys={list(batch.keys()) if isinstance(batch, dict) else None}")
+    except Exception as e:
+        _report("read_cached_metadata_entry(ids=[...])", False, f"exception={e}")
+
+    # 5) Caching.Load/Save explicit cache refs
+    try:
+        Caching.Save.cache(cache_key=TEST_CACHE_KEY, gallery_ids=TEST_IDS)
+        loaded_ids = Caching.Load.cache(cache_key=TEST_CACHE_KEY)
+        ok = isinstance(loaded_ids, list) and all(isinstance(gid, int) for gid in loaded_ids)
+        _report("Caching.Save.cache(cache_key, gallery_ids) + Caching.Load.cache(cache_key)", ok, f"loaded_ids={loaded_ids}")
+    except Exception as e:
+        _report("Caching.Save.cache(cache_key, gallery_ids) + Caching.Load.cache(cache_key)", False, f"exception={e}")
+
+    # 6) Caching.Load.id_metadata
+    try:
+        md = Caching.Load.id_metadata([TEST_GALLERY_ID])
+        ok = isinstance(md, dict)
+        _report("Caching.Load.id_metadata([...])", ok, f"keys={list(md.keys()) if isinstance(md, dict) else None}")
+    except Exception as e:
+        _report("Caching.Load.id_metadata([...])", False, f"exception={e}")
+
+    # 7) Caching.Load.cached_metadata (raw + clean)
+    try:
+        raw_block = Caching.Load.cached_metadata(clean=False)
+        clean_block = Caching.Load.cached_metadata(clean=True)
+        ok = isinstance(raw_block, dict) and isinstance(clean_block, dict)
+        _report("Caching.Load.cached_metadata(clean=False/True)", ok, f"raw={len(raw_block)} clean={len(clean_block)}")
+    except Exception as e:
+        _report("Caching.Load.cached_metadata(clean=False/True)", False, f"exception={e}")
+
+    # 8) Integration fetch test (best effort; may fail if network/rate-limited)
+    try:
+        fetched_cache_key, fetched_ids = Fetch.gallery_ids(
+            TEST_SEARCH_TYPE,
+            TEST_SEARCH_VALUE,
+            TEST_SEARCH_SORT,
+            TEST_SEARCH_START,
+            TEST_SEARCH_END,
+            fetch_as_archival=False,
+        )
+        entry = read_cached_metadata_entry(cache_key=fetched_cache_key) if fetched_cache_key else None
+        ok = (
+            fetched_cache_key is not None
+            and isinstance(fetched_ids, list)
+            and (entry is None or isinstance(entry, dict))
+        )
+        _report("Fetch.gallery_ids integration -> CacheReferences", ok, f"cache_key={fetched_cache_key} ids={len(fetched_ids) if isinstance(fetched_ids, list) else 'n/a'}")
+    except Exception as e:
+        _report("Fetch.gallery_ids integration -> CacheReferences", False, f"exception={e}")
+
+    summary = f"[CACHE TEST] COMPLETE: passed={passed}, failed={failed}"
+    print(summary)
+    logger.info(summary)
+    logger.debug(summary)
+
+    return failed == 0
+
 cache = Caching()
 get = Get()
 fetch = Fetch()

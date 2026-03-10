@@ -316,6 +316,12 @@ def parse_args():
         default=argparse.SUPPRESS,
         help="Simulate downloads without saving files",
     )
+    runtime_group.add_argument(
+        "--test-cache",
+        action="store_true",
+        default=False,
+        help="Run cache read/write self-tests and exit",
+    )
     summary_mode_group.add_argument(
         "--unattended",
         action="store_true",
@@ -970,6 +976,11 @@ def main():
     # Update Config With CLI Args
     # Allows session to use correct config values on creation
     update_config(args)
+
+    # --- Cache test mode ---
+    if args.test_cache:
+        ok = scraperapi.test_cache()
+        sys.exit(0 if ok else 1)
     
     # --- Handle --interactive mode (before building gallery list) ---
     if args.interactive:
