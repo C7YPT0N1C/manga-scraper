@@ -23,8 +23,9 @@ possible_broken_symbols_lock = threading.Lock()
 DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 
-# Cache TTL: 3 hours (runtime-configured)
-TTL = getattr(orchestrator, "metadata_ttl", 3 * 60 * 60)
+# Cache expiry windows (seconds)
+CACHE_REFERENCES_TTL_SECONDS = 24 * 60 * 60      # 1 day
+CACHED_METADATA_TTL_SECONDS = 14 * 24 * 60 * 60  # 14 days
 
 # Pre-compile regex patterns for title cleaning (avoid recompilation on every call)
 _BRACKET_PATTERN = re.compile(r"(\[.*?\]|\{.*?\})")
@@ -132,7 +133,8 @@ def init_db():
             gallery_id INTEGER PRIMARY KEY,
             timestamp REAL,
             raw_metadata TEXT,
-            clean_metadata TEXT
+            clean_metadata TEXT,
+            expires_at REAL
         );
 
         CREATE TABLE IF NOT EXISTS CacheReferences (
@@ -140,10 +142,37 @@ def init_db():
             cache_type TEXT,
             cache_target TEXT,
             ids TEXT,
-            ttl INTEGER,
             expires_at REAL
         );
         """)
+
+        c.execute("PRAGMA table_info(CacheReferences)")
+        cache_ref_columns = [row[1] for row in c.fetchall()]
+        if "expires_at" not in cache_ref_columns:
+            c.execute("ALTER TABLE CacheReferences ADD COLUMN expires_at REAL")
+
+        # Ensure required expires_at columns exist and are backfilled.
+        c.execute("PRAGMA table_info(CachedMetadata)")
+        cached_meta_columns = [row[1] for row in c.fetchall()]
+        if "expires_at" not in cached_meta_columns:
+            c.execute("ALTER TABLE CachedMetadata ADD COLUMN expires_at REAL")
+
+        now = time.time()
+        c.execute(
+            "UPDATE CacheReferences SET expires_at = ? WHERE expires_at IS NULL",
+            (now + CACHE_REFERENCES_TTL_SECONDS,),
+        )
+        c.execute(
+            """
+            UPDATE CachedMetadata
+            SET expires_at = CASE
+                WHEN timestamp IS NOT NULL THEN timestamp + ?
+                ELSE ?
+            END
+            WHERE expires_at IS NULL
+            """,
+            (CACHED_METADATA_TTL_SECONDS, now + CACHED_METADATA_TTL_SECONDS),
+        )
 
         conn.commit()
 
@@ -263,8 +292,13 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
             cursor = conn.cursor()
             if cache_key is not None:
                 cursor.execute(
-                    "SELECT cache_key, cache_type, cache_target, ids, ttl, expires_at FROM CacheReferences WHERE cache_key = ?",
-                    (str(cache_key),),
+                    """
+                    SELECT cache_key, cache_type, cache_target, ids, expires_at
+                    FROM CacheReferences
+                    WHERE cache_key = ?
+                      AND (expires_at IS NULL OR expires_at > ?)
+                    """,
+                    (str(cache_key), time.time()),
                 )
                 row = cursor.fetchone()
                 if not row:
@@ -274,7 +308,6 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                     cache_type,
                     cache_target,
                     ids_json,
-                    ttl,
                     expires_at,
                 ) = row
                 parsed_ids = []
@@ -288,14 +321,18 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                     "cache_key": str(cache_key_val),
                     "cache_target": str(cache_target or ""),
                     "ids": parsed_ids,
-                    "ttl": _safe_float(ttl),
                     "expires_at": _safe_float(expires_at),
                 }
                 return entry
             else:
                 # Return all CacheReferences entries
                 cursor.execute(
-                    "SELECT cache_key, cache_type, cache_target, ids, ttl, expires_at FROM CacheReferences"
+                    """
+                    SELECT cache_key, cache_type, cache_target, ids, expires_at
+                    FROM CacheReferences
+                    WHERE expires_at IS NULL OR expires_at > ?
+                    """,
+                    (time.time(),),
                 )
                 rows = cursor.fetchall()
                 result = {}
@@ -305,7 +342,6 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                         cache_type,
                         cache_target,
                         ids_json,
-                        ttl,
                         expires_at,
                     ) = row
                     parsed_ids = []
@@ -319,7 +355,6 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                         "cache_key": str(cache_key_val),
                         "cache_target": str(cache_target or ""),
                         "ids": parsed_ids,
-                        "ttl": _safe_float(ttl),
                         "expires_at": _safe_float(expires_at),
                     }
                     result[str(cache_key_val)] = entry
@@ -337,16 +372,18 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
             placeholders = ",".join("?" for _ in ids_list)
             params = list(ids_list)
             query = (
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata "
+                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata, expires_at "
                 "FROM CachedMetadata WHERE gallery_id IN (" + placeholders + ")"
             )
+            query += " AND (expires_at IS NULL OR expires_at > ?)"
+            params.append(time.time())
             if cutoff is not None:
                 query += " AND timestamp >= ?"
                 params.append(cutoff)
             cursor.execute(query, params)
             rows = cursor.fetchall()
             result = {}
-            for gallery_id, timestamp, clean_json, raw_json in rows:
+            for gallery_id, timestamp, clean_json, raw_json, expires_at in rows:
                 gid = _normalise_integer(gallery_id)
                 if gid is None:
                     continue
@@ -354,6 +391,7 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 raw = _safe_json_dict(raw_json)
                 result[gid] = {
                     "timestamp": _safe_float(timestamp),
+                    "expires_at": _safe_float(expires_at),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
@@ -363,24 +401,39 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
             if gid is None:
                 return None
             cursor.execute(
-                "SELECT timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE gallery_id = ?",
-                (gid,),
+                """
+                SELECT timestamp, clean_metadata, raw_metadata, expires_at
+                FROM CachedMetadata
+                WHERE gallery_id = ?
+                  AND (expires_at IS NULL OR expires_at > ?)
+                """,
+                (gid, time.time()),
             )
             row = cursor.fetchone()
             if not row:
                 return None
-            timestamp, clean_json, raw_json = row
+            timestamp, clean_json, raw_json, expires_at = row
             clean = _safe_json_dict(clean_json)
             raw = _safe_json_dict(raw_json)
-            return {"timestamp": _safe_float(timestamp), "clean_metadata": clean, "raw_metadata": raw}
+            return {
+                "timestamp": _safe_float(timestamp),
+                "expires_at": _safe_float(expires_at),
+                "clean_metadata": clean,
+                "raw_metadata": raw,
+            }
         elif cutoff is not None:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata WHERE timestamp >= ?",
-                (cutoff,),
+                """
+                SELECT gallery_id, timestamp, clean_metadata, raw_metadata, expires_at
+                FROM CachedMetadata
+                WHERE timestamp >= ?
+                  AND (expires_at IS NULL OR expires_at > ?)
+                """,
+                (cutoff, time.time()),
             )
             rows = cursor.fetchall()
             result = {}
-            for gallery_id, timestamp, clean_json, raw_json in rows:
+            for gallery_id, timestamp, clean_json, raw_json, expires_at in rows:
                 gid = _normalise_integer(gallery_id)
                 if gid is None:
                     continue
@@ -388,17 +441,23 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 raw = _safe_json_dict(raw_json)
                 result[gid] = {
                     "timestamp": _safe_float(timestamp),
+                    "expires_at": _safe_float(expires_at),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
             return result
         else:
             cursor.execute(
-                "SELECT gallery_id, timestamp, clean_metadata, raw_metadata FROM CachedMetadata"
+                """
+                SELECT gallery_id, timestamp, clean_metadata, raw_metadata, expires_at
+                FROM CachedMetadata
+                WHERE expires_at IS NULL OR expires_at > ?
+                """,
+                (time.time(),),
             )
             rows = cursor.fetchall()
             result = {}
-            for gallery_id, timestamp, clean_json, raw_json in rows:
+            for gallery_id, timestamp, clean_json, raw_json, expires_at in rows:
                 gid = _normalise_integer(gallery_id)
                 if gid is None:
                     continue
@@ -406,13 +465,14 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 raw = _safe_json_dict(raw_json)
                 result[gid] = {
                     "timestamp": _safe_float(timestamp),
+                    "expires_at": _safe_float(expires_at),
                     "clean_metadata": clean,
                     "raw_metadata": raw,
                 }
             return result
         
 def prune_all_caches():
-    """Remove expired entries in CacheReferences based on expires_at."""
+    """Remove expired entries in cache tables based on expires_at."""
     init_db()
     now = time.time()
     with lock, dbconnect() as conn:
@@ -420,6 +480,10 @@ def prune_all_caches():
         # Delete expired cache references by expires_at
         cursor.execute(
             "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now,),
+        )
+        cursor.execute(
+            "DELETE FROM CachedMetadata WHERE expires_at IS NOT NULL AND expires_at <= ?",
             (now,),
         )
         conn.commit()
@@ -441,6 +505,7 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
 
     entry = read_cached_metadata_entry(gallery_id=gid) or {
         "timestamp": None,
+        "expires_at": None,
         "clean_metadata": {},
         "raw_metadata": {},
     }
@@ -448,22 +513,25 @@ def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=Non
         entry["clean_metadata"].update(clean_metadata)
     if raw_metadata is not None:
         entry["raw_metadata"] = _safe_json_dict(raw_metadata)
-    entry["timestamp"] = _safe_float(timestamp)
+    entry["timestamp"] = _safe_float(timestamp, time.time())
+    entry["expires_at"] = entry["timestamp"] + CACHED_METADATA_TTL_SECONDS
 
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata) "
-            "VALUES (?, ?, ?, ?) "
+            "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata, expires_at) "
+            "VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(gallery_id) DO UPDATE SET "
             "timestamp=excluded.timestamp, "
             "clean_metadata=excluded.clean_metadata, "
-            "raw_metadata=excluded.raw_metadata",
+            "raw_metadata=excluded.raw_metadata, "
+            "expires_at=excluded.expires_at",
             (
                 gid,
                 entry["timestamp"],
                 json.dumps(entry["clean_metadata"], ensure_ascii=False),
                 json.dumps(entry["raw_metadata"], ensure_ascii=False),
+                entry["expires_at"],
             ),
         )
         conn.commit()
@@ -474,28 +542,25 @@ def upsert_cache_reference(cache_key: str, entry: dict):
     ids = _normalise_integer_list(entry.get("ids"))
     cache_type = _safe_text(entry.get("cache_type"), "")
     cache_target = _safe_text(entry.get("cache_target"), "")
-    ttl = _normalise_integer(entry.get("ttl"))
-    if ttl is None:
-        ttl = 0
     expires_at = _safe_float(entry.get("expires_at"))
+    if expires_at <= 0:
+        expires_at = time.time() + CACHE_REFERENCES_TTL_SECONDS
     ids_json = json.dumps(ids)
     with lock, dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO CacheReferences (cache_key, cache_type, cache_target, ids, ttl, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
+            "INSERT INTO CacheReferences (cache_key, cache_type, cache_target, ids, expires_at) "
+            "VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(cache_key) DO UPDATE SET "
             "cache_type=excluded.cache_type, "
             "cache_target=excluded.cache_target, "
             "ids=excluded.ids, "
-            "ttl=excluded.ttl, "
             "expires_at=excluded.expires_at",
             (
                 cache_key,
                 cache_type,
                 cache_target,
                 ids_json,
-                ttl,
                 expires_at,
             ),
         )
@@ -2019,26 +2084,13 @@ class Caching:
     @staticmethod
     def clear_cache(cache_key: str = None):
         """Clear / prune the cache"""
-        # Prune references to cache files by their own TTL
         prune_all_caches()
     
     @staticmethod
     def _read_cache() -> dict:
-        cutoff = time.time() - TTL
         try:
-            cache_entry = read_cached_metadata_entry(cutoff=cutoff)
-            
-            # Remove expired entries from cache_entry (in-memory prune)
-            if isinstance(cache_entry, dict):
-                expired_keys = []
-                for gid, entry in cache_entry.items():
-                    if not isinstance(entry, dict):
-                        continue
-                    timestamp = entry.get("timestamp") or 0
-                    if (time.time() - timestamp) >= TTL:
-                        expired_keys.append(gid)
-                for gid in expired_keys:
-                    cache_entry.pop(gid, None)
+            prune_all_caches()
+            cache_entry = read_cached_metadata_entry(cutoff=0)
             references = read_cached_metadata_entry()
             #logger.debug(f"[CACHE]:\nCache References = {references}\nCache Entry = {cache_entry}")
             return {"references": references, "metadata": cache_entry}
@@ -2098,10 +2150,6 @@ class Caching:
             
             for gid, entry in metadata_block.items():
                 if not isinstance(entry, dict):
-                    continue
-                
-                timestamp = entry.get("timestamp") or 0
-                if (time.time() - timestamp) >= TTL:
                     continue
                 
                 if clean:
@@ -2221,14 +2269,12 @@ class Caching:
                 cache_type, cache_target = split_cache_key(cache_key)
                 ids = _normalise_integer_list(gallery_ids)
                 ids = list(sorted(set(ids)))
-                ttl_default = 10800
-                expires_at = now + ttl_default
+                expires_at = now + CACHE_REFERENCES_TTL_SECONDS
                 entry_ref = {
                     "cache_key": cache_key,
                     "cache_type": cache_type,
                     "cache_target": cache_target,
                     "ids": ids,
-                    "ttl": ttl_default,
                     "expires_at": expires_at,
                 }
                 upsert_cache_reference(cache_key, entry_ref)

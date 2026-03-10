@@ -163,7 +163,6 @@ def main() -> bool:
                     "cache_type": "test",
                     "cache_target": "cache_sanity",
                     "ids": TEST_IDS,
-                    "ttl": 300,
                     "expires_at": now + 300,
                 },
             )
@@ -171,6 +170,7 @@ def main() -> bool:
             ok = (
                 isinstance(entry, dict)
                 and isinstance(entry.get("ids"), list)
+                and isinstance(entry.get("expires_at"), float)
                 and all(isinstance(gid, int) for gid in entry.get("ids", []))
             )
             _report("upsert_cache_reference + read_cached_metadata_entry(cache_key)", ok, f"entry={entry}")
@@ -188,7 +188,6 @@ def main() -> bool:
                     "cache_type": "test",
                     "cache_target": "mixed_ids",
                     "ids": ["1", "bad", None, 2, 2],
-                    "ttl": 300,
                     "expires_at": now + 300,
                 },
             )
@@ -212,6 +211,7 @@ def main() -> bool:
             ok = (
                 isinstance(entry, dict)
                 and isinstance(entry.get("timestamp"), float)
+                and isinstance(entry.get("expires_at"), float)
                 and isinstance(entry.get("clean_metadata"), dict)
                 and isinstance(entry.get("raw_metadata"), dict)
             )
@@ -292,7 +292,6 @@ def main() -> bool:
                     "cache_type": "test",
                     "cache_target": "expired",
                     "ids": [123],
-                    "ttl": 1,
                     "expires_at": time.time() - 1,
                 },
             )
@@ -302,6 +301,31 @@ def main() -> bool:
             _report("prune_all_caches removes expired refs", ok, f"expired_entry={expired}")
         except Exception as e:
             _report("prune_all_caches removes expired refs", False, f"exception={e}")
+
+        # 11.1) prune_all_caches removes expired metadata
+        try:
+            expired_gid = TEST_GALLERY_ID + 11
+            now = time.time()
+            scraperapi.upsert_cached_metadata(
+                expired_gid,
+                now,
+                clean_metadata={"id": expired_gid, "title": "Expired Metadata"},
+                raw_metadata={"id": expired_gid},
+            )
+            with scraperapi.lock, scraperapi.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE CachedMetadata SET expires_at = ? WHERE gallery_id = ?",
+                    (time.time() - 1, expired_gid),
+                )
+                conn.commit()
+
+            scraperapi.prune_all_caches()
+            expired_md = scraperapi.read_cached_metadata_entry(gallery_id=expired_gid)
+            ok = expired_md is None
+            _report("prune_all_caches removes expired metadata", ok, f"expired_metadata={expired_md}")
+        except Exception as e:
+            _report("prune_all_caches removes expired metadata", False, f"exception={e}")
 
         # 12) Integration fetch test (small network sanity; no downloader invoked)
         try:
