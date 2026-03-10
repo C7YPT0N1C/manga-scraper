@@ -7,7 +7,7 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.interactive import interactive_config_menu, interactive_search_menu
 from mangascraper.core import api as scraperapi
-from mangascraper.core import cache_test
+from mangascraper.core import tester
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
@@ -1021,7 +1021,7 @@ def main():
 
     # --- Cache test mode ---
     if args.test_cache:
-        ok = cache_test.main()
+        ok = tester.main()
         sys.exit(0 if ok else 1)
     
     # --- Handle --interactive mode (before building gallery list) ---
