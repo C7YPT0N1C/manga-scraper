@@ -711,7 +711,6 @@ class Fetch:
         import time
         
         cache_key = Get.cache_keys(query_type, query_value) if query_value else None
-        logger.error(f"[TESTING]: Gallery IDs cache key = {cache_key}")
         
         # 1. Try cache first
         if cache_key:
@@ -726,6 +725,8 @@ class Fetch:
                     return (cache_key, ids)
                 else:
                     logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
+        else:
+            logger.info(f"No valid cache entry for {cache_key}. Will fetch from API.")
 
         # 2. If no valid cache, fetch from API
         max_retries = 2
