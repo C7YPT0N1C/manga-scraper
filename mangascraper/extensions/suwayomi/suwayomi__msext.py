@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/suwayomi/suwayomi__msext.py
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile, math, re, sqlite3
+import os, time, json, requests, threading, subprocess, shutil, tarfile, zipfile, math, re, sqlite3
 from requests.auth import HTTPBasicAuth
 from tqdm import tqdm
 
@@ -1289,7 +1289,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             
             # Archive the gallery if it's a directory and not already archived
             if gallery_format in {"cbz", "zip"} and os.path.isdir(gallery_path):
-                import zipfile
                 archive_path = os.path.join(creator_folder, f"{gallery_name}{archive_ext}")
                 with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as archive:
                     for root, _, files in os.walk(gallery_path):

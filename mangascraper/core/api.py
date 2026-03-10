@@ -2,6 +2,7 @@
 # mangascraper/core/api.py
 
 import os, sqlite3, threading, atexit, json, time, random, cloudscraper, requests, re, socket, urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 from pathlib import Path
@@ -33,8 +34,6 @@ session_lock = threading.Lock()
 ################################################################################################################
 
 def _build_symbol_translation_table():
-    import logging
-    logger = logging.getLogger("mangascraper.api")
     """Build a translation table for symbol replacements (called once at module load)."""
     global _SYMBOL_TRANSLATION_TABLE
     trans_dict = {ord(symbol): replacement for symbol, replacement in BROKEN_SYMBOL_REPLACEMENTS.items()}
@@ -168,9 +167,6 @@ def build_gallery_metadata_summary(meta, referrer: str):
         "creator_names": creators_clean,
         "language_names": gallery_language_clean,
     }
-    # Log all cleaned fields
-    import logging
-    logger = logging.getLogger("mangascraper.api")
     
     # Update DB clean_metadata for this gallery if id is valid
     try:
@@ -708,7 +704,6 @@ class Fetch:
         Unified fetch_gallery_ids for CLI and Interactive: tries cache key(s) first, then falls back to API if needed.
         Returns a tuple (cache_key, list of IDs).
         """
-        import time
         
         cache_key = Get.cache_keys(query_type, query_value) if query_value else None
         
@@ -721,12 +716,14 @@ class Fetch:
                 expires_at = cache_entry.get("expires_at")
                 ids = cache_entry.get("ids", [])
                 if expires_at is None or expires_at > now:
-                    logger.info(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
+                    logger.debug(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
                     return (cache_key, ids)
                 else:
-                    logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
+                    logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
+            else:
+                logger.debug(f"No valid cache entry for {cache_key}. Will fetch from API.")
         else:
-            logger.info(f"No valid cache entry for {cache_key}. Will fetch from API.")
+            logger.debug(f"No valid cache entry for {cache_key}. Will fetch from API.")
 
         # 2. If no valid cache, fetch from API
         max_retries = 2
@@ -1031,7 +1028,6 @@ class Fetch:
         Returns:
             dict: {gallery_id: metadata_dict}
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
         
         if not gallery_ids:
             return {}

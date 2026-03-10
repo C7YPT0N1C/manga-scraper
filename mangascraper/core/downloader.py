@@ -907,7 +907,6 @@ def start_downloader(gallery_list=None):
     
     # Clean up temp archive folder if used
     if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
-        import shutil
         try:
             if os.path.exists(ARCHIVE_TEMP_ROOT):
                 shutil.rmtree(ARCHIVE_TEMP_ROOT)
