@@ -958,16 +958,16 @@ class Fetch:
                 if not isinstance(data, dict):
                     logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                     return None
-
-                cached_entry = scraperdb.build_cached_metadata_entry(data, gallery_id)
-                if cached_entry:
-                    general_metadata = Caching.Load.general_metadata()
-                    general_metadata[gallery_id] = cached_entry
-                    Caching.Save.general_metadata(general_metadata)
-
-                raw_cache = Caching.Load.raw_metadata()
-                raw_cache[str(gallery_id)] = data
-                Caching.Save.raw_metadata(raw_cache)
+                
+                # Update cache
+                #cached_entry = scraperdb.build_cached_metadata_entry(data, gallery_id)
+                #if cached_entry:
+                #    general_metadata = Caching.Load.general_metadata()
+                #    general_metadata[gallery_id] = cached_entry
+                #    Caching.Save.general_metadata(general_metadata)
+                #raw_cache = Caching.Load.raw_metadata()
+                #raw_cache[str(gallery_id)] = data
+                #Caching.Save.raw_metadata(raw_cache)
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
