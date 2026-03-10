@@ -113,8 +113,8 @@ def main() -> bool:
             skipped += 1
 
     def _cleanup_test_data():
-        scraperapi.Db.init_db()
-        with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
+        scraperapi.DB.init_db()
+        with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
             cursor = conn.cursor()
 
             gallery_ids = sorted(TEST_GALLERY_IDS)
@@ -185,7 +185,7 @@ def main() -> bool:
             conn.commit()
 
     with _temporary_test_runtime_paths():
-        scraperapi.Db.init_db()
+        scraperapi.DB.init_db()
         try:
             # 0) Runtime path safety assertion
             try:
@@ -206,7 +206,7 @@ def main() -> bool:
             # 0.1) Pre-download path generation safety (computed path must stay under test runtime root)
             try:
                 path_gid = TEST_GALLERY_ID + 10
-                scraperapi.Db.Gallery.start(path_gid, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.DB.Gallery.start(path_gid, TEST_RUNTIME_ROOT, "skeleton")
                 scraperapi.Cache.upsert_cached_metadata(
                     path_gid,
                     time.time(),
@@ -225,9 +225,9 @@ def main() -> bool:
                     },
                     raw_metadata={"id": path_gid, "title": {"english": "Cache Test Path Guard"}},
                 )
-                scraperapi.Db.Gallery.complete(path_gid)
+                scraperapi.DB.Gallery.complete(path_gid)
 
-                with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
+                with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT download_path FROM Galleries WHERE id = ?", (path_gid,))
                     row = cursor.fetchone()
@@ -410,7 +410,7 @@ def main() -> bool:
                     clean_metadata={"id": expired_gid, "title": "Expired Metadata"},
                     raw_metadata={"id": expired_gid},
                 )
-                with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
+                with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "UPDATE CachedMetadata SET expires_at = ? WHERE gallery_id = ?",
@@ -797,7 +797,7 @@ def main() -> bool:
 
             # I.1) mark_gallery_started → status == "started"
             try:
-                scraperapi.Db.Gallery.start(_STATUS_GID_STARTED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.DB.Gallery.start(_STATUS_GID_STARTED, TEST_RUNTIME_ROOT, "skeleton")
                 status = scraperapi.Get.gallery_status(_STATUS_GID_STARTED)
                 ok = status == "started"
                 _report("mark_gallery_started → status='started'", ok, f"status={status}")
@@ -806,8 +806,8 @@ def main() -> bool:
 
             # I.2) mark_gallery_skipped → status == "skipped"
             try:
-                scraperapi.Db.Gallery.start(_STATUS_GID_SKIPPED, TEST_RUNTIME_ROOT, "skeleton")
-                scraperapi.Db.Gallery.skip(_STATUS_GID_SKIPPED)
+                scraperapi.DB.Gallery.start(_STATUS_GID_SKIPPED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.DB.Gallery.skip(_STATUS_GID_SKIPPED)
                 status = scraperapi.Get.gallery_status(_STATUS_GID_SKIPPED)
                 ok = status == "skipped"
                 _report("mark_gallery_skipped → status='skipped'", ok, f"status={status}")
@@ -816,8 +816,8 @@ def main() -> bool:
 
             # I.3) mark_gallery_failed → status == "failed"
             try:
-                scraperapi.Db.Gallery.start(_STATUS_GID_FAILED, TEST_RUNTIME_ROOT, "skeleton")
-                scraperapi.Db.Gallery.fail(_STATUS_GID_FAILED)
+                scraperapi.DB.Gallery.start(_STATUS_GID_FAILED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.DB.Gallery.fail(_STATUS_GID_FAILED)
                 status = scraperapi.Get.gallery_status(_STATUS_GID_FAILED)
                 ok = status == "failed"
                 _report("mark_gallery_failed → status='failed'", ok, f"status={status}")
@@ -826,7 +826,7 @@ def main() -> bool:
 
             # I.4) list_galleries() includes newly inserted row
             try:
-                all_ids = {row[0] for row in scraperapi.Db.Gallery.list()}
+                all_ids = {row[0] for row in scraperapi.DB.Gallery.list()}
                 ok = _STATUS_GID_STARTED in all_ids
                 _report("list_galleries() includes newly started gallery", ok)
             except Exception as e:
@@ -834,8 +834,8 @@ def main() -> bool:
 
             # I.5) list_galleries(status) filters by status correctly
             try:
-                started_ids = {row[0] for row in scraperapi.Db.Gallery.list_by_status("started")}
-                skipped_ids = {row[0] for row in scraperapi.Db.Gallery.list_by_status("skipped")}
+                started_ids = {row[0] for row in scraperapi.DB.Gallery.list_by_status("started")}
+                skipped_ids = {row[0] for row in scraperapi.DB.Gallery.list_by_status("skipped")}
                 ok = (
                     _STATUS_GID_STARTED in started_ids
                     and _STATUS_GID_SKIPPED not in started_ids

@@ -944,7 +944,7 @@ def update_config(args):
 # Main
 # ------------------------------------------------------------
 def main():
-    scraperapi.Db.init_db()
+    scraperapi.DB.init_db()
     """
     This is one this module's entrypoints.
     """

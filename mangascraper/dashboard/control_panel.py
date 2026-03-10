@@ -36,7 +36,7 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        entries = scraperapi.Db.Gallery.list()
+        entries = scraperapi.DB.Gallery.list()
         return render_template("database.html", entries=entries)
 
     @app.route("/gallery")
