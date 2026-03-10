@@ -2449,7 +2449,7 @@ class Cache:
 Helpers.build_symbol_translation_table()
 
 cache = Cache()
-db = Db()
+db = DB()
 helpers = Helpers()
 sleep = Sleep()
 get = Get()
