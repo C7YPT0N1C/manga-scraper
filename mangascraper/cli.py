@@ -438,13 +438,11 @@ def estimate_download_size(metadata: dict) -> tuple[int, str]:
     
     return total_bytes, f"{total_bytes:.2f} TB"
 
-def display_download_summary(gallery_ids: list, show_summary: bool = False, received_cache_key: str | None = None) -> bool:
+def display_download_summary(gallery_ids: list, show_summary: bool = False, cache_key: str | None = None) -> bool:
     """
     Display gallery summary with size estimate and get confirmation.
     Returns True if user wants to proceed, False otherwise.
     """
-    
-    logger.debug(f"[TESTING]: display_download_summary cache_key = {received_cache_key}")
     
     if not show_summary:
         return True
@@ -457,7 +455,7 @@ def display_download_summary(gallery_ids: list, show_summary: bool = False, rece
     logger.info(f"Fetching metadata for {len(gallery_ids)} galleries (this may take a moment)...")
     
     # Fetch metadata
-    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key=received_cache_key)
+    metadata = scraperapi.Fetch.all_galleries_metadata(gallery_ids, cache_key)
     
     if not metadata:
         logger.warning("Could not fetch metadata. Proceed without summary? (y/n): ", end="")
@@ -682,7 +680,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
 
     return gallery_ids
 
-def _get_summary_cache_key(args) -> str | None:
+def _get_summary_cache_keys(args) -> str | None:
     """Return a cache key when a single search source is used, else None."""
     if args.file or args.range or args.galleries:
         return None
@@ -1068,8 +1066,8 @@ def main():
     
     # --- Show summary before downloading (if requested) ---
     if args.show_summary:
-        summary_cache_key = _get_summary_cache_key(args)
-        if not display_download_summary(gallery_list, show_summary=True, cache_key=summary_cache_key):
+        summary_cache_keys = _get_summary_cache_keys(args)
+        if not display_download_summary(gallery_list, show_summary=True, cache_key=summary_cache_keys):
             logger.info("Download cancelled.")
             sys.exit(0)
     

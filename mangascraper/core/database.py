@@ -221,6 +221,14 @@ def list_galleries(status=None):
 # CACHING HELPERS
 ####################################################################################################################
 
+def split_cache_key(cache_key):
+    """Splits a cache_key into cache_type and cache_target. E.g., "artist:abc" → ("artist", "abc")"""
+    if ":" in cache_key:
+        cache_type, cache_target = cache_key.split(":", 1)
+    else:
+        cache_type, cache_target = cache_key, ""
+    return cache_type, cache_target
+
 def write_to_cache(meta: dict, gallery_id: int, cache_key: str = None):
     """
     Write metadata to CachedMetadata and, if cache_key is provided, update CacheReferences as well.
@@ -260,11 +268,8 @@ def write_to_cache(meta: dict, gallery_id: int, cache_key: str = None):
     # If cache_key is provided, update CacheReferences
     if cache_key:
         # Parse cache_type and cache_target from cache_key
-        # Example: cache_key = "artist:abc" → cache_type = "artist", cache_target = "abc"
-        if ":" in cache_key:
-            cache_type, cache_target = cache_key.split(":", 1)
-        else:
-            cache_type, cache_target = cache_key, ""
+        cache_type, cache_target = split_cache_key(cache_key)
+        
         # Load all gallery IDs for this cache_key
         references = load_cache_references()
         ids = [int(gallery_id)]

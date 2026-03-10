@@ -441,16 +441,15 @@ class Get:
         Returns:
             Cache key suitable for filename (e.g., "artist_john", "tag_schoolgirl")
         """
-        
         if search_value:
-            # For multi-word searches, sort terms alphabetically to ensure order-independence
-            # E.g., "THREE TWO ONE" and "ONE TWO THREE" both become "one_three_two"
-            terms = search_value.lower().split()
-            terms.sort()
+            # Split into words/tokens, sort alphanumerically, join with underscores
+            terms = [t for t in search_value.lower().split() if t]
+            if len(terms) > 1:
+                terms = sorted(terms, key=lambda x: (x.isdigit(), x))
             sorted_value = "_".join(terms)
             # Sanitise for use as filename (remove special chars)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
-            logger.debug(f"[TESTING]: GETTING CACHE KEY: {search_type}:{safe_value}")
+            logger.debug(f"[CACHE_KEY]: {search_type}:{safe_value}")
             return f"{search_type}:{safe_value}"
         return search_type
     
@@ -701,7 +700,7 @@ class Fetch:
         fetch_as_archival: bool = DEFAULT_ARCHIVING,
     ) -> tuple[str | None, list[int]]:
         """
-        Unified fetch_gallery_ids for CLI and Interactive: tries cache key(s) first, then falls back to API if needed.
+        Fetches Gallery IDs. Tries cache key(s) first, then falls back to API if needed.
         Returns a tuple (cache_key, list of IDs).
         """
         
@@ -1096,7 +1095,7 @@ class Fetch:
             return required_keys.issubset(meta.keys())
 
         if cache_key:
-            cached_metadata = Caching.load(cache_key)
+            cached_metadata = Caching._load(cache_key)
         else:
             cached_metadata = Caching.Load.id_metadata(gallery_ids)
 
@@ -1157,7 +1156,7 @@ class Fetch:
         
         # Save to cache
         if metadata and cache_key:
-            Caching.save(cache_key, metadata)
+            Caching._save(cache_key, gallery_ids)
         elif metadata:
             general_metadata = Caching.Load.general_metadata()
             general_metadata.update(metadata)
@@ -1167,9 +1166,8 @@ class Fetch:
 
 class Caching:
     @staticmethod
-    def load(cache_key: str) -> dict:
+    def _load(cache_key: str) -> dict:
         """Load the CacheReferences entry for this cache_key"""
-        cache_key = f"metadata:{cache_key}"
         references = scraperdb.load_cache_references()
         ref_entry = references.get(cache_key)
         if not ref_entry or not isinstance(ref_entry, dict):
@@ -1188,47 +1186,24 @@ class Caching:
         return result
     
     @staticmethod
-    def save(cache_key: str, metadata: dict):
-        """Save the metadata for this cache_key to a CacheReferences entry, using search type and value."""
-        logger.debug("[TESTING] SAVING CACHE")
+    def _save(cache_key: str, gallery_ids: list):
+        """Save the list of IDs for this cache_key to a CacheReferences entry. Does NOT write metadata."""
+        logger.debug("[TESTING] SAVING CACHE IDS ONLY")
         try:
             timestamp = time.time()
-            safe_metadata = {str(k): v for k, v in metadata.items()}
-            ids = []
-            for gid in safe_metadata.keys():
-                try:
-                    ids.append(int(gid))
-                except Exception:
-                    continue
-            ids = sorted(set(ids))
-            # Write all metadata to CachedMetadata table
-            now = time.time()
-            for gid, entry in safe_metadata.items():
-                scraperdb.upsert_cache_metadata(gid, now, clean_metadata=entry)
-            scraperdb.prune_all_caches()
-
-            # Parse search type and value from cache_key
-            search_types = ["artist", "group", "tag", "character", "parody", "search", "archive", "homepage"]
-            cache_type = "metadata"
-            cache_key = f"metadata:{cache_key}"
-            key_value = cache_key
-            for st in search_types:
-                if cache_key.startswith(f"{st}:"):
-                    cache_type = st
-                    key_value = cache_key[len(st)+1:]
-                    cache_key = f"{st}:{key_value}"
-                    break
-
+            
+            cache_type, cache_target = scraperdb.split_cache_key(cache_key)
             cache_reference_entry = {
-                "type": cache_type,
-                "key": key_value,
-                "ids": ids,
+                "cache_key": cache_key,
+                "cache_type": cache_type,
+                "cache_target": cache_target,
+                "ids": gallery_ids,
                 "ttl": scraperdb.TTL,
                 "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
             }
-            logger.debug(f"[TESTING] Called with cache_key={cache_key}, cache_key={cache_key}, ids={ids}, cache_reference_entry={cache_reference_entry}")
+            logger.debug(f"[TESTING] Called with cache_key={cache_key}, ids={gallery_ids}, cache_reference_entry={cache_reference_entry}")
             scraperdb.upsert_cache_reference(cache_key, cache_reference_entry)
-            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {cache_key} with {len(ids)} ids.")
+            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {cache_key} with {len(gallery_ids)} ids.")
         except Exception as e:
             logger.error(f"[TESTING] Exception while saving cache reference for {cache_key}: {e}")
         
