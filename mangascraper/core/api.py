@@ -171,7 +171,7 @@ def build_gallery_metadata_summary(meta, referrer: str):
     # Update DB clean_metadata for this gallery if id is valid
     try:
         gid = int(id) if id.isdigit() else id
-        scraperdb.upsert_cache_metadata(gid, time.time(), clean_metadata=clean_metadata)
+        scraperdb.upsert_cached_metadata(gid, time.time(), clean_metadata=clean_metadata)
     except Exception as e:
         logger.error(f"Failed to upsert cached metadata for Gallery {id}: {e}")
 
@@ -432,6 +432,17 @@ def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
 
 class Get:
     """Get a resource, usually generated."""
+    
+    @staticmethod
+    def gallery_status(gallery_id):
+        """Get the status of a Gallery keyed by its ID"""
+        scraperdb.init_db()
+        with scraperdb.lock, scraperdb.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+    
     @staticmethod
     def cache_keys(search_type: str, search_value: str = None) -> str:
         """Generate cache key based on search criteria.
@@ -449,7 +460,7 @@ class Get:
             sorted_value = "_".join(terms)
             # Sanitise for use as filename (remove special chars)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
-            logger.debug(f"[CACHE_KEY]: {search_type}:{safe_value}")
+            logger.debug(f"[TESTING]: {search_type}:{safe_value}")
             return f"{search_type}:{safe_value}"
         return search_type
     
@@ -677,17 +688,6 @@ class Fetch:
     ################################################################################################################
     # GALLERY ID FETCHING
     ################################################################################################################
-    
-    @staticmethod
-    def queued_galleries() -> list:
-        """Fetch queued galleries from GalleriesQueue table in the database."""
-        scraperdb.init_db()
-        with scraperdb.lock, scraperdb.dbconnect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM GalleriesQueue")
-            rows = cursor.fetchall()
-            return sorted({int(row[0]) for row in rows})
-    
 
     @staticmethod
     def gallery_ids(
@@ -708,7 +708,7 @@ class Fetch:
         
         # 1. Try cache first
         if cache_key:
-            references = scraperdb.load_cache_references()
+            references = Caching.Load.cache()
             cache_entry = references.get(cache_key)
             now = time.time()
             if cache_entry:
@@ -959,7 +959,7 @@ class Fetch:
                     return None
                 
                 # Update cache
-                cached_entry = scraperdb.write_to_cache(data, gallery_id)
+                cached_entry = Caching.Save.cache(data, gallery_id)
                 if cached_entry:
                     general_metadata = Caching.Load.general_metadata()
                     general_metadata[gallery_id] = cached_entry
@@ -1095,7 +1095,7 @@ class Fetch:
             return required_keys.issubset(meta.keys())
 
         if cache_key:
-            cached_metadata = Caching._load(cache_key)
+            cached_metadata = Caching.Load.cache(cache_key)
         else:
             cached_metadata = Caching.Load.id_metadata(gallery_ids)
 
@@ -1140,7 +1140,7 @@ class Fetch:
             try:
                 meta = Fetch.gallery_metadata(gallery_id)
                 if meta and isinstance(meta, dict):
-                    meta_entry = scraperdb.write_to_cache(meta, gallery_id)
+                    meta_entry = Caching.Save.cache(meta, gallery_id)
                     if meta_entry:
                         metadata[gallery_id] = meta_entry
                 else:
@@ -1156,7 +1156,7 @@ class Fetch:
         
         # Save to cache
         if metadata and cache_key:
-            Caching._save(cache_key, gallery_ids)
+            Caching.Save.cache(cache_key, gallery_ids)
         elif metadata:
             general_metadata = Caching.Load.general_metadata()
             general_metadata.update(metadata)
@@ -1166,56 +1166,69 @@ class Fetch:
 
 class Caching:
     @staticmethod
-    def _load(cache_key: str) -> dict:
-        """Load the CacheReferences entry for this cache_key"""
-        references = scraperdb.load_cache_references()
-        ref_entry = references.get(cache_key)
-        if not ref_entry or not isinstance(ref_entry, dict):
-            return {}
-        ids = ref_entry.get("ids")
-        if not ids or not isinstance(ids, list):
-            return {}
-        # Fetch metadata for all IDs from CachedMetadata
-        meta_dict = scraperdb.load_cached_metadata_for_ids(ids)
-        # Return only the clean_metadata for each gallery
-        result = {}
-        for gid, entry in meta_dict.items():
-            clean = entry.get("clean_metadata")
-            if isinstance(clean, dict):
-                result[gid] = clean
-        return result
+    def clear_cache(cache_key: str = None):
+        """Clear / prune the cache"""
+        # Prune references to cache files by their own TTL
+        scraperdb.prune_all_caches()
     
     @staticmethod
-    def _save(cache_key: str, gallery_ids: list):
-        """Save the list of IDs for this cache_key to a CacheReferences entry. Does NOT write metadata."""
-        logger.debug("[TESTING] SAVING CACHE IDS ONLY")
+    def _read_cache() -> dict:
+        cutoff = time.time() - scraperdb.TTL
         try:
-            timestamp = time.time()
+            cache_entry = scraperdb.read_cached_metadata_entry(cutoff)
             
-            cache_type, cache_target = scraperdb.split_cache_key(cache_key)
-            cache_reference_entry = {
-                "cache_key": cache_key,
-                "cache_type": cache_type,
-                "cache_target": cache_target,
-                "ids": gallery_ids,
-                "ttl": scraperdb.TTL,
-                "expires_at": timestamp + scraperdb.TTL if scraperdb.TTL else None,
-            }
-            logger.debug(f"[TESTING] Called with cache_key={cache_key}, ids={gallery_ids}, cache_reference_entry={cache_reference_entry}")
-            scraperdb.upsert_cache_reference(cache_key, cache_reference_entry)
-            logger.info(f"[TESTING] Successfully wrote CacheReferences entry for {cache_key} with {len(gallery_ids)} ids.")
-        except Exception as e:
-            logger.error(f"[TESTING] Exception while saving cache reference for {cache_key}: {e}")
-        
-    @staticmethod
-    def clear(cache_key: str = None):
-        """Clear the cache"""
-        pass
+            # Remove expired entries from cache_entry (in-memory prune)
+            if isinstance(cache_entry, dict):
+                expired_keys = []
+                for gid, entry in cache_entry.items():
+                    if not isinstance(entry, dict):
+                        continue
+                    timestamp = entry.get("timestamp") or 0
+                    if (time.time() - timestamp) >= scraperdb.TTL:
+                        expired_keys.append(gid)
+                for gid in expired_keys:
+                    cache_entry.pop(gid, None)
+            logger.debug(f"[TESTING]: references = {references}")
+            logger.debug(f"[TESTING]: cache_entry = {cache_entry}")
+            references = scraperdb.read_cache_references()
+            return {"references": references, "metadata": cache_entry}
+        except Exception:
+            return {"references": {}, "metadata": {}}
     
     class Load:
         @staticmethod
+        def cache(cache_key: str = None, gallery_id: int = None):
+            """
+            Load from cache by either cache_key or gallery_id.
+            - If cache_key is provided, return the list of IDs for that key (from CacheReferences).
+            - If gallery_id is provided, return the clean metadata for that ID (from CachedMetadata).
+            - If no arguments are provided, return all cache references as a dict.
+            """
+            
+            # Return the list of Gallery IDs for a specific cache_key
+            if cache_key is not None:
+                references_entry = scraperdb.read_cached_metadata_entry(cache_key)
+                if not references_entry or not isinstance(references_entry, dict):
+                    return []
+                ids = references_entry.get("ids")
+                if not ids or not isinstance(ids, list):
+                    return []
+                return ids
+            
+            # Return clean metadata for a specific Gallery ID
+            elif gallery_id is not None:
+                cache_entry = scraperdb.read_cached_metadata_entry(gallery_id)
+                if not cache_entry:
+                    return None
+                return cache_entry.get("clean_metadata")
+            
+            # Return all cache references as a dict
+            else:
+                return scraperdb.read_cache_references()
+        
+        @staticmethod
         def general_metadata() -> dict:
-            data = scraperdb.read_cache()
+            data = Caching._read_cache()
             metadata = data.get("metadata", {})
             if not isinstance(metadata, dict):
                 return {}
@@ -1233,7 +1246,7 @@ class Caching:
 
         @staticmethod
         def raw_metadata() -> dict:
-            data = scraperdb.read_cache()
+            data = Caching._read_cache()
             raw_block = data.get("metadata", {})
             if not isinstance(raw_block, dict):
                 return {}
@@ -1247,12 +1260,32 @@ class Caching:
                 if "raw_metadata" in entry:
                     metadata[gid] = entry.get("raw_metadata")
             return metadata
+        
+        @staticmethod
+        def broken_symbols() -> dict[str, str]:
+            """Load all detected broken symbols as { symbol: '_' }."""
+            scraperdb.init_db()
+            with scraperdb.lock, scraperdb.dbconnect() as conn:
+                c = conn.cursor()
+                c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
+                rows = c.fetchall()
+                return {row[0]: "_" for row in rows if row[0].strip()}
+        
+        @staticmethod
+        def queued_galleries() -> list:
+            """Fetch queued galleries from GalleriesQueue table in the database."""
+            scraperdb.init_db()
+            with scraperdb.lock, scraperdb.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM GalleriesQueue")
+                rows = cursor.fetchall()
+                return sorted({int(row[0]) for row in rows})
 
         @staticmethod
         def all_metadata() -> dict:
             """Load all cached metadata entries from the CachedMetadata table."""
             # Just return all clean_metadata from CachedMetadata
-            all_entries = scraperdb.all_cached_metadata()
+            all_entries = scraperdb.Caching.Load.cache()
             merged = {}
             for gid, entry in all_entries.items():
                 clean = entry.get("clean_metadata")
@@ -1266,36 +1299,78 @@ class Caching:
             if not ids:
                 return {}
             # Fetch metadata for all IDs from CachedMetadata
-            meta_dict = scraperdb.load_cached_metadata_for_ids(ids)
+            meta_dict = scraperdb.read_cached_metadata_entry(ids)
             result = {}
             for gid, entry in meta_dict.items():
                 clean = entry.get("clean_metadata")
                 if isinstance(clean, dict):
                     result[gid] = clean
             return result
-        
-        @staticmethod
-        def broken_symbols() -> dict[str, str]:
-            """Load all detected broken symbols as { symbol: '_' }."""
-            scraperdb.init_db()
-            with scraperdb.lock, scraperdb.dbconnect() as conn:
-                c = conn.cursor()
-                c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
-                rows = c.fetchall()
-                return {row[0]: "_" for row in rows if row[0].strip()}
 
     class Save:
+        @staticmethod
+        def cache(cache_key: str = None, gallery_ids: list = None, meta: dict = None):
+            """
+            Canonical function for updating CachedMetadata and/or CacheReferences.
+            - If only meta is provided, updates CachedMetadata for the ID extracted from meta.
+            - If cache_key and gallery_ids are provided, updates CacheReferences for that key with the given IDs.
+            - If all are provided, updates both.
+            Returns the clean metadata entry if metadata is updated, else None.
+            """
+            now = time.time()
+            entry = None
+
+            # If meta is provided, extract gallery_id from meta
+            if meta is not None:
+                gid = meta.get("id")
+                if gid is not None:
+                    entry = {
+                        "id": gid,
+                        "title": meta.get("title", {}).get("english", f"Gallery {gid}"),
+                        "artists": Get.artists(meta),
+                        "groups": Get.groups(meta),
+                        "tags": Get.tags(meta),
+                        "characters": Get.characters(meta),
+                        "parodies": Get.parodies(meta),
+                        "languages": Get.languages(meta),
+                        "pages": Get.page_count(meta),
+                    }
+                    scraperdb.upsert_cached_metadata(
+                        gallery_id=str(gid),
+                        timestamp=now,
+                        clean_metadata=entry,
+                        raw_metadata=meta,
+                    )
+            
+            # If cache_key and gallery_ids are provided, update CacheReferences
+            if cache_key and gallery_ids is not None:
+                cache_type, cache_target = scraperdb.split_cache_key(cache_key)
+                ids = list(sorted(set(int(gid) for gid in gallery_ids)))
+                ttl_default = 10800
+                expires_at = now + ttl_default
+                entry_ref = {
+                    "cache_key": cache_key,
+                    "cache_type": cache_type,
+                    "cache_target": cache_target,
+                    "ids": ids,
+                    "ttl": ttl_default,
+                    "expires_at": expires_at,
+                }
+                scraperdb.upsert_cache_reference(cache_key, entry_ref)
+            
+            return entry
+        
         @staticmethod
         def general_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = scraperdb.read_cache()
+            data = Caching._read_cache()
             safe_metadata = {str(k): v for k, v in metadata.items()}
             now = time.time()
             for gid, entry in safe_metadata.items():
                 if not isinstance(entry, dict):
                     continue
-                scraperdb.upsert_cache_metadata(
+                scraperdb.upsert_cached_metadata(
                     gid,
                     now,
                     clean_metadata=entry,
@@ -1306,10 +1381,10 @@ class Caching:
         def raw_metadata(metadata: dict):
             if not isinstance(metadata, dict):
                 return
-            data = scraperdb.read_cache()
+            data = Caching._read_cache()
             now = time.time()
             for gid, entry in metadata.items():
-                scraperdb.upsert_cache_metadata(
+                scraperdb.upsert_cached_metadata(
                     str(gid),
                     now,
                     clean_metadata=None,

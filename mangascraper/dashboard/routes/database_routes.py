@@ -18,5 +18,5 @@ def list_all():
 
 @db_bp.route("/get/<int:gallery_id>", methods=["GET"])
 def get_gallery(gallery_id):
-    status = scraperdb.get_gallery_status(gallery_id)
+    status = scraperapi.Get.gallery_status(gallery_id)
     return jsonify({"gallery_id": gallery_id, "status": status})

@@ -834,7 +834,7 @@ def start_downloader(gallery_list=None):
     orchestrator.refresh_globals()
     
     if gallery_list is None:
-        gallery_list = scraperapi.Fetch.queued_galleries()
+        gallery_list = scraperapi.Caching.Load.queued_galleries()
         if not gallery_list:
             logger.warning("No galleries queued in database; no galleries to download.")
 
