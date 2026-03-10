@@ -1436,6 +1436,34 @@ class Get:
 
 class Fetch:
     """Fetch a resource"""
+
+    @staticmethod
+    def latest_gallery_id(timeout: int = 5) -> int | None:
+        """Fetch the latest gallery ID directly from nhentai homepage API."""
+
+        orchestrator.refresh_globals()
+        try:
+            log_clarification("debug")
+            log("Fetching latest gallery ID from nhentai homepage...", "debug")
+
+            session = Get.session(referrer="Latest ID Fetch", status="return")
+            url = f"{nhentai_api_base}/galleries/all?page=1"
+
+            resp = session.get(url, timeout=(timeout, timeout))
+            resp.raise_for_status()
+            data = resp.json()
+
+            results = data.get("result", []) if isinstance(data, dict) else []
+            if results:
+                latest_id = Helpers.normalise_integer(results[0].get("id"))
+                if latest_id is not None:
+                    log_clarification("debug")
+                    log(f"Latest gallery ID fetched: {latest_id}", "debug")
+                    return latest_id
+        except Exception as e:
+            log_clarification("debug")
+            logger.warning(f"Could not fetch latest gallery ID: {e}")
+        return None
     
     @staticmethod # GALLERY ID FETCHING
     def gallery_ids(

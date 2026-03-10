@@ -218,7 +218,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
         try:
             meta = scraperapi.Fetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
-                estimated_size, _, _ = Build.estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, _ = scraperapi.Build.estimate_gallery_size(meta, use_head_requests=False)
                 gallery_sizes.append((gallery_id, estimated_size))
                 download_estimated += estimated_size
         except Exception as e:
@@ -315,7 +315,7 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
     Build the folder path for a gallery based on SUBFOLDER_STRUCTURE.
     """
     
-    gallery_metas = active_extension.build_gallery_metadata_summary(
+    gallery_metas = scraperapi.Helpers.summary(
         meta,
         active_extension.EXTENSION_REFERRER,
     )
@@ -584,7 +584,7 @@ def process_galleries(batch_ids):
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
                 active_extension.during_gallery_download_hook(gallery_id)
-                gallery_metas = active_extension.build_gallery_metadata_summary(
+                gallery_metas = scraperapi.Helpers.summary(
                     meta,
                     active_extension.EXTENSION_REFERRER,
                 )
@@ -596,10 +596,10 @@ def process_galleries(batch_ids):
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
-                estimated_size, _, img_count = Build.estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, img_count = scraperapi.Build.estimate_gallery_size(meta, use_head_requests=False)
                 space_monitor["total_estimated_bytes"] += estimated_size * 2 # keep this here i think
                 
-                time.sleep(Sleep.dynamic("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
+                time.sleep(scraperapi.Sleep.dynamic("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False

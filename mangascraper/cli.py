@@ -11,13 +11,13 @@ from mangascraper.core import tester
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
-    get_selected_extension,
     uninstall_selected_extension,
 )
 
-# ------------------------------------------------------------
-# VARIABLES
-# ------------------------------------------------------------
+####################################################################################################################
+# GLOBAL VARIABLES
+####################################################################################################################
+
 INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
 
 EPILOG = """Examples:
@@ -30,13 +30,13 @@ EPILOG = """Examples:
     manga-scraper --output-folder /mnt/storage --ids "123456,654321" --output-format cbz
 """
 
-
 class _HelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
     pass
 
-# ------------------------------------------------------------
+####################################################################################################################
 # Delegate to installer
-# ------------------------------------------------------------
+####################################################################################################################
+
 INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
 
 def run_installer(flag: str):

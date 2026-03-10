@@ -22,32 +22,6 @@ def clear_screen():
     # \033[2J clears the entire screen, \033[H moves cursor to home position
     print("\033[2J\033[H", end="", flush=True)
 
-def get_latest_gallery_id(timeout: int = 5) -> int | None:
-    """Fetch the latest gallery ID directly from nhentai API without affecting application state."""
-    try:
-        log_clarification("debug")
-        log(f"Fetching latest gallery ID from nhentai homepage...", "debug")
-        
-        # Request homepage directly from API without using fetch_gallery_ids to avoid state pollution
-        session = scraperapi.Get.session(referrer="Latest ID Fetch", status="return")
-        url = f"{orchestrator.nhentai_api_base}/galleries/all?page=1"
-        
-        resp = session.get(url, timeout=(10, 10))
-        resp.raise_for_status()
-        data = resp.json()
-        
-        results = data.get("result", [])
-        if results:
-            # Get the first (newest) gallery's ID
-            latest_id = int(results[0]["id"])
-            log_clarification("debug")
-            log(f"Latest gallery ID fetched: {latest_id}", "debug")
-            return latest_id
-    except Exception as e:
-        log_clarification("debug")
-        logger.warning(f"Could not fetch latest gallery ID: {e}")
-    return None
-
 def display_metadata_summary(summary: dict):
     """Display a formatted summary of gallery metadata."""
     
@@ -1231,7 +1205,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 
                 # Fetch latest ID if user doesn't specify end ID
                 logger.info("Fetching latest gallery ID from nhentai...")
-                latest_id = get_latest_gallery_id()
+                latest_id = scraperapi.Fetch.latest_gallery_id()
                 
                 while True:
                     if latest_id is None:
