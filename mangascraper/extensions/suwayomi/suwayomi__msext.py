@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/suwayomi/suwayomi__msext.py
 
-import os, time, json, requests, threading, subprocess, shutil, tarfile, zipfile, math, re, sqlite3
-from requests.auth import HTTPBasicAuth
+import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile, sqlite3
 from tqdm import tqdm
+from requests.auth import HTTPBasicAuth
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
@@ -744,7 +744,7 @@ def remove_from_deferred(creator_name: str, metadata: dict = None):
         metadata["deferred_creators"] = sorted(deferred_creators)
     
     return metadata
-    
+
 # ------------------------------------------------------------
 # Update creator mangas and ensure they are added to Suwayomi
 # ------------------------------------------------------------
@@ -764,20 +764,10 @@ def update_creator_manga(meta):
         return
 
     gallery_meta = scraperapi.Helpers.summary(meta, EXTENSION_REFERRER)
-    creators = gallery_meta.get("creator", [])
+    creator_entries = scraperapi.Helpers.resolve_creator_entries(meta, DEDICATED_DOWNLOAD_PATH)
+    creators = [entry["folder_name"] for entry in creator_entries]
     if not creators:
         return
-
-    # Build a raw-name lookup for DB queries. The `creators` list comes from
-    # clean metadata and may have sanitised dash spacing.
-    raw_artists = scraperapi.Get.meta_tags(EXTENSION_REFERRER, meta, "artist")
-    raw_groups = scraperapi.Get.meta_tags(EXTENSION_REFERRER, meta, "group")
-    raw_creators = raw_artists or raw_groups or ["Unknown Creator"]
-    raw_lookup_by_clean = {}
-    for raw_name in raw_creators:
-        clean_name = scraperapi.Helpers.sanitise(raw_name)
-        if clean_name and clean_name not in raw_lookup_by_clean:
-            raw_lookup_by_clean[clean_name] = raw_name
 
     gallery_title = gallery_meta["title"]
     current_gallery_id = parse_gallery_id(gallery_title) or int(meta.get("id", 0))
@@ -828,11 +818,7 @@ def update_creator_manga(meta):
             description = f"Latest Doujin: {latest_name}"
 
         # Query database for most_popular_tags (top genres) for this creator
-        db_creator_name = raw_lookup_by_clean.get(creator_name, creator_name)
-        logger.debug(
-            f"[details.json] Entering DB genre lookup for creator: {creator_name} "
-            f"(db lookup: {db_creator_name}), DB path: {scraperapi.DB_PATH}"
-        )
+        logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperapi.DB_PATH}")
         genre_names = []
 
         def _canonical_creator_name(value: str) -> str:
@@ -844,18 +830,16 @@ def update_creator_manga(meta):
             cursor = conn.cursor()
 
             row = None
-            lookup_name = db_creator_name
+            lookup_name = creator_name
 
-            # Exact match first.
+            # Exact raw-name match first.
             cursor.execute("SELECT id FROM Creators WHERE name=?", (lookup_name,))
             row = cursor.fetchone()
 
-            # Fallback alias: Unknown Creator should resolve to Unknown Group if present.
-            if not row and lookup_name == "Unknown Creator":
-                cursor.execute("SELECT id FROM Creators WHERE name=?", ("Unknown Group",))
+            # Fallback to cleaned display name match.
+            if not row:
+                cursor.execute("SELECT id FROM Creators WHERE display_name=?", (lookup_name,))
                 row = cursor.fetchone()
-                if row:
-                    lookup_name = "Unknown Group"
 
             # Canonical spacing fallback to handle names like
             # "mayafufu-kakko-kashikoi" vs "mayafufu -kakko- kashikoi".
@@ -871,19 +855,24 @@ def update_creator_manga(meta):
                     (canonical_lookup,),
                 )
                 matched = cursor.fetchone()
+                if not matched:
+                    cursor.execute(
+                        """
+                        SELECT id, name
+                        FROM Creators
+                        WHERE REPLACE(REPLACE(display_name, ' -', '-'), '- ', '-') = ?
+                        LIMIT 1
+                        """,
+                        (canonical_lookup,),
+                    )
+                    matched = cursor.fetchone()
                 if matched:
                     row = (matched[0],)
                     lookup_name = matched[1]
 
-            logger.debug(
-                f"[details.json] DB row for creator_name={creator_name} "
-                f"(db lookup: {db_creator_name}): {row}"
-            )
+            logger.debug(f"[details.json] DB row for creator_name={creator_name}: {row}")
             if not row:
-                logger.warning(
-                    f"[details.json] Creator not found in DB: {creator_name} "
-                    f"(db lookup: {db_creator_name}) (DB path: {scraperapi.DB_PATH})"
-                )
+                logger.warning(f"[details.json] Creator not found in DB: {creator_name} (DB path: {scraperapi.DB_PATH})")
             if row:
                 creator_id = row[0]
                 cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
@@ -1231,9 +1220,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             gallery_format = "directory"
 
         gallery_meta = scraperapi.Helpers.summary(meta, EXTENSION_REFERRER)
-        creators = gallery_meta.get("creator", [])
-        tags = gallery_meta.get("tags", [])
-        languages = gallery_meta.get("languages", [])
+        creator_entries = scraperapi.Helpers.resolve_creator_entries(meta, DEDICATED_DOWNLOAD_PATH)
+        creators = [entry["folder_name"] for entry in creator_entries]
 
         cover_source = None
         cover_gallery_name = None

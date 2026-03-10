@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/skeleton/skeleton__msext.py
 
-import os, time, json, requests, math, shutil, re, zipfile
+import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile
+from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.api import *
 from mangascraper.extensions.extension_manager import (
@@ -235,7 +235,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         )
         downloader_session = scraperapi.Get.session(referrer=f"{EXTENSION_NAME}", status="rebuild")
         success = try_download(downloader_session, urls, 1, tor_rotate=True)
-
+    
     # Explicitly call page_update_hook after each page download if provided
     if success and page_update_hook:
         try:
@@ -319,9 +319,8 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             gallery_format = "directory"
 
         gallery_meta = scraperapi.Helpers.summary(meta, EXTENSION_REFERRER)
-        creators = gallery_meta.get("creator", [])
-        tags = gallery_meta.get("tags", [])
-        languages = gallery_meta.get("languages", [])
+        creator_entries = scraperapi.Helpers.resolve_creator_entries(meta, DEDICATED_DOWNLOAD_PATH)
+        creators = [entry["folder_name"] for entry in creator_entries]
 
         cover_source = None
         cover_gallery_name = None

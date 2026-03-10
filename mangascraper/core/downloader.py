@@ -326,9 +326,22 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
 
     template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
     path_parts = [base_path or download_location]
+    raw_creators = scraperapi.Helpers.creator_candidates(meta)
+    primary_raw_creator = raw_creators[0] if raw_creators else "Unknown Creator"
+    primary_display_creator = scraperapi.Helpers.sanitise(primary_raw_creator)
 
     for key in template:
         value = gallery_metas.get(key, "Unknown")
+        if key == "creator":
+            current_base = os.path.join(*path_parts)
+            creator_folder = scraperapi.Helpers.choose_creator_folder_name(
+                raw_name=primary_raw_creator,
+                base_path=current_base,
+                fallback_name=primary_display_creator,
+            )
+            path_parts.append(creator_folder)
+            continue
+
         if isinstance(value, list):
             value = value[0] if value else "Unknown"
         if not isinstance(value, str):

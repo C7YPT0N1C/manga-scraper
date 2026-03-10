@@ -278,6 +278,12 @@ def clear_cached_items(cache_key: str = None, gallery_id: int = None):
 class Helpers:
     """Stateless helper utilities."""
 
+    _WINDOWS_RESERVED_NAMES = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    }
+
     @staticmethod
     def normalise_integer(value) -> int | None:
         try:
@@ -335,6 +341,102 @@ class Helpers:
             if text:
                 result.append(text)
         return result
+
+    @staticmethod
+    def creator_candidates(meta: dict) -> list[str]:
+        if not isinstance(meta, dict):
+            return ["Unknown Creator"]
+        creators = Get.meta_tags("api", meta, "artist") or Get.meta_tags("api", meta, "group")
+        creators = Helpers.safe_text_list(creators)
+        return creators or ["Unknown Creator"]
+
+    @staticmethod
+    def _normalise_path_component_key(value: str) -> str:
+        text = Helpers.safe_text(value)
+        return text.rstrip(" .").casefold()
+
+    @staticmethod
+    def _is_windows_reserved_component(value: str) -> bool:
+        text = Helpers.safe_text(value).strip(" .")
+        if not text:
+            return True
+        stem = text.split(".", 1)[0].upper()
+        return stem in Helpers._WINDOWS_RESERVED_NAMES
+
+    @staticmethod
+    def is_unsafe_path_component(value: str) -> bool:
+        text = Helpers.safe_text(value)
+        if not text or text in {".", ".."}:
+            return True
+        if text[-1:] in {" ", "."}:
+            return True
+        if re.search(r'[<>:"/\\|?*\x00-\x1f]', text):
+            return True
+        if Helpers._is_windows_reserved_component(text):
+            return True
+        return False
+
+    @staticmethod
+    def choose_creator_folder_name(raw_name: str, base_path: str | None = None, fallback_name: str | None = None) -> str:
+        raw = Helpers.safe_text(raw_name).strip()
+        fallback = Helpers.safe_text(fallback_name or Helpers.sanitise(raw)).strip()
+
+        if not raw:
+            raw = "Unknown Creator"
+        if not fallback:
+            fallback = "Unknown Creator"
+
+        chosen = raw
+        if Helpers.is_unsafe_path_component(chosen):
+            chosen = fallback
+
+        if base_path:
+            try:
+                candidate_key = Helpers._normalise_path_component_key(chosen)
+                for existing in os.listdir(base_path):
+                    existing_path = os.path.join(base_path, existing)
+                    if not os.path.isdir(existing_path):
+                        continue
+                    if Helpers._normalise_path_component_key(existing) != candidate_key:
+                        continue
+                    if existing != chosen:
+                        chosen = fallback
+                        break
+            except Exception:
+                pass
+
+        if Helpers.is_unsafe_path_component(chosen):
+            chosen = Helpers.sanitise(chosen) or "Unknown Creator"
+
+        return chosen
+
+    @staticmethod
+    def resolve_creator_entries(meta: dict, base_path: str) -> list[dict]:
+        """Resolve creator naming context with raw-first folder naming."""
+
+        raw_creators = Helpers.creator_candidates(meta)
+        entries = []
+        seen_folders = set()
+
+        for raw_name in raw_creators:
+            display_name = Helpers.sanitise(raw_name)
+            folder_name = Helpers.choose_creator_folder_name(
+                raw_name=raw_name,
+                base_path=base_path,
+                fallback_name=display_name,
+            )
+            if folder_name in seen_folders:
+                continue
+            seen_folders.add(folder_name)
+            entries.append(
+                {
+                    "raw_name": raw_name,
+                    "display_name": display_name,
+                    "folder_name": folder_name,
+                }
+            )
+
+        return entries
 
     @staticmethod
     def sanitise(meta_or_title):
@@ -591,6 +693,16 @@ class Db:
                 (CACHED_METADATA_TTL_SECONDS, now + CACHED_METADATA_TTL_SECONDS),
             )
 
+            # Directly enforce creator display_name normalization for all existing rows.
+            c.execute("SELECT id, name FROM Creators")
+            creator_rows = c.fetchall()
+            for creator_id, raw_name in creator_rows:
+                display_name = Helpers.sanitise(Helpers.safe_text(raw_name, ""))
+                c.execute(
+                    "UPDATE Creators SET display_name=? WHERE id=?",
+                    (display_name, creator_id),
+                )
+
             conn.commit()
 
     @staticmethod
@@ -781,7 +893,11 @@ class Db:
                     primary_creator = meta["groups"][0]
                 else:
                     primary_creator = "Unknown"
-                cleaned_creator = Helpers.sanitise(primary_creator)
+                cleaned_creator = Helpers.choose_creator_folder_name(
+                    raw_name=primary_creator,
+                    base_path=ext_download_path,
+                    fallback_name=Helpers.sanitise(primary_creator),
+                )
                 ext = meta.get("archive_ext") or meta.get("ext") or "cbz"
                 is_archive = meta.get("is_archive", True)
                 started_at = meta.get("started_at")
@@ -895,9 +1011,10 @@ class Db:
                 now = datetime.now(timezone.utc).isoformat()
 
                 for cname, cdata in creators.items():
+                    display_name = Helpers.sanitise(cname)
                     cursor.execute("INSERT OR IGNORE INTO Creators (name, display_name, creator_type, first_seen, last_updated, total_galleries, most_popular_tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (cname, cdata["display_name"], cdata["creator_type"], now, now, 0, json.dumps([])))
-                    cursor.execute("UPDATE Creators SET creator_type=? WHERE name=?", (cdata["creator_type"], cname))
+                        (cname, display_name, cdata["creator_type"], now, now, 0, json.dumps([])))
+                    cursor.execute("UPDATE Creators SET creator_type=?, display_name=? WHERE name=?", (cdata["creator_type"], display_name, cname))
                     cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
                     creator_id_map[cname] = cursor.fetchone()[0]
 
