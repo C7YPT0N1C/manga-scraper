@@ -751,33 +751,33 @@ def _get_summary_cache_keys(args) -> str | None:
             first = str(args.homepage[0]).lower()
             if first in valid_sorts:
                 sort_val = first
-        return scraperapi.Get.cache_keys("homepage", sort_val)
+        return scraperapi.Cache.cache_keys("homepage", sort_val)
 
     if args.artist and len(args.artist) == 1:
-        return scraperapi.Get.cache_keys("artist", args.artist[0][0])
+        return scraperapi.Cache.cache_keys("artist", args.artist[0][0])
 
     if args.group and len(args.group) == 1:
-        return scraperapi.Get.cache_keys("group", args.group[0][0])
+        return scraperapi.Cache.cache_keys("group", args.group[0][0])
 
     if args.tag and len(args.tag) == 1:
-        return scraperapi.Get.cache_keys("tag", args.tag[0][0])
+        return scraperapi.Cache.cache_keys("tag", args.tag[0][0])
 
     if args.character and len(args.character) == 1:
-        return scraperapi.Get.cache_keys("character", args.character[0][0])
+        return scraperapi.Cache.cache_keys("character", args.character[0][0])
 
     if args.parody and len(args.parody) == 1:
-        return scraperapi.Get.cache_keys("parody", args.parody[0][0])
+        return scraperapi.Cache.cache_keys("parody", args.parody[0][0])
 
     if args.search and len(args.search) == 1:
-        return scraperapi.Get.cache_keys("search", args.search[0][0])
+        return scraperapi.Cache.cache_keys("search", args.search[0][0])
 
     if args.archive and len(args.archive) == 1:
         entry = args.archive[0]
         if isinstance(entry, str):
             entry = [entry]
         if len(entry) == 1 and str(entry[0]).lower() == "all":
-            return scraperapi.Get.cache_keys("archive", "all")
-        return scraperapi.Get.cache_keys("archive", entry[0])
+            return scraperapi.Cache.cache_keys("archive", "all")
+        return scraperapi.Cache.cache_keys("archive", entry[0])
 
     return None
 
@@ -944,7 +944,7 @@ def update_config(args):
 # Main
 # ------------------------------------------------------------
 def main():
-    scraperapi.init_db()
+    scraperapi.Db.init_db()
     """
     This is one this module's entrypoints.
     """

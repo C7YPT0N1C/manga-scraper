@@ -11,7 +11,7 @@ db_bp = Blueprint("database", __name__)
 @db_bp.route("/list", methods=["GET"])
 def list_all():
     status = request.args.get("status")
-    galleries = scraperapi.list_galleries(status=status)
+    galleries = scraperapi.Db.Gallery.list_by_status(status) if status else scraperapi.Db.Gallery.list()
     return jsonify({"galleries": galleries})
 
 @db_bp.route("/get/<int:gallery_id>", methods=["GET"])

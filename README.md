@@ -41,12 +41,12 @@ The **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)** Extension automa
 - Optional: `chafa` (for interactive "Read a gallery" mode)
 
 ### Installation Commands
-One Line Install: `wget -O mangascraper-install.sh https://git.anthrosys.uk/C7YPT0N1C/manga-scraper/raw/branch/main/mangascraper-install.sh && sudo bash ./mangascraper-install.sh --install`
+One Line Install: `wget -O mangascraper-install.sh https://github.com/C7YPT0N1C/manga-scraper/raw/branch/main/mangascraper-install.sh && sudo bash ./mangascraper-install.sh --install`
 
 Alternative Install: Clone Repository.
 ```bash
 # Clone the repository
-git clone https://git.anthrosys.uk/C7YPT0N1C/manga-scraper.git
+git clone https://github.com/C7YPT0N1C/manga-scraper.git
 cd manga-scraper
 
 # Run the installer script

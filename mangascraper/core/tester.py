@@ -41,7 +41,7 @@ TEST_CACHE_KEYS = {
     "test:cache_mixed_ids",
     "test:cache_expired",
     "test:clear_ck_test",
-    scraperapi.Get.cache_keys(TEST_SEARCH_TYPE, TEST_SEARCH_VALUE),
+    scraperapi.Cache.cache_keys(TEST_SEARCH_TYPE, TEST_SEARCH_VALUE),
 }
 
 
@@ -113,8 +113,8 @@ def main() -> bool:
             skipped += 1
 
     def _cleanup_test_data():
-        scraperapi.init_db()
-        with scraperapi.lock, scraperapi.dbconnect() as conn:
+        scraperapi.Db.init_db()
+        with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
             cursor = conn.cursor()
 
             gallery_ids = sorted(TEST_GALLERY_IDS)
@@ -185,7 +185,7 @@ def main() -> bool:
             conn.commit()
 
     with _temporary_test_runtime_paths():
-        scraperapi.init_db()
+        scraperapi.Db.init_db()
         try:
             # 0) Runtime path safety assertion
             try:
@@ -206,8 +206,8 @@ def main() -> bool:
             # 0.1) Pre-download path generation safety (computed path must stay under test runtime root)
             try:
                 path_gid = TEST_GALLERY_ID + 10
-                scraperapi.mark_gallery_started(path_gid, TEST_RUNTIME_ROOT, "skeleton")
-                scraperapi.upsert_cached_metadata(
+                scraperapi.Db.Gallery.start(path_gid, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.Cache.upsert_cached_metadata(
                     path_gid,
                     time.time(),
                     clean_metadata={
@@ -225,9 +225,9 @@ def main() -> bool:
                     },
                     raw_metadata={"id": path_gid, "title": {"english": "Cache Test Path Guard"}},
                 )
-                scraperapi.mark_gallery_completed(path_gid)
+                scraperapi.Db.Gallery.complete(path_gid)
 
-                with scraperapi.lock, scraperapi.dbconnect() as conn:
+                with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT download_path FROM Galleries WHERE id = ?", (path_gid,))
                     row = cursor.fetchone()
@@ -240,7 +240,7 @@ def main() -> bool:
 
             # 1) Read all references shape
             try:
-                refs = scraperapi.read_cached_metadata_entry()
+                refs = scraperapi.Cache.read_entry()
                 ok = isinstance(refs, dict)
                 _report("read_cached_metadata_entry(all references)", ok, f"type={type(refs).__name__}")
             except Exception as e:
@@ -249,7 +249,7 @@ def main() -> bool:
             # 2) Upsert/read CacheReferences
             try:
                 now = time.time()
-                scraperapi.upsert_cache_reference(
+                scraperapi.Cache.upsert_cache_reference(
                     TEST_CACHE_KEY,
                     {
                         "cache_key": TEST_CACHE_KEY,
@@ -259,7 +259,7 @@ def main() -> bool:
                         "expires_at": now + 300,
                     },
                 )
-                result = scraperapi.read_cached_metadata_entry(cache_key=TEST_CACHE_KEY)
+                result = scraperapi.Cache.read_entry(cache_key=TEST_CACHE_KEY)
                 ref = result.get("references", {}).get(TEST_CACHE_KEY) if isinstance(result, dict) else None
                 ok = (
                     isinstance(ref, dict)
@@ -275,7 +275,7 @@ def main() -> bool:
             try:
                 mixed_key = "test:cache_mixed_ids"
                 now = time.time()
-                scraperapi.upsert_cache_reference(
+                scraperapi.Cache.upsert_cache_reference(
                     mixed_key,
                     {
                         "cache_key": mixed_key,
@@ -285,23 +285,23 @@ def main() -> bool:
                         "expires_at": now + 300,
                     },
                 )
-                mixed = scraperapi.Caching.Load.cache(cache_key=mixed_key)
+                mixed = scraperapi.Cache.Load.cache(cache_key=mixed_key)
                 ok = isinstance(mixed, list) and all(isinstance(gid, int) for gid in mixed)
-                _report("Caching.Load.cache normalises mixed IDs", ok, f"ids={mixed}")
+                _report("Cache.Load.cache normalises mixed IDs", ok, f"ids={mixed}")
             except Exception as e:
-                _report("Caching.Load.cache normalises mixed IDs", False, f"exception={e}")
+                _report("Cache.Load.cache normalises mixed IDs", False, f"exception={e}")
 
             # 4) Upsert/read CachedMetadata by ID
             try:
                 raw_meta = {"id": TEST_GALLERY_ID, "title": {"english": "Cache Test Gallery"}}
                 clean_meta = {"id": TEST_GALLERY_ID, "title": "Cache Test Gallery", "pages": 1}
-                scraperapi.upsert_cached_metadata(
+                scraperapi.Cache.upsert_cached_metadata(
                     TEST_GALLERY_ID,
                     time.time(),
                     clean_metadata=clean_meta,
                     raw_metadata=raw_meta,
                 )
-                result = scraperapi.read_cached_metadata_entry(gallery_id=TEST_GALLERY_ID)
+                result = scraperapi.Cache.read_entry(gallery_id=TEST_GALLERY_ID)
                 entry = result.get("metadata", {}).get(TEST_GALLERY_ID) if isinstance(result, dict) else None
                 ok = (
                     isinstance(entry, dict)
@@ -320,7 +320,7 @@ def main() -> bool:
 
             # 5) Read CachedMetadata by IDs list
             try:
-                result = scraperapi.read_cached_metadata_entry(ids=[TEST_GALLERY_ID])
+                result = scraperapi.Cache.read_entry(ids=[TEST_GALLERY_ID])
                 batch = result.get("metadata", {}) if isinstance(result, dict) else {}
                 ok = isinstance(batch, dict) and TEST_GALLERY_ID in batch
                 _report("read_cached_metadata_entry(ids=[...])", ok, f"keys={list(batch.keys()) if isinstance(batch, dict) else None}")
@@ -333,56 +333,56 @@ def main() -> bool:
                 new_ts = time.time()
                 old_gid = TEST_GALLERY_ID + 1
                 new_gid = TEST_GALLERY_ID + 2
-                scraperapi.upsert_cached_metadata(old_gid, old_ts, clean_metadata={"id": old_gid}, raw_metadata={"id": old_gid})
-                scraperapi.upsert_cached_metadata(new_gid, new_ts, clean_metadata={"id": new_gid}, raw_metadata={"id": new_gid})
+                scraperapi.Cache.upsert_cached_metadata(old_gid, old_ts, clean_metadata={"id": old_gid}, raw_metadata={"id": old_gid})
+                scraperapi.Cache.upsert_cached_metadata(new_gid, new_ts, clean_metadata={"id": new_gid}, raw_metadata={"id": new_gid})
                 cutoff = time.time() - 60
-                result = scraperapi.read_cached_metadata_entry(cutoff=cutoff)
+                result = scraperapi.Cache.read_entry(cutoff=cutoff)
                 recent = result.get("metadata", {}) if isinstance(result, dict) else {}
                 ok = isinstance(recent, dict) and new_gid in recent and old_gid not in recent
                 _report("read_cached_metadata_entry(cutoff=...)", ok, f"recent_keys={list(recent.keys())[:5] if isinstance(recent, dict) else None}")
             except Exception as e:
                 _report("read_cached_metadata_entry(cutoff=...)", False, f"exception={e}")
 
-            # 7) Caching.Load/Save explicit cache refs
+            # 7) Cache.Load/Save explicit cache refs
             try:
-                scraperapi.Caching.Save.cache(cache_key=TEST_CACHE_KEY, gallery_ids=TEST_IDS)
-                loaded_ids = scraperapi.Caching.Load.cache(cache_key=TEST_CACHE_KEY)
+                scraperapi.Cache.Save.cache(cache_key=TEST_CACHE_KEY, gallery_ids=TEST_IDS)
+                loaded_ids = scraperapi.Cache.Load.cache(cache_key=TEST_CACHE_KEY)
                 ok = isinstance(loaded_ids, list) and all(isinstance(gid, int) for gid in loaded_ids)
-                _report("Caching.Save.cache(cache_key, gallery_ids) + Caching.Load.cache(cache_key)", ok, f"loaded_ids={loaded_ids}")
+                _report("Cache.Save.cache(cache_key, gallery_ids) + Cache.Load.cache(cache_key)", ok, f"loaded_ids={loaded_ids}")
             except Exception as e:
-                _report("Caching.Save.cache(cache_key, gallery_ids) + Caching.Load.cache(cache_key)", False, f"exception={e}")
+                _report("Cache.Save.cache(cache_key, gallery_ids) + Cache.Load.cache(cache_key)", False, f"exception={e}")
 
             # 8) Backward-compatible cache(meta, gallery_id) call shape
             try:
                 compat_meta = {"id": TEST_GALLERY_ID + 3, "title": {"english": "Compat Title"}, "tags": [], "images": {"pages": []}}
-                entry = scraperapi.Caching.Save.cache(compat_meta, TEST_GALLERY_ID + 3)
-                loaded = scraperapi.Caching.Load.cache(gallery_id=TEST_GALLERY_ID + 3)
+                entry = scraperapi.Cache.Save.cache(compat_meta, TEST_GALLERY_ID + 3)
+                loaded = scraperapi.Cache.Load.cache(gallery_id=TEST_GALLERY_ID + 3)
                 ok = isinstance(entry, dict) and isinstance(loaded, dict)
-                _report("Caching.Save.cache(meta, gallery_id) compatibility", ok, f"loaded_keys={list(loaded.keys()) if isinstance(loaded, dict) else None}")
+                _report("Cache.Save.cache(meta, gallery_id) compatibility", ok, f"loaded_keys={list(loaded.keys()) if isinstance(loaded, dict) else None}")
             except Exception as e:
-                _report("Caching.Save.cache(meta, gallery_id) compatibility", False, f"exception={e}")
+                _report("Cache.Save.cache(meta, gallery_id) compatibility", False, f"exception={e}")
 
-            # 9) Caching.Load.id_metadata
+            # 9) Cache.Load.id_metadata
             try:
-                md = scraperapi.Caching.Load.id_metadata([TEST_GALLERY_ID])
+                md = scraperapi.Cache.Load.id_metadata([TEST_GALLERY_ID])
                 ok = isinstance(md, dict)
-                _report("Caching.Load.id_metadata([...])", ok, f"keys={list(md.keys()) if isinstance(md, dict) else None}")
+                _report("Cache.Load.id_metadata([...])", ok, f"keys={list(md.keys()) if isinstance(md, dict) else None}")
             except Exception as e:
-                _report("Caching.Load.id_metadata([...])", False, f"exception={e}")
+                _report("Cache.Load.id_metadata([...])", False, f"exception={e}")
 
-            # 10) Caching.Load.cached_metadata (raw + clean)
+            # 10) Cache.Load.cached_metadata (raw + clean)
             try:
-                raw_block = scraperapi.Caching.Load.cached_metadata(clean=False)
-                clean_block = scraperapi.Caching.Load.cached_metadata(clean=True)
+                raw_block = scraperapi.Cache.Load.cached_metadata(clean=False)
+                clean_block = scraperapi.Cache.Load.cached_metadata(clean=True)
                 ok = isinstance(raw_block, dict) and isinstance(clean_block, dict)
-                _report("Caching.Load.cached_metadata(clean=False/True)", ok, f"raw={len(raw_block)} clean={len(clean_block)}")
+                _report("Cache.Load.cached_metadata(clean=False/True)", ok, f"raw={len(raw_block)} clean={len(clean_block)}")
             except Exception as e:
-                _report("Caching.Load.cached_metadata(clean=False/True)", False, f"exception={e}")
+                _report("Cache.Load.cached_metadata(clean=False/True)", False, f"exception={e}")
 
             # 11) prune_all_caches removes expired references
             try:
                 expired_key = "test:cache_expired"
-                scraperapi.upsert_cache_reference(
+                scraperapi.Cache.upsert_cache_reference(
                     expired_key,
                     {
                         "cache_key": expired_key,
@@ -392,8 +392,8 @@ def main() -> bool:
                         "expires_at": time.time() - 1,
                     },
                 )
-                scraperapi.prune_all_caches()
-                result = scraperapi.read_cached_metadata_entry(cache_key=expired_key)
+                scraperapi.Cache.prune()
+                result = scraperapi.Cache.read_entry(cache_key=expired_key)
                 expired = result.get("references", {}).get(expired_key) if isinstance(result, dict) else None
                 ok = expired is None
                 _report("prune_all_caches removes expired refs", ok, f"expired_entry={expired}")
@@ -404,13 +404,13 @@ def main() -> bool:
             try:
                 expired_gid = TEST_GALLERY_ID + 11
                 now = time.time()
-                scraperapi.upsert_cached_metadata(
+                scraperapi.Cache.upsert_cached_metadata(
                     expired_gid,
                     now,
                     clean_metadata={"id": expired_gid, "title": "Expired Metadata"},
                     raw_metadata={"id": expired_gid},
                 )
-                with scraperapi.lock, scraperapi.dbconnect() as conn:
+                with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "UPDATE CachedMetadata SET expires_at = ? WHERE gallery_id = ?",
@@ -418,8 +418,8 @@ def main() -> bool:
                     )
                     conn.commit()
 
-                scraperapi.prune_all_caches()
-                result = scraperapi.read_cached_metadata_entry(gallery_id=expired_gid)
+                scraperapi.Cache.prune()
+                result = scraperapi.Cache.read_entry(gallery_id=expired_gid)
                 expired_md = result.get("metadata", {}).get(expired_gid) if isinstance(result, dict) else None
                 ok = expired_md is None
                 _report("prune_all_caches removes expired metadata", ok, f"expired_metadata={expired_md}")
@@ -436,7 +436,7 @@ def main() -> bool:
                     TEST_SEARCH_END,
                     fetch_as_archival=False,
                 )
-                entry = scraperapi.read_cached_metadata_entry(cache_key=fetched_cache_key) if fetched_cache_key else None
+                entry = scraperapi.Cache.read_entry(cache_key=fetched_cache_key) if fetched_cache_key else None
                 ok = (
                     fetched_cache_key is not None
                     and isinstance(fetched_ids, list)
@@ -560,7 +560,7 @@ def main() -> bool:
 
             # B.1) simple key with colon
             try:
-                ct, tgt = scraperapi.split_cache_key("artist:abc")
+                ct, tgt = scraperapi.Cache.split_key("artist:abc")
                 ok = ct == "artist" and tgt == "abc"
                 _report("split_cache_key('artist:abc')", ok, f"type={ct} target={tgt}")
             except Exception as e:
@@ -568,7 +568,7 @@ def main() -> bool:
 
             # B.2) key with multiple colons → splits on first colon only
             try:
-                ct, tgt = scraperapi.split_cache_key("artist:abc:extra")
+                ct, tgt = scraperapi.Cache.split_key("artist:abc:extra")
                 ok = ct == "artist" and tgt == "abc:extra"
                 _report("split_cache_key multi-colon → first split only", ok, f"type={ct} target={tgt}")
             except Exception as e:
@@ -576,7 +576,7 @@ def main() -> bool:
 
             # B.3) key with no colon → type only, empty target
             try:
-                ct, tgt = scraperapi.split_cache_key("homepage")
+                ct, tgt = scraperapi.Cache.split_key("homepage")
                 ok = ct == "homepage" and tgt == ""
                 _report("split_cache_key('homepage') → no target", ok, f"type={ct} target={repr(tgt)}")
             except Exception as e:
@@ -588,7 +588,7 @@ def main() -> bool:
 
             # C.1) homepage + date sort → no sort param
             try:
-                url = scraperapi.build_url("homepage", None, "date", 1)
+                url = scraperapi.Build.url("homepage", None, "date", 1)
                 ok = "/galleries/all?page=1" in url and "sort=" not in url
                 _report("build_url homepage+date → no sort param", ok, f"url={url}")
             except Exception as e:
@@ -596,7 +596,7 @@ def main() -> bool:
 
             # C.2) homepage + non-date sort → includes &sort=
             try:
-                url = scraperapi.build_url("homepage", None, "popular", 2)
+                url = scraperapi.Build.url("homepage", None, "popular", 2)
                 ok = "page=2" in url and "sort=popular" in url
                 _report("build_url homepage+popular → has sort param", ok, f"url={url}")
             except Exception as e:
@@ -604,7 +604,7 @@ def main() -> bool:
 
             # C.3) artist query → encoded artist and name present in URL
             try:
-                url = scraperapi.build_url("artist", "john", "date", 1)
+                url = scraperapi.Build.url("artist", "john", "date", 1)
                 ok = "artist" in url and "john" in url
                 _report("build_url artist → encoded in URL", ok, f"url={url}")
             except Exception as e:
@@ -612,7 +612,7 @@ def main() -> bool:
 
             # C.4) search query → spaces encoded as '+' via quote_plus
             try:
-                url = scraperapi.build_url("search", "big ass", "date", 1)
+                url = scraperapi.Build.url("search", "big ass", "date", 1)
                 ok = "big+ass" in url
                 _report("build_url search → spaces encoded as '+'", ok, f"url={url}")
             except Exception as e:
@@ -622,7 +622,7 @@ def main() -> bool:
             try:
                 raised = False
                 try:
-                    scraperapi.build_url("invalid_type", "x", "date", 1)
+                    scraperapi.Build.url("invalid_type", "x", "date", 1)
                 except ValueError:
                     raised = True
                 _report("build_url invalid type → ValueError", raised)
@@ -635,7 +635,7 @@ def main() -> bool:
 
             # D.1) multi-word value → tokens sorted alphabetically
             try:
-                key = scraperapi.Get.cache_keys("artist", "John Doe")
+                key = scraperapi.Cache.cache_keys("artist", "John Doe")
                 ok = key == "artist:doe_john"
                 _report("Get.cache_keys multi-word → sorted tokens", ok, f"key={key}")
             except Exception as e:
@@ -643,7 +643,7 @@ def main() -> bool:
 
             # D.2) single-word value → type:value
             try:
-                key = scraperapi.Get.cache_keys("tag", "schoolgirl")
+                key = scraperapi.Cache.cache_keys("tag", "schoolgirl")
                 ok = key == "tag:schoolgirl"
                 _report("Get.cache_keys single-word", ok, f"key={key}")
             except Exception as e:
@@ -651,7 +651,7 @@ def main() -> bool:
 
             # D.3) no value → type only
             try:
-                key = scraperapi.Get.cache_keys("homepage")
+                key = scraperapi.Cache.cache_keys("homepage")
                 ok = key == "homepage"
                 _report("Get.cache_keys no value → type only", ok, f"key={key}")
             except Exception as e:
@@ -749,7 +749,7 @@ def main() -> bool:
 
             # H.1) plain ASCII title preserved
             try:
-                result = scraperapi.sanitise_string("Test Title")
+                result = scraperapi.Helpers.sanitise("Test Title")
                 ok = isinstance(result, str) and "Test" in result
                 _report("sanitise_string plain ASCII", ok, f"result={repr(result)}")
             except Exception as e:
@@ -757,7 +757,7 @@ def main() -> bool:
 
             # H.2) bracket content stripped
             try:
-                result = scraperapi.sanitise_string("[Group] Title [Subtitle]")
+                result = scraperapi.Helpers.sanitise("[Group] Title [Subtitle]")
                 ok = isinstance(result, str) and "[" not in result and "]" not in result
                 _report("sanitise_string bracket content stripped", ok, f"result={repr(result)}")
             except Exception as e:
@@ -765,7 +765,7 @@ def main() -> bool:
 
             # H.3) dict with title.english → extracts and strips brackets
             try:
-                result = scraperapi.sanitise_string({"id": 999, "title": {"english": "[Author] My Story"}})
+                result = scraperapi.Helpers.sanitise({"id": 999, "title": {"english": "[Author] My Story"}})
                 ok = isinstance(result, str) and "My Story" in result and "[" not in result
                 _report("sanitise_string dict → extracts english title and strips brackets", ok, f"result={repr(result)}")
             except Exception as e:
@@ -773,7 +773,7 @@ def main() -> bool:
 
             # H.4) empty string → "UNTITLED"
             try:
-                result = scraperapi.sanitise_string("")
+                result = scraperapi.Helpers.sanitise("")
                 ok = result == "UNTITLED"
                 _report("sanitise_string empty string → 'UNTITLED'", ok, f"result={repr(result)}")
             except Exception as e:
@@ -781,7 +781,7 @@ def main() -> bool:
 
             # H.5) slashes converted to dashes
             try:
-                result = scraperapi.sanitise_string("Part A / Part B")
+                result = scraperapi.Helpers.sanitise("Part A / Part B")
                 ok = "/" not in result and "-" in result
                 _report("sanitise_string slashes → dashes", ok, f"result={repr(result)}")
             except Exception as e:
@@ -797,7 +797,7 @@ def main() -> bool:
 
             # I.1) mark_gallery_started → status == "started"
             try:
-                scraperapi.mark_gallery_started(_STATUS_GID_STARTED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.Db.Gallery.start(_STATUS_GID_STARTED, TEST_RUNTIME_ROOT, "skeleton")
                 status = scraperapi.Get.gallery_status(_STATUS_GID_STARTED)
                 ok = status == "started"
                 _report("mark_gallery_started → status='started'", ok, f"status={status}")
@@ -806,8 +806,8 @@ def main() -> bool:
 
             # I.2) mark_gallery_skipped → status == "skipped"
             try:
-                scraperapi.mark_gallery_started(_STATUS_GID_SKIPPED, TEST_RUNTIME_ROOT, "skeleton")
-                scraperapi.mark_gallery_skipped(_STATUS_GID_SKIPPED)
+                scraperapi.Db.Gallery.start(_STATUS_GID_SKIPPED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.Db.Gallery.skip(_STATUS_GID_SKIPPED)
                 status = scraperapi.Get.gallery_status(_STATUS_GID_SKIPPED)
                 ok = status == "skipped"
                 _report("mark_gallery_skipped → status='skipped'", ok, f"status={status}")
@@ -816,8 +816,8 @@ def main() -> bool:
 
             # I.3) mark_gallery_failed → status == "failed"
             try:
-                scraperapi.mark_gallery_started(_STATUS_GID_FAILED, TEST_RUNTIME_ROOT, "skeleton")
-                scraperapi.mark_gallery_failed(_STATUS_GID_FAILED)
+                scraperapi.Db.Gallery.start(_STATUS_GID_FAILED, TEST_RUNTIME_ROOT, "skeleton")
+                scraperapi.Db.Gallery.fail(_STATUS_GID_FAILED)
                 status = scraperapi.Get.gallery_status(_STATUS_GID_FAILED)
                 ok = status == "failed"
                 _report("mark_gallery_failed → status='failed'", ok, f"status={status}")
@@ -826,7 +826,7 @@ def main() -> bool:
 
             # I.4) list_galleries() includes newly inserted row
             try:
-                all_ids = {row[0] for row in scraperapi.list_galleries()}
+                all_ids = {row[0] for row in scraperapi.Db.Gallery.list()}
                 ok = _STATUS_GID_STARTED in all_ids
                 _report("list_galleries() includes newly started gallery", ok)
             except Exception as e:
@@ -834,8 +834,8 @@ def main() -> bool:
 
             # I.5) list_galleries(status) filters by status correctly
             try:
-                started_ids = {row[0] for row in scraperapi.list_galleries("started")}
-                skipped_ids = {row[0] for row in scraperapi.list_galleries("skipped")}
+                started_ids = {row[0] for row in scraperapi.Db.Gallery.list_by_status("started")}
+                skipped_ids = {row[0] for row in scraperapi.Db.Gallery.list_by_status("skipped")}
                 ok = (
                     _STATUS_GID_STARTED in started_ids
                     and _STATUS_GID_SKIPPED not in started_ids
@@ -846,14 +846,14 @@ def main() -> bool:
                 _report("list_galleries(status) filters correctly", False, f"exception={e}")
 
             # ======================================================================
-            # J) set_queued_galleries + Caching.Load.queued_galleries
+            # J) set_queued_galleries + Cache.Load.queued_galleries
             # ======================================================================
 
             # J.1) set queue → load back as a sorted list
             try:
                 _queue_ids = sorted([TEST_GALLERY_ID + 4, TEST_GALLERY_ID + 5, TEST_GALLERY_ID + 6])
-                scraperapi.set_queued_galleries(_queue_ids)
-                loaded = scraperapi.Caching.Load.queued_galleries()
+                scraperapi.Cache.Save.queued_galleries(_queue_ids)
+                loaded = scraperapi.Cache.Load.queued_galleries()
                 ok = isinstance(loaded, list) and all(gid in loaded for gid in _queue_ids)
                 _report("set_queued_galleries + queued_galleries() roundtrip", ok, f"loaded={loaded}")
             except Exception as e:
@@ -868,15 +868,15 @@ def main() -> bool:
 
             # K.1) clear by cache_key removes that reference
             try:
-                scraperapi.upsert_cache_reference(_CLEAR_CACHE_KEY, {
+                scraperapi.Cache.upsert_cache_reference(_CLEAR_CACHE_KEY, {
                     "cache_key": _CLEAR_CACHE_KEY,
                     "cache_type": "test",
                     "cache_target": "clear_test",
                     "ids": [1],
                     "expires_at": time.time() + 300,
                 })
-                scraperapi.clear_cached_items(cache_key=_CLEAR_CACHE_KEY)
-                result = scraperapi.read_cached_metadata_entry(cache_key=_CLEAR_CACHE_KEY)
+                scraperapi.Cache.clear(cache_key=_CLEAR_CACHE_KEY)
+                result = scraperapi.Cache.read_entry(cache_key=_CLEAR_CACHE_KEY)
                 ok = result.get("references", {}).get(_CLEAR_CACHE_KEY) is None
                 _report("clear_cached_items(cache_key=...) removes reference", ok)
             except Exception as e:
@@ -884,12 +884,12 @@ def main() -> bool:
 
             # K.2) clear by gallery_id removes metadata
             try:
-                scraperapi.upsert_cached_metadata(_CLEAR_META_GID, time.time(),
+                scraperapi.Cache.upsert_cached_metadata(_CLEAR_META_GID, time.time(),
                     clean_metadata={"id": _CLEAR_META_GID},
                     raw_metadata={"id": _CLEAR_META_GID},
                 )
-                scraperapi.clear_cached_items(gallery_id=_CLEAR_META_GID)
-                result = scraperapi.read_cached_metadata_entry(gallery_id=_CLEAR_META_GID)
+                scraperapi.Cache.clear(gallery_id=_CLEAR_META_GID)
+                result = scraperapi.Cache.read_entry(gallery_id=_CLEAR_META_GID)
                 ok = result.get("metadata", {}).get(_CLEAR_META_GID) is None
                 _report("clear_cached_items(gallery_id=...) removes metadata", ok)
             except Exception as e:
@@ -899,7 +899,7 @@ def main() -> bool:
             try:
                 raised = False
                 try:
-                    scraperapi.clear_cached_items(cache_key="x", gallery_id=1)
+                    scraperapi.Cache.clear(cache_key="x", gallery_id=1)
                 except ValueError:
                     raised = True
                 _report("clear_cached_items(both args) → ValueError", raised)
@@ -916,7 +916,7 @@ def main() -> bool:
                     "media_id": "999999",
                     "images": {"pages": [{"t": "j"}, {"t": "p"}, {"t": "w"}, {"t": "g"}]},
                 }
-                est, actual, count = scraperapi.estimate_gallery_size(_meta_pages, use_head_requests=False)
+                est, actual, count = scraperapi.Build.estimate_gallery_size(_meta_pages, use_head_requests=False)
                 ok = isinstance(est, int) and est > 0 and count == 4
                 _report("estimate_gallery_size with typed pages", ok, f"est={est} count={count}")
             except Exception as e:
@@ -924,7 +924,7 @@ def main() -> bool:
 
             # L.2) empty meta → (0, 0, 0)
             try:
-                est, actual, count = scraperapi.estimate_gallery_size({}, use_head_requests=False)
+                est, actual, count = scraperapi.Build.estimate_gallery_size({}, use_head_requests=False)
                 ok = est == 0 and actual == 0 and count == 0
                 _report("estimate_gallery_size empty meta → (0, 0, 0)", ok, f"result=({est},{actual},{count})")
             except Exception as e:

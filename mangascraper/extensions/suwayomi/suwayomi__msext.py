@@ -763,7 +763,7 @@ def update_creator_manga(meta):
         log(f"[DRY RUN] Would process gallery {meta.get('id')}", "debug")
         return
 
-    gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
+    gallery_meta = Helpers.summary(meta, EXTENSION_REFERRER)
     creators = gallery_meta.get("creator", [])
     if not creators:
         return
@@ -819,7 +819,7 @@ def update_creator_manga(meta):
         # Query database for most_popular_tags (top genres) for this creator
         logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperapi.DB_PATH}")
         genre_names = []
-        with scraperapi.lock, scraperapi.dbconnect() as conn:
+        with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
             row = cursor.fetchone()
@@ -1063,7 +1063,7 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                     return True
 
                 except Exception as e:
-                    wait = dynamic_sleep("image", attempt=attempt)
+                    wait = Sleep.dynamic("image", attempt=attempt)
                     log_clarification()
                     logger.warning(
                         f"Gallery {gallery}: Page {page}: Mirror {url}, attempt {attempt} failed: {e}, retrying in {wait:.2f}s"
@@ -1172,7 +1172,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
             )
             gallery_format = "directory"
 
-        gallery_meta = build_gallery_metadata_summary(meta, EXTENSION_REFERRER)
+        gallery_meta = Helpers.summary(meta, EXTENSION_REFERRER)
         creators = gallery_meta.get("creator", [])
         tags = gallery_meta.get("tags", [])
         languages = gallery_meta.get("languages", [])

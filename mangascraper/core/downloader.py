@@ -218,7 +218,7 @@ def estimate_total_download_size(gallery_ids: list) -> tuple:
         try:
             meta = scraperapi.Fetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
-                estimated_size, _, _ = estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, _ = Build.estimate_gallery_size(meta, use_head_requests=False)
                 gallery_sizes.append((gallery_id, estimated_size))
                 download_estimated += estimated_size
         except Exception as e:
@@ -333,7 +333,7 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
             value = value[0] if value else "Unknown"
         if not isinstance(value, str):
             value = str(value)
-        path_parts.append(scraperapi.sanitise_string(value))
+        path_parts.append(scraperapi.Helpers.sanitise(value))
 
     return os.path.join(*path_parts)
 
@@ -352,7 +352,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
             return
 
         gallery_id = meta.get("id", "Unknown")
-        gallery_title = scraperapi.sanitise_string(meta)
+        gallery_title = scraperapi.Helpers.sanitise(meta)
         log_clarification("debug")
         skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
         log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
@@ -559,7 +559,7 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraperapi.mark_gallery_started(gallery_id, download_location, extension_name)
+            scraperapi.Db.Gallery.start(gallery_id, download_location, extension_name)
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -579,7 +579,7 @@ def process_galleries(batch_ids):
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                        scraperapi.mark_gallery_failed(gallery_id)
+                        scraperapi.Db.Gallery.fail(gallery_id)
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -596,10 +596,10 @@ def process_galleries(batch_ids):
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
-                estimated_size, _, img_count = estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, img_count = Build.estimate_gallery_size(meta, use_head_requests=False)
                 space_monitor["total_estimated_bytes"] += estimated_size * 2 # keep this here i think
                 
-                time.sleep(dynamic_sleep("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
+                time.sleep(Sleep.dynamic("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
 
                 # --- Decide if gallery should be skipped ---
                 skip_gallery = False
@@ -611,7 +611,7 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraperapi.mark_gallery_skipped(gallery_id)
+                        scraperapi.Db.Gallery.skip(gallery_id)
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -629,7 +629,7 @@ def process_galleries(batch_ids):
                     )
 
                 # --- Prepare primary folder (first creator only) ---
-                primary_creator = scraperapi.sanitise_string(creators[0]) if creators else "Unknown"
+                primary_creator = scraperapi.Helpers.sanitise(creators[0]) if creators else "Unknown"
                 log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(
                     meta,
@@ -683,7 +683,7 @@ def process_galleries(batch_ids):
 
                 # --- Symlink all additional creators to the finalised path (archive or folder) ---
                 for extra_creator in creators[1:]:
-                    extra_creator_safe = scraperapi.sanitise_string(extra_creator)
+                    extra_creator_safe = scraperapi.Helpers.sanitise(extra_creator)
                     extra_folder = build_gallery_path(meta, {"creator": [extra_creator_safe]})
                     
                     # If archiving, append the extension for the symlink target
@@ -706,7 +706,7 @@ def process_galleries(batch_ids):
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
-                    scraperapi.mark_gallery_completed(gallery_id)
+                    scraperapi.Db.Gallery.complete(gallery_id)
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
@@ -735,7 +735,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
-                    scraperapi.mark_gallery_failed(gallery_id)
+                    scraperapi.Db.Gallery.fail(gallery_id)
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
@@ -839,7 +839,7 @@ def start_downloader(gallery_list=None):
     orchestrator.refresh_globals()
     
     if gallery_list is None:
-        gallery_list = scraperapi.Caching.Load.queued_galleries()
+        gallery_list = scraperapi.Cache.Load.queued_galleries()
         if not gallery_list:
             logger.warning("No galleries queued in database; no galleries to download.")
 

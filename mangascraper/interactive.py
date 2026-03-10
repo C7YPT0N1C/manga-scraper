@@ -297,7 +297,7 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
         list: Updated list of selected IDs (after any removals)
     """
     
-    selected_ids = scraperapi.Caching.Load.queued_galleries()
+    selected_ids = scraperapi.Cache.Load.queued_galleries()
     if not selected_ids:
         logger.info("No galleries selected yet.")
         return []
@@ -309,7 +309,7 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
     if cached_metadata:
         metadata.update({gid: cached_metadata[gid] for gid in unique_ids if gid in cached_metadata})
 
-    cached_by_ids = scraperapi.Caching.Load.id_metadata(unique_ids)
+    cached_by_ids = scraperapi.Cache.Load.id_metadata(unique_ids)
     if cached_by_ids:
         for gid in unique_ids:
             if gid not in metadata and gid in cached_by_ids:
@@ -1021,7 +1021,7 @@ def interactive_config_menu(current_config: dict) -> dict:
         elif choice == "a":
             confirm = input("Are you sure you want to clear the cache? (y/n): ").strip().lower()
             if confirm == 'y':
-                scraperapi.Caching.clear_cache()
+                scraperapi.Cache.clear()
                 logger.info("Cache cleared successfully.")
             else:
                 logger.info("Cache clear cancelled.")
@@ -1056,9 +1056,9 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
-        scraperapi.set_queued_galleries([])
+        scraperapi.Cache.Save.queued_galleries([])
 
-    selected_ids = scraperapi.Caching.Load.queued_galleries() # Start with any galleries already in the queue (e.g. from previous searches or CLI flags)
+    selected_ids = scraperapi.Cache.Load.queued_galleries() # Start with any galleries already in the queue (e.g. from previous searches or CLI flags)
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
@@ -1070,9 +1070,9 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
     def persist_selected_ids():
         """Persist selected gallery IDs to the database, merging with any existing queued galleries to prevent overwriting."""
         nonlocal selected_ids
-        cached_ids = scraperapi.Caching.Load.queued_galleries()
+        cached_ids = scraperapi.Cache.Load.queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
-        scraperapi.set_queued_galleries(sorted(set(merged)) if merged else [])
+        scraperapi.Cache.Save.queued_galleries(sorted(set(merged)) if merged else [])
         selected_ids = merged
 
     if selected_ids:
@@ -1107,7 +1107,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
         logger.debug(f"Search menu choice: {choice}")
         
         if choice == "0":
-            selected_ids = scraperapi.Caching.Load.queued_galleries()
+            selected_ids = scraperapi.Cache.Load.queued_galleries()
             if selected_ids:
                 break
             else:
@@ -1192,7 +1192,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 continue
             
             if ids and cache_key:
-                cache_key = scraperapi.Get.cache_keys("homepage", sort_val)
+                cache_key = scraperapi.Cache.cache_keys("homepage", sort_val)
                 if archive_mode:
                     selected_ids.extend(ids)
                     logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1358,7 +1358,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                     continue
                 
                 if ids and cache_key:
-                    cache_key = scraperapi.Get.cache_keys("search", search_query)
+                    cache_key = scraperapi.Cache.cache_keys("search", search_query)
                     if archive_mode:
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1445,7 +1445,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                     continue
                 
                 if ids and cache_key:
-                    cache_key = scraperapi.Get.cache_keys(query_type, query_value)
+                    cache_key = scraperapi.Cache.cache_keys(query_type, query_value)
                     if archive_mode:
                         selected_ids.extend(ids)
                         logger.info(f"Added {len(ids)} galleries to download list.")
@@ -1467,7 +1467,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
         
         elif choice == "q":
             # View selected galleries
-            selected_ids = scraperapi.Caching.Load.queued_galleries()
+            selected_ids = scraperapi.Cache.Load.queued_galleries()
             selected_ids = view_selected_galleries(selected_ids, selected_metadata)
             persist_selected_ids()
             continue
