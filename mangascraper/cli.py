@@ -5,7 +5,7 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.interactive import interactive_config_menu, interactive_gallery_search
+from mangascraper.interactive import interactive_config_menu, interactive_search_menu
 from mangascraper.core import database as scraperdb
 from mangascraper.core import api as scraperapi
 from mangascraper.core.downloader import start_downloader
@@ -415,49 +415,6 @@ def _parse_galleries_arg(galleries_value: str, warn_invalid: bool = True) -> lis
 # CLI Helper Functions
 ####################################################################################################
 
-def fetch_gallery_ids(query_type: str, query_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> list[int]:
-    """
-    Fetch gallery IDs with error handling and fallback to cached results.
-    """
-    cache_key = scraperapi.Get.cache_keys(query_type, query_value) if query_value else None
-    max_retries = 2
-    attempt = 0
-    
-    while attempt < max_retries:
-        try:
-            ids = scraperapi.Fetch.gallery_ids(
-                query_type,
-                query_value,
-                sort_val,
-                start_page,
-                end_page,
-                fetch_as_archival=fetch_as_archival,
-            )
-            return ids or []
-        except Exception as e:
-            attempt += 1
-            logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
-            
-            if attempt < max_retries:
-                logger.info("Retrying...")
-                time.sleep(2)
-                continue
-            
-            # Try to fallback to cached results
-            if cache_key:
-                try:
-                    logger.info("Attempting to use cached results...")
-                    cached_metadata = scraperapi.Caching.load(cache_key)
-                    if cached_metadata:
-                        cached_ids = list(cached_metadata.keys())
-                        logger.warning(f"Using {len(cached_ids)} galleries from cache")
-                        return cached_ids
-                except:
-                    pass
-            
-            logger.warning(f"Failed to fetch galleries for {query_type}={query_value}. Skipping.")
-            return []
-
 def estimate_download_size(metadata: dict) -> tuple[int, str]:
     """
     Estimate total download size in bytes from metadata.
@@ -622,7 +579,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_val)
                     start_page = DEFAULT_PAGE_RANGE_START
                     end_page = int(m_homepage.group(1))
-                    gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(scraperapi.Fetch.gallery_ids("homepage", "", sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 # Creator / group / tag / character / parody / search URLs
@@ -639,7 +596,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(sort_path if sort_path else DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids(qtype, qvalue, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(scraperapi.Fetch.gallery_ids(qtype, qvalue, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 elif m_search:
@@ -648,7 +605,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                     sort_val = get_valid_sort_value(DEFAULT_PAGE_SORT)
                     start_page = 1
                     end_page = int(page_q) if page_q else DEFAULT_PAGE_RANGE_END
-                    gallery_ids.update(fetch_gallery_ids("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
+                    gallery_ids.update(scraperapi.Fetch.gallery_ids("search", search_query, sort_val, start_page, end_page, fetch_as_archival=archive_mode))
                     continue
 
                 else:
@@ -676,7 +633,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 if len(arg_list) > 1:
                     end_page = int(arg_list[1])
 
-        gallery_ids.update(fetch_gallery_ids("homepage", "", sort_val, start_page, end_page))
+        gallery_ids.update(scraperapi.Fetch.gallery_ids("homepage", "", sort_val, start_page, end_page))
         return gallery_ids
 
     # --- Other queries (CLI flags) ---
@@ -721,7 +678,7 @@ def _handle_gallery_args(arg_list: list | None, query_type: str) -> set[int]:
                 end_page = int(entry[2])
 
         archival_flag = archive_mode or force_archive
-        gallery_ids.update(fetch_gallery_ids(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
+        gallery_ids.update(scraperapi.Fetch.gallery_ids(query_lower, name, sort_val, start_page, end_page, fetch_as_archival=archival_flag))
 
     return gallery_ids
 
@@ -852,7 +809,7 @@ def build_gallery_list(args):
             gallery_ids.update(_handle_gallery_args(archive_entries, "archive"))
         if archive_all:
             # Same as homepage crawl but infinite
-            gallery_ids.update(fetch_gallery_ids("homepage", "", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
+            gallery_ids.update(scraperapi.Fetch.gallery_ids("homepage", "", DEFAULT_PAGE_SORT, start_page=1, end_page=None, fetch_as_archival=True))
 
     # --- Final sorted list (Processes highest gallery ID (latest gallery) first.) ---
     # Deduplicate while preserving highest-ID-first order
@@ -1095,7 +1052,7 @@ def main():
 
         # Enter gallery search mode
         log_clarification()
-        gallery_list = interactive_gallery_search(initial_gallery_list, unattended=args.unattended)
+        gallery_list = interactive_search_menu(initial_gallery_list, unattended=args.unattended)
         if not gallery_list:
             logger.warning("No galleries selected. Exiting.")
             sys.exit(0)

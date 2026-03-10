@@ -691,6 +691,7 @@ class Fetch:
             rows = cursor.fetchall()
             return sorted({int(row[0]) for row in rows})
     
+
     @staticmethod
     def gallery_ids(
         query_type: str,
@@ -700,196 +701,167 @@ class Fetch:
         end_page: int | None = None,
         file_used: bool = False,
         fetch_as_archival: bool = DEFAULT_ARCHIVING,
-    ) -> set[int]:
+    ) -> list[int]:
         """
-        Fetch gallery IDs from NHentai based on query type, value, and optional sort type.
-
-        query_type: homepage, artist, group, tag, character, parody, search
-        query_value: string query value (None for homepage)
-        sort_value: date / recent / today / week / popular / all_time (defaults to 'date')
-        start_page, end_page: pagination (auto-defaults depend on archival flag)
-        archival: if True, crawl until NHentai returns no more results (ignores end_page)
+        Unified fetch_gallery_ids for CLI and Interactive: tries cache key(s) first, then falls back to API if needed.
+        Returns a list of IDs.
         """
+        import time
         
-        global archiving
-
-        orchestrator.refresh_globals()
+        cache_key = Get.cache_keys(query_type, query_value) if query_value else None
+        logger.error(f"[TESTING]: Gallery IDs cache key = {cache_key}")
         
-        query_type = query_type.capitalize()
-        query_str = f" ' {query_value}'" if query_value else ""
-        sort_str = f"'{sort_value}'" if sort_value != "date" else "date"
+        # 1. Try cache first
+        if cache_key:
+            references = scraperdb.load_cache_references()
+            cache_entry = references.get(cache_key)
+            now = time.time()
+            if cache_entry:
+                expires_at = cache_entry.get("expires_at")
+                ids = cache_entry.get("ids", [])
+                if expires_at is None or expires_at > now:
+                    logger.info(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
+                    return ids
+                else:
+                    logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
 
-        # Apply default ranges depending on flags used.
-        if start_page is None:
-            start_page = DEFAULT_PAGE_RANGE_START
-        
-        if file_used:
-            if end_page is None:
-                end_page = None # Always unlimited in archival mode if no end page provided
-        if fetch_as_archival:
-            log_clarification("debug") # NOTE: DEBUGGING
-            log(f"SWITCHING TO ARCHIVAL MODE", "debug")
-            orchestrator.archiving = True # Let scraper know there is archival being done.
-            end_page = None # Always unlimited in archival mode
-        else:
-            if end_page is None:
-                end_page = DEFAULT_PAGE_RANGE_END
-
-        ids: set[int] = set()
-        page = start_page
-        
-        #log_clarification("debug") # NOTE: DEBUGGING
-        #log(f"START PAGE = {start_page}", "debug")
-        #log(f"END PAGE = {end_page}", "debug")
-        
-        gallery_ids_session = Get.session(referrer="API", status="return")
-
-        try:
-            log_clarification("debug")
-            if query_value is None:
-                log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
-            else:
-                log(f"Fetching Gallery IDs for {query_type} '{query_value}' (pages {start_page} → {end_page or '∞'}), sorted by {sort_str}")
-
-            while True:
-                # Stop at configured end_page (non-archival only)
-                if end_page is not None and page > end_page:
-                    break
-
-                url = build_url(query_type, query_value, sort_value, page)
-                log(f"Fetcher: Requesting URL: {url}", "debug")
-
-                resp = None
-                for attempt in range(1, orchestrator.max_retries + 1):
-                    try:
-                        resp = gallery_ids_session.get(url, timeout=(60, 60))
-
-                        if resp.status_code == 429:
-                            wait = dynamic_sleep("api", attempt=attempt)
-                            logger.warning(f"{query_type}{query_str}, Page {page}: Attempt {attempt}: 429 rate limit, waiting {wait:.2f}s")
-                            time.sleep(wait)
-                            continue
-
-                        if resp.status_code == 403:
-                            wait = dynamic_sleep("api", attempt=attempt)
-                            logger.warning(f"{query_type}{query_str}, Page {page}: Attempt {attempt}: 403 forbidden, retrying in {wait:.2f}s")
-                            time.sleep(wait)
-                            continue
-
-                        resp.raise_for_status()
-                        break  # success
-
-                    except requests.RequestException as e:
-                        if attempt >= orchestrator.max_retries:
-                            log_clarification("debug")
-                            logger.warning(f"{query_type} {f'{query_value}' if query_value == None else ''}, Page {page}: Failed after {attempt} retries: {e}")
-                            resp = None
-
-                            # Tor fallback
-                            if use_tor:
-                                wait = dynamic_sleep("api", attempt=attempt) * 2
-                                logger.warning(f"{query_type}{query_str}, Page {page}: Retrying with new Tor node in {wait:.2f}s")
+        # 2. If no valid cache, fetch from API
+        max_retries = 2
+        attempt = 0
+        ids = []
+        while attempt < max_retries:
+            try:
+                global archiving
+                orchestrator.refresh_globals()
+                qt = query_type.capitalize()
+                query_str = f" ' {query_value}'" if query_value else ""
+                sort_str = f"'{sort_value}'" if sort_value != "date" else "date"
+                if start_page is None:
+                    start_page = DEFAULT_PAGE_RANGE_START
+                if file_used:
+                    if end_page is None:
+                        end_page = None
+                if fetch_as_archival:
+                    log_clarification("debug")
+                    log(f"SWITCHING TO ARCHIVAL MODE", "debug")
+                    orchestrator.archiving = True
+                    end_page = None
+                else:
+                    if end_page is None:
+                        end_page = DEFAULT_PAGE_RANGE_END
+                ids_set = set()
+                page = start_page
+                gallery_ids_session = Get.session(referrer="API", status="return")
+                log_clarification("debug")
+                if query_value is None:
+                    log(f"Fetching Gallery IDs from NHentai Homepages {start_page} → {end_page or '∞'}")
+                else:
+                    log(f"Fetching Gallery IDs for {qt} '{query_value}' (pages {start_page} → {end_page or '∞'}), sorted by {sort_str}")
+                while True:
+                    if end_page is not None and page > end_page:
+                        break
+                    url = build_url(qt, query_value, sort_value, page)
+                    log(f"Fetcher: Requesting URL: {url}", "debug")
+                    resp = None
+                    for api_attempt in range(1, orchestrator.max_retries + 1):
+                        try:
+                            resp = gallery_ids_session.get(url, timeout=(60, 60))
+                            if resp.status_code == 429:
+                                wait = dynamic_sleep("api", attempt=api_attempt)
+                                logger.warning(f"{qt}{query_str}, Page {page}: Attempt {api_attempt}: 429 rate limit, waiting {wait:.2f}s")
                                 time.sleep(wait)
-                                gallery_ids_session = Get.session(referrer="API", status="rebuild")
-                                try:
-                                    resp = gallery_ids_session.get(url, timeout=(60, 60))
-                                    resp.raise_for_status()
-                                except Exception as e2:
-                                    logger.warning(f"{query_type}{query_str}, Page {page}: Still failed after Tor rotate: {e2}")
-                                    resp = None
+                                continue
+                            if resp.status_code == 403:
+                                wait = dynamic_sleep("api", attempt=api_attempt)
+                                logger.warning(f"{qt}{query_str}, Page {page}: Attempt {api_attempt}: 403 forbidden, retrying in {wait:.2f}s")
+                                time.sleep(wait)
+                                continue
+                            resp.raise_for_status()
                             break
-
-                        wait = dynamic_sleep("api", attempt=attempt)
-                        logger.warning(f"{query_type}{query_str}, Page {page}: Attempt {attempt}: Request failed: {e}, retrying in {wait:.2f}s")
-                        time.sleep(wait)
-
-                if resp is None:
-                    page += 1
-                    continue  # skip this page
-
-                try:
-                    data = resp.json()
-                except Exception as e:
-                    logger.warning(f"{query_type}{query_str}, Page {page}: Failed to decode JSON: {e}")
-                    break
-                
-                # ------------------------------------
-                # Filtering
-                # ------------------------------------
-                results = data.get("result", [])
-                batch = []
-
-                # --- Excluded Tags ---
-                excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags]
-                
-                # --- Allowed Languages ---
-                allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
-
-                for g in results:
-                    # Extract gallery tags
-                    gallery_tags = [
-                        t["name"].lower()
-                        for t in g.get("tags", [])
-                        if t.get("type") == "tag"
-                    ]
-
-                    # Extract gallery languages
-                    gallery_langs = [
-                        t["name"].lower()
-                        for t in g.get("tags", [])
-                        if t.get("type") == "language"
-                    ]
-
-                    # --- Tag filter ---
-                    blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
-                    if blocked_tags:
-                        log(f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}", "debug") # NOTE: DEBUGGING
+                        except requests.RequestException as e:
+                            if api_attempt >= orchestrator.max_retries:
+                                log_clarification("debug")
+                                logger.warning(f"{qt} {f'{query_value}' if query_value == None else ''}, Page {page}: Failed after {api_attempt} retries: {e}")
+                                resp = None
+                                if use_tor:
+                                    wait = dynamic_sleep("api", attempt=api_attempt) * 2
+                                    logger.warning(f"{qt}{query_str}, Page {page}: Retrying with new Tor node in {wait:.2f}s")
+                                    time.sleep(wait)
+                                    gallery_ids_session = Get.session(referrer="API", status="rebuild")
+                                    try:
+                                        resp = gallery_ids_session.get(url, timeout=(60, 60))
+                                        resp.raise_for_status()
+                                    except Exception as e2:
+                                        logger.warning(f"{qt}{query_str}, Page {page}: Still failed after Tor rotate: {e2}")
+                                        resp = None
+                                break
+                            wait = dynamic_sleep("api", attempt=api_attempt)
+                            logger.warning(f"{qt}{query_str}, Page {page}: Attempt {api_attempt}: Request failed: {e}, retrying in {wait:.2f}s")
+                            time.sleep(wait)
+                    if resp is None:
+                        page += 1
                         continue
-
-                    # --- Language filter ---
-                    if allowed_gallery_language:
-                        has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
-                        has_translated = "translated" in gallery_langs
-                        allow_translated = "translated" in allowed_gallery_language
-                        if not (has_allowed or (has_translated and allow_translated)):
-                            blocked_langs = gallery_langs[:]
-                            log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug") # NOTE: DEBUGGING
+                    try:
+                        data = resp.json()
+                    except Exception as e:
+                        logger.warning(f"{qt}{query_str}, Page {page}: Failed to decode JSON: {e}")
+                        break
+                    results = data.get("result", [])
+                    batch = []
+                    excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags]
+                    allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
+                    for g in results:
+                        gallery_tags = [
+                            t["name"].lower()
+                            for t in g.get("tags", [])
+                            if t.get("type") == "tag"
+                        ]
+                        gallery_langs = [
+                            t["name"].lower()
+                            for t in g.get("tags", [])
+                            if t.get("type") == "language"
+                        ]
+                        blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
+                        if blocked_tags:
+                            log(f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}", "debug")
                             continue
-
-                    # If passed filters → keep
-                    batch.append(int(g["id"]))
-                    
-                    # --- Track total pages ---
-                    images = g.get("images", {})
-                    num_pages = len(images.get("pages", []))
-                    orchestrator.total_gallery_images += num_pages
-
-                log(f"Fetcher: {query_type}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
-                log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
-                #log(f"Excluded tags: {excluded_gallery_tags})", "debug") # NOTE: DEBUGGING
-                #log(f"Langs allowed: {allowed_gallery_language}", "debug") # NOTE: DEBUGGING
-
-                # Stop only if NHentai itself returns no results
-                if not results:
-                    logger.info(f"Fetcher: {query_type}{query_str}, Page {page}: No more results from NHentai, stopping.")
-                    break
-
-                # If results exist but all were filtered out, just skip to next page
-                if not batch:
-                    logger.debug(f"Fetcher: {query_type}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
+                        if allowed_gallery_language:
+                            has_allowed = any(lang in allowed_gallery_language for lang in gallery_langs)
+                            has_translated = "translated" in gallery_langs
+                            allow_translated = "translated" in allowed_gallery_language
+                            if not (has_allowed or (has_translated and allow_translated)):
+                                blocked_langs = gallery_langs[:]
+                                log(f"Skipping Gallery {g['id']} due to blocked languages: {blocked_langs}", "debug")
+                                continue
+                        batch.append(int(g["id"]))
+                        images = g.get("images", {})
+                        num_pages = len(images.get("pages", []))
+                        orchestrator.total_gallery_images += num_pages
+                    log(f"Fetcher: {qt}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
+                    log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
+                    if not results:
+                        logger.info(f"Fetcher: {qt}{query_str}, Page {page}: No more results from NHentai, stopping.")
+                        break
+                    if not batch:
+                        logger.debug(f"Fetcher: {qt}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
+                        page += 1
+                        continue
+                    ids_set.update(batch)
                     page += 1
+                log(f"Fetched total {len(ids_set)} Galleries for {qt}{query_str}", "warning")
+                log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
+                ids = list(ids_set)
+                return ids
+            except Exception as e:
+                attempt += 1
+                logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
+                if attempt < max_retries:
+                    logger.info("Retrying...")
+                    time.sleep(2)
                     continue
-
-                ids.update(batch)
-                page += 1
-
-            log(f"Fetched total {len(ids)} Galleries for {query_type}{query_str}", "warning")
-            log(f"Overall Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
-            return ids
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch Galleries for {query_type}{query_str}: {e}")
-            return set()
+                logger.warning(f"Failed to fetch galleries for {query_type}={query_value}. Skipping.")
+                return []
+        return ids
 
     ################################################################################################################
     # IMAGE URL FETCHING

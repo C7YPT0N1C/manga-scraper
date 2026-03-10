@@ -49,10 +49,6 @@ def get_latest_gallery_id(timeout: int = 5) -> int | None:
         logger.warning(f"Could not fetch latest gallery ID: {e}")
     return None
 
-####################################################################################################
-# METADATA UTILITIES
-####################################################################################################
-
 def display_metadata_summary(summary: dict):
     """Display a formatted summary of gallery metadata."""
     
@@ -480,7 +476,6 @@ def view_selected_galleries(selected_ids: list, cached_metadata: dict | None = N
     # Return updated list (original order, minus removed IDs)
     return [gid for gid in unique_ids if gid not in removed_ids]
 
-
 def show_gallery_details(metadata: dict):
     """Display detailed metadata for all galleries with pagination."""
     if not metadata:
@@ -698,6 +693,70 @@ def show_filter_menu(summary: dict, metadata: dict) -> tuple:
     logger.info(f"Filtered to {len(filtered_ids)} galleries")
     
     return filtered_ids, filtered_metadata
+
+def _handle_search_error(search_type: str, search_value: str = ""):
+    """
+    Handle search errors consistently and return user to config menu.
+    
+    Args:
+        search_type: Type of search that failed
+        search_value: Optional search value for more specific error messages
+    """
+    log_clarification()
+    logger.error(
+        f"An error occurred during {search_type} search"
+        f"{f' for {search_value}' if search_value else ''}.\n"
+        f"Please check the log file for details: {RUNTIME_LOG_FILE}\n"
+        f"The search menu will now return to the configuration menu to prevent further issues."
+    )
+    log_clarification()
+    return True  # Signal to return to config menu
+
+def _check_no_results_and_prompt_filters():
+    """
+    Helper function to prompt user when a search returns no results.
+    Asks if they want to adjust their language/tag filters.
+    Returns True if user wants to change filters, False otherwise.
+    """
+    log_clarification()
+    logger.warning("No galleries found with current filters.")
+    response = input("\nWould you like to change your filters? (y/n): ").strip().lower()
+    if response == "y":
+        logger.info("Returning to configuration menu to adjust filters...")
+        log_clarification()
+        return True
+    return False
+
+####################################################################################################
+# HELPERS
+####################################################################################################
+
+def parse_end_page(end_page_input: str, default: int) -> int | None:
+        """Parse end page input. Returns None for 'all' to fetch all pages, otherwise returns int."""
+        end_page_input = end_page_input.strip().lower()
+        if end_page_input == "all":
+            return None
+        return int(end_page_input) if end_page_input.isdigit() else default
+
+def prompt_yes_no(prompt: str) -> bool:
+    while True:
+        value = input(prompt).strip().lower()
+        if value in ("y", "yes"):
+            return True
+        if value in ("n", "no"):
+            return False
+        logger.warning("Invalid input. Enter y or n.")
+
+def prompt_archive_mode() -> bool:
+    archive = prompt_yes_no("Archive this query (add every result to download)? (y/n): ")
+    if not archive:
+        return False
+    logger.warning("WARNING: Archiving adds every result to the download queue.")
+    confirm = prompt_yes_no("Are you sure you want to archive this query? (y/n): ")
+    if not confirm:
+        logger.info("Archive cancelled. Continuing with normal browsing.")
+        return False
+    return True
 
 ####################################################################################################
 # INTERACTIVE CONFIG MENU
@@ -983,110 +1042,7 @@ def interactive_config_menu(current_config: dict) -> dict:
 # INTERACTIVE SEARCH MODE
 ####################################################################################################
 
-def fetch_gallery_ids(search_type: str, search_value: str, sort_val: str, start_page: int, end_page: int = None, fetch_as_archival: bool = False) -> dict:
-    """
-    Fetch gallery IDs with error handling and fallback to cached results.
-    
-    Args:
-        search_type: Type of search
-        search_value: Search query value
-        sort_val: Sort option
-        start_page: Start page number
-        end_page: End page number
-        fetch_as_archival: Whether to fetch all pages (archive mode)
-    
-    Returns:
-        tuple: (gallery_ids list, cache_key) or ([], None) if all fail
-    """
-
-    cache_key = scraperapi.Get.cache_keys(search_type, search_value)
-    logger.debug(f"[TESTING] fetch_gallery_ids cache_key = {cache_key}")
-
-    # 1. Check cache references for this key
-    references = scraperdb.load_cache_references()
-    cache_entry = references.get(cache_key)
-    now = time.time()
-    if cache_entry:
-        expires_at = cache_entry.get("expires_at")
-        ids = cache_entry.get("ids", [])
-        if expires_at is None or expires_at > now:
-            # Cache is valid
-            logger.info(f"Using cached gallery IDs for key {cache_key} (count={len(ids)})")
-            # Try to fetch metadata for these IDs from cache
-            cached_metadata = scraperdb.load_cached_metadata_for_ids(ids)
-            if cached_metadata and len(cached_metadata) == len(ids):
-                logger.info(f"Fetched all metadata from cache for {len(ids)} galleries.")
-                return ids, cache_key
-            else:
-                logger.info(f"Some metadata missing from cache, will fetch missing from API if needed.")
-                # Optionally, could fetch missing metadata from API here
-                return ids, cache_key
-        else:
-            logger.info(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
-
-    # 2. If no valid cache, fetch from API
-    max_retries = 2
-    attempt = 0
-    while attempt < max_retries:
-        try:
-            ids = scraperapi.Fetch.gallery_ids(
-                search_type,
-                search_value,
-                sort_val,
-                start_page,
-                end_page,
-                fetch_as_archival=fetch_as_archival,
-            )
-            if ids:
-                logger.info(f"Fetched {len(ids)} gallery IDs from API for key {cache_key}")
-                return ids, cache_key # Optionally: update cache here
-            else:
-                logger.warning("No galleries found for this search")
-                return [], cache_key
-        except Exception as e:
-            attempt += 1
-            logger.error(f"Error fetching galleries (attempt {attempt}/{max_retries}): {e}")
-            if attempt < max_retries:
-                if input(f"Retry? (y/n): ").strip().lower() == "y":
-                    continue
-            logger.warning("No cached results available. Search failed.")
-            return [], None
-    return [], None
-
-def _handle_search_error(search_type: str, search_value: str = ""):
-    """
-    Handle search errors consistently and return user to config menu.
-    
-    Args:
-        search_type: Type of search that failed
-        search_value: Optional search value for more specific error messages
-    """
-    log_clarification()
-    logger.error(
-        f"An error occurred during {search_type} search"
-        f"{f' for {search_value}' if search_value else ''}.\n"
-        f"Please check the log file for details: {RUNTIME_LOG_FILE}\n"
-        f"The search menu will now return to the configuration menu to prevent further issues."
-    )
-    log_clarification()
-    return True  # Signal to return to config menu
-
-def _check_no_results_and_prompt_filters():
-    """
-    Helper function to prompt user when a search returns no results.
-    Asks if they want to adjust their language/tag filters.
-    Returns True if user wants to change filters, False otherwise.
-    """
-    log_clarification()
-    logger.warning("No galleries found with current filters.")
-    response = input("\nWould you like to change your filters? (y/n): ").strip().lower()
-    if response == "y":
-        logger.info("Returning to configuration menu to adjust filters...")
-        log_clarification()
-        return True
-    return False
-
-def interactive_gallery_search(initial_ids: list | None = None, unattended: bool = False):
+def interactive_search_menu(initial_ids: list | None = None, unattended: bool = False):
     """
     Interactive menu for searching and browsing galleries when no CLI flags are provided.
     Returns gallery_ids to download.
@@ -1098,54 +1054,26 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
         unattended: If True, skip all confirmation prompts and warnings
     """
     
-    def parse_end_page(end_page_input: str, default: int) -> int | None:
-        """Parse end page input. Returns None for 'all' to fetch all pages, otherwise returns int."""
-        end_page_input = end_page_input.strip().lower()
-        if end_page_input == "all":
-            return None
-        return int(end_page_input) if end_page_input.isdigit() else default
-
-    def prompt_yes_no(prompt: str) -> bool:
-        while True:
-            value = input(prompt).strip().lower()
-            if value in ("y", "yes"):
-                return True
-            if value in ("n", "no"):
-                return False
-            logger.warning("Invalid input. Enter y or n.")
-
-    def prompt_archive_mode() -> bool:
-        archive = prompt_yes_no("Archive this query (add every result to download)? (y/n): ")
-        if not archive:
-            return False
-        logger.warning("WARNING: Archiving adds every result to the download queue.")
-        confirm = prompt_yes_no("Are you sure you want to archive this query? (y/n): ")
-        if not confirm:
-            logger.info("Archive cancelled. Continuing with normal browsing.")
-            return False
-        return True
-    
     logger.info("No gallery sources specified. Entering interactive search mode...")
     log_clarification()
 
-    scraperapi.Get.session(referrer="Interactive", status="build")
+    scraperapi.Get.session(referrer="Interactive", status="build") # Get session from API
 
     # Only clear selected galleries if this is the first invocation (no initial_ids and not unattended)
     if (not initial_ids) and (not unattended):
         scraperdb.set_queued_galleries([])
 
-    selected_ids = scraperapi.Fetch.queued_galleries()
+    selected_ids = scraperapi.Fetch.queued_galleries() # Start with any galleries already in the queue (e.g. from previous searches or CLI flags)
     if initial_ids:
         selected_ids.extend(initial_ids)
         selected_ids = list(dict.fromkeys(selected_ids))
         if selected_ids:
             logger.info(f"Loaded {len(selected_ids)} galleries from CLI flags")
     
-    # Search history removed
-    
     selected_metadata = {}  # Track metadata for all selected galleries to avoid redundant fetches
-
+    
     def persist_selected_ids():
+        """Persist selected gallery IDs to the database, merging with any existing queued galleries to prevent overwriting."""
         nonlocal selected_ids
         cached_ids = scraperapi.Fetch.queued_galleries()
         merged = list(dict.fromkeys(cached_ids + selected_ids))
@@ -1190,8 +1118,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             else:
                 logger.warning("No galleries selected yet.")
         
+        #------------------------------------------
+        # Homepage search
+        #------------------------------------------
         elif choice == "1":
-            # Homepage
             archive_mode = prompt_archive_mode()
             if archive_mode:
                 sort_val = DEFAULT_PAGE_SORT
@@ -1247,7 +1177,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             
             logger.info(f"Fetching homepage (sort={sort_val}, pages={start_page}-{end_page or 'all'})...")
             fetch_all_pages = archive_mode or fetch_all or end_page is None
-            ids, cache_key = fetch_gallery_ids(
+            ids, cache_key = scraperapi.Fetch.gallery_ids(
                 "homepage",
                 sort_val,
                 sort_val,
@@ -1287,8 +1217,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 else:
                     logger.info("No galleries found on homepage")
 
+        #------------------------------------------
+        # Browse by ID range
+        #------------------------------------------
         elif choice == "2":
-            # Browse by ID range
             try:
                 while True:
                     start_input = input(f"Enter start ID (numbers only): ").strip()
@@ -1343,8 +1275,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
             except ValueError as e:
                 logger.warning(f"Error processing ID range: {e}")
         
+        #------------------------------------------
+        # Explicit gallery IDs
+        #------------------------------------------
         elif choice == "3":
-            # Explicit gallery IDs
             ids_input = input("Enter gallery IDs (comma-separated): ").strip()
             if ids_input:
                 ids = []
@@ -1372,8 +1306,10 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                         logger.info(f"Total selected: {len(dict.fromkeys(selected_ids))} unique galleries")
                         persist_selected_ids()
         
+        #------------------------------------------
+        # General search
+        #------------------------------------------
         elif choice == "4":
-            # General search
             search_query = input("Enter search query (or press Enter to go back): ").strip()
             if search_query:
                 archive_mode = prompt_archive_mode()
@@ -1407,7 +1343,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 logger.info(f"Fetching search={search_query}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = fetch_gallery_ids(
+                ids, cache_key = scraperapi.Fetch.gallery_ids(
                     "search",
                     search_query,
                     sort_val,
@@ -1447,6 +1383,9 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                     else:
                         logger.info(f"No galleries found for search: {search_query}")
         
+        #------------------------------------------
+        # Search by XYZ
+        #------------------------------------------
         elif choice in ("5", "6", "7", "8", "9"):
             query_map = {
                 "5": "artist",
@@ -1491,7 +1430,7 @@ def interactive_gallery_search(initial_ids: list | None = None, unattended: bool
                 
                 logger.info(f"Fetching {query_type}={query_value}, sort={sort_val}, pages={start_page}-{end_page or 'all'}...")
                 fetch_all_pages = archive_mode or end_page is None
-                ids, cache_key = fetch_gallery_ids(
+                ids, cache_key = scraperapi.Fetch.gallery_ids(
                     query_type,
                     query_value,
                     sort_val,
