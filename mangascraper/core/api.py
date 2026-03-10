@@ -788,8 +788,6 @@ class DB:
                         started_at=excluded.started_at,
                         download_path=excluded.download_path
                     """, (gallery_id, "started", now, download_path))
-                    logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
-                    logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used (preserved)={row[0]}")
                 else:
                     cursor.execute("""
                     INSERT INTO Galleries (id, status, started_at, download_path, extension_used)
@@ -800,9 +798,10 @@ class DB:
                         download_path=excluded.download_path,
                         extension_used=excluded.extension_used
                     """, (gallery_id, "started", now, download_path, extension_used))
-                    logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
-                    logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
                 conn.commit()
+            
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as started.")
+            #logger.debug(f"[DATABASE] Data: status=started, started_at={now}, download_path={download_path}, extension_used={extension_used}")
 
         @staticmethod
         def skip(gallery_id):
@@ -819,6 +818,8 @@ class DB:
                 WHERE id = ?
                 """, ("skipped", now, gallery_id))
                 conn.commit()
+            
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as skipped.")
 
         @staticmethod
         def fail(gallery_id):
@@ -835,6 +836,8 @@ class DB:
                 WHERE id = ?
                 """, ("failed", now, gallery_id))
                 conn.commit()
+            
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as failed.")
 
         @staticmethod
         def complete(gallery_id):
@@ -933,9 +936,9 @@ class DB:
                 SET status = ?, completed_at = ?, download_path = ?, cover_path = ?, extension_used = ?, started_at = ?
                 WHERE id = ?
                 """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
-                logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
-                logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
                 conn.commit()
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
+            #logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
 
             cache = read_cached_metadata_entry(ids=[gallery_id])
             creators = {}
@@ -1032,7 +1035,7 @@ class DB:
                     creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
                     tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
                     language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
-                    logger.debug(f"[DATABASE] Writing to Galleries (partial update): id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
+                    #logger.debug(f"[DATABASE] Writing to Galleries (partial update): id={gid}, raw_title={gdata['raw_title']}, clean_title={gdata['clean_title']}, num_pages={gdata['num_pages']}, creator_ids={creator_ids}, language_ids={language_ids}, tag_ids={tag_ids}")
                     cursor.execute(
                         "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
                         (
@@ -1091,6 +1094,9 @@ class DB:
                     cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
                 conn.commit()
+            
+            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
+            #logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
 
         @staticmethod
         def list():
@@ -1312,7 +1318,7 @@ class Build:
                 terms = sorted(terms, key=lambda x: (x.isdigit(), x))
             sorted_value = "_".join(terms)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
-            logger.debug(f"[CACHE]: Generated Cache Key '{search_type}:{safe_value}'")
+            logger.debug(f"[DATABASE: CACHE]: Generated Cache Key '{search_type}:{safe_value}'")
             return f"{search_type}:{safe_value}"
         return search_type
 
@@ -1613,7 +1619,7 @@ class Fetch:
                 ids = Helpers.normalise_integer_list(cache_entry.get("ids", []))
                 
                 if expires_at is None or expires_at > now:
-                    logger.debug(f"[CACHE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
+                    logger.debug(f"[DATABASE: CACHE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
                     return (cache_key, ids)
                 else:
                     logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
