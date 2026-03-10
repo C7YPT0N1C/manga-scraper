@@ -1082,7 +1082,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
         clear_screen()
         print(
             "╔════════════════════════════════════════════════════════╗\n"
-            "║        Interactive Configuration Menu                  ║\n"
+            "║                 Interactive Search Menu                ║\n"
             "╚════════════════════════════════════════════════════════╝\n"
             "Search Options:\n"
             "  [1] Homepage\n"
