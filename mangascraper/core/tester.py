@@ -114,7 +114,7 @@ def main() -> bool:
 
     def _cleanup_test_data():
         scraperapi.DB.init_db()
-        with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
+        with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
             cursor = conn.cursor()
 
             gallery_ids = sorted(TEST_GALLERY_IDS)
@@ -227,7 +227,7 @@ def main() -> bool:
                 )
                 scraperapi.DB.Gallery.complete(path_gid)
 
-                with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
+                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT download_path FROM Galleries WHERE id = ?", (path_gid,))
                     row = cursor.fetchone()
@@ -410,7 +410,7 @@ def main() -> bool:
                     clean_metadata={"id": expired_gid, "title": "Expired Metadata"},
                     raw_metadata={"id": expired_gid},
                 )
-                with scraperapi.lock, scraperapi.DB.dbconnect() as conn:
+                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "UPDATE CachedMetadata SET expires_at = ? WHERE gallery_id = ?",

@@ -937,9 +937,7 @@ class DB:
                 WHERE id = ?
                 """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
                 conn.commit()
-            logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
-            #logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
-
+            
             cache = read_cached_metadata_entry(ids=[gallery_id])
             creators = {}
             tags = {}
