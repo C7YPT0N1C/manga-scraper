@@ -1596,6 +1596,14 @@ class Fetch:
                     batch = []
                     excluded_gallery_tags = [tag.lower() for tag in orchestrator.excluded_tags]
                     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
+                    exact_match_types = {"artist", "group", "tag", "character", "parody"}
+
+                    def _normalise_term(value: str) -> str:
+                        return " ".join(Helpers.safe_text(value).strip().lower().split())
+
+                    query_kind = Helpers.safe_text(query_type).strip().lower()
+                    query_exact = _normalise_term(Helpers.safe_text(query_value).strip().strip('"').strip("'"))
+
                     for g in results:
                         if not isinstance(g, dict):
                             continue
@@ -1609,6 +1617,28 @@ class Fetch:
                             for t in g.get("tags", [])
                             if t.get("type") == "language"
                         ]
+
+                        # Exact matching for typed queries only (artist/group/tag/character/parody).
+                        if query_kind in exact_match_types and query_exact:
+                            typed_names = []
+                            for t in g.get("tags", []):
+                                if not isinstance(t, dict):
+                                    continue
+                                if Helpers.safe_text(t.get("type")).lower() != query_kind:
+                                    continue
+                                raw_name = Helpers.safe_text(t.get("name"))
+                                for part in raw_name.split("|"):
+                                    name = _normalise_term(part)
+                                    if name:
+                                        typed_names.append(name)
+
+                            if query_exact not in typed_names:
+                                log(
+                                    f"Skipping Gallery {g.get('id', '?')} due to exact {query_kind} mismatch: expected '{query_exact}', got {typed_names}",
+                                    "debug",
+                                )
+                                continue
+
                         blocked_tags = [t for t in gallery_tags if t in excluded_gallery_tags]
                         if blocked_tags:
                             log(f"Skipping Gallery {g['id']} due to excluded tags: {blocked_tags}", "debug")

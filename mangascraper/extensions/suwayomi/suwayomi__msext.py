@@ -768,6 +768,17 @@ def update_creator_manga(meta):
     if not creators:
         return
 
+    # Build a raw-name lookup for DB queries. The `creators` list comes from
+    # clean metadata and may have sanitised dash spacing.
+    raw_artists = scraperapi.Get.meta_tags(EXTENSION_REFERRER, meta, "artist")
+    raw_groups = scraperapi.Get.meta_tags(EXTENSION_REFERRER, meta, "group")
+    raw_creators = raw_artists or raw_groups or ["Unknown Creator"]
+    raw_lookup_by_clean = {}
+    for raw_name in raw_creators:
+        clean_name = scraperapi.Helpers.sanitise(raw_name)
+        if clean_name and clean_name not in raw_lookup_by_clean:
+            raw_lookup_by_clean[clean_name] = raw_name
+
     gallery_title = gallery_meta["title"]
     current_gallery_id = parse_gallery_id(gallery_title) or int(meta.get("id", 0))
     gallery_tags = meta.get("tags", [])
@@ -817,15 +828,62 @@ def update_creator_manga(meta):
             description = f"Latest Doujin: {latest_name}"
 
         # Query database for most_popular_tags (top genres) for this creator
-        logger.debug(f"[details.json] Entering DB genre lookup for creator: {creator_name}, DB path: {scraperapi.DB_PATH}")
+        db_creator_name = raw_lookup_by_clean.get(creator_name, creator_name)
+        logger.debug(
+            f"[details.json] Entering DB genre lookup for creator: {creator_name} "
+            f"(db lookup: {db_creator_name}), DB path: {scraperapi.DB_PATH}"
+        )
         genre_names = []
+
+        def _canonical_creator_name(value: str) -> str:
+            # Keep dashes meaningful while making spacing around dashes irrelevant.
+            text = " ".join(str(value or "").strip().split())
+            return re.sub(r"\s*-\s*", "-", text)
+
         with scraperapi.lock, scraperapi.Db.dbconnect() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM Creators WHERE name=?", (creator_name,))
+
+            row = None
+            lookup_name = db_creator_name
+
+            # Exact match first.
+            cursor.execute("SELECT id FROM Creators WHERE name=?", (lookup_name,))
             row = cursor.fetchone()
-            logger.debug(f"[details.json] DB row for creator_name={creator_name}: {row}")
+
+            # Fallback alias: Unknown Creator should resolve to Unknown Group if present.
+            if not row and lookup_name == "Unknown Creator":
+                cursor.execute("SELECT id FROM Creators WHERE name=?", ("Unknown Group",))
+                row = cursor.fetchone()
+                if row:
+                    lookup_name = "Unknown Group"
+
+            # Canonical spacing fallback to handle names like
+            # "mayafufu-kakko-kashikoi" vs "mayafufu -kakko- kashikoi".
             if not row:
-                logger.warning(f"[details.json] Creator not found in DB: {creator_name} (DB path: {scraperapi.DB_PATH})")
+                canonical_lookup = _canonical_creator_name(lookup_name)
+                cursor.execute(
+                    """
+                    SELECT id, name
+                    FROM Creators
+                    WHERE REPLACE(REPLACE(name, ' -', '-'), '- ', '-') = ?
+                    LIMIT 1
+                    """,
+                    (canonical_lookup,),
+                )
+                matched = cursor.fetchone()
+                if matched:
+                    row = (matched[0],)
+                    lookup_name = matched[1]
+
+            logger.debug(
+                f"[details.json] DB row for creator_name={creator_name} "
+                f"(db lookup: {db_creator_name}): {row}"
+            )
+            if not row:
+                logger.warning(
+                    f"[details.json] Creator not found in DB: {creator_name} "
+                    f"(db lookup: {db_creator_name}) (DB path: {scraperapi.DB_PATH})"
+                )
             if row:
                 creator_id = row[0]
                 cursor.execute("SELECT most_popular_tags FROM Creators WHERE id=?", (creator_id,))
