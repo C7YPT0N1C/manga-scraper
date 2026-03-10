@@ -16,7 +16,7 @@ from mangascraper.core.orchestrator import *
 ####################################################################################################################
 
 # Locks
-db_lock = threading.Lock()
+db_lock = threading.RLock() # Reentrant lock avoids self-deadlocks when DB code paths re-enter DB helpers.
 _thread_local = threading.local()
 possible_broken_symbols_lock = threading.Lock()
 session_lock = threading.Lock()
