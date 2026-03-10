@@ -318,10 +318,10 @@ def parse_args():
         help="Simulate downloads without saving files",
     )
     runtime_group.add_argument(
-        "--test-cache",
+        "--self-test",
         action="store_true",
         default=False,
-        help="Run cache self-tests and exit",
+        help="Run self-tests and exit",
     )
     summary_mode_group.add_argument(
         "--unattended",
@@ -1019,8 +1019,8 @@ def main():
     # Allows session to use correct config values on creation
     update_config(args)
 
-    # --- Cache test mode ---
-    if args.test_cache:
+    # --- Self-test mode ---
+    if args.self_test:
         ok = tester.main()
         sys.exit(0 if ok else 1)
     
