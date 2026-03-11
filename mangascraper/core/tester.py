@@ -91,7 +91,7 @@ def main() -> bool:
             status = "FAIL"
         else:
             status = "SKIP"
-        line = f"[TEST] {status}: {name}"
+        line = f"[SELF-TEST] {status}: {name}"
         if details:
             line = f"{line} | {details}"
 
@@ -969,7 +969,7 @@ def main() -> bool:
             except Exception as e:
                 _report("cleanup removes test data from database", False, f"exception={e}")
 
-    summary = f"[TEST] COMPLETE: passed={passed}, failed={failed}, skipped={skipped}"
+    summary = f"[SELF-TEST] SELF-TEST COMPLETE: passed={passed}, failed={failed}, skipped={skipped}"
     print(summary)
     logger.info(summary)
     logger.debug(summary)
