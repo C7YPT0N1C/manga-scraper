@@ -1316,7 +1316,7 @@ class Build:
                 terms = sorted(terms, key=lambda x: (x.isdigit(), x))
             sorted_value = "_".join(terms)
             safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
-            logger.debug(f"[DATABASE: CACHE]: Generated Cache Key '{search_type}:{safe_value}'")
+            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{safe_value}'")
             return f"{search_type}:{safe_value}"
         return search_type
 
@@ -1617,7 +1617,7 @@ class Fetch:
                 ids = Helpers.normalise_integer_list(cache_entry.get("ids", []))
                 
                 if expires_at is None or expires_at > now:
-                    logger.debug(f"[DATABASE: CACHE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
+                    logger.debug(f"[DATABASE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
                     return (cache_key, ids)
                 else:
                     logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
