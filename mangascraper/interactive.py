@@ -1222,7 +1222,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
             else:
                 if not ids:
                     if _check_no_results_and_prompt_filters():
-                        break  # Break out to config menu
+                            continue
                 else:
                     logger.info("No galleries found on homepage")
 
@@ -1388,7 +1388,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 else:
                     if not ids:
                         if _check_no_results_and_prompt_filters():
-                            break  # Break out to config menu
+                            continue
                     else:
                         logger.info(f"No galleries found for search: {search_query}")
         
@@ -1475,7 +1475,7 @@ def interactive_search_menu(initial_ids: list | None = None, unattended: bool = 
                 else:
                     if not ids:
                         if _check_no_results_and_prompt_filters():
-                            break  # Break out to config menu
+                            continue
                     else:
                         logger.info(f"No galleries found for {query_type}={query_value}")
         
