@@ -22,7 +22,7 @@ TEST_SEARCH_VALUE = "big ass"
 TEST_SEARCH_SORT = DEFAULT_PAGE_SORT
 TEST_SEARCH_START = 1
 TEST_SEARCH_END = 1
-TEST_RUNTIME_ROOT = "/tmp/manga-scraper/"
+TEST_RUNTIME_ROOT = f"{orchestrator.TEMP_DIR}/"
 
 TEST_GALLERY_IDS = {
     TEST_GALLERY_ID,
@@ -47,9 +47,9 @@ TEST_CACHE_KEYS = {
 
 @contextmanager
 def _temporary_test_runtime_paths():
-    """
+    f"""
     Temporarily redirect runtime download paths for cache tests.
-    If any download-related path is touched during tests, it stays under /tmp/manga-scraper/.
+    If any download-related path is touched during tests, it stays under {TEST_RUNTIME_ROOT}/.
     """
 
     prev_download = orchestrator.config.get("DOWNLOAD_PATH")
@@ -190,7 +190,7 @@ def main() -> bool:
             # 0) Runtime path safety assertion
             try:
                 _report(
-                    "test runtime paths set to /tmp/manga-scraper/",
+                    f"test runtime paths set to {orchestrator.TEMP_DIR}/",
                     (
                         str(getattr(orchestrator, "download_path", "")).startswith(TEST_RUNTIME_ROOT)
                         and str(getattr(orchestrator, "extension_download_path", "")).startswith(TEST_RUNTIME_ROOT)
@@ -201,7 +201,7 @@ def main() -> bool:
                     ),
                 )
             except Exception as e:
-                _report("test runtime paths set to /tmp/manga-scraper/", False, f"exception={e}")
+                _report(f"test runtime paths set to {orchestrator.TEMP_DIR}/", False, f"exception={e}")
 
             # 0.1) Pre-download path generation safety (computed path must stay under test runtime root)
             try:
@@ -234,9 +234,9 @@ def main() -> bool:
 
                 final_path = str(row[0]) if row and row[0] is not None else ""
                 ok = final_path.startswith(TEST_RUNTIME_ROOT)
-                _report("computed gallery output path stays under /tmp/manga-scraper/", ok, f"download_path={final_path}")
+                _report(f"computed gallery output path stays under {orchestrator.TEMP_DIR}/", ok, f"download_path={final_path}")
             except Exception as e:
-                _report("computed gallery output path stays under /tmp/manga-scraper/", False, f"exception={e}")
+                _report(f"computed gallery output path stays under {orchestrator.TEMP_DIR}/", False, f"exception={e}")
 
             # 1) Read all references shape
             try:

@@ -17,7 +17,7 @@ from mangascraper.extensions.extension_manager import (
 # GLOBAL VARIABLES
 ####################################################################################################################
 
-INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
+INSTALLER_PATH = f"{orchestrator.SCRAPER_DIR}/mangascraper-install.sh"
 
 EPILOG = """Examples:
     manga-scraper --file archive=true

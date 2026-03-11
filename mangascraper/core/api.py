@@ -21,8 +21,8 @@ _thread_local = threading.local()
 possible_broken_symbols_lock = threading.Lock()
 session_lock = threading.Lock()
 
-DATA_DIR = os.path.join(SCRAPER_DIR, "mangascraper/core")
-DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
+DATA_DIR = f"{orchestrator.SCRAPER_DIR}/mangascraper/core"
+DB_PATH = f"{orchestrator.SCRAPER_DIR}/mangascraper.db"
 
 atexit.register(lambda: DB.close_connection())
 
@@ -883,7 +883,7 @@ class DB:
                     ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
                     base_ext_path = calculate_extension_download_path(ext_name)
                 except Exception:
-                    base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
+                    base_ext_path = getattr(orchestrator, "extension_download_path", f"{orchestrator.SCRAPER_DIR}/downloads/")
                 if not ext_download_path:
                     ext_download_path = base_ext_path
                 elif not os.path.isabs(ext_download_path):

@@ -13,8 +13,8 @@ from mangascraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
-EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/extensions"
-REMOTE_EXTENSIONS_TMP = "/tmp/manga-scraper/manga-scraper-extensions"
+EXTENSIONS_DIR = f"{orchestrator.SCRAPER_DIR}/mangascraper/extensions"
+REMOTE_EXTENSIONS_TMP = f"{orchestrator.TEMP_DIR}/manga-scraper-extensions"
 os.makedirs(EXTENSIONS_DIR, exist_ok=True)
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 

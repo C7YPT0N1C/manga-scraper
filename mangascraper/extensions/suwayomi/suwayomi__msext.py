@@ -1110,6 +1110,11 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
                     return True
 
                 except Exception as e:
+                    if os.path.exists(path):
+                        try:
+                            os.unlink(path)
+                        except Exception:
+                            pass
                     wait = scraperapi.Sleep.dynamic("image", attempt=attempt)
                     log_clarification()
                     logger.warning(
@@ -1229,7 +1234,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
-        temp_root = "/opt/manga-scraper/mangascraper/core/archive_temp/"
+        temp_root = f"{orchestrator.SCRAPER_DIR}/mangascraper/core/archive_temp/"
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             temp_creator_folder = os.path.join(temp_root, creator_name)

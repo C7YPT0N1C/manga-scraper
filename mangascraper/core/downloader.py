@@ -17,9 +17,12 @@ from mangascraper.extensions.extension_manager import get_selected_extension  # 
 
 active_extension = "skeleton"
 download_location = ""
-ARCHIVE_TEMP_ROOT = "/opt/manga-scraper/mangascraper/core/archive_temp/"
+ARCHIVE_TEMP_ROOT = f"{orchestrator.SCRAPER_DIR}/mangascraper/core/archive_temp/"
 
-skipped_galleries = []
+skipped_galleries = {}
+skipped_galleries_lock = threading.Lock()
+failed_galleries = {}
+failed_galleries_lock = threading.Lock()
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -109,10 +112,11 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     
     best_case = compute_case(orchestrator.min_api_sleep, orchestrator.min_retry_sleep)
     worst_case = compute_case(orchestrator.max_api_sleep, orchestrator.max_retry_sleep)
+    total_pages_suffix = f" (Total {total_pages} Pages)" if context == "Run" else ""
 
     # --- Output ---
     log_clarification("warning")
-    log(f"Starting {context} with {num_galleries} Galleries{f' (Total {total_pages} Pages)' if context ==  "Run" else ''}:")
+    log(f"Starting {context} with {num_galleries} Galleries{total_pages_suffix}:")
     log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}\n")
     log(f"Estimated Total API Hits: {total_api_hits}\n", "debug")
     
@@ -200,15 +204,17 @@ def _is_network_share(path: str) -> bool:
         logger.warning(f"Failed to determine if '{path}' is a network share: {e}")
         return False
 
-def estimate_total_download_size(gallery_ids: list) -> tuple:
+def pre_download_checks(gallery_ids: list) -> tuple:
     """
-    Estimate total download size for all galleries.
+    Triggers metadata fetching for all galleries.
+    Estimates total download size for all galleries.
     Returns (total_estimated_bytes, galleries_list_to_download).
     
     If insufficient space, prompts user to download as many as fit.
     """
     
-    log(f"Estimating download size for {len(gallery_ids)} galleries...")
+    log(f"Fetching metadata and estimating download size for {len(gallery_ids)} galleries.")
+    log("This may take a while, patience...")
     
     download_estimated = 0
     gallery_sizes = []  # List of (gallery_id, estimated_bytes)
@@ -350,25 +356,117 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
 
     return os.path.join(*path_parts)
 
-def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Reason Given."):
+def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Reason Given.", reportable: bool = True):
     global skipped_galleries
-    
+
     orchestrator.refresh_globals()
 
     if ReturnReport:
-        log_clarification()
-        skipped_report = "\n".join(skipped_galleries)
-        log(f"All Skipped Galleries:\n{skipped_report}")
-    else:
-        if not meta:
-            logger.warning("Downloader: update_skipped_galleries called without meta while ReturnReport is False.")
+        with skipped_galleries_lock:
+            reportable_entries = {gid: e for gid, e in skipped_galleries.items() if e.get("reportable")}
+        if not reportable_entries:
             return
 
-        gallery_id = meta.get("id", "Unknown")
-        gallery_title = scraperapi.Helpers.sanitise(meta)
-        log_clarification("debug")
-        skipped_galleries.append(f"Gallery: {gallery_id}: {Reason}")
-        log(f"Downloader: Updated Skipped Galleries List: Gallery {gallery_id} ({gallery_title}): {Reason}", "debug")
+        lines = []
+        for gid in sorted(reportable_entries.keys()):
+            entry = reportable_entries[gid]
+            creators = entry.get("creators") or ["Unknown Creator"]
+            lines.append(
+                f"Gallery: {gid} | Title: {entry.get('title', 'Unknown Title')} | "
+                f"Creators: {', '.join(creators)} | Pages: {entry.get('pages', 'Unknown')} | "
+                f"Reason: {entry.get('reason', 'No Reason Given.')}"
+            )
+        log_clarification()
+        log(f"Skipped Galleries (matched filter):\n" + "\n".join(lines), "warning")
+        return
+
+    if not meta:
+        return
+
+    gid = scraperapi.Helpers.normalise_integer(meta.get("id"))
+    if gid is None:
+        return
+
+    gallery_title = scraperapi.Helpers.sanitise(meta)
+    creators = scraperapi.Get.artists(meta) or scraperapi.Get.groups(meta) or ["Unknown Creator"]
+    pages = len(meta.get("images", {}).get("pages", [])) if isinstance(meta.get("images"), dict) else "Unknown"
+
+    entry = {
+        "title": gallery_title,
+        "creators": [scraperapi.Helpers.safe_text(c).strip() for c in creators if scraperapi.Helpers.safe_text(c).strip()] or ["Unknown Creator"],
+        "pages": pages,
+        "reason": scraperapi.Helpers.safe_text(Reason, "No Reason Given."),
+        "reportable": reportable,
+    }
+
+    with skipped_galleries_lock:
+        # Don't overwrite a reportable entry with a non-reportable one
+        existing = skipped_galleries.get(gid)
+        if existing is None or (reportable and not existing.get("reportable")):
+            skipped_galleries[gid] = entry
+
+    log_clarification("debug")
+    log(f"Downloader: Skipped Gallery {gid} ({gallery_title}): {Reason}", "debug")
+
+def update_failed_galleries(ReturnReport: bool, gallery_id=None, meta=None, Reason: str = "No Reason Given."):
+    global failed_galleries
+
+    orchestrator.refresh_globals()
+
+    if ReturnReport:
+        if not failed_galleries:
+            return
+
+        lines = []
+        with failed_galleries_lock:
+            for gid in sorted(failed_galleries.keys()):
+                entry = failed_galleries[gid]
+                creators = entry.get("creators") or ["Unknown Creator"]
+                creator_text = ", ".join(creators)
+                lines.append(
+                    f"Gallery: {gid} | Title: {entry.get('title', 'Unknown Title')} | "
+                    f"Creators: {creator_text} | Pages: {entry.get('pages', 'Unknown')} | "
+                    f"Reason: {entry.get('reason', 'No Reason Given.')}"
+                )
+
+        log_clarification()
+        log(f"Failed Galleries:\n" + "\n".join(lines), "warning")
+        return
+
+    gid = scraperapi.Helpers.normalise_integer(gallery_id)
+    if gid is None:
+        logger.warning("Downloader: update_failed_galleries called without a valid gallery_id.")
+        return
+
+    cached_meta = scraperapi.Cache.Load.cache(gallery_id=gid) or {}
+    title = "Unknown Title"
+    creators = ["Unknown Creator"]
+    pages = "Unknown"
+
+    if isinstance(meta, dict) and meta:
+        title = scraperapi.Helpers.sanitise(meta)
+        creators = scraperapi.Get.artists(meta) or scraperapi.Get.groups(meta) or ["Unknown Creator"]
+        pages = len(meta.get("images", {}).get("pages", [])) if isinstance(meta.get("images"), dict) else "Unknown"
+    elif isinstance(cached_meta, dict) and cached_meta:
+        title = scraperapi.Helpers.safe_text(cached_meta.get("title") or cached_meta.get("clean_title") or f"Gallery {gid}")
+        creators = cached_meta.get("artists") or cached_meta.get("groups") or ["Unknown Creator"]
+        pages = cached_meta.get("pages", "Unknown")
+
+    entry = {
+        "title": title,
+        "creators": [scraperapi.Helpers.safe_text(c).strip() for c in creators if scraperapi.Helpers.safe_text(c).strip()] or ["Unknown Creator"],
+        "pages": pages,
+        "reason": scraperapi.Helpers.safe_text(Reason, "No Reason Given."),
+    }
+
+    with failed_galleries_lock:
+        failed_galleries[gid] = entry
+
+    log_clarification("debug")
+    log(
+        f"Downloader: Recorded failed gallery: {gid} ({entry['title']}) | Creators: {', '.join(entry['creators'])} | Reason: {entry['reason']}",
+        "debug",
+    )
 
 def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = None):
     """
@@ -378,7 +476,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     orchestrator.refresh_globals()
     
     if not meta:
-        update_skipped_galleries(False, meta, "Not Meta.")
+        update_skipped_galleries(False, meta, "Not Meta.", reportable=False)
         return False
 
     gallery_id = meta.get("id")
@@ -391,7 +489,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Title: {gallery_title}\n"
         )
         log_clarification()
-        update_skipped_galleries(False, meta, "No Pages.")
+        update_skipped_galleries(False, meta, "No Pages.", reportable=False)
         return False
 
     # Skip only if NOT in dry-run
@@ -450,7 +548,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
             f"Filtered languages: {blocked_langs}"
         )
         log_clarification()
-        update_skipped_galleries(False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}")
+        update_skipped_galleries(False, meta, f"Filtered tags: {blocked_tags}, languages: {blocked_langs}", reportable=False)
         return False
 
     return True
@@ -467,9 +565,16 @@ def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, saf
         )
         for page, urls, path, _ in creator_tasks
     ]
+    
     # No per-gallery progress bar here; progress is handled by the batch-wide tqdm in start_batch via page_update_hook
-    for _ in concurrent.futures.as_completed(futures):
-        pass
+    all_succeeded = True
+    for future in concurrent.futures.as_completed(futures):
+        try:
+            if not future.result():
+                all_succeeded = False
+        except Exception:
+            all_succeeded = False
+    return all_succeeded
 
 #----------------------
 # ARCHIVE CONVERSION
@@ -580,6 +685,7 @@ def process_galleries(batch_ids):
         gallery_attempts = 0
 
         while gallery_attempts < orchestrator.max_retries:
+            meta = None
             gallery_attempts += 1
             try:
                 active_extension.pre_gallery_download_hook(gallery_id)
@@ -592,6 +698,7 @@ def process_galleries(batch_ids):
                 if not meta or not isinstance(meta, dict):
                     logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
+                        update_failed_galleries(False, gallery_id=gallery_id, Reason="Failed to fetch metadata.")
                         scraperapi.DB.Gallery.fail(gallery_id)
                     continue
 
@@ -662,7 +769,7 @@ def process_galleries(batch_ids):
                     img_urls = scraperapi.Fetch.image_urls(meta, page)
                     if not img_urls:
                         logger.warning(f"Downloader: Skipping Page {page} for {primary_creator}: Failed to get URLs")
-                        update_skipped_galleries(False, meta, "Failed to get URLs.")
+                        update_skipped_galleries(False, meta, "Failed to get URLs.", reportable=False)
                         continue
 
                     img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
@@ -671,17 +778,21 @@ def process_galleries(batch_ids):
 
                 # --- Download images (once, in primary creator's folder) ---
                 if tasks:
+                    page_downloads_succeeded = True
                     with concurrent.futures.ThreadPoolExecutor(max_workers=threads_images) as executor:
                         _register_executor(executor)
                         try:
                             if not orchestrator.dry_run:
                                 local_session = scraperapi.Get.session(referrer="Downloader", status="return")
-                                submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
+                                page_downloads_succeeded = submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
                             else:
                                 for _ in tasks:
                                     time.sleep(0.1)  # fake delay
                         finally:
                             _active_executors.remove(executor)
+
+                    if not page_downloads_succeeded:
+                        raise RuntimeError(f"One or more pages failed for Gallery {gallery_id}")
 
                 # --- Finalise gallery format (archive) BEFORE creating symlinks ---
                 finalised_path = primary_folder
@@ -748,6 +859,7 @@ def process_galleries(batch_ids):
             except Exception as e:
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
+                    update_failed_galleries(False, gallery_id=gallery_id, meta=meta, Reason=str(e))
                     scraperapi.DB.Gallery.fail(gallery_id)
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
@@ -839,11 +951,16 @@ def start_downloader(gallery_list=None):
     This is one this module's entrypoints.
     """
     
-    global galleries
+    global galleries, failed_galleries, skipped_galleries
     
     log_clarification("debug")
     logger.debug("Downloader: Ready.")
     log("Downloader: Debugging Started.", "debug")
+
+    with failed_galleries_lock:
+        failed_galleries = {}
+    with skipped_galleries_lock:
+        skipped_galleries = {}
     
     # Setup signal handlers for graceful shutdown (Ctrl+C, SIGTERM)
     signal.signal(signal.SIGINT, _signal_handler)
@@ -868,7 +985,7 @@ def start_downloader(gallery_list=None):
     
     # Estimate total download size and prompt if space insufficient
     if not orchestrator.dry_run:
-        _, gallery_list = estimate_total_download_size(gallery_list)
+        _, gallery_list = pre_download_checks(gallery_list)
         if not gallery_list:
             logger.warning("No galleries to download. Exiting.")
             return
@@ -919,7 +1036,8 @@ def start_downloader(gallery_list=None):
             f"-     Average per gallery: {_format_bytes(space_monitor['total_actual_bytes'] // space_monitor['galleries_processed'])}\n"
         )
     
-    #update_skipped_galleries(True) # Report all skipped galleries at end
+    update_failed_galleries(True)
+    update_skipped_galleries(True)
     log_clarification()
     log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.\n")
 

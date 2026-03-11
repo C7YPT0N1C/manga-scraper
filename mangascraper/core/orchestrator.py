@@ -5,11 +5,15 @@ import os, sys, logging, math, threading, ast
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 
+# DIRECTORIES
+SCRAPER_DIR = "/opt/manga-scraper"
+TEMP_DIR = "/tmp/manga-scraper"
+
 ##########################################################################################
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = "/tmp/manga-scraper/logs"
+LOG_DIR = f"{TEMP_DIR}/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log
@@ -143,8 +147,7 @@ def with_env_lock(func, *args, **kwargs):
 # ------------------------------------------------------------
 # Paths & Env
 # ------------------------------------------------------------
-SCRAPER_DIR = "/opt/manga-scraper"
-ENV_FILE = os.path.join(SCRAPER_DIR, "manga-scraper.env")
+ENV_FILE = f"{SCRAPER_DIR}/manga-scraper.env"
 
 # Ensure NHentai directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
@@ -157,7 +160,7 @@ if os.path.exists(ENV_FILE):
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-DEFAULT_DOWNLOAD_PATH = "/opt/manga-scraper/downloads"
+DEFAULT_DOWNLOAD_PATH = f"{SCRAPER_DIR}/downloads"
 download_path = DEFAULT_DOWNLOAD_PATH  # public variable
 
 DEFAULT_DOUJIN_TXT_PATH = "/root/Doujinshi_IDs.txt"
@@ -184,7 +187,7 @@ doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 DEFAULT_EXTENSION = "skeleton"
 extension = DEFAULT_EXTENSION
 
-DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/manga-scraper/downloads/"
+DEFAULT_EXTENSION_DOWNLOAD_PATH = f"{SCRAPER_DIR}/downloads/"
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 # Metadata cache TTL (seconds) - runtime only, not persisted to env
