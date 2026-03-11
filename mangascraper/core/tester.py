@@ -240,7 +240,7 @@ def main() -> bool:
 
             # 1) Read all references shape
             try:
-                refs = scraperapi.Cache.read_entry()
+                refs = scraperapi.read_cached_metadata_entry()
                 ok = isinstance(refs, dict)
                 _report("read_cached_metadata_entry(all references)", ok, f"type={type(refs).__name__}")
             except Exception as e:
@@ -259,7 +259,7 @@ def main() -> bool:
                         "expires_at": now + 300,
                     },
                 )
-                result = scraperapi.Cache.read_entry(cache_key=TEST_CACHE_KEY)
+                result = scraperapi.read_cached_metadata_entry(cache_key=TEST_CACHE_KEY)
                 ref = result.get("references", {}).get(TEST_CACHE_KEY) if isinstance(result, dict) else None
                 ok = (
                     isinstance(ref, dict)
@@ -301,7 +301,7 @@ def main() -> bool:
                     clean_metadata=clean_meta,
                     raw_metadata=raw_meta,
                 )
-                result = scraperapi.Cache.read_entry(gallery_id=TEST_GALLERY_ID)
+                result = scraperapi.read_cached_metadata_entry(gallery_id=TEST_GALLERY_ID)
                 entry = result.get("metadata", {}).get(TEST_GALLERY_ID) if isinstance(result, dict) else None
                 ok = (
                     isinstance(entry, dict)
@@ -320,7 +320,7 @@ def main() -> bool:
 
             # 5) Read CachedMetadata by IDs list
             try:
-                result = scraperapi.Cache.read_entry(ids=[TEST_GALLERY_ID])
+                result = scraperapi.read_cached_metadata_entry(ids=[TEST_GALLERY_ID])
                 batch = result.get("metadata", {}) if isinstance(result, dict) else {}
                 ok = isinstance(batch, dict) and TEST_GALLERY_ID in batch
                 _report("read_cached_metadata_entry(ids=[...])", ok, f"keys={list(batch.keys()) if isinstance(batch, dict) else None}")
@@ -336,7 +336,7 @@ def main() -> bool:
                 scraperapi.Cache.upsert_cached_metadata(old_gid, old_ts, clean_metadata={"id": old_gid}, raw_metadata={"id": old_gid})
                 scraperapi.Cache.upsert_cached_metadata(new_gid, new_ts, clean_metadata={"id": new_gid}, raw_metadata={"id": new_gid})
                 cutoff = time.time() - 60
-                result = scraperapi.Cache.read_entry(cutoff=cutoff)
+                result = scraperapi.read_cached_metadata_entry(cutoff=cutoff)
                 recent = result.get("metadata", {}) if isinstance(result, dict) else {}
                 ok = isinstance(recent, dict) and new_gid in recent and old_gid not in recent
                 _report("read_cached_metadata_entry(cutoff=...)", ok, f"recent_keys={list(recent.keys())[:5] if isinstance(recent, dict) else None}")
@@ -392,8 +392,8 @@ def main() -> bool:
                         "expires_at": time.time() - 1,
                     },
                 )
-                scraperapi.Cache.prune()
-                result = scraperapi.Cache.read_entry(cache_key=expired_key)
+                scraperapi.prune_all_caches()
+                result = scraperapi.read_cached_metadata_entry(cache_key=expired_key)
                 expired = result.get("references", {}).get(expired_key) if isinstance(result, dict) else None
                 ok = expired is None
                 _report("prune_all_caches removes expired refs", ok, f"expired_entry={expired}")
@@ -418,8 +418,8 @@ def main() -> bool:
                     )
                     conn.commit()
 
-                scraperapi.Cache.prune()
-                result = scraperapi.Cache.read_entry(gallery_id=expired_gid)
+                scraperapi.prune_all_caches()
+                result = scraperapi.read_cached_metadata_entry(gallery_id=expired_gid)
                 expired_md = result.get("metadata", {}).get(expired_gid) if isinstance(result, dict) else None
                 ok = expired_md is None
                 _report("prune_all_caches removes expired metadata", ok, f"expired_metadata={expired_md}")
@@ -436,7 +436,7 @@ def main() -> bool:
                     TEST_SEARCH_END,
                     fetch_as_archival=False,
                 )
-                entry = scraperapi.Cache.read_entry(cache_key=fetched_cache_key) if fetched_cache_key else None
+                entry = scraperapi.read_cached_metadata_entry(cache_key=fetched_cache_key) if fetched_cache_key else None
                 ok = (
                     fetched_cache_key is not None
                     and isinstance(fetched_ids, list)
@@ -456,35 +456,35 @@ def main() -> bool:
 
             # A.1) _normalise_integer: valid int
             try:
-                ok = scraperapi._normalise_integer(42) == 42
+                ok = scraperapi.Helpers.normalise_integer(42) == 42
                 _report("_normalise_integer(42)", ok)
             except Exception as e:
                 _report("_normalise_integer(42)", False, f"exception={e}")
 
             # A.2) _normalise_integer: coerce string
             try:
-                ok = scraperapi._normalise_integer("123") == 123
+                ok = scraperapi.Helpers.normalise_integer("123") == 123
                 _report("_normalise_integer('123')", ok)
             except Exception as e:
                 _report("_normalise_integer('123')", False, f"exception={e}")
 
             # A.3) _normalise_integer: invalid → None
             try:
-                ok = scraperapi._normalise_integer("bad") is None
+                ok = scraperapi.Helpers.normalise_integer("bad") is None
                 _report("_normalise_integer('bad') → None", ok)
             except Exception as e:
                 _report("_normalise_integer('bad') → None", False, f"exception={e}")
 
             # A.4) _normalise_integer: None → None
             try:
-                ok = scraperapi._normalise_integer(None) is None
+                ok = scraperapi.Helpers.normalise_integer(None) is None
                 _report("_normalise_integer(None) → None", ok)
             except Exception as e:
                 _report("_normalise_integer(None) → None", False, f"exception={e}")
 
             # A.5) _normalise_integer_list: mixed valid/invalid/float inputs
             try:
-                result = scraperapi._normalise_integer_list([1, "2", "bad", None, 3.7])
+                result = scraperapi.Helpers.normalise_integer_list([1, "2", "bad", None, 3.7])
                 ok = result == [1, 2, 3]  # int(3.7) == 3
                 _report("_normalise_integer_list mixed inputs", ok, f"result={result}")
             except Exception as e:
@@ -492,63 +492,63 @@ def main() -> bool:
 
             # A.6) _normalise_integer_list: None → []
             try:
-                ok = scraperapi._normalise_integer_list(None) == []
+                ok = scraperapi.Helpers.normalise_integer_list(None) == []
                 _report("_normalise_integer_list(None) → []", ok)
             except Exception as e:
                 _report("_normalise_integer_list(None) → []", False, f"exception={e}")
 
             # A.7) _safe_json_dict: dict passthrough
             try:
-                ok = scraperapi._safe_json_dict({"x": 1}) == {"x": 1}
+                ok = scraperapi.Helpers.safe_json_dict({"x": 1}) == {"x": 1}
                 _report("_safe_json_dict(dict) passthrough", ok)
             except Exception as e:
                 _report("_safe_json_dict(dict) passthrough", False, f"exception={e}")
 
             # A.8) _safe_json_dict: JSON string → dict
             try:
-                ok = scraperapi._safe_json_dict('{"a": 1}') == {"a": 1}
+                ok = scraperapi.Helpers.safe_json_dict('{"a": 1}') == {"a": 1}
                 _report("_safe_json_dict(JSON string) → dict", ok)
             except Exception as e:
                 _report("_safe_json_dict(JSON string) → dict", False, f"exception={e}")
 
             # A.9) _safe_json_dict: invalid string → {}
             try:
-                ok = scraperapi._safe_json_dict("not json") == {}
+                ok = scraperapi.Helpers.safe_json_dict("not json") == {}
                 _report("_safe_json_dict(invalid) → {}", ok)
             except Exception as e:
                 _report("_safe_json_dict(invalid) → {}", False, f"exception={e}")
 
             # A.10) _safe_float: valid float string
             try:
-                ok = abs(scraperapi._safe_float("3.14") - 3.14) < 1e-9
+                ok = abs(scraperapi.Helpers.safe_float("3.14") - 3.14) < 1e-9
                 _report("_safe_float('3.14')", ok)
             except Exception as e:
                 _report("_safe_float('3.14')", False, f"exception={e}")
 
             # A.11) _safe_float: invalid + custom default
             try:
-                ok = scraperapi._safe_float("bad", 99.0) == 99.0
+                ok = scraperapi.Helpers.safe_float("bad", 99.0) == 99.0
                 _report("_safe_float('bad', 99.0) → 99.0", ok)
             except Exception as e:
                 _report("_safe_float('bad', 99.0) → 99.0", False, f"exception={e}")
 
             # A.12) _safe_text: None → ""
             try:
-                ok = scraperapi._safe_text(None) == ""
+                ok = scraperapi.Helpers.safe_text(None) == ""
                 _report("_safe_text(None) → ''", ok)
             except Exception as e:
                 _report("_safe_text(None) → ''", False, f"exception={e}")
 
             # A.13) _safe_text: non-str → str
             try:
-                ok = scraperapi._safe_text(42) == "42"
+                ok = scraperapi.Helpers.safe_text(42) == "42"
                 _report("_safe_text(42) → '42'", ok)
             except Exception as e:
                 _report("_safe_text(42) → '42'", False, f"exception={e}")
 
             # A.14) _safe_text_list: mixed inputs (blanks stripped, None skipped)
             try:
-                result = scraperapi._safe_text_list([" hello ", None, "", "  world  "])
+                result = scraperapi.Helpers.safe_text_list([" hello ", None, "", "  world  "])
                 ok = result == ["hello", "world"]
                 _report("_safe_text_list mixed inputs", ok, f"result={result}")
             except Exception as e:
@@ -875,8 +875,8 @@ def main() -> bool:
                     "ids": [1],
                     "expires_at": time.time() + 300,
                 })
-                scraperapi.Cache.clear(cache_key=_CLEAR_CACHE_KEY)
-                result = scraperapi.Cache.read_entry(cache_key=_CLEAR_CACHE_KEY)
+                scraperapi.clear_cached_items(cache_key=_CLEAR_CACHE_KEY)
+                result = scraperapi.read_cached_metadata_entry(cache_key=_CLEAR_CACHE_KEY)
                 ok = result.get("references", {}).get(_CLEAR_CACHE_KEY) is None
                 _report("clear_cached_items(cache_key=...) removes reference", ok)
             except Exception as e:
@@ -888,8 +888,8 @@ def main() -> bool:
                     clean_metadata={"id": _CLEAR_META_GID},
                     raw_metadata={"id": _CLEAR_META_GID},
                 )
-                scraperapi.Cache.clear(gallery_id=_CLEAR_META_GID)
-                result = scraperapi.Cache.read_entry(gallery_id=_CLEAR_META_GID)
+                scraperapi.clear_cached_items(gallery_id=_CLEAR_META_GID)
+                result = scraperapi.read_cached_metadata_entry(gallery_id=_CLEAR_META_GID)
                 ok = result.get("metadata", {}).get(_CLEAR_META_GID) is None
                 _report("clear_cached_items(gallery_id=...) removes metadata", ok)
             except Exception as e:
@@ -899,7 +899,7 @@ def main() -> bool:
             try:
                 raised = False
                 try:
-                    scraperapi.Cache.clear(cache_key="x", gallery_id=1)
+                    scraperapi.clear_cached_items(cache_key="x", gallery_id=1)
                 except ValueError:
                     raised = True
                 _report("clear_cached_items(both args) → ValueError", raised)
