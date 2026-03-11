@@ -29,7 +29,7 @@ EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
-EXTENSION_INSTALL_PATH = f"{orchestrator.SCRAPER_DIR}/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
+EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 
 DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
 
@@ -333,7 +333,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
-        temp_root = f"{orchestrator.SCRAPER_DIR}/mangascraper/core/archive_temp/"
+        temp_root = f"/opt/manga-scraper/mangascraper/core/archive_temp/"
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             temp_creator_folder = os.path.join(temp_root, creator_name)

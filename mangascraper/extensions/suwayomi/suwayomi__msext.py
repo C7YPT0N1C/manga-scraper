@@ -1234,7 +1234,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
-        temp_root = f"{orchestrator.SCRAPER_DIR}/mangascraper/core/archive_temp/"
+        temp_root = "/opt/manga-scraper/mangascraper/core/archive_temp/"
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             temp_creator_folder = os.path.join(temp_root, creator_name)

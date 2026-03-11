@@ -17,7 +17,7 @@ from mangascraper.extensions.extension_manager import get_selected_extension  # 
 
 active_extension = "skeleton"
 download_location = ""
-ARCHIVE_TEMP_ROOT = f"{orchestrator.SCRAPER_DIR}/mangascraper/core/archive_temp/"
+ARCHIVE_TEMP_ROOT = "/opt/manga-scraper/mangascraper/core/archive_temp/"
 
 skipped_galleries = {}
 skipped_galleries_lock = threading.Lock()
@@ -708,11 +708,9 @@ def process_galleries(batch_ids):
                     meta,
                     active_extension.EXTENSION_REFERRER,
                 )
-                
-                creators = gallery_metas["creator"]
-                # Ensure creators is always a list
-                if not isinstance(creators, list):
-                    creators = [creators]
+
+                creator_entries = scraperapi.Helpers.resolve_creator_entries(meta, download_location)
+                creators = [entry["folder_name"] for entry in creator_entries] or ["Unknown Creator"]
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
@@ -821,10 +819,13 @@ def process_galleries(batch_ids):
                         target_name = "archive" if orchestrator.gallery_format != "directory" else "primary folder"
                         log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {target_name}", "debug")
                     else:
+                        if os.path.normcase(os.path.normpath(extra_folder)) == os.path.normcase(os.path.normpath(finalised_path)):
+                            logger.debug(f"Downloader: Skipping self-symlink for Gallery {gallery_id}: {extra_folder}")
+                            continue
                         if os.path.islink(extra_folder):
                             os.unlink(extra_folder)  # remove old symlink only
                         elif os.path.exists(extra_folder):
-                            logger.warning(f"Downloader: Extra folder already exists and is not a symlink: {extra_folder}")
+                            logger.warning(f"Downloader: Extra path already exists and is not a symlink: {extra_folder}")
                             continue  # skip creating symlink if real folder exists
                         os.symlink(finalised_path, extra_folder)
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")

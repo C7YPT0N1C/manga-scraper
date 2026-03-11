@@ -21,14 +21,14 @@ _thread_local = threading.local()
 possible_broken_symbols_lock = threading.Lock()
 session_lock = threading.Lock()
 
-DATA_DIR = f"{orchestrator.SCRAPER_DIR}/mangascraper/core"
-DB_PATH = f"{orchestrator.SCRAPER_DIR}/mangascraper.db"
+DATA_DIR = "/opt/manga-scraper/mangascraper/core"
+DB_PATH = "/opt/manga-scraper/mangascraper.db"
 
 atexit.register(lambda: DB.close_connection())
 
 # Cache expiry windows (seconds)
-CACHE_REFERENCES_TTL_SECONDS = 1 * 24 * 60 * 60  # 1 day
-CACHED_METADATA_TTL_SECONDS = 14 * 24 * 60 * 60  # 14 days
+CACHE_REFERENCES_TTL_SECONDS = 60 * 60 * 24 * 1 # day
+CACHED_METADATA_TTL_SECONDS = 60 * 60 * 24 * 31 # days
 
 session = None # Session object
 
@@ -883,7 +883,7 @@ class DB:
                     ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
                     base_ext_path = calculate_extension_download_path(ext_name)
                 except Exception:
-                    base_ext_path = getattr(orchestrator, "extension_download_path", f"{orchestrator.SCRAPER_DIR}/downloads/")
+                    base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
                 if not ext_download_path:
                     ext_download_path = base_ext_path
                 elif not os.path.isabs(ext_download_path):
