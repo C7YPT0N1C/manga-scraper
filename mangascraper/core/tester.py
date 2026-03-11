@@ -41,7 +41,7 @@ TEST_CACHE_KEYS = {
     "test:cache_mixed_ids",
     "test:cache_expired",
     "test:clear_ck_test",
-    scraperapi.Cache.cache_keys(TEST_SEARCH_TYPE, TEST_SEARCH_VALUE),
+    "search:ass_big",
 }
 
 

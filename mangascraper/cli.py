@@ -7,7 +7,6 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.interactive import interactive_config_menu, interactive_search_menu
 from mangascraper.core import api as scraperapi
-from mangascraper.core import tester
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,
@@ -1021,6 +1020,7 @@ def main():
 
     # --- Self-test mode ---
     if args.self_test:
+        from mangascraper.core import tester
         ok = tester.main()
         sys.exit(0 if ok else 1)
     
