@@ -259,7 +259,7 @@ def pre_download_checks(gallery_ids: list) -> tuple:
     total_estimated = download_estimated + required_with_buffer
     
     log(
-        f"Space Usage Estimate:\n"
+        f"Space Usage Estimate ({len(gallery_ids)} Galleries):\n"
         f"-     Total download size: {_format_bytes(total_estimated)}\n"
         f"-     Available disk space (target): {_format_bytes(available_on_target)}\n"
         + (f"-     Available disk space (staging): {_format_bytes(available_on_staging)}\n" if use_staging else "")
@@ -1030,8 +1030,7 @@ def start_downloader(gallery_list=None):
     log_clarification()
     if space_monitor["galleries_processed"] > 0:
         log(
-            f"Space Usage Summary:\n"
-            f"-     Galleries processed: {space_monitor['galleries_processed']}\n"
+            f"Space Usage Summary ({space_monitor['galleries_processed']} Galleries):\n"
             f"-     Total download size: {_format_bytes(space_monitor['total_actual_bytes'])}\n"
             f"-     Estimated download size: {_format_bytes(space_monitor['total_estimated_bytes'])}\n"
             f"-     Average per gallery: {_format_bytes(space_monitor['total_actual_bytes'] // space_monitor['galleries_processed'])}\n"
