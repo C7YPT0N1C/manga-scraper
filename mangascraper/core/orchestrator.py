@@ -291,7 +291,7 @@ threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THR
 DEFAULT_USE_DAEMON_THREADS = True
 use_daemon_threads = DEFAULT_USE_DAEMON_THREADS
 
-DEFAULT_MAX_RETRIES = 3
+DEFAULT_MAX_RETRIES = 5
 max_retries = DEFAULT_MAX_RETRIES
 
 DEFAULT_MIN_RETRY_SLEEP = 0.5
