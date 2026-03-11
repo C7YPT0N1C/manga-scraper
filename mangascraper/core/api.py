@@ -21,8 +21,8 @@ _thread_local = threading.local()
 possible_broken_symbols_lock = threading.Lock()
 session_lock = threading.Lock()
 
-DATA_DIR = "/opt/manga-scraper/mangascraper/core"
-DB_PATH = "/opt/manga-scraper/mangascraper.db"
+DATA_DIR = os.path.join(orchestrator.SCRAPER_DIR, "mangascraper/core")
+DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 
 atexit.register(lambda: DB.close_connection())
 

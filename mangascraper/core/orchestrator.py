@@ -149,7 +149,7 @@ def with_env_lock(func, *args, **kwargs):
 # ------------------------------------------------------------
 # Env
 # ------------------------------------------------------------
-ENV_FILE = "/opt/manga-scraper/manga-scraper.env"
+ENV_FILE = os.path.join(SCRAPER_DIR, "manga-scraper.env")
 
 # Ensure NHentai directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
