@@ -60,7 +60,7 @@
       if (!content || !toggle || !bar) return;
       content.style.display = window.__dynamicBarCollapsed ? 'none' : '';
       bar.classList.toggle('dynamic-bar-collapsed', window.__dynamicBarCollapsed);
-      toggle.textContent = window.__dynamicBarCollapsed ? '▸' : '▾';
+      toggle.textContent = window.__dynamicBarCollapsed ? '▸' : '◂';
       toggle.title = window.__dynamicBarCollapsed ? 'Expand telemetry' : 'Collapse telemetry';
     }
 

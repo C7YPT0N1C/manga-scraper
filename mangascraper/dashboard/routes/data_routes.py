@@ -1199,6 +1199,14 @@ def gallery_details(creator, gallery):
     })
 
 
+@gallery_bp.route("/details_by_id/<int:gallery_id>", methods=["GET"])
+def gallery_details_by_id(gallery_id):
+    meta = _gallery_meta_by_id(gallery_id)
+    if not meta:
+        abort(404)
+    return jsonify(meta)
+
+
 @gallery_bp.route("/view/<path:creator>/<path:gallery>/<path:filename>", methods=["GET"])
 def view_image(creator, gallery, filename):
     """Serve a local gallery image to the frontend reader."""

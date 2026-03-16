@@ -355,10 +355,18 @@ async function openGalleryDetail(gallery) {
 
 	if (!_currentCreator) return;
 	try {
-		const creatorName = encodeURIComponent(_currentCreator);
-		const galleryName = encodeURIComponent(itemLabel(gallery));
-		const data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
-		_detailGallery.gallery_id = data.gallery_id;
+		let data;
+		if (_detailGallery.gallery_id) {
+			data = await apiFetch(`/api/gallery/details_by_id/${encodeURIComponent(_detailGallery.gallery_id)}`);
+		} else {
+			const creatorName = encodeURIComponent(_currentCreator);
+			const galleryName = encodeURIComponent(itemLabel(gallery));
+			data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
+		}
+
+		if (data.gallery_id) {
+			_detailGallery.gallery_id = data.gallery_id;
+		}
 		_detailGallery.page_count = Number(data.page_count || _detailGallery.page_count || 0);
 		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
 		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
@@ -366,7 +374,7 @@ async function openGalleryDetail(gallery) {
 
 		for (const item of _allGalleries) {
 			if (itemLabel(item) === itemLabel(_detailGallery)) {
-				item.gallery_id = _detailGallery.gallery_id;
+				if (_detailGallery.gallery_id) item.gallery_id = _detailGallery.gallery_id;
 				item.languages = _detailGallery.languages;
 				item.tags = _detailGallery.tags;
 				item.tag_count = _detailGallery.tags.length;
