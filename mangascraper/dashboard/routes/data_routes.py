@@ -532,7 +532,16 @@ def list_locations():
 
 @gallery_bp.route("/files", methods=["GET"])
 def list_files():
-    root = _resolve_root_path()
+    requested_root = str(request.args.get("root") or "").strip()
+    roots = _available_roots()
+    root = None
+    if requested_root:
+        for item in roots:
+            if item["root_path"] == requested_root:
+                root = requested_root
+                break
+    if not root:
+        root = roots[0]["root_path"] if roots else _download_path()
     if not root or not os.path.isdir(root):
         return jsonify({"error": "Root path not found.", "root_path": root or "", "current_path": "", "entries": []}), 404
 
@@ -586,6 +595,98 @@ def list_files():
             "entries": entries,
         }
     )
+
+
+@gallery_bp.route("/files/rename", methods=["POST"])
+def rename_file():
+    payload = request.get_json(silent=True) or {}
+    requested_root = str(payload.get("root") or "").strip()
+    rel_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    new_name = str(payload.get("new_name") or "").strip()
+    if not new_name or "/" in new_name or "\\" in new_name or new_name in (".", ".."):
+        return jsonify({"error": "Invalid name."}), 400
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    target = _safe_path(root, *parts)
+    if not target or not os.path.exists(target):
+        return jsonify({"error": "Path not found."}), 404
+    dest = os.path.join(os.path.dirname(target), new_name)
+    if os.path.exists(dest):
+        return jsonify({"error": "A file or folder with that name already exists."}), 409
+    try:
+        os.rename(target, dest)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
+@gallery_bp.route("/files/delete", methods=["POST"])
+def delete_file():
+    import shutil
+    payload = request.get_json(silent=True) or {}
+    requested_root = str(payload.get("root") or "").strip()
+    rel_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    if not rel_path or rel_path in (".", "/"):
+        return jsonify({"error": "Cannot delete root."}), 400
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    if not parts:
+        return jsonify({"error": "Cannot delete root."}), 400
+    target = _safe_path(root, *parts)
+    if not target or not os.path.exists(target):
+        return jsonify({"error": "Path not found."}), 404
+    try:
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        else:
+            os.remove(target)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
+@gallery_bp.route("/files/mkdir", methods=["POST"])
+def make_directory():
+    payload = request.get_json(silent=True) or {}
+    requested_root = str(payload.get("root") or "").strip()
+    rel_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    name = str(payload.get("name") or "").strip()
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        return jsonify({"error": "Invalid folder name."}), 400
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    parent = _safe_path(root, *parts) if parts else root
+    if not parent or not os.path.isdir(parent):
+        return jsonify({"error": "Parent path not found."}), 404
+    new_dir = os.path.join(parent, name)
+    if os.path.exists(new_dir):
+        return jsonify({"error": "Already exists."}), 409
+    try:
+        os.makedirs(new_dir)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
 
 
 @gallery_bp.route("/favourite/gallery/<int:gallery_id>", methods=["POST"])

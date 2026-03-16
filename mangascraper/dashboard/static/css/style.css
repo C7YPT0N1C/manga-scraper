@@ -498,6 +498,108 @@ table tr:nth-child(even) {
   line-height: 1.1;
 }
 
+/* ── File Browser ─────────────────────────────────────────── */
+
+.file-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0.3rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.file-bc-link {
+  color: var(--ink-1);
+  text-decoration: none;
+  padding: 0 0.15rem;
+}
+.file-bc-link:hover { text-decoration: underline; }
+.file-bc-sep {
+  color: var(--ink-2);
+  padding: 0 0.1rem;
+  user-select: none;
+}
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.file-table thead th {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #2a2e3d;
+  color: var(--ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.file-row td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid #1a1d27;
+  vertical-align: middle;
+}
+.file-row:hover td { background: rgba(255,255,255,0.03); }
+.file-row-up td { color: var(--ink-2); }
+.file-icon {
+  font-size: 0.95em;
+  margin-right: 0.25rem;
+  user-select: none;
+}
+.file-link {
+  color: var(--ink-1);
+  text-decoration: none;
+}
+.file-link:hover { text-decoration: underline; }
+.file-size {
+  white-space: nowrap;
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  min-width: 70px;
+}
+.file-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 0.3rem;
+}
+.file-action-btn {
+  border: 1px solid #3a3e4d;
+  background: #0d1018;
+  color: var(--ink-1);
+  padding: 0.18rem 0.5rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.file-action-btn:hover { background: #1a1e2e; }
+.file-action-delete { color: #e05a5a; border-color: #5a2020; }
+.file-action-delete:hover { background: #2a1010; }
+
+.file-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.file-modal-box {
+  background: #13161f;
+  border: 1px solid #2a2e3d;
+  border-radius: 8px;
+  padding: 1.2rem 1.6rem;
+  min-width: 280px;
+}
+.file-modal-box p {
+  margin: 0 0 0.5rem;
+  color: var(--ink-1);
+  font-size: 0.9rem;
+}
+.file-modal-box input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 #searchFilterBar {
   display: grid;
   grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 2fr);

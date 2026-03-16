@@ -48,15 +48,36 @@
     <div id="fileControls">
       <button id="fileRefreshBtn" type="button">Refresh</button>
       <select id="fileRootSelect" title="Choose root folder"></select>
-      <button id="fileUpBtn" type="button">Up</button>
-      <input id="filePathInput" type="text" readonly value="/" title="Current relative path">
-      <select id="fileEntrySelect" title="Choose entry">
-        <option value="">-- entry --</option>
-      </select>
-      <button id="fileOpenEntryBtn" type="button">Open</button>
+      <button id="fileNewFolderBtn" type="button">New Folder</button>
     </div>
-    <p id="fileStatusMsg">Choose a root folder and browse directories.</p>
-    <pre id="fileListViewer" style="white-space:pre-wrap;max-height:55vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+    <div id="fileBreadcrumb" class="file-breadcrumb"></div>
+    <p id="fileStatusMsg">Choose a root folder to begin.</p>
+    <div id="fileListPanel" style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+      <table id="fileTable" class="file-table">
+        <thead><tr><th>Name</th><th>Size</th><th>Actions</th></tr></thead>
+        <tbody id="fileTableBody"></tbody>
+      </table>
+    </div>
+    <div id="fileRenameModal" class="file-modal" style="display:none">
+      <div class="file-modal-box">
+        <p>Rename to:</p>
+        <input id="fileRenameInput" type="text" autocomplete="off">
+        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+          <button id="fileRenameConfirmBtn" type="button">Rename</button>
+          <button id="fileRenameCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="fileMkdirModal" class="file-modal" style="display:none">
+      <div class="file-modal-box">
+        <p>New folder name:</p>
+        <input id="fileMkdirInput" type="text" autocomplete="off">
+        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+          <button id="fileMkdirConfirmBtn" type="button">Create</button>
+          <button id="fileMkdirCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="diagPaneSelfTest" style="display:none;">
@@ -226,96 +247,214 @@ async function loadFileRoots() {
   }
 }
 
-async function loadFileEntries(path = undefined) {
+async function loadFileEntries(path) {
   const filePath = path !== undefined ? String(path || '') : _fileCurrentPath;
-  const entrySelect = document.getElementById('fileEntrySelect');
-  const pathInput = document.getElementById('filePathInput');
-  const listViewer = document.getElementById('fileListViewer');
   const status = document.getElementById('fileStatusMsg');
-  entrySelect.innerHTML = '<option value="">-- entry --</option>';
-  listViewer.textContent = '';
+  const tbody = document.getElementById('fileTableBody');
+  tbody.innerHTML = '';
 
   if (!_fileCurrentRoot) {
     status.textContent = 'Choose a root folder first.';
-    pathInput.value = '/';
+    _renderBreadcrumb([]);
     return;
   }
 
   try {
-    const query = new URLSearchParams();
-    query.set('root', _fileCurrentRoot);
-    if (filePath) {
-      query.set('path', filePath);
-    }
-    const res = await fetch(`/api/gallery/files?${query.toString()}`);
+    const query = new URLSearchParams({ root: _fileCurrentRoot });
+    if (filePath) query.set('path', filePath);
+    const res = await fetch(`/api/gallery/files?${query}`);
     const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
     _fileCurrentPath = String(data.current_path || '');
-    pathInput.value = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
+    const parts = _fileCurrentPath ? _fileCurrentPath.split('/').filter(Boolean) : [];
+    _renderBreadcrumb(parts);
 
     const entries = Array.isArray(data.entries) ? data.entries : [];
+
+    // Up row if not at root
+    if (_fileCurrentPath) {
+      const tr = document.createElement('tr');
+      tr.className = 'file-row file-row-up';
+      tr.innerHTML = `<td colspan="3"><span class="file-icon">&#x21A9;</span> <a class="file-link" href="#">..</a></td>`;
+      tr.querySelector('.file-link').addEventListener('click', e => { e.preventDefault(); _fileNavigateUp(); });
+      tbody.appendChild(tr);
+    }
+
     entries.forEach(item => {
       const name = String(item.name || '');
-      if (!name) {
-        return;
-      }
+      if (!name) return;
       const isDir = !!item.is_dir;
-      const opt = document.createElement('option');
-      opt.value = JSON.stringify({ name, is_dir: isDir });
-      opt.textContent = isDir ? `[DIR] ${name}` : name;
-      entrySelect.appendChild(opt);
-    });
-    status.textContent = `${entries.length} entries in ${pathInput.value}.`;
+      const relPath = _fileCurrentPath ? `${_fileCurrentPath}/${name}` : name;
 
-    const lines = entries.map(item => {
-      const name = String(item.name || '');
-      if (item.is_dir) {
-        return `[DIR] ${name}`;
+      const tr = document.createElement('tr');
+      tr.className = 'file-row';
+
+      // Name cell
+      const tdName = document.createElement('td');
+      const icon = document.createElement('span');
+      icon.className = 'file-icon';
+      icon.textContent = isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+      tdName.appendChild(icon);
+      tdName.append(' ');
+      if (isDir) {
+        const a = document.createElement('a');
+        a.className = 'file-link';
+        a.href = '#';
+        a.textContent = name;
+        a.addEventListener('click', e => { e.preventDefault(); loadFileEntries(relPath); });
+        tdName.appendChild(a);
+      } else {
+        const span = document.createElement('span');
+        span.textContent = name;
+        tdName.appendChild(span);
       }
-      const size = Number(item.size || 0);
-      return `${name} (${size} bytes)`;
+
+      // Size cell
+      const tdSize = document.createElement('td');
+      tdSize.className = 'file-size';
+      if (!isDir && item.size !== null && item.size !== undefined) {
+        tdSize.textContent = _formatFileSize(item.size);
+      } else if (isDir) {
+        tdSize.textContent = '';
+      }
+
+      // Actions cell
+      const tdActions = document.createElement('td');
+      tdActions.className = 'file-actions';
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'file-action-btn';
+      renameBtn.textContent = 'Rename';
+      renameBtn.addEventListener('click', () => _showRenameModal(relPath, name));
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'file-action-btn file-action-delete';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => _confirmDelete(relPath, name, isDir));
+      tdActions.appendChild(renameBtn);
+      tdActions.appendChild(deleteBtn);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdSize);
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
     });
-    listViewer.textContent = lines.length ? lines.join('\n') : '(empty folder)';
+
+    const loc = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
+    status.textContent = `${entries.length} item${entries.length !== 1 ? 's' : ''} in ${loc}`;
   } catch (err) {
     status.textContent = `Failed to load folder: ${err.message}`;
   }
 }
 
-function openSelectedEntry() {
-  const select = document.getElementById('fileEntrySelect');
-  const status = document.getElementById('fileStatusMsg');
-  if (!select.value) {
-    status.textContent = 'Choose an entry first.';
-    return;
-  }
-
-  try {
-    const entry = JSON.parse(select.value);
-    if (!entry || !entry.name) {
-      status.textContent = 'Invalid entry selected.';
-      return;
-    }
-    if (entry.is_dir) {
-      const nextPath = _fileCurrentPath ? `${_fileCurrentPath}/${entry.name}` : entry.name;
-      loadFileEntries(nextPath);
-      return;
-    }
-    status.textContent = `Selected file: ${entry.name}`;
-  } catch (err) {
-    status.textContent = `Could not open entry: ${err.message}`;
-  }
+function _renderBreadcrumb(parts) {
+  const el = document.getElementById('fileBreadcrumb');
+  el.innerHTML = '';
+  const makeLink = (label, path) => {
+    const a = document.createElement('a');
+    a.className = 'file-bc-link';
+    a.href = '#';
+    a.textContent = label;
+    a.addEventListener('click', e => { e.preventDefault(); loadFileEntries(path); });
+    return a;
+  };
+  el.appendChild(makeLink(_fileCurrentRoot || 'Root', ''));
+  parts.forEach((part, i) => {
+    const sep = document.createElement('span');
+    sep.className = 'file-bc-sep';
+    sep.textContent = '/';
+    el.appendChild(sep);
+    const path = parts.slice(0, i + 1).join('/');
+    el.appendChild(makeLink(part, path));
+  });
 }
 
-function fileNavigateUp() {
-  if (!_fileCurrentPath) {
-    return;
-  }
+function _formatFileSize(bytes) {
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+function _fileNavigateUp() {
+  if (!_fileCurrentPath) return;
   const parts = _fileCurrentPath.split('/').filter(Boolean);
   parts.pop();
   loadFileEntries(parts.join('/'));
+}
+
+let _renameTargetPath = '';
+function _showRenameModal(relPath, currentName) {
+  _renameTargetPath = relPath;
+  const input = document.getElementById('fileRenameInput');
+  input.value = currentName;
+  document.getElementById('fileRenameModal').style.display = 'flex';
+  input.focus();
+  input.select();
+}
+
+async function _doRename() {
+  const newName = document.getElementById('fileRenameInput').value.trim();
+  const status = document.getElementById('fileStatusMsg');
+  document.getElementById('fileRenameModal').style.display = 'none';
+  if (!newName) return;
+  try {
+    const res = await fetch('/api/gallery/files/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _renameTargetPath, new_name: newName }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Rename failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Rename error: ${err.message}`;
+  }
+}
+
+async function _confirmDelete(relPath, name, isDir) {
+  const kind = isDir ? 'folder' : 'file';
+  if (!confirm(`Delete ${kind} "${name}"?${isDir ? ' This will delete everything inside it.' : ''}`)) return;
+  const status = document.getElementById('fileStatusMsg');
+  try {
+    const res = await fetch('/api/gallery/files/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: relPath }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Delete failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Delete error: ${err.message}`;
+  }
+}
+
+function _showMkdirModal() {
+  const input = document.getElementById('fileMkdirInput');
+  input.value = '';
+  document.getElementById('fileMkdirModal').style.display = 'flex';
+  input.focus();
+}
+
+async function _doMkdir() {
+  const name = document.getElementById('fileMkdirInput').value.trim();
+  const status = document.getElementById('fileStatusMsg');
+  document.getElementById('fileMkdirModal').style.display = 'none';
+  if (!name) return;
+  try {
+    const res = await fetch('/api/gallery/files/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileCurrentPath, name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Create folder failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Create folder error: ${err.message}`;
+  }
 }
 
 async function fetchLogsList(options = {}) {
@@ -400,25 +539,28 @@ document.getElementById('dbTableSelect').addEventListener('change', e => {
 });
 document.getElementById('dbSearchBox').addEventListener('input', e => loadDbTable(_dbCurrentTable, e.target.value));
 
-document.getElementById('fileRefreshBtn').addEventListener('click', loadFileRoots);
+document.getElementById('fileRefreshBtn').addEventListener('click', () => loadFileEntries(_fileCurrentPath));
 document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileCurrentRoot = e.target.value;
   _fileCurrentPath = '';
   loadFileEntries('');
 });
-document.getElementById('fileUpBtn').addEventListener('click', fileNavigateUp);
-document.getElementById('fileOpenEntryBtn').addEventListener('click', openSelectedEntry);
-document.getElementById('fileEntrySelect').addEventListener('change', () => {
-  const val = document.getElementById('fileEntrySelect').value;
-  if (!val) return;
-  try {
-    const entry = JSON.parse(val);
-    if (!entry.is_dir) {
-      document.getElementById('fileStatusMsg').textContent = `Selected file: ${entry.name}`;
-    }
-  } catch {
-    // ignore invalid selection payload
-  }
+document.getElementById('fileNewFolderBtn').addEventListener('click', _showMkdirModal);
+document.getElementById('fileRenameConfirmBtn').addEventListener('click', _doRename);
+document.getElementById('fileRenameCancelBtn').addEventListener('click', () => {
+  document.getElementById('fileRenameModal').style.display = 'none';
+});
+document.getElementById('fileRenameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') _doRename();
+  if (e.key === 'Escape') document.getElementById('fileRenameModal').style.display = 'none';
+});
+document.getElementById('fileMkdirConfirmBtn').addEventListener('click', _doMkdir);
+document.getElementById('fileMkdirCancelBtn').addEventListener('click', () => {
+  document.getElementById('fileMkdirModal').style.display = 'none';
+});
+document.getElementById('fileMkdirInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') _doMkdir();
+  if (e.key === 'Escape') document.getElementById('fileMkdirModal').style.display = 'none';
 });
 
 activateDiagTab('logs');
