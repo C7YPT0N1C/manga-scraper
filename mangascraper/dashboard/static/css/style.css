@@ -343,8 +343,8 @@ table tr:nth-child(even) {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1.2rem;
   padding: 0.5rem 0;
 }
 
@@ -357,12 +357,12 @@ table tr:nth-child(even) {
 }
 
 .gallery-square:hover {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 .gallery-square-image {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 2 / 3;
   background: linear-gradient(135deg, #2a2f3c, #1a1f2e);
   background-size: cover;
   background-position: center;
@@ -386,6 +386,56 @@ table tr:nth-child(even) {
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0 0.4rem;
+}
+
+#searchFilterBar {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+#searchInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-group select {
+  min-width: 140px;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  align-items: center;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.pagination-controls button {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  min-width: 120px;
+  text-align: center;
 }
 
 #streamControls {
