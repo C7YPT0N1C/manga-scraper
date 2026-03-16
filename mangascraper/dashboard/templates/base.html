@@ -2,18 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{{ title if title else "NHScraper Dashboard" }}</title>
+  <title>{{ title if title else "MangaScraper Dashboard" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
   <header>
-    <h1>NHScraper Dashboard</h1>
+    <h1>MangaScraper Dashboard</h1>
     <nav>
       <a href="/">Home</a> |
       <a href="/scraper">Scraper</a> |
       <a href="/gallery">Gallery</a> |
       <a href="/database">Database</a>
     </nav>
+    <div id="globalStatus"></div>
   </header>
 
   <main>

@@ -2,6 +2,7 @@
 {% block content %}
 <h2>Scraper Control Panel</h2>
 
+<!-- ===== RUNTIME ===== -->
 <section>
   <h3>Runtime</h3>
   <button id="refreshStatusBtn">Refresh Status</button>
@@ -11,65 +12,174 @@
   <p id="runtimeStatus">Status: loading...</p>
 </section>
 
+<!-- ===== CONFIGURATION ===== -->
 <section>
   <h3>Configuration</h3>
   <div id="configGrid">
-    <label>Extension <input id="cfg_extension" type="text"></label>
-    <label>Mirrors <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net"></label>
-    <label>Language(s) <input id="cfg_language" type="text" placeholder="english"></label>
-    <label>Title Type
+
+    <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
+      Extension
+      <select id="cfg_extension">
+        <option value="">— none (built-in) —</option>
+      </select>
+    </label>
+
+    <label title="Comma-separated list of image mirror URLs to try when downloading images. The first reachable mirror is used.">
+      Mirrors
+      <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net">
+    </label>
+
+    <label title="Filter galleries by language. Comma-separated (e.g. english,japanese). Leave blank to allow all languages.">
+      Language(s)
+      <input id="cfg_language" type="text" placeholder="english">
+    </label>
+
+    <label title="Which title variant to use when naming downloaded gallery folders.">
+      Title Type
       <select id="cfg_title_type">
         <option value="english">english</option>
         <option value="japanese">japanese</option>
         <option value="pretty">pretty</option>
       </select>
     </label>
-    <label>Excluded Tags <input id="cfg_excluded_tags" type="text"></label>
-    <label>Output Folder <input id="cfg_output_folder" type="text"></label>
-    <label>Format
+
+    <label title="Comma-separated list of tags to skip. Any gallery containing one of these tags will be excluded from the download batch.">
+      Excluded Tags
+      <input id="cfg_excluded_tags" type="text" placeholder="e.g. guro,snuff">
+    </label>
+
+    <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
+      Output Folder
+      <select id="cfg_output_folder_select">
+        <option value="">— select a folder —</option>
+        <option value="__custom__">Custom...</option>
+      </select>
+      <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
+    </label>
+
+    <label title="How galleries are stored on disk: as a plain folder of images, a .zip archive, or a .cbz comic archive.">
+      Format
       <select id="cfg_format">
         <option value="directory">directory</option>
         <option value="zip">zip</option>
         <option value="cbz">cbz</option>
       </select>
     </label>
-    <label>Gallery Threads <input id="cfg_threads_galleries" type="number" min="1"></label>
-    <label>Image Threads <input id="cfg_threads_images" type="number" min="1"></label>
-    <label>Max Retries <input id="cfg_max_retries" type="number" min="0"></label>
-    <label>Use Tor <input id="cfg_use_tor" type="checkbox"></label>
-    <label>Dry Run <input id="cfg_dry_run" type="checkbox"></label>
-    <label>Verify SSL <input id="cfg_verify_ssl" type="checkbox"></label>
-    <label>Daemon Threads <input id="cfg_use_daemon_threads" type="checkbox"></label>
-    <label>Reduce Logs <input id="cfg_calm" type="checkbox"></label>
+
+    <label title="How many galleries to process in parallel. Higher values speed things up but use more memory and bandwidth.">
+      Gallery Threads
+      <input id="cfg_threads_galleries" type="number" min="1" placeholder="2">
+    </label>
+
+    <label title="How many image download threads to run per gallery. Higher values download images faster at the cost of more CPU and bandwidth.">
+      Image Threads
+      <input id="cfg_threads_images" type="number" min="1" placeholder="10">
+    </label>
+
+    <label title="How many times to retry a failed image download before giving up and marking the image as missing.">
+      Max Retries
+      <input id="cfg_max_retries" type="number" min="0" placeholder="5">
+    </label>
+
+    <label title="Route all traffic through the Tor network to anonymise downloads. Tor must be installed and running on the server.">
+      Use Tor
+      <input id="cfg_use_tor" type="checkbox">
+    </label>
+
+    <label title="Simulate a run without actually downloading anything. Useful for testing search results and configuration before committing to a full batch.">
+      Dry Run
+      <input id="cfg_dry_run" type="checkbox">
+    </label>
+
+    <label title="Verify HTTPS certificates when making requests. Disable only if you encounter SSL errors with your chosen mirrors.">
+      Verify SSL
+      <input id="cfg_verify_ssl" type="checkbox">
+    </label>
+
+    <label title="Run download threads as daemon threads so they are forcibly killed when the main process exits, rather than waiting for them to finish.">
+      Daemon Threads
+      <input id="cfg_use_daemon_threads" type="checkbox">
+    </label>
+
+    <label title="Suppress verbose log output. Only warnings and errors are shown, making it easier to spot problems in long runs.">
+      Reduce Logs
+      <input id="cfg_calm" type="checkbox">
+    </label>
+
   </div>
   <button id="loadConfigBtn">Load Config</button>
   <button id="saveConfigBtn">Save Config</button>
   <p id="configMsg"></p>
 </section>
 
+<!-- ===== SEARCH ===== -->
 <section>
   <h3>Search</h3>
   <div id="searchGrid">
-    <label>Query Type
+
+    <label title="How to search for galleries. Different modes reveal different options below.">
+      Search...
       <select id="queryType">
-        <option value="homepage">homepage</option>
-        <option value="id_range">id range</option>
-        <option value="ids">explicit ids</option>
-        <option value="search">search</option>
-        <option value="artist">artist</option>
-        <option value="group">group</option>
-        <option value="tag">tag</option>
-        <option value="character">character</option>
-        <option value="parody">parody</option>
+        <option value="homepage">The Homepage</option>
+        <option value="id_range">by ID Range</option>
+        <option value="ids">by Explicit IDs</option>
+        <option value="search">General Search (keyword)</option>
+        <option value="artist">by Artist</option>
+        <option value="group">by Group</option>
+        <option value="tag">by Tag</option>
+        <option value="character">by Character</option>
+        <option value="parody">by Parody / Series</option>
       </select>
     </label>
-    <label>Query / IDs <input id="queryValue" type="text" placeholder="e.g. english or 123,456"></label>
-    <label>Sort <input id="sortValue" type="text" value="date" placeholder="date / popular-week"></label>
-    <label>Start Page <input id="startPage" type="number" min="1" value="1"></label>
-    <label>End Page <input id="endPage" type="text" value="10" placeholder="10 or all"></label>
-    <label>Start ID <input id="startId" type="number" min="1" placeholder="for id_range"></label>
-    <label>End ID <input id="endId" type="number" min="1" placeholder="for id_range"></label>
-    <label>Fetch All Pages <input id="fetchAll" type="checkbox"></label>
+
+    <!-- search, artist, group, tag, character, parody -->
+    <label id="row_queryValue" title="The search term for the selected mode. For keyword search enter a phrase; for artist/group/tag/character/parody enter the name exactly as it appears on the site.">
+      Query
+      <input id="queryValue" type="text" placeholder="e.g. english">
+    </label>
+
+    <!-- ids only -->
+    <label id="row_idsValue" title="Comma-separated list of gallery IDs to fetch directly — no search needed.">
+      Gallery IDs
+      <input id="idsValue" type="text" placeholder="e.g. 177013,370138">
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_sort" title="Sort order for results. 'date' returns the newest galleries first; the 'popular-*' options rank by view count.">
+      Sort
+      <select id="sortValue">
+        <option value="date">date (newest first)</option>
+        <option value="popular">popular (all-time)</option>
+        <option value="popular-week">popular this week</option>
+        <option value="popular-month">popular this month</option>
+        <option value="popular-today">popular today</option>
+      </select>
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_startPage" title="Which page of results to start collecting from. Page 1 is the newest (date sort) or most popular.">
+      Start Page
+      <input id="startPage" type="number" min="1" value="1" placeholder="1">
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_endPage" title="Which page to stop at. Enter a number, or 'all' to fetch every available page (can be slow for large queries).">
+      End Page
+      <input id="endPage" type="text" value="10" placeholder="10 or all">
+    </label>
+
+    <!-- id_range only -->
+    <label id="row_startId" title="The lowest gallery ID in the range to download. IDs are assigned sequentially—lower numbers are older entries.">
+      Start ID
+      <input id="startId" type="number" min="1" placeholder="e.g. 400000">
+    </label>
+
+    <!-- id_range only -->
+    <label id="row_endId" title="The highest gallery ID in the range. Leave blank to automatically use the latest uploaded gallery ID.">
+      End ID
+      <input id="endId" type="number" min="1" placeholder="leave blank = latest">
+    </label>
+
   </div>
   <button id="searchBtn">Search</button>
   <button id="addAllBtn">Add All Results To Queue</button>
@@ -92,6 +202,7 @@
   </table>
 </section>
 
+<!-- ===== QUEUE ===== -->
 <section>
   <h3>Selected Queue</h3>
   <button id="refreshQueueBtn">Refresh Queue</button>
@@ -118,6 +229,8 @@
 {% block scripts %}
 <script>
 let currentResults = [];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function asText(v, fallback = '-') {
   if (v === null || v === undefined || v === '') return fallback;
@@ -154,30 +267,163 @@ function renderRows(tableSelector, rows) {
   });
 }
 
+// ── Global status bar ─────────────────────────────────────────────────────────
+
+function setGlobalStatus(msg) {
+  const bar = document.getElementById('globalStatus');
+  if (bar) bar.textContent = msg;
+}
+
+function clearGlobalStatus() {
+  setGlobalStatus('');
+}
+
+// ── Search field visibility ───────────────────────────────────────────────────
+
+const SEARCH_FIELD_RULES = {
+  // row id  → array of query types that SHOW this row
+  row_queryValue: ['search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_idsValue:   ['ids'],
+  row_sort:       ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_startPage:  ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_endPage:    ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_startId:    ['id_range'],
+  row_endId:      ['id_range'],
+};
+
+function updateSearchFields() {
+  const type = document.getElementById('queryType').value;
+  for (const [rowId, visibleFor] of Object.entries(SEARCH_FIELD_RULES)) {
+    const el = document.getElementById(rowId);
+    if (el) el.style.display = visibleFor.includes(type) ? '' : 'none';
+  }
+}
+
+document.getElementById('queryType').addEventListener('change', updateSearchFields);
+updateSearchFields(); // run on load
+
+// ── Extension dropdown ────────────────────────────────────────────────────────
+
+async function loadExtensions() {
+  try {
+    const res = await fetch('/api/scraper/extensions');
+    const data = await res.json();
+    const sel = document.getElementById('cfg_extension');
+    // Clear all except the first "none" option
+    while (sel.options.length > 1) sel.remove(1);
+    (data.extensions || []).forEach(ext => {
+      const opt = document.createElement('option');
+      opt.value = ext.name;
+      opt.textContent = ext.label || ext.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    // Non-fatal: extension list stays as "none"
+  }
+}
+
+// ── Output folder dropdown ────────────────────────────────────────────────────
+
+function setupOutputFolderDropdown(currentFolder) {
+  const sel = document.getElementById('cfg_output_folder_select');
+  const custom = document.getElementById('cfg_output_folder_custom');
+
+  // Populate known paths — always include the current value if non-empty
+  const knownPaths = [];
+  if (currentFolder && !knownPaths.includes(currentFolder)) {
+    knownPaths.push(currentFolder);
+  }
+
+  // Rebuild options (keep blank + known paths + Custom)
+  while (sel.options.length > 1) sel.remove(1); // keep "— select a folder —"
+  knownPaths.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    sel.insertBefore(opt, sel.options[sel.options.length - 1]); // before Custom...
+    // Re-add Custom at end
+  });
+  // Always ensure Custom... is last
+  if (!sel.querySelector('option[value="__custom__"]')) {
+    const customOpt = document.createElement('option');
+    customOpt.value = '__custom__';
+    customOpt.textContent = 'Custom...';
+    sel.appendChild(customOpt);
+  }
+
+  // Set current selection
+  if (currentFolder) {
+    // Try to match an existing option
+    let matched = false;
+    for (const opt of sel.options) {
+      if (opt.value === currentFolder) { sel.value = currentFolder; matched = true; break; }
+    }
+    if (!matched) {
+      // Add it as a new option and select it
+      const opt = document.createElement('option');
+      opt.value = currentFolder;
+      opt.textContent = currentFolder;
+      sel.insertBefore(opt, sel.options[sel.options.length - 1]);
+      sel.value = currentFolder;
+    }
+  }
+  custom.style.display = 'none';
+}
+
+document.getElementById('cfg_output_folder_select').addEventListener('change', function () {
+  const custom = document.getElementById('cfg_output_folder_custom');
+  if (this.value === '__custom__') {
+    custom.style.display = '';
+    custom.focus();
+  } else {
+    custom.style.display = 'none';
+    custom.value = '';
+  }
+});
+
+function getOutputFolder() {
+  const sel = document.getElementById('cfg_output_folder_select');
+  if (sel.value === '__custom__') {
+    return document.getElementById('cfg_output_folder_custom').value.trim();
+  }
+  return sel.value;
+}
+
+// ── Runtime status ────────────────────────────────────────────────────────────
+
 async function refreshStatus() {
   const res = await fetch('/api/scraper/status');
   const data = await res.json();
   const counts = data.counts || {};
   document.getElementById('runtimeStatus').textContent =
     `Status: ${data.status} | PID: ${asText(data.pid)} | Uptime: ${asText(data.uptime_seconds, 0)}s | ` +
-    `DB total=${asText(counts.total, 0)} completed=${asText(counts.completed, 0)} failed=${asText(counts.failed, 0)} skipped=${asText(counts.skipped, 0)}`;
+    `Galleries: total=${asText(counts.total, 0)} completed=${asText(counts.completed, 0)} ` +
+    `failed=${asText(counts.failed, 0)} skipped=${asText(counts.skipped, 0)}`;
 }
+
+// ── Config load / save ────────────────────────────────────────────────────────
 
 async function loadConfig() {
   const res = await fetch('/api/scraper/config');
   const data = await res.json();
   const c = data.config || {};
 
-  document.getElementById('cfg_extension').value = c.extension || '';
+  // Extension dropdown — load extensions first, then set value
+  await loadExtensions();
+  const extSel = document.getElementById('cfg_extension');
+  extSel.value = c.extension || '';
+
   document.getElementById('cfg_mirrors').value = c.mirrors || '';
   document.getElementById('cfg_language').value = c.language || '';
   document.getElementById('cfg_title_type').value = c.title_type || 'pretty';
   document.getElementById('cfg_excluded_tags').value = c.excluded_tags || '';
-  document.getElementById('cfg_output_folder').value = c.output_folder || '';
+
+  setupOutputFolderDropdown(c.output_folder || '');
+
   document.getElementById('cfg_format').value = c.format || 'directory';
-  document.getElementById('cfg_threads_galleries').value = c.threads_galleries || 2;
-  document.getElementById('cfg_threads_images').value = c.threads_images || 10;
-  document.getElementById('cfg_max_retries').value = c.max_retries || 5;
+  document.getElementById('cfg_threads_galleries').value = c.threads_galleries ?? '';
+  document.getElementById('cfg_threads_images').value = c.threads_images ?? '';
+  document.getElementById('cfg_max_retries').value = c.max_retries ?? '';
   document.getElementById('cfg_use_tor').checked = !!c.use_tor;
   document.getElementById('cfg_dry_run').checked = !!c.dry_run;
   document.getElementById('cfg_verify_ssl').checked = !!c.verify_ssl;
@@ -189,12 +435,12 @@ async function loadConfig() {
 
 async function saveConfig() {
   const payload = {
-    extension: document.getElementById('cfg_extension').value.trim(),
+    extension: document.getElementById('cfg_extension').value,
     mirrors: document.getElementById('cfg_mirrors').value.trim(),
     language: document.getElementById('cfg_language').value.trim(),
     title_type: document.getElementById('cfg_title_type').value,
     excluded_tags: document.getElementById('cfg_excluded_tags').value.trim(),
-    output_folder: document.getElementById('cfg_output_folder').value.trim(),
+    output_folder: getOutputFolder(),
     format: document.getElementById('cfg_format').value,
     threads_galleries: Number(document.getElementById('cfg_threads_galleries').value || 0),
     threads_images: Number(document.getElementById('cfg_threads_images').value || 0),
@@ -215,17 +461,34 @@ async function saveConfig() {
   document.getElementById('configMsg').textContent = data.message || 'Configuration updated.';
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+
 async function runSearch() {
+  const type = document.getElementById('queryType').value;
+
+  // Build query_value / ids depending on mode
+  let queryValue = '';
+  let explicitIds = '';
+  if (type === 'ids') {
+    explicitIds = document.getElementById('idsValue').value.trim();
+  } else {
+    queryValue = document.getElementById('queryValue').value.trim();
+  }
+
   const payload = {
-    query_type: document.getElementById('queryType').value,
-    query_value: document.getElementById('queryValue').value.trim(),
-    sort: document.getElementById('sortValue').value.trim(),
+    query_type: type,
+    query_value: queryValue,
+    ids: explicitIds,
+    sort: document.getElementById('sortValue').value,
     start_page: Number(document.getElementById('startPage').value || 1),
     end_page: document.getElementById('endPage').value.trim(),
     start_id: Number(document.getElementById('startId').value || 0),
     end_id: Number(document.getElementById('endId').value || 0),
-    fetch_all_pages: document.getElementById('fetchAll').checked
+    fetch_all_pages: false
   };
+
+  document.getElementById('searchMsg').textContent = 'Searching...';
+  setGlobalStatus('Fetching gallery IDs...');
 
   const res = await fetch('/api/scraper/search', {
     method: 'POST',
@@ -234,16 +497,19 @@ async function runSearch() {
   });
   const data = await res.json();
 
+  clearGlobalStatus();
   currentResults = data.results || [];
   renderRows('#resultsTable', currentResults);
 
   const s = data.summary || {};
   document.getElementById('summaryMsg').textContent = Object.keys(s).length
-    ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
+    ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}–${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
     : 'Summary: none';
 
   document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentResults.length} results.`;
 }
+
+// ── Queue ─────────────────────────────────────────────────────────────────────
 
 async function refreshQueue() {
   const res = await fetch('/api/scraper/queue');
@@ -255,26 +521,39 @@ async function refreshQueue() {
 
 async function addIdsToQueue(ids) {
   if (!ids.length) return;
+  setGlobalStatus('Adding to queue...');
   await fetch('/api/scraper/queue/add', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids })
   });
+  clearGlobalStatus();
   await refreshQueue();
 }
 
+// ── Event bindings ────────────────────────────────────────────────────────────
+
 document.getElementById('refreshStatusBtn').onclick = refreshStatus;
+
 document.getElementById('startBtn').onclick = async () => {
+  setGlobalStatus('Starting scraper...');
   await fetch('/api/scraper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args: [] }) });
   await refreshStatus();
+  clearGlobalStatus();
 };
+
 document.getElementById('stopBtn').onclick = async () => {
+  setGlobalStatus('Stopping scraper...');
   await fetch('/api/scraper/stop', { method: 'POST' });
   await refreshStatus();
+  clearGlobalStatus();
 };
+
 document.getElementById('startQueueBtn').onclick = async () => {
+  setGlobalStatus('Starting scraper from queue...');
   await fetch('/api/scraper/queue/start', { method: 'POST' });
   await refreshStatus();
+  clearGlobalStatus();
 };
 
 document.getElementById('loadConfigBtn').onclick = loadConfig;
@@ -302,6 +581,7 @@ document.getElementById('clearQueueBtn').onclick = async () => {
 document.getElementById('resultsSelectAll').addEventListener('change', (e) => setSelectAll('#resultsTable', e.target.checked));
 document.getElementById('queueSelectAll').addEventListener('change', (e) => setSelectAll('#queueTable', e.target.checked));
 
+// ── Initialise ────────────────────────────────────────────────────────────────
 loadConfig();
 refreshStatus();
 refreshQueue();

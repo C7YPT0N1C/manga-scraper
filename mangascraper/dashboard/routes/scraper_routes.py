@@ -189,6 +189,28 @@ def _start_process(cli_args: list[str]):
     return {"message": "Scraper started.", "args": cli_args}, None
 
 
+@scraper_bp.route("/extensions", methods=["GET"])
+def list_extensions():
+    """Return installed extensions from the local manifest."""
+    try:
+        from mangascraper.extensions.extension_manager import load_local_manifest
+        manifest = load_local_manifest()
+        extensions = [
+            {
+                "name": ext.get("name", ""),
+                "label": ext.get("name", ""),
+                "description": ext.get("description", ""),
+                "version": ext.get("version", ""),
+                "installed": ext.get("installed", False),
+            }
+            for ext in (manifest.get("extensions") or [])
+            if ext.get("name")
+        ]
+    except Exception:
+        extensions = []
+    return jsonify({"extensions": extensions})
+
+
 @scraper_bp.route("/config", methods=["GET"])
 def config_get():
     return jsonify({"config": _current_config()})

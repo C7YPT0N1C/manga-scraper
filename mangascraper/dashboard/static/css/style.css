@@ -132,3 +132,18 @@ select {
   margin-top: 10px;
   color: #ccc;
 }
+
+/* Global status bar in the header */
+#globalStatus {
+  font-size: 0.85rem;
+  color: #adf;
+  margin-top: 4px;
+  min-height: 1.2em;
+  font-style: italic;
+}
+
+/* Labels in search/config grids that are hidden — don't leave a phantom gap */
+#searchGrid label[style*="display:none"],
+#searchGrid label[style*="display: none"] {
+  display: none !important;
+}
