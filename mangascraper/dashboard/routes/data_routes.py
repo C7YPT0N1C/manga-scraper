@@ -4,7 +4,7 @@
 import os, time, threading, io, requests, json, re, zipfile, tempfile, posixpath
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
-from mangascraper.core import api as scraperapi
+from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
 
 # ── Blueprints ────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import DEFAULT_PAGE_SORT, logger
-from mangascraper.core import api as scraperapi
+from mangascraper.core.api import api as scraperapi
 from mangascraper.core import downloader as scraper_downloader
 
 ####################################################################################################################

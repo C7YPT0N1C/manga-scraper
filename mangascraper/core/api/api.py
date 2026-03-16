@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/core/api.py
+# mangascraper/core/api/api.py
 
 import os, sqlite3, threading, atexit, json, time, random, cloudscraper, requests, re, socket, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
+from mangascraper.core.api.smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
 
 ####################################################################################################################
 # GLOBAL VARIABLES
@@ -1214,129 +1215,6 @@ class DB:
         }
 
     @staticmethod
-    def _tokenise_smart_expression(expression: str) -> list[str]:
-        text = Helpers.safe_text(expression, "").strip()
-        if not text:
-            return []
-        tokens = re.findall(r"F\d+|AND|OR|NOT|\(|\)", text, flags=re.IGNORECASE)
-        normalised = [token.upper() for token in tokens]
-        compact_source = re.sub(r"\s+", "", text).upper()
-        compact_tokens = "".join(normalised)
-        if compact_source != compact_tokens:
-            raise ValueError("Expression contains unsupported tokens. Use only F#, AND, OR, NOT, and brackets.")
-        return normalised
-
-    @staticmethod
-    def _smart_expression_to_rpn(expression: str) -> list[str]:
-        tokens = DB._tokenise_smart_expression(expression)
-        if not tokens:
-            raise ValueError("Smart expression is required for smart collections.")
-
-        def _kind(token: str) -> str:
-            if re.fullmatch(r"F\d+", token):
-                return "operand"
-            if token in {"AND", "OR"}:
-                return "binary"
-            if token == "NOT":
-                return "unary"
-            if token == "(":
-                return "lparen"
-            if token == ")":
-                return "rparen"
-            return "unknown"
-
-        prev_kind = None
-        balance = 0
-        for token in tokens:
-            kind = _kind(token)
-            if kind == "unknown":
-                raise ValueError(f"Unsupported token '{token}'.")
-
-            if kind == "lparen":
-                balance += 1
-            elif kind == "rparen":
-                balance -= 1
-                if balance < 0:
-                    raise ValueError("Expression has mismatched brackets.")
-
-            if prev_kind is None:
-                if kind not in {"operand", "unary", "lparen"}:
-                    raise ValueError("Expression must start with a filter, NOT, or '(' .")
-            elif prev_kind in {"operand", "rparen"}:
-                if kind in {"operand", "unary", "lparen"}:
-                    raise ValueError("Explicit AND is required between filters and groups.")
-            elif prev_kind in {"binary", "unary", "lparen"}:
-                if kind in {"binary", "rparen"}:
-                    raise ValueError("Expression has an operator in an invalid position.")
-
-            prev_kind = kind
-
-        if balance != 0:
-            raise ValueError("Expression has mismatched brackets.")
-        if prev_kind in {"binary", "unary", "lparen"}:
-            raise ValueError("Expression cannot end with an operator.")
-
-        precedence = {"NOT": 3, "AND": 2, "OR": 1}
-        right_associative = {"NOT"}
-        output = []
-        stack = []
-
-        for token in tokens:
-            if re.fullmatch(r"F\d+", token):
-                output.append(token)
-                continue
-            if token in {"AND", "OR", "NOT"}:
-                while stack and stack[-1] in precedence:
-                    top = stack[-1]
-                    if top not in precedence:
-                        break
-                    if precedence[top] > precedence[token] or (
-                        precedence[top] == precedence[token] and token not in right_associative
-                    ):
-                        output.append(stack.pop())
-                    else:
-                        break
-                stack.append(token)
-                continue
-            if token == "(":
-                stack.append(token)
-                continue
-            if token == ")":
-                while stack and stack[-1] != "(":
-                    output.append(stack.pop())
-                if not stack:
-                    raise ValueError("Expression has mismatched brackets.")
-                stack.pop()
-
-        while stack:
-            top = stack.pop()
-            if top in {"(", ")"}:
-                raise ValueError("Expression has mismatched brackets.")
-            output.append(top)
-
-        return output
-
-    @staticmethod
-    def _evaluate_smart_rpn(rpn_tokens: list[str], filter_result_map: dict[str, bool]) -> bool:
-        stack = []
-        for token in rpn_tokens:
-            if re.fullmatch(r"F\d+", token):
-                stack.append(bool(filter_result_map.get(token, False)))
-                continue
-            if token == "NOT":
-                if not stack:
-                    return False
-                stack.append(not stack.pop())
-                continue
-            if token in {"AND", "OR"}:
-                if len(stack) < 2:
-                    return False
-                right = bool(stack.pop())
-                left = bool(stack.pop())
-                stack.append(left and right if token == "AND" else left or right)
-        return bool(stack[-1]) if len(stack) == 1 else False
-
-    @staticmethod
     def _collection_gallery_dataset(cursor) -> tuple[list[dict], dict[int, str], dict[int, str]]:
         cursor.execute("SELECT id, name FROM Tags")
         tag_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
@@ -1629,7 +1507,7 @@ class DB:
                 if DB._normalise_collection_type(collection.get("collection_type", "normal")) != "smart":
                     raise ValueError("Smart rule can only be set for smart collections.")
 
-                rpn = DB._smart_expression_to_rpn(expression)
+                rpn = smart_expression_to_rpn(expression)
                 if not rpn:
                     raise ValueError("Smart expression cannot be empty.")
 
@@ -1764,7 +1642,7 @@ class DB:
                     conn.commit()
                     return {"updated": True, "matched": 0}
 
-                rpn = DB._smart_expression_to_rpn(expression)
+                rpn = smart_expression_to_rpn(expression)
                 cursor.execute(
                     "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
                     (int(collection_id),),
@@ -1791,7 +1669,7 @@ class DB:
                     for key in referenced_keys:
                         rule = filter_map.get(key)
                         result_map[key] = DB._filter_matches_gallery(rule["type"], rule["value"], gallery_row) if rule else False
-                    if DB._evaluate_smart_rpn(rpn, result_map):
+                    if evaluate_smart_rpn(rpn, result_map):
                         matched_gallery_ids.append(int(gallery_row["id"]))
 
                 cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND is_rule=1", (int(collection_id),))
@@ -1957,8 +1835,7 @@ class DB:
     @staticmethod
     def list_download_locations() -> list[dict]:
         """Return one dict per distinct download root, with a gallery count."""
-        DB.init_db()  # Ensure schema is initialized
-        DB.prune_unmanaged_download_locations()  # Prune stale locations (skips init_db)
+        DB.init_db()
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -2003,37 +1880,6 @@ class DB:
                 (root_path, extension_used),
             )
             conn.commit()
-
-    @staticmethod
-    def prune_unmanaged_download_locations() -> dict:
-        """Remove DownloadLocations rows whose root path is missing the marker file."""
-        # Note: Do NOT call init_db() here; called by database_cleanup() or by list_download_locations()
-        removed = {"roots": 0, "gallery_locations": 0}
-        with db_lock, DB.dbconnect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, root_path FROM DownloadLocations")
-            rows = cursor.fetchall()
-            for loc_id, root_path in rows:
-                loc_id = Helpers.normalise_integer(loc_id)
-                root_text = Helpers.safe_text(root_path, "").strip()
-                if loc_id is None or not root_text:
-                    continue
-
-                marker_path = os.path.join(root_text, DOWNLOAD_ROOT_MARKER_FILE)
-                if os.path.isfile(marker_path):
-                    continue
-
-                cursor.execute("DELETE FROM GalleryLocations WHERE location_id=?", (loc_id,))
-                gl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
-                cursor.execute("DELETE FROM DownloadLocations WHERE id=?", (loc_id,))
-                dl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
-                if gl_deleted > 0:
-                    removed["gallery_locations"] += int(gl_deleted)
-                if dl_deleted > 0:
-                    removed["roots"] += int(dl_deleted)
-
-            conn.commit()
-        return removed
 
     @staticmethod
     def database_cleanup() -> dict:

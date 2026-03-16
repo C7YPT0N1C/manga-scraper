@@ -5,7 +5,7 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import api as scraperapi
+from mangascraper.core.api import api as scraperapi
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
     ensure_extension_cli,

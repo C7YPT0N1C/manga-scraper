@@ -7,7 +7,7 @@ from urllib.request import urlopen
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import api as scraperapi
+from mangascraper.core.api import api as scraperapi
 from mangascraper.extensions import * # Ensure extensions package is recognised
 
 # ------------------------------------------------------------

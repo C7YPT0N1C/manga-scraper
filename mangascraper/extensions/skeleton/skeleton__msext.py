@@ -6,8 +6,8 @@ from tqdm import tqdm
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.core import api as scraperapi
-from mangascraper.core.api import *
+from mangascraper.core.api import api as scraperapi
+from mangascraper.core.api.api import *
 from mangascraper.extensions.extension_manager import (
     calculate_extension_download_path,
     cleanup_download_tree,

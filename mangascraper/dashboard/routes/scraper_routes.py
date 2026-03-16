@@ -4,7 +4,7 @@
 import os, time, sys, threading, subprocess, socket, secrets, shlex
 from flask import Blueprint, jsonify, request
 
-from mangascraper.core import api as scraperapi
+from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
 
 scraper_bp = Blueprint("scraper", __name__)
