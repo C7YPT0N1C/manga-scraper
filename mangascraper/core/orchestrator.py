@@ -20,71 +20,11 @@ LOG_DIR = f"{TEMP_DIR}/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 RUNTIME_PROGRESS_FILE = os.path.join(TEMP_DIR, "runtime-progress.json")
 
-# Persisted pointer to the active runtime log file.
-_ACTIVE_RUNTIME_LOG_POINTER = os.path.join(LOG_DIR, ".active_runtime_log")
-
-
-def _resolve_runtime_log_file() -> str:
-    """Choose one runtime log file and keep reusing it across reloads/restarts."""
-    os.makedirs(LOG_DIR, exist_ok=True)
-
-    # 1) Respect explicit override if provided.
-    explicit = os.getenv("MANGASCRAPER_RUNTIME_LOG_FILE")
-    if explicit:
-        resolved = os.path.realpath(explicit)
-        try:
-            with open(_ACTIVE_RUNTIME_LOG_POINTER, "w", encoding="utf-8") as f:
-                f.write(resolved)
-        except Exception:
-            pass
-        return resolved
-
-    # 2) Reuse the persisted active file if it exists.
-    if os.path.isfile(_ACTIVE_RUNTIME_LOG_POINTER):
-        try:
-            with open(_ACTIVE_RUNTIME_LOG_POINTER, "r", encoding="utf-8") as f:
-                candidate = f.read().strip()
-            if candidate:
-                candidate_real = os.path.realpath(candidate)
-                if os.path.isfile(candidate_real):
-                    return candidate_real
-        except Exception:
-            pass
-
-    # 3) Reuse the newest existing runtime-*.log if available.
-    latest_path = None
-    latest_mtime = -1.0
-    try:
-        for name in os.listdir(LOG_DIR):
-            if not name.startswith("runtime-") or not name.endswith(".log"):
-                continue
-            path = os.path.join(LOG_DIR, name)
-            if not os.path.isfile(path):
-                continue
-            mtime = os.path.getmtime(path)
-            if mtime > latest_mtime:
-                latest_mtime = mtime
-                latest_path = path
-    except Exception:
-        latest_path = None
-
-    if latest_path:
-        chosen = os.path.realpath(latest_path)
-    else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        chosen = os.path.join(LOG_DIR, f"runtime-{timestamp}.log")
-
-    try:
-        with open(_ACTIVE_RUNTIME_LOG_POINTER, "w", encoding="utf-8") as f:
-            f.write(os.path.realpath(chosen))
-    except Exception:
-        pass
-
-    return chosen
-
-
-# Runtime log file used by all handlers in this process.
-RUNTIME_LOG_FILE = _resolve_runtime_log_file()
+# Runtime log file used by this process.
+RUNTIME_LOG_FILE = os.path.join(
+    LOG_DIR,
+    f"runtime-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+)
 
 
 def _cleanup_empty_runtime_logs():
@@ -93,8 +33,6 @@ def _cleanup_empty_runtime_logs():
         if not os.path.isdir(LOG_DIR):
             return
         for name in os.listdir(LOG_DIR):
-            if name == os.path.basename(_ACTIVE_RUNTIME_LOG_POINTER):
-                continue
             path = os.path.join(LOG_DIR, name)
             if not os.path.isfile(path):
                 continue

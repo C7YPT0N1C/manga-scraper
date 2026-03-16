@@ -387,6 +387,8 @@ def logs_list():
             mtime = os.path.getmtime(full)
         except OSError:
             continue
+        if size <= 0:
+            continue
         files.append({"name": name, "size": size, "mtime": mtime})
     return jsonify({"files": files})
 
