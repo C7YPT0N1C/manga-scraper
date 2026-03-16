@@ -247,8 +247,7 @@ EOF
 
     # mangascraper-dashboard
     echo "Creating systemd service for mangascraper-dashboard..."
-    if [ ! -f /etc/systemd/system/mangascraper-dashboard.service ]; then
-        sudo tee /etc/systemd/system/mangascraper-dashboard.service > /dev/null <<EOF
+    sudo tee /etc/systemd/system/mangascraper-dashboard.service > /dev/null <<EOF
 [Unit]
 Description=Manga Scraper API
 After=network.target
@@ -256,14 +255,14 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$SCRAPER_DIR
-ExecStart=$SCRAPER_DIR/venv/bin/python3 $SCRAPER_DIR/mangascraper/dashboard/control_panel.py
+ExecStart=$SCRAPER_DIR/venv/bin/python3 -m mangascraper.dashboard.control_panel
 Restart=always
+RestartSec=3
 EnvironmentFile=$ENV_FILE
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
     systemctl daemon-reexec
     systemctl enable filebrowser mangascraper-dashboard tor
