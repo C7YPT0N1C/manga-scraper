@@ -1148,7 +1148,7 @@ class DB:
             return DB.list_galleries(status=status)
 
         @staticmethod
-        def list_as_dicts(status=None) -> list[dict]:
+        def list_as_dicts(status=None) -> "list[dict]":
             """Return gallery rows as dicts with string-safe fields."""
             rows = DB.list_galleries(status=status)
             result = []
