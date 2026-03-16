@@ -9,6 +9,7 @@ import io
 import zipfile
 import posixpath
 import json
+import re
 
 import requests
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
@@ -218,6 +219,19 @@ def _parse_json_int_list(value) -> list[int]:
     return items
 
 
+def _gallery_id_from_name(value: str) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.match(r"^\((\d+)\)", text)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except Exception:
+        return None
+
+
 def _count_pages_on_disk(path: str) -> int | None:
     if not path:
         return None
@@ -386,6 +400,90 @@ def _apply_gallery_db_meta(items: list[dict]) -> list[dict]:
         item["status"] = meta["status"]
         item["favourite"] = bool(meta["favourite"])
         item["rating"] = meta["rating"]
+
+    return items
+
+
+def _apply_creator_db_meta(items: list[dict]) -> list[dict]:
+    """Overlay creator rows with DB-backed tags/languages/favourite using Creators + Galleries."""
+    if not items:
+        return items
+
+    scraperapi.DB.init_db()
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_name_map = {int(tag_id): str(name) for tag_id, name in cursor.fetchall() if tag_id is not None and name}
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
+
+        cursor.execute("SELECT id, name, display_name, most_popular_tags, favourite FROM Creators")
+        creator_rows = cursor.fetchall()
+
+        creator_match: dict[str, dict] = {}
+        creator_ids: set[int] = set()
+        for item in items:
+            creator_name = str(item.get("label") or item.get("name") or "").strip()
+            if not creator_name:
+                continue
+
+            creator_name_lower = creator_name.lower()
+            matched = None
+            for row in creator_rows:
+                creator_id = int(row[0])
+                raw_name = str(row[1] or "").strip()
+                display_name = str(row[2] or "").strip()
+
+                if display_name and display_name.lower() == creator_name_lower:
+                    matched = row
+                    break
+
+            if matched is None:
+                for row in creator_rows:
+                    raw_name = str(row[1] or "").strip()
+                    if raw_name and raw_name.lower() == creator_name_lower:
+                        matched = row
+                        break
+
+            if matched is None:
+                continue
+
+            creator_id = int(matched[0])
+            creator_match[creator_name] = {
+                "creator_id": creator_id,
+                "most_popular_tags": _parse_json_int_list(matched[3]),
+                "favourite": bool(matched[4]),
+            }
+            creator_ids.add(creator_id)
+
+        creator_languages: dict[int, set[str]] = {creator_id: set() for creator_id in creator_ids}
+        if creator_ids:
+            cursor.execute("SELECT creator_ids, language_ids FROM Galleries")
+            for row in cursor.fetchall():
+                gallery_creator_ids = set(_parse_json_int_list(row[0]))
+                if not gallery_creator_ids:
+                    continue
+                gallery_language_ids = _parse_json_int_list(row[1])
+                gallery_languages = {language_name_map[language_id] for language_id in gallery_language_ids if language_id in language_name_map}
+                for creator_id in gallery_creator_ids.intersection(creator_ids):
+                    creator_languages.setdefault(int(creator_id), set()).update(gallery_languages)
+
+    for item in items:
+        creator_name = str(item.get("label") or item.get("name") or "").strip()
+        matched = creator_match.get(creator_name)
+        if not matched:
+            continue
+
+        creator_id = int(matched["creator_id"])
+        tag_names = [tag_name_map[tag_id] for tag_id in matched["most_popular_tags"] if tag_id in tag_name_map]
+        language_names = sorted(creator_languages.get(creator_id, set()), key=str.lower)
+
+        item["tags"] = sorted(set(tag_names), key=str.lower)
+        item["tag_count"] = len(item["tags"])
+        item["languages"] = language_names
+        item["favourite"] = bool(matched["favourite"]) or bool(item.get("favourite"))
 
     return items
 
@@ -656,6 +754,8 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
         row = dict(row)
         row["creator_name"] = creator_name
         row["gallery_name"] = gallery_name
+        if row.get("gallery_id") is None:
+            row["gallery_id"] = _gallery_id_from_name(gallery_name)
         valid_rows.append(row)
         if row.get("gallery_id") is not None:
             gallery_ids.add(int(row["gallery_id"]))
@@ -789,7 +889,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 continue
             gallery_path = _safe_path(root_path, creator_name, gallery_name)
             meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_name or "").strip().lower()), {})
-            gallery_id = meta.get("gallery_id")
+            gallery_id = meta.get("gallery_id") or _gallery_id_from_name(gallery_name)
             page_count = meta.get("num_pages") if meta else None
             if page_count is None:
                 page_count = _count_pages_on_disk(gallery_path or "")
@@ -1074,6 +1174,7 @@ def list_creators():
         root_creators, _ = _load_gallery_browser_root_dataset(base)
         creators.update(root_creators)
         creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
+        creator_items = _apply_creator_db_meta(creator_items)
         return jsonify({"creators": creator_items, "filters": _table_filter_options(), "root_path": base})
 
     for item in _available_roots():
@@ -1105,6 +1206,7 @@ def list_creators():
             existing["max_page_count"] = max(int(existing.get("max_page_count") or 0), int(creator_item.get("max_page_count") or 0))
 
     creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
+    creator_items = _apply_creator_db_meta(creator_items)
     return jsonify({"creators": creator_items, "filters": _table_filter_options(), "root_path": ""})
 
 

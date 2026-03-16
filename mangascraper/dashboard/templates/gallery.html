@@ -137,6 +137,14 @@ function itemLabel(item) {
 	return typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
 }
 
+function parseGalleryId(value) {
+	const text = String(value || '').trim();
+	const match = text.match(/^\((\d+)\)/);
+	if (!match) return null;
+	const galleryId = Number(match[1]);
+	return Number.isFinite(galleryId) ? galleryId : null;
+}
+
 function _withRoot(url) {
 	if (!_currentRootPath) return url;
 	const sep = url.includes('?') ? '&' : '?';
@@ -350,6 +358,9 @@ function _renderGalleryDetail(gallery) {
 
 async function openGalleryDetail(gallery) {
 	_detailGallery = { ...gallery };
+	if (!_detailGallery.gallery_id) {
+		_detailGallery.gallery_id = parseGalleryId(itemLabel(gallery));
+	}
 	_renderGalleryDetail(_detailGallery);
 	document.getElementById('galleryDetailModal').style.display = '';
 
@@ -759,6 +770,9 @@ document.getElementById('galleryDetailReadBtn').addEventListener('click', () => 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
 	if (!_detailGallery) return;
 	const galleryName = itemLabel(_detailGallery);
+	if (!_detailGallery.gallery_id) {
+		_detailGallery.gallery_id = parseGalleryId(galleryName);
+	}
 	const newTarget = !Boolean(_detailGallery.favourite);
 	const isFav = await toggleGalleryFavourite(_detailGallery.gallery_id, galleryName, newTarget);
 	if (isFav === null) return;
