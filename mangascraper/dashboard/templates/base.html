@@ -54,6 +54,11 @@
       return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
     }
 
+    function _asText(value, fallback = '-') {
+      if (value === null || value === undefined || value === '') return fallback;
+      return String(value);
+    }
+
     window.setDynamicBarStatusOverride = function(statusText) {
       window.__dynamicBarStatusOverride = String(statusText || '').trim();
     };
@@ -70,20 +75,29 @@
         const c = data.counts || {};
         const p = data.progress || {};
         const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+        const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
+        const completedCount = Number(c.completed ?? p.completed ?? 0);
+        const failedCount = Number(c.failed ?? p.failed ?? 0);
+        const skippedCount = Number(c.skipped ?? p.skipped ?? 0);
+        const pagesTotal = Number(p.total_pages ?? 0);
+        const pagesProcessed = Number(p.pages_processed ?? 0);
+        const pagesPerSecond = Number(p.pages_per_second ?? 0);
+
         const parts = [
           `Status: ${dynamicStatus}`,
-          `PID: ${data.pid ?? 'N/A'}`,
-          `Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`,
-          `Queue: ${data.queue_total ?? 0}`,
-          `Completed: ${c.completed ?? 0}`,
-          `Failed: ${c.failed ?? 0}`,
-          `Skipped: ${c.skipped ?? 0}`,
+          `PID: ${_asText(data.pid, 'N/A')}`,
+          `Queued Galleries: ${_asText(runTotal, 0)}`,
+          `Completed: ${_asText(completedCount, 0)}/${_asText(runTotal, 0)}`,
+          `Failed: ${_asText(failedCount, 0)}/${_asText(runTotal, 0)}`,
+          `Skipped: ${_asText(skippedCount, 0)}/${_asText(runTotal, 0)}`,
         ];
-        if ((p.total_pages ?? 0) > 0) {
-          parts.push(`Pages: ${p.pages_processed ?? 0}/${p.total_pages ?? 0}`);
-          parts.push(`Pages/s: ${Number(p.pages_per_second ?? 0).toFixed(2)}`);
+        if (pagesTotal > 0) {
+          parts.push(`Pages: ${_asText(pagesProcessed, 0)}/${_asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
+        }
+        parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
+        parts.push(`Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`);
+        if (pagesTotal > 0) {
           parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
-          parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
         }
         const line = parts.join(' | ');
         content.textContent = line;
