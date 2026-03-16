@@ -10,6 +10,7 @@ from dotenv import load_dotenv, set_key
 ##########################################################################################
 SCRAPER_DIR = "/opt/manga-scraper"
 TEMP_DIR = "/tmp/manga-scraper"
+os.makedirs(TEMP_DIR, exist_ok=True)
 
 ##########################################################################################
 # LOGGER
@@ -17,6 +18,7 @@ TEMP_DIR = "/tmp/manga-scraper"
 
 LOG_DIR = f"{TEMP_DIR}/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
+RUNTIME_PROGRESS_FILE = os.path.join(TEMP_DIR, "runtime-progress.json")
 
 # Persisted pointer to the active runtime log file.
 _ACTIVE_RUNTIME_LOG_POINTER = os.path.join(LOG_DIR, ".active_runtime_log")

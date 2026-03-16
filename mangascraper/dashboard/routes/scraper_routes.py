@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/scraper_routes.py
 
+import json
 import shlex
 import subprocess
 import sys
@@ -78,6 +79,8 @@ def _queue_rows(ids: list[int], metadata: dict | None = None) -> list[dict]:
             "artists": meta.get("artists") or [],
             "groups": meta.get("groups") or [],
             "tags": meta.get("tags") or [],
+            "characters": meta.get("characters") or [],
+            "parodies": meta.get("parodies") or [],
             "languages": meta.get("languages") or [],
             "pages": meta.get("pages") or 0,
         })
@@ -172,6 +175,36 @@ def _status_counts() -> dict:
     return counts
 
 
+def _queue_total() -> int:
+    try:
+        return len(scraperapi.Cache.Load.queued_galleries() or [])
+    except Exception:
+        return 0
+
+
+def _clear_runtime_progress() -> None:
+    progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
+    if not progress_file:
+        return
+    try:
+        if os.path.isfile(progress_file):
+            os.remove(progress_file)
+    except Exception:
+        pass
+
+
+def _read_runtime_progress() -> dict:
+    progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
+    if not progress_file or not os.path.isfile(progress_file):
+        return {}
+    try:
+        with open(progress_file, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _start_process(cli_args: list[str]):
     global _scraper_process, _started_at, _last_args
 
@@ -180,6 +213,7 @@ def _start_process(cli_args: list[str]):
             return None, ({"message": "Scraper is already running.", "pid": _scraper_process.pid}, 409)
 
         cmd = [sys.executable, "-m", "mangascraper.cli", *cli_args]
+        _clear_runtime_progress()
         _scraper_process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -193,22 +227,50 @@ def _start_process(cli_args: list[str]):
 
 @scraper_bp.route("/extensions", methods=["GET"])
 def list_extensions():
-    """Return installed extensions from the local manifest."""
+    """Return installed extensions from the local manifest with remote version comparison."""
+    import json as _json
+    import re as _re
+
+    def _ver(v):
+        parts = _re.findall(r'\d+', str(v))
+        return tuple(int(p) for p in parts) if parts else (0,)
+
     try:
         from mangascraper.extensions.extension_manager import calculate_extension_download_path, load_local_manifest
         manifest = load_local_manifest()
-        extensions = [
-            {
-                "name": ext.get("name", ""),
-                "label": ext.get("name", ""),
+
+        # Try local sibling repo for version comparison (no network required)
+        master_map = {}
+        try:
+            _base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+            _mpath = os.path.join(_base, '..', 'manga-scraper-extensions', 'master_manifest.json')
+            if os.path.isfile(_mpath):
+                with open(_mpath, 'r', encoding='utf-8') as _f:
+                    _remote = _json.load(_f)
+                for _e in (_remote.get('extensions') or []):
+                    if _e.get('name'):
+                        master_map[_e['name']] = _e.get('version', '0')
+        except Exception:
+            pass
+
+        extensions = []
+        for ext in (manifest.get("extensions") or []):
+            name = ext.get("name", "")
+            if not name:
+                continue
+            local_v = ext.get("version", "0")
+            remote_v = master_map.get(name, local_v)
+            update_available = _ver(remote_v) > _ver(local_v)
+            extensions.append({
+                "name": name,
+                "label": name,
                 "description": ext.get("description", ""),
-                "version": ext.get("version", ""),
+                "version": local_v,
+                "remote_version": remote_v,
+                "update_available": update_available,
                 "installed": ext.get("installed", False),
-                "default_output_folder": calculate_extension_download_path(ext.get("name", "")) if ext.get("name") else "",
-            }
-            for ext in (manifest.get("extensions") or [])
-            if ext.get("name")
-        ]
+                "default_output_folder": calculate_extension_download_path(name) if name else "",
+            })
     except Exception:
         extensions = []
     return jsonify({"extensions": extensions})
@@ -458,13 +520,20 @@ def status():
         started_at = _started_at
         args = list(_last_args)
 
+    progress = _read_runtime_progress() if running else {}
+    counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+    if not running:
+        _clear_runtime_progress()
+
     return jsonify({
         "status": "running" if running else "stopped",
         "pid": pid,
         "started_at": started_at,
         "uptime_seconds": int(time.time() - started_at) if running and started_at else 0,
         "args": args,
-        "counts": _status_counts(),
+        "counts": counts,
+        "queue_total": _queue_total(),
+        "progress": progress,
     })
 
 @scraper_bp.route("/start", methods=["POST"])
@@ -486,6 +555,7 @@ def stop_scraper():
         if not _is_running():
             _scraper_process = None
             _started_at = None
+            _clear_runtime_progress()
             return jsonify({"message": "Scraper is not running."}), 409
 
         _scraper_process.terminate()
@@ -496,5 +566,6 @@ def stop_scraper():
 
         _scraper_process = None
         _started_at = None
+        _clear_runtime_progress()
 
     return jsonify({"message": "Scraper stopped."})

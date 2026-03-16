@@ -6,10 +6,9 @@
 <section>
   <h3>Runtime</h3>
   <button id="refreshAllBtn">Refresh Scraper</button>
-  <button id="startBtn">Start Scraper</button>
+  <button id="startBtn" title="Start a default scraper run using the current configuration, not the queue.">Start Default Run</button>
   <button id="stopBtn">Stop Scraper</button>
-  <button id="startQueueBtn">Start From Queue</button>
-  <p id="runtimeStatus">Loading runtime status...</p>
+  <button id="startQueueBtn" title="Start a scraper run using only the galleries currently in the queue.">Start Queue Run</button>
 </section>
 
 <!-- ===== CONFIGURATION ===== -->
@@ -121,10 +120,10 @@
   <table id="historyTable">
     <thead>
       <tr>
-        <th>Type</th>
-        <th>Target</th>
-        <th>IDs</th>
-        <th>Action</th>
+        <th>Query Type</th>
+        <th>Query Target</th>
+        <th>No of Galleries</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -201,6 +200,10 @@
     </label>
 
   </div>
+  <label id="row_archiveMode" title="Fetch every page of results and add all galleries directly to the queue without going through the results browser. Use for bulk archiving only — can take a long time.">
+    Archive Mode
+    <input id="archiveMode" type="checkbox">
+  </label>
   <button id="searchBtn">Search</button>
   <button id="addAllBtn">Add All Results To Queue</button>
   <button id="addSelectedBtn">Add Selected Results</button>
@@ -213,6 +216,7 @@
         <th><input id="resultsSelectAll" type="checkbox"></th>
         <th>ID</th>
         <th>Title</th>
+        <th></th>
         <th>Artists/Groups</th>
         <th>Language</th>
         <th>Pages</th>
@@ -220,7 +224,63 @@
     </thead>
     <tbody></tbody>
   </table>
+
+  <div id="otherResultsPanel" style="display:none">
+    <h4>Other / Previous Search Results</h4>
+    <table id="otherResultsTable">
+      <thead>
+        <tr>
+          <th><input id="otherResultsSelectAll" type="checkbox"></th>
+          <th>ID</th>
+          <th>Title</th>
+          <th></th>
+          <th>Artists/Groups</th>
+          <th>Language</th>
+          <th>Pages</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </section>
+
+<!-- ===== QUEUE ===== -->
+<!-- ===== RESULTS FILTER ===== -->
+<div id="filterPanel" style="display:none">
+  <h4>Filter Results</h4>
+  <div id="filterGrid">
+    <label>Artists <input id="flt_artists" type="text" placeholder="comma-separated"></label>
+    <label>Groups <input id="flt_groups" type="text" placeholder="comma-separated"></label>
+    <label>Include Tags <input id="flt_tags" type="text" placeholder="comma-separated"></label>
+    <label>Exclude Tags <input id="flt_excludeTags" type="text" placeholder="comma-separated"></label>
+    <label>Languages <input id="flt_language" type="text" placeholder="comma-separated"></label>
+    <label>Min Pages <input id="flt_minPages" type="number" min="0" placeholder="0"></label>
+    <label>Max Pages <input id="flt_maxPages" type="number" min="0" placeholder="∞"></label>
+  </div>
+  <button id="applyFilterBtn">Apply Filters</button>
+  <button id="clearFilterBtn">Clear Filters</button>
+  <p id="filterMsg"></p>
+</div>
+
+<!-- ===== GALLERY DETAIL MODAL ===== -->
+<div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
+  <div id="galleryDetailPanel" class="detail-modal-panel">
+    <div class="detail-modal-header">
+      <strong id="gdTitle"></strong>
+      <button id="galleryDetailClose">&#x2715; Close</button>
+    </div>
+    <div class="detail-modal-body">
+      <p><strong>ID:</strong> <span id="gdId"></span></p>
+      <p><strong>Artists:</strong> <span id="gdArtists"></span></p>
+      <p><strong>Groups:</strong> <span id="gdGroups"></span></p>
+      <p><strong>Languages:</strong> <span id="gdLanguages"></span></p>
+      <p><strong>Pages:</strong> <span id="gdPages"></span></p>
+      <p><strong>Tags:</strong> <span id="gdTags"></span></p>
+      <p><strong>Characters:</strong> <span id="gdCharacters"></span></p>
+      <p><strong>Parodies:</strong> <span id="gdParodies"></span></p>
+    </div>
+  </div>
+</div>
 
 <!-- ===== QUEUE ===== -->
 <section>
@@ -249,7 +309,15 @@
 {% block scripts %}
 <script>
 let currentResults = [];
+let previousResults = [];
+let queueIds = new Set();
 let extensionOutputFolders = {};
+let _resultsById = {};
+const selectedRows = {
+  '#resultsTable': new Set(),
+  '#otherResultsTable': new Set(),
+  '#queueTable': new Set(),
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -258,38 +326,114 @@ function asText(v, fallback = '-') {
   return String(v);
 }
 
+function dedupeRows(rows) {
+  const seen = new Set();
+  const unique = [];
+  rows.forEach(row => {
+    const gid = Number(row.id ?? row.gallery_id);
+    if (!Number.isFinite(gid) || seen.has(gid)) return;
+    seen.add(gid);
+    unique.push(row);
+  });
+  return unique;
+}
+
+function snapshotSelection(tableSelector) {
+  const tracked = selectedRows[tableSelector] || new Set();
+  document.querySelectorAll(`${tableSelector} tbody input[type="checkbox"]`).forEach(cb => {
+    const gid = Number(cb.value);
+    if (!Number.isFinite(gid)) return;
+    if (cb.checked) tracked.add(gid);
+    else tracked.delete(gid);
+  });
+  selectedRows[tableSelector] = tracked;
+}
+
 function selectedIds(tableSelector) {
-  const rows = document.querySelectorAll(`${tableSelector} tbody input[type="checkbox"]:checked`);
-  return Array.from(rows).map(cb => Number(cb.value)).filter(Number.isFinite);
+  snapshotSelection(tableSelector);
+  return Array.from(selectedRows[tableSelector] || []).filter(Number.isFinite);
 }
 
 function setSelectAll(selector, checked) {
+  const tracked = selectedRows[selector] || new Set();
   document.querySelectorAll(`${selector} tbody input[type="checkbox"]`).forEach(cb => {
+    const gid = Number(cb.value);
     cb.checked = checked;
+    if (!Number.isFinite(gid)) return;
+    if (checked) tracked.add(gid);
+    else tracked.delete(gid);
   });
+  selectedRows[selector] = tracked;
 }
 
-function renderRows(tableSelector, rows) {
+function renderRows(tableSelector, rows, options = {}) {
   const tbody = document.querySelector(`${tableSelector} tbody`);
+  const tracked = selectedRows[tableSelector] || new Set();
+  const showDetail = !!options.showDetail;
   tbody.innerHTML = '';
   rows.forEach(row => {
     const idValue = row.id ?? row.gallery_id;
     const artists = Array.isArray(row.artists) ? row.artists : [];
     const groups = Array.isArray(row.groups) ? row.groups : [];
     const langsArr = Array.isArray(row.languages) ? row.languages : [];
-    const people = [...(row.artists || []), ...(row.groups || [])].join(', ');
-    const langs = (row.languages || []).join(', ');
     const tr = document.createElement('tr');
+    const detailCell = showDetail ? `<td><button class="detailBtn" data-id="${asText(idValue, '')}">Detail</button></td>` : '';
     tr.innerHTML = `
-      <td><input type="checkbox" value="${asText(idValue, '')}"></td>
+      <td><input type="checkbox" value="${asText(idValue, '')}" ${tracked.has(Number(idValue)) ? 'checked' : ''}></td>
       <td>${asText(idValue)}</td>
       <td>${asText(row.title, '(no title)')}</td>
+      ${detailCell}
       <td>${asText([...artists, ...groups].join(', '), '-')}</td>
       <td>${asText(langsArr.join(', '), '-')}</td>
       <td>${asText(row.pages, '0')}</td>
     `;
     tbody.appendChild(tr);
   });
+
+  tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const gid = Number(cb.value);
+      if (!Number.isFinite(gid)) return;
+      if (cb.checked) tracked.add(gid);
+      else tracked.delete(gid);
+    });
+  });
+
+  if (showDetail) {
+    tbody.querySelectorAll('.detailBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = _resultsById[Number(btn.dataset.id)];
+        if (row) openGalleryDetail(row);
+      });
+    });
+  }
+
+  selectedRows[tableSelector] = tracked;
+}
+
+function currentSearchRows() {
+  return dedupeRows(currentResults).filter(row => !queueIds.has(Number(row.id ?? row.gallery_id)));
+}
+
+function previousSearchRows() {
+  const currentIds = new Set(dedupeRows(currentResults).map(row => Number(row.id ?? row.gallery_id)).filter(Number.isFinite));
+  return dedupeRows(previousResults).filter(row => {
+    const gid = Number(row.id ?? row.gallery_id);
+    return Number.isFinite(gid) && !queueIds.has(gid) && !currentIds.has(gid);
+  });
+}
+
+function renderSearchTables() {
+  const activeRows = currentSearchRows();
+  const otherRows = previousSearchRows();
+  _resultsById = {};
+  [...activeRows, ...otherRows].forEach(row => {
+    _resultsById[Number(row.id ?? row.gallery_id)] = row;
+  });
+  renderRows('#resultsTable', activeRows, { showDetail: true });
+  renderRows('#otherResultsTable', otherRows, { showDetail: true });
+  document.getElementById('otherResultsPanel').style.display = otherRows.length ? '' : 'none';
+  document.getElementById('filterPanel').style.display = activeRows.length || otherRows.length ? '' : 'none';
 }
 
 function renderHistoryRows(rows) {
@@ -329,6 +473,34 @@ function renderHistoryRows(rows) {
       await removeHistoryItem(key);
     });
   });
+}
+
+// ── Global status bar ─────────────────────────────────────────────────────────
+// ── Results table (with Detail button) ───────────────────────────────────────
+
+function renderResultsRows(rows) {
+  currentResults = dedupeRows(rows);
+  renderSearchTables();
+}
+
+// ── Gallery detail modal ───────────────────────────────────────────────────────
+
+function openGalleryDetail(row) {
+  const join = arr => Array.isArray(arr) && arr.length ? arr.join(', ') : '-';
+  document.getElementById('gdId').textContent = row.id ?? '-';
+  document.getElementById('gdTitle').textContent = row.title || `Gallery ${row.id}`;
+  document.getElementById('gdArtists').textContent = join(row.artists);
+  document.getElementById('gdGroups').textContent = join(row.groups);
+  document.getElementById('gdLanguages').textContent = join(row.languages);
+  document.getElementById('gdPages').textContent = row.pages ?? '-';
+  document.getElementById('gdTags').textContent = join(row.tags);
+  document.getElementById('gdCharacters').textContent = join(row.characters);
+  document.getElementById('gdParodies').textContent = join(row.parodies);
+  document.getElementById('galleryDetailModal').style.display = '';
+}
+
+function closeGalleryDetail() {
+  document.getElementById('galleryDetailModal').style.display = 'none';
 }
 
 // ── Global status bar ─────────────────────────────────────────────────────────
@@ -387,7 +559,10 @@ async function loadExtensions() {
     (data.extensions || []).forEach(ext => {
       const opt = document.createElement('option');
       opt.value = ext.name;
-      opt.textContent = ext.label || ext.name;
+      const vStr = ext.version ? ` v${ext.version}` : '';
+      const upStr = ext.update_available ? ` ⬆ (${ext.remote_version} available)` : '';
+      opt.textContent = (ext.label || ext.name) + vStr + upStr;
+      if (ext.update_available) opt.title = `Update available: v${ext.remote_version}`;
       sel.appendChild(opt);
       if (ext.name && ext.default_output_folder) {
         extensionOutputFolders[ext.name] = ext.default_output_folder;
@@ -480,26 +655,56 @@ document.getElementById('cfg_extension').addEventListener('change', function () 
 
 // ── Runtime status ────────────────────────────────────────────────────────────
 
+function formatHudDuration(seconds) {
+  const total = Number(seconds || 0);
+  if (!Number.isFinite(total) || total <= 0) return '0s';
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = Math.floor(total % 60);
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
+function formatHudBytesPerSecond(bytesPerSecond) {
+  const val = Number(bytesPerSecond || 0);
+  if (!Number.isFinite(val) || val <= 0) return '0 B/s';
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  let size = val;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
+}
+
 async function refreshStatus() {
   const res = await fetch('/api/scraper/status');
   const data = await res.json();
   const counts = data.counts || {};
+  const progress = data.progress || {};
 
-  const statusText = `${String(data.status || 'unknown').toUpperCase()}`;
-  const pidText = asText(data.pid, 'N/A');
-  const uptimeText = `${asText(data.uptime_seconds, 0)}s`;
-  const total = asText(counts.total, 0);
-  const completed = asText(counts.completed, 0);
-  const failed = asText(counts.failed, 0);
-  const skipped = asText(counts.skipped, 0);
+  const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+  const parts = [
+    `Status: ${dynamicStatus}`,
+    `PID: ${asText(data.pid, 'N/A')}`,
+    `Uptime: ${formatHudDuration(data.uptime_seconds ?? 0)}`,
+    `Queue: ${asText(data.queue_total, 0)}`,
+    `Completed: ${asText(counts.completed, 0)}`,
+    `Failed: ${asText(counts.failed, 0)}`,
+    `Skipped: ${asText(counts.skipped, 0)}`,
+  ];
+  if ((progress.total_pages ?? 0) > 0) {
+    parts.push(`Pages: ${asText(progress.pages_processed, 0)}/${asText(progress.total_pages, 0)}`);
+    parts.push(`Pages/s: ${Number(progress.pages_per_second ?? 0).toFixed(2)}`);
+    parts.push(`ETA: ${formatHudDuration(progress.eta_seconds ?? 0)}`);
+    parts.push(`Speed: ${formatHudBytesPerSecond(progress.download_speed_bytes ?? 0)}`);
+  }
+  const pretty = parts.join(' | ');
 
-  const pretty =
-    `Status: ${statusText} | PID: ${pidText} | Uptime: ${uptimeText} | ` +
-    `Galleries -> Total: ${total}, Completed: ${completed}, Failed: ${failed}, Skipped: ${skipped}`;
-  document.getElementById('runtimeStatus').textContent = pretty;
-
-  const dock = document.getElementById('runtimeDock');
-  const dockContent = document.getElementById('runtimeDockContent');
+  const dock = document.getElementById('dynamicBar');
+  const dockContent = document.getElementById('dynamicBarContent');
   if (dock && dockContent) {
     dock.style.display = '';
     dockContent.textContent = pretty;
@@ -570,8 +775,6 @@ async function saveConfig() {
 
 async function runSearch() {
   const type = document.getElementById('queryType').value;
-
-  // Build query_value / ids depending on mode
   let queryValue = '';
   let explicitIds = '';
   if (type === 'ids') {
@@ -580,20 +783,33 @@ async function runSearch() {
     queryValue = document.getElementById('queryValue').value.trim();
   }
 
+  const archiveMode = document.getElementById('archiveMode').checked;
+  const startPage = Number(document.getElementById('startPage').value || 1);
+  const endPageRaw = document.getElementById('endPage').value.trim();
+  const endPageNum = (endPageRaw === '' || endPageRaw.toLowerCase() === 'all') ? null : Number(endPageRaw);
+
+  if (!archiveMode && endPageNum !== null && endPageNum - startPage >= 20) {
+    if (!confirm(`Fetching ${endPageNum - startPage + 1} pages may take a long time and risk rate limiting.\nContinue?`)) return;
+  }
+  if (archiveMode) {
+    if (!confirm(`Archive mode will fetch ALL pages and add every gallery to the queue.\nThis can take hours and risks rate limiting.\nContinue?`)) return;
+  }
+
   const payload = {
     query_type: type,
     query_value: queryValue,
     ids: explicitIds,
     sort: document.getElementById('sortValue').value,
-    start_page: Number(document.getElementById('startPage').value || 1),
-    end_page: document.getElementById('endPage').value.trim(),
+    start_page: startPage,
+    end_page: endPageRaw,
     start_id: Number(document.getElementById('startId').value || 0),
     end_id: Number(document.getElementById('endId').value || 0),
-    fetch_all_pages: false
+    fetch_all_pages: archiveMode,
   };
 
-  document.getElementById('searchMsg').textContent = 'Searching...';
-  setGlobalStatus('Fetching gallery IDs...');
+  document.getElementById('searchMsg').textContent = '';
+  window.setDynamicBarStatusOverride('Searching');
+  await refreshStatus();
 
   try {
     const res = await fetch('/api/scraper/search', {
@@ -606,27 +822,38 @@ async function runSearch() {
     const ids = Array.isArray(data.ids) ? data.ids : [];
     const results = Array.isArray(data.results) ? data.results : [];
     const rowById = new Map(results.map(r => [Number(r.id), r]));
-
-    currentResults = ids.map(id => rowById.get(Number(id)) || {
+    const incomingResults = ids.map(id => rowById.get(Number(id)) || {
       id,
       title: `Gallery ${id}`,
       artists: [],
       groups: [],
+      tags: [],
+      characters: [],
+      parodies: [],
       languages: [],
       pages: 0,
     });
-    renderRows('#resultsTable', currentResults);
+
+    previousResults = dedupeRows([...currentResults, ...previousResults].filter(row => !ids.includes(Number(row.id ?? row.gallery_id))));
+    currentResults = incomingResults;
+    renderSearchTables();
 
     const s = data.summary || {};
     document.getElementById('summaryMsg').textContent = Object.keys(s).length
       ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
       : 'Summary: none';
 
-    document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentResults.length} results.`;
+    if (archiveMode && ids.length) {
+      await addIdsToQueue(ids);
+      document.getElementById('searchMsg').textContent = `Archive mode: ${ids.length} galleries added to queue.`;
+    } else {
+      document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentSearchRows().length} current results.`;
+    }
   } catch (err) {
     document.getElementById('searchMsg').textContent = `Search failed: ${err.message}`;
   } finally {
-    clearGlobalStatus();
+    window.setDynamicBarStatusOverride('');
+    await refreshStatus();
   }
 }
 
@@ -649,7 +876,6 @@ async function refreshSearchHistory() {
 async function removeHistoryItem(cacheKey) {
   const ok = window.confirm(`Remove search history item '${cacheKey}'? This will delete its cache key from the database.`);
   if (!ok) return;
-
   await fetch('/api/scraper/search/history/remove', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -661,40 +887,90 @@ async function removeHistoryItem(cacheKey) {
 async function clearEntireCache() {
   const ok = window.confirm('Clear the entire cache? This removes all cache keys and cached metadata.');
   if (!ok) return;
-
   setGlobalStatus('Clearing cache...');
-  await fetch('/api/scraper/cache/clear', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
+  try {
+    await fetch('/api/scraper/cache/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    await refreshSearchHistory();
+  } finally {
+    clearGlobalStatus();
+  }
+}
+
+// ── Results filter ───────────────────────────────────────────────────────────
+
+function _splitFilter(val) {
+  return val.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function applyFilters() {
+  const artists = _splitFilter(document.getElementById('flt_artists').value);
+  const groups = _splitFilter(document.getElementById('flt_groups').value);
+  const tags = _splitFilter(document.getElementById('flt_tags').value);
+  const excludeTags = _splitFilter(document.getElementById('flt_excludeTags').value);
+  const languages = _splitFilter(document.getElementById('flt_language').value);
+  const minPages = parseInt(document.getElementById('flt_minPages').value, 10) || 0;
+  const maxPages = parseInt(document.getElementById('flt_maxPages').value, 10) || 0;
+
+  let filtered = currentSearchRows();
+  if (artists.length) filtered = filtered.filter(r => (r.artists || []).some(a => artists.includes(a.toLowerCase())));
+  if (groups.length) filtered = filtered.filter(r => (r.groups || []).some(g => groups.includes(g.toLowerCase())));
+  if (tags.length) filtered = filtered.filter(r => (r.tags || []).some(t => tags.includes(t.toLowerCase())));
+  if (excludeTags.length) filtered = filtered.filter(r => !(r.tags || []).some(t => excludeTags.includes(t.toLowerCase())));
+  if (languages.length) filtered = filtered.filter(r => (r.languages || []).some(l => languages.includes(l.toLowerCase())));
+  if (minPages > 0) filtered = filtered.filter(r => (r.pages || 0) >= minPages);
+  if (maxPages > 0) filtered = filtered.filter(r => (r.pages || 0) <= maxPages);
+
+  renderRows('#resultsTable', filtered, { showDetail: true });
+  document.getElementById('filterMsg').textContent = `Showing ${filtered.length} of ${currentSearchRows().length} current results.`;
+}
+
+function clearFilters() {
+  ['flt_artists', 'flt_groups', 'flt_tags', 'flt_excludeTags', 'flt_language', 'flt_minPages', 'flt_maxPages'].forEach(id => {
+    document.getElementById(id).value = '';
   });
-  await refreshSearchHistory();
-  clearGlobalStatus();
+  renderSearchTables();
+  document.getElementById('filterMsg').textContent = '';
 }
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
 
 async function refreshQueue() {
+  snapshotSelection('#queueTable');
   const res = await fetch('/api/scraper/queue');
   const data = await res.json();
   const rows = data.queue || [];
+  queueIds = new Set((data.ids || []).map(Number).filter(Number.isFinite));
   renderRows('#queueTable', rows);
+  renderSearchTables();
   document.getElementById('queueMsg').textContent = `Queue: ${rows.length} galleries.`;
+  await refreshStatus();
 }
 
 async function addIdsToQueue(ids) {
-  if (!ids.length) return;
+  const cleanIds = Array.from(new Set((ids || []).map(Number).filter(Number.isFinite)));
+  if (!cleanIds.length) return;
   setGlobalStatus('Adding to queue...');
-  await fetch('/api/scraper/queue/add', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids })
+  try {
+    await fetch('/api/scraper/queue/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: cleanIds })
+    });
+  } finally {
+    clearGlobalStatus();
+  }
+  cleanIds.forEach(id => {
+    selectedRows['#resultsTable'].delete(id);
+    selectedRows['#otherResultsTable'].delete(id);
   });
-  clearGlobalStatus();
   await refreshQueue();
 }
 
-// ── Event bindings ────────────────────────────────────────────────────────────
+// ── Event bindings ───────────────────────────────────────────────────────────
 
 document.getElementById('refreshAllBtn').onclick = async () => {
   await refreshStatus();
@@ -704,7 +980,11 @@ document.getElementById('refreshAllBtn').onclick = async () => {
 
 document.getElementById('startBtn').onclick = async () => {
   setGlobalStatus('Starting scraper...');
-  await fetch('/api/scraper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args: [] }) });
+  await fetch('/api/scraper/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ args: [] })
+  });
   await refreshStatus();
   clearGlobalStatus();
 };
@@ -725,13 +1005,17 @@ document.getElementById('startQueueBtn').onclick = async () => {
 
 document.getElementById('loadConfigBtn').onclick = loadConfig;
 document.getElementById('saveConfigBtn').onclick = saveConfig;
-
 document.getElementById('searchBtn').onclick = runSearch;
 document.getElementById('refreshHistoryBtn').onclick = refreshSearchHistory;
 document.getElementById('clearCacheBtn').onclick = clearEntireCache;
-document.getElementById('addAllBtn').onclick = async () => addIdsToQueue(currentResults.map(r => r.id));
-document.getElementById('addSelectedBtn').onclick = async () => addIdsToQueue(selectedIds('#resultsTable'));
-
+document.getElementById('addAllBtn').onclick = async () => addIdsToQueue(currentSearchRows().map(r => r.id));
+document.getElementById('addSelectedBtn').onclick = async () => addIdsToQueue([
+  ...selectedIds('#resultsTable'),
+  ...selectedIds('#otherResultsTable')
+]);
+document.getElementById('applyFilterBtn').onclick = applyFilters;
+document.getElementById('clearFilterBtn').onclick = clearFilters;
+document.getElementById('galleryDetailClose').onclick = closeGalleryDetail;
 document.getElementById('refreshQueueBtn').onclick = refreshQueue;
 document.getElementById('removeSelectedQueueBtn').onclick = async () => {
   const ids = selectedIds('#queueTable');
@@ -748,9 +1032,11 @@ document.getElementById('clearQueueBtn').onclick = async () => {
 };
 
 document.getElementById('resultsSelectAll').addEventListener('change', (e) => setSelectAll('#resultsTable', e.target.checked));
+document.getElementById('otherResultsSelectAll').addEventListener('change', (e) => setSelectAll('#otherResultsTable', e.target.checked));
 document.getElementById('queueSelectAll').addEventListener('change', (e) => setSelectAll('#queueTable', e.target.checked));
 
-// ── Initialise ────────────────────────────────────────────────────────────────
+// ── Initialise ───────────────────────────────────────────────────────────────
+
 loadConfig();
 refreshStatus();
 refreshQueue();

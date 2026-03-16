@@ -22,16 +22,46 @@
     {% block content %}{% endblock %}
   </main>
 
-  <div id="runtimeDock" class="runtime-dock" style="display:none">
-    <div class="runtime-dock-title">Scraper Runtime</div>
-    <div id="runtimeDockContent">Status unavailable.</div>
+  <div id="dynamicBar" class="dynamic-bar" style="display:none">
+    <div class="dynamic-bar-title">Dynamic Bar</div>
+    <div id="dynamicBarContent">Status unavailable.</div>
   </div>
 
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   <script>
-    async function _updateRuntimeDockGlobal() {
-      const dock = document.getElementById('runtimeDock');
-      const content = document.getElementById('runtimeDockContent');
+    window.__dynamicBarStatusOverride = '';
+
+    function _formatHudDuration(seconds) {
+      const total = Number(seconds || 0);
+      if (!Number.isFinite(total) || total <= 0) return '0s';
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = Math.floor(total % 60);
+      if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+      if (minutes > 0) return `${minutes}m ${secs}s`;
+      return `${secs}s`;
+    }
+
+    function _formatHudBytesPerSecond(bytesPerSecond) {
+      const val = Number(bytesPerSecond || 0);
+      if (!Number.isFinite(val) || val <= 0) return '0 B/s';
+      const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+      let size = val;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    window.setDynamicBarStatusOverride = function(statusText) {
+      window.__dynamicBarStatusOverride = String(statusText || '').trim();
+    };
+
+    async function _updateDynamicBarGlobal() {
+      const dock = document.getElementById('dynamicBar');
+      const content = document.getElementById('dynamicBarContent');
       if (!dock || !content) return;
 
       try {
@@ -39,9 +69,24 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const c = data.counts || {};
-        const line =
-          `Status: ${String(data.status || 'unknown').toUpperCase()} | PID: ${data.pid ?? 'N/A'} | ` +
-          `Uptime: ${data.uptime_seconds ?? 0}s | Galleries: total=${c.total ?? 0} completed=${c.completed ?? 0} failed=${c.failed ?? 0} skipped=${c.skipped ?? 0}`;
+        const p = data.progress || {};
+        const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+        const parts = [
+          `Status: ${dynamicStatus}`,
+          `PID: ${data.pid ?? 'N/A'}`,
+          `Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`,
+          `Queue: ${data.queue_total ?? 0}`,
+          `Completed: ${c.completed ?? 0}`,
+          `Failed: ${c.failed ?? 0}`,
+          `Skipped: ${c.skipped ?? 0}`,
+        ];
+        if ((p.total_pages ?? 0) > 0) {
+          parts.push(`Pages: ${p.pages_processed ?? 0}/${p.total_pages ?? 0}`);
+          parts.push(`Pages/s: ${Number(p.pages_per_second ?? 0).toFixed(2)}`);
+          parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
+          parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
+        }
+        const line = parts.join(' | ');
         content.textContent = line;
         dock.style.display = '';
       } catch (err) {
@@ -49,8 +94,8 @@
       }
     }
 
-    _updateRuntimeDockGlobal();
-    setInterval(_updateRuntimeDockGlobal, 5000);
+    _updateDynamicBarGlobal();
+    setInterval(_updateDynamicBarGlobal, 5000);
   </script>
   {% block scripts %}{% endblock %}
 </body>

@@ -24,7 +24,7 @@ session_lock = threading.Lock()
 DATA_DIR = os.path.join(orchestrator.SCRAPER_DIR, "mangascraper/core")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 
-atexit.register(lambda: DB.close_connection())
+atexit.register(lambda: DB.close_connection()) # Ensure DB connections are closed on exit
 
 # Cache expiry windows (seconds)
 CACHE_REFERENCES_TTL_SECONDS = 60 * 60 * 24 * 1 # day
@@ -283,6 +283,20 @@ class Helpers:
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     }
+
+    @staticmethod
+    def infer_location_root(download_path: str) -> str:
+        """Infer the extension/root download directory from a stored gallery path.
+        Expects a path of the form <root>/<creator>/<title> and returns <root>.
+        """
+        safe_path = str(download_path or "").strip()
+        if not safe_path:
+            return ""
+        normalised = os.path.normpath(safe_path)
+        parent = os.path.dirname(normalised)
+        if not parent:
+            return ""
+        return os.path.dirname(parent) or parent
 
     @staticmethod
     def normalise_integer(value) -> int | None:
@@ -618,6 +632,12 @@ class DB:
                 rating REAL
             );
 
+            CREATE TABLE IF NOT EXISTS DownloadLocations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                root_path TEXT NOT NULL UNIQUE,
+                extension_used TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS GalleryTags (
                 gallery_id INTEGER PRIMARY KEY,
                 tag_ids TEXT,
@@ -692,6 +712,97 @@ class DB:
                 """,
                 (CACHED_METADATA_TTL_SECONDS, now + CACHED_METADATA_TTL_SECONDS),
             )
+
+            # ── GalleryLocations schema migration ─────────────────────────────────
+            # Three cases:
+            #  A) Fresh install – neither GalleryLocations nor DownloadLocations existed
+            #     → create GalleryLocations with the new schema.
+            #  B) Old single-table schema (has root_path column, no location_id)
+            #     → populate DownloadLocations, migrate rows, swap table.
+            #  C) New schema already present – nothing to do.
+            c.execute("PRAGMA table_info(GalleryLocations)")
+            gl_cols = {row[1] for row in c.fetchall()}
+
+            if not gl_cols:
+                # Case A: fresh install
+                c.execute("""
+                    CREATE TABLE GalleryLocations (
+                        gallery_id INTEGER NOT NULL,
+                        location_id INTEGER NOT NULL,
+                        download_path TEXT NOT NULL,
+                        cover_path TEXT,
+                        first_seen TEXT,
+                        last_seen TEXT,
+                        PRIMARY KEY (gallery_id, location_id),
+                        FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
+                        FOREIGN KEY (location_id) REFERENCES DownloadLocations(id)
+                    )
+                """)
+                c.execute("CREATE INDEX IF NOT EXISTS idx_gallerylocations_gallery_id ON GalleryLocations(gallery_id)")
+
+            elif "root_path" in gl_cols and "location_id" not in gl_cols:
+                # Case B: migrate old single-table schema
+                c.execute("SELECT DISTINCT root_path, extension_used FROM GalleryLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
+                for root_path, ext_used in c.fetchall():
+                    c.execute(
+                        "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
+                        (root_path, ext_used or ""),
+                    )
+                c.execute("""
+                    CREATE TABLE GalleryLocations_new (
+                        gallery_id INTEGER NOT NULL,
+                        location_id INTEGER NOT NULL,
+                        download_path TEXT NOT NULL,
+                        cover_path TEXT,
+                        first_seen TEXT,
+                        last_seen TEXT,
+                        PRIMARY KEY (gallery_id, location_id),
+                        FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
+                        FOREIGN KEY (location_id) REFERENCES DownloadLocations(id)
+                    )
+                """)
+                c.execute("SELECT gallery_id, root_path, download_path, cover_path, first_seen, last_seen FROM GalleryLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
+                for g_id, root_path, dl_path, cov_path, f_seen, l_seen in c.fetchall():
+                    c.execute("SELECT id FROM DownloadLocations WHERE root_path=?", (root_path,))
+                    loc = c.fetchone()
+                    if loc:
+                        c.execute(
+                            "INSERT OR IGNORE INTO GalleryLocations_new (gallery_id, location_id, download_path, cover_path, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
+                            (g_id, loc[0], dl_path or "", cov_path or "", f_seen or "", l_seen or ""),
+                        )
+                c.execute("DROP TABLE GalleryLocations")
+                c.execute("ALTER TABLE GalleryLocations_new RENAME TO GalleryLocations")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_gallerylocations_gallery_id ON GalleryLocations(gallery_id)")
+            # Case C: new schema already present, no action needed.
+
+            # ── Backfill GalleryLocations from Galleries.download_path ────────────
+            c.execute(
+                "SELECT id, extension_used, download_path, cover_path, started_at, completed_at FROM Galleries WHERE download_path IS NOT NULL AND TRIM(download_path) != ''"
+            )
+            for gallery_id, extension_used, download_path, cover_path, started_at, completed_at in c.fetchall():
+                root_path = Helpers.infer_location_root(download_path)
+                if not root_path:
+                    continue
+                first_seen = started_at or completed_at or datetime.now(timezone.utc).isoformat()
+                last_seen = completed_at or started_at or datetime.now(timezone.utc).isoformat()
+                c.execute(
+                    "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
+                    (root_path, extension_used or ""),
+                )
+                c.execute("SELECT id FROM DownloadLocations WHERE root_path=?", (root_path,))
+                loc = c.fetchone()
+                if loc:
+                    c.execute(
+                        """
+                        INSERT INTO GalleryLocations (gallery_id, location_id, download_path, cover_path, first_seen, last_seen)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(gallery_id, location_id) DO UPDATE SET
+                            download_path=excluded.download_path,
+                            cover_path=excluded.cover_path,
+                            last_seen=excluded.last_seen
+                        """,
+                        (gallery_id, loc[0], download_path, cover_path or "", first_seen, last_seen),
+                    )
 
             # Directly enforce creator display_name normalization for all existing rows.
             c.execute("SELECT id, name FROM Creators")
@@ -803,6 +914,106 @@ class DB:
                     continue
                 result.append((gid, Helpers.safe_text(row[1], ""), Helpers.safe_text(row[2], ""), Helpers.safe_text(row[3], "")))
             return result
+
+    @staticmethod
+    def upsert_gallery_location(gallery_id, extension_used=None, download_path=None, cover_path=None, first_seen=None, last_seen=None):
+        DB.init_db()
+        gallery_id = Helpers.normalise_integer(gallery_id)
+        download_path = Helpers.safe_text(download_path, "")
+        if gallery_id is None or not download_path:
+            return
+        extension_used = Helpers.safe_text(extension_used, "")
+        cover_path = Helpers.safe_text(cover_path, "")
+        root_path = Helpers.infer_location_root(download_path)
+        if not root_path:
+            return
+        first_seen = Helpers.safe_text(first_seen, "") or datetime.now(timezone.utc).isoformat()
+        last_seen = Helpers.safe_text(last_seen, "") or first_seen
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
+                (root_path, extension_used),
+            )
+            cursor.execute("SELECT id FROM DownloadLocations WHERE root_path=?", (root_path,))
+            loc = cursor.fetchone()
+            if not loc:
+                return
+            cursor.execute(
+                """
+                INSERT INTO GalleryLocations (gallery_id, location_id, download_path, cover_path, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(gallery_id, location_id) DO UPDATE SET
+                    download_path=excluded.download_path,
+                    cover_path=excluded.cover_path,
+                    last_seen=excluded.last_seen
+                """,
+                (gallery_id, loc[0], download_path, cover_path, first_seen, last_seen),
+            )
+            conn.commit()
+
+    @staticmethod
+    def list_download_locations() -> list[dict]:
+        """Return one dict per distinct download root, with a gallery count."""
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT dl.id, dl.root_path, dl.extension_used, COUNT(gl.gallery_id) AS gallery_count
+                FROM DownloadLocations dl
+                LEFT JOIN GalleryLocations gl ON gl.location_id = dl.id
+                GROUP BY dl.id
+                ORDER BY dl.extension_used, dl.root_path
+            """)
+            return [
+                {
+                    "id": Helpers.normalise_integer(row[0]),
+                    "root_path": Helpers.safe_text(row[1], ""),
+                    "extension_used": Helpers.safe_text(row[2], ""),
+                    "count": Helpers.normalise_integer(row[3]) or 0,
+                }
+                for row in cursor.fetchall()
+            ]
+
+    @staticmethod
+    def list_gallery_locations(gallery_id=None, root_path=None) -> list[dict]:
+        """Return location rows joined from GalleryLocations + DownloadLocations."""
+        DB.init_db()
+        query = """
+            SELECT gl.gallery_id, dl.extension_used, dl.root_path, gl.download_path,
+                   gl.cover_path, gl.first_seen, gl.last_seen, dl.id
+            FROM GalleryLocations gl
+            JOIN DownloadLocations dl ON dl.id = gl.location_id
+        """
+        clauses = []
+        params = []
+        gid = Helpers.normalise_integer(gallery_id)
+        root_path_filter = Helpers.safe_text(root_path, "")
+        if gid is not None:
+            clauses.append("gl.gallery_id=?")
+            params.append(gid)
+        if root_path_filter:
+            clauses.append("dl.root_path=?")
+            params.append(root_path_filter)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY dl.root_path, gl.download_path"
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            return [
+                {
+                    "gallery_id": Helpers.normalise_integer(row[0]),
+                    "extension_used": Helpers.safe_text(row[1], ""),
+                    "root_path": Helpers.safe_text(row[2], ""),
+                    "download_path": Helpers.safe_text(row[3], ""),
+                    "cover_path": Helpers.safe_text(row[4], ""),
+                    "first_seen": Helpers.safe_text(row[5], ""),
+                    "last_seen": Helpers.safe_text(row[6], ""),
+                    "location_id": Helpers.normalise_integer(row[7]),
+                }
+                for row in cursor.fetchall()
+            ]
 
     class Gallery:
         @staticmethod
@@ -980,6 +1191,15 @@ class DB:
                 WHERE id = ?
                 """, ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id))
                 conn.commit()
+
+            DB.upsert_gallery_location(
+                gallery_id,
+                extension_used=extension_used,
+                download_path=download_path,
+                cover_path=cover_path,
+                first_seen=started_at or now,
+                last_seen=now,
+            )
             
             cache = read_cached_metadata_entry(ids=[gallery_id])
             creators = {}
@@ -1154,19 +1374,25 @@ class DB:
             result = []
             for row in rows:
                 if isinstance(row, dict):
-                    result.append({
-                        "id": row.get("id"),
+                    gid = row.get("id")
+                    payload = {
+                        "id": gid,
                         "status": row.get("status"),
                         "started_at": row.get("started_at"),
                         "completed_at": row.get("completed_at"),
-                    })
+                    }
                 elif isinstance(row, (list, tuple)) and len(row) >= 4:
-                    result.append({
-                        "id": row[0],
+                    gid = row[0]
+                    payload = {
+                        "id": gid,
                         "status": row[1],
                         "started_at": row[2],
                         "completed_at": row[3],
-                    })
+                    }
+                else:
+                    continue
+                payload["locations"] = DB.list_gallery_locations(gallery_id=gid)
+                result.append(payload)
             return result
 
 class Sleep:

@@ -22,7 +22,6 @@
 		<label for="streamIdInput">Gallery ID:</label>
 		<input type="number" id="streamIdInput" min="1" placeholder="e.g. 123456">
 		<button id="streamStartBtn">Open</button>
-		<button id="streamDownloadBtn" type="button">Download This Gallery</button>
 	</div>
 	<p id="streamStatus">Enter a gallery ID and click Open.</p>
 	<p id="streamPathInfo"></p>
@@ -34,6 +33,7 @@
 		<button id="readerClose">&#x2715; Close</button>
 		<span id="readerTitle"></span>
 		<span id="readerCounter"></span>
+		<button id="streamDownloadBtn" type="button" style="display:none">Download This Gallery</button>
 	</div>
 	<div id="readerBody">
 		<button id="prevBtn" class="navBtn">&#8592;</button>
@@ -51,6 +51,9 @@
 
 // ── State ──────────────────────────────────────────────────────────────────
 let _activeStreamId = null;
+let _readerFromStream = false;
+let _selectedRootPath = '';
+let _locationOptions = [];
 
 const reader = {
 	pages: [],    // array of URL strings
@@ -85,7 +88,7 @@ function setLocalList(items, onClick, emptyMsg) {
 	items.forEach(item => {
 		const div = document.createElement('div');
 		div.className = 'listItem';
-		div.textContent = item;
+		div.textContent = typeof item === 'string' ? item : (item.label || item.root_path || item.name || 'Unknown');
 		div.addEventListener('click', () => onClick(item));
 		el.appendChild(div);
 	});
@@ -105,11 +108,37 @@ function setBreadcrumb(parts) {
 	});
 }
 
+function buildLocalUrl(path) {
+	const url = new URL(path, window.location.origin);
+	if (_selectedRootPath) url.searchParams.set('root', _selectedRootPath);
+	return url.pathname + url.search;
+}
+
 async function loadCreators() {
-	setBreadcrumb([{ label: 'Creators' }]);
+	setBreadcrumb([{ label: 'Locations' }]);
 	setLocalList([], () => {}, 'Loading...');
 	try {
-		const data = await apiFetch('/api/gallery/list_creators');
+		const data = await apiFetch('/api/gallery/list_locations');
+		_locationOptions = (data.locations || []).map(item => ({
+			...item,
+			label: item.extension_used ? `${item.extension_used} | ${item.root_path}` : item.root_path,
+		}));
+		_selectedRootPath = data.selected_root || (_locationOptions[0] && _locationOptions[0].root_path) || '';
+		setLocalList(_locationOptions, loadCreatorsForLocation, 'No local download locations found.');
+	} catch (err) {
+		document.getElementById('localList').textContent = 'Error: ' + err.message;
+	}
+}
+
+async function loadCreatorsForLocation(location) {
+	_selectedRootPath = typeof location === 'string' ? location : (location.root_path || '');
+	setBreadcrumb([
+		{ label: 'Locations', onClick: loadCreators },
+		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath }
+	]);
+	setLocalList([], () => {}, 'Loading...');
+	try {
+		const data = await apiFetch(buildLocalUrl('/api/gallery/list_creators'));
 		setLocalList(data.creators || [], loadGalleries, 'No local creators found.');
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
@@ -118,12 +147,13 @@ async function loadCreators() {
 
 async function loadGalleries(creator) {
 	setBreadcrumb([
-		{ label: 'Creators', onClick: loadCreators },
+		{ label: 'Locations', onClick: loadCreators },
+		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath, onClick: () => loadCreatorsForLocation(_selectedRootPath) },
 		{ label: creator }
 	]);
 	setLocalList([], () => {}, 'Loading...');
 	try {
-		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`);
+		const data = await apiFetch(buildLocalUrl(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`));
 		setLocalList(data.galleries || [], gallery => loadPages(creator, gallery), 'No galleries found.');
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
@@ -132,19 +162,21 @@ async function loadGalleries(creator) {
 
 async function loadPages(creator, gallery) {
 	setBreadcrumb([
-		{ label: 'Creators', onClick: loadCreators },
+		{ label: 'Locations', onClick: loadCreators },
+		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath, onClick: () => loadCreatorsForLocation(_selectedRootPath) },
 		{ label: creator, onClick: () => loadGalleries(creator) },
 		{ label: gallery }
 	]);
 	setLocalList([], () => {}, 'Loading...');
 	try {
-		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`);
+		const data = await apiFetch(buildLocalUrl(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`));
 		const mode = data.mode || 'directory';
 		const pages = (data.pages || []).map(
-			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`
+			f => buildLocalUrl(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`)
 		);
 		if (!pages.length) { document.getElementById('localList').textContent = 'Gallery is empty.'; return; }
 		const title = mode === 'archive' ? `${gallery} (archive)` : gallery;
+		_readerFromStream = false;
 		openReader(pages, title, () => {
 			document.getElementById('localPane').style.display = '';
 			loadPages(creator, gallery);
@@ -172,6 +204,7 @@ async function startStream() {
 		const data = await apiFetch(`/api/gallery/stream/${id}`);
 		if (data.error) { status.textContent = 'Error: ' + data.error; return; }
 		_activeStreamId = id;
+		_readerFromStream = true;
 		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
 		document.getElementById('streamPathInfo').textContent =
 			`Temporary files: ${data.temp_dir} (auto-cleaned after ${data.expires_in_seconds}s inactivity)`;
@@ -217,6 +250,7 @@ function openReader(pages, title, onClose) {
 	reader.title = title;
 	reader.onClose = onClose;
 	document.getElementById('readerTitle').textContent = title;
+	document.getElementById('streamDownloadBtn').style.display = _readerFromStream ? '' : 'none';
 	document.getElementById('localPane').style.display = 'none';
 	document.getElementById('streamPane').style.display = 'none';
 	document.getElementById('readerOverlay').style.display  = '';
@@ -248,6 +282,7 @@ document.addEventListener('keydown', e => {
 document.getElementById('readerClose').addEventListener('click', closeReader);
 function closeReader() {
 	document.getElementById('readerOverlay').style.display = 'none';
+	document.getElementById('streamDownloadBtn').style.display = 'none';
 	// Re-show the active mode pane
 	const activeMode = document.querySelector('.modeTab.active').dataset.mode;
 	document.getElementById(activeMode + 'Pane').style.display = '';

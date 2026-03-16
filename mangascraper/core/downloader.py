@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile, threading
+import os, sys, time, random, concurrent.futures, math, zipfile, shutil, atexit, signal, tempfile, threading, json
 from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
 
@@ -23,6 +23,34 @@ skipped_galleries = {}
 skipped_galleries_lock = threading.Lock()
 failed_galleries = {}
 failed_galleries_lock = threading.Lock()
+_runtime_progress_lock = threading.Lock()
+
+
+def _write_runtime_progress(payload: dict):
+    """Persist runtime progress so the dashboard process can read live stats."""
+    try:
+        progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
+        if not progress_file:
+            return
+        os.makedirs(os.path.dirname(progress_file), exist_ok=True)
+        data = dict(payload)
+        data["updated_at"] = time.time()
+        temp_path = f"{progress_file}.tmp"
+        with _runtime_progress_lock:
+            with open(temp_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+            os.replace(temp_path, progress_file)
+    except Exception:
+        logger.debug("Downloader: Failed to write runtime progress.", exc_info=True)
+
+
+def _clear_runtime_progress():
+    try:
+        progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
+        if progress_file and os.path.isfile(progress_file):
+            os.remove(progress_file)
+    except Exception:
+        logger.debug("Downloader: Failed to clear runtime progress.", exc_info=True)
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -863,7 +891,7 @@ def process_galleries(batch_ids):
                     update_failed_galleries(False, gallery_id=gallery_id, meta=meta, Reason=str(e))
                     scraperapi.DB.Gallery.fail(gallery_id)
 
-def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None):
+def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None, overall_start_index: int = 0, overall_total_galleries: int | None = None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
     load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
     
@@ -910,6 +938,19 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     # Shared state for progress
     page_lock = threading.Lock()
     progress_state = {"pages": 0, "gallery": 1}
+    batch_started_at = time.perf_counter()
+    total_gallery_count = overall_total_galleries or len(batch_list)
+
+    _write_runtime_progress({
+        "current_gallery_number": overall_start_index + 1 if batch_list else 0,
+        "current_gallery_id": batch_list[0] if batch_list else None,
+        "total_galleries": total_gallery_count,
+        "pages_processed": 0,
+        "total_pages": total_pages,
+        "pages_per_second": 0,
+        "eta_seconds": None,
+        "download_speed_bytes": 0,
+    })
 
     def page_update_hook():
         with page_lock:
@@ -920,6 +961,23 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                 progress_state["gallery"] += 1
             page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
             page_progress.update(1)
+
+            elapsed = max(time.perf_counter() - batch_started_at, 0.001)
+            pages_processed = progress_state["pages"]
+            pages_per_second = pages_processed / elapsed if pages_processed > 0 else 0
+            remaining_pages = max(total_pages - pages_processed, 0)
+            eta_seconds = math.ceil(remaining_pages / pages_per_second) if pages_per_second > 0 and remaining_pages > 0 else 0
+            local_gallery_index = min(max(progress_state["gallery"] - 1, 0), max(len(batch_list) - 1, 0))
+            _write_runtime_progress({
+                "current_gallery_number": min(overall_start_index + progress_state["gallery"], total_gallery_count),
+                "current_gallery_id": batch_list[local_gallery_index] if batch_list else None,
+                "total_galleries": total_gallery_count,
+                "pages_processed": pages_processed,
+                "total_pages": total_pages,
+                "pages_per_second": round(pages_per_second, 2),
+                "eta_seconds": eta_seconds,
+                "download_speed_bytes": round(space_monitor["total_actual_bytes"] / elapsed, 2) if space_monitor["total_actual_bytes"] > 0 else 0,
+            })
 
     # Patch the download_images_hook to call our page_update_hook after each page
     orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
@@ -962,6 +1020,10 @@ def start_downloader(gallery_list=None):
         failed_galleries = {}
     with skipped_galleries_lock:
         skipped_galleries = {}
+    space_monitor["total_estimated_bytes"] = 0
+    space_monitor["total_actual_bytes"] = 0
+    space_monitor["galleries_processed"] = 0
+    _clear_runtime_progress()
     
     # Setup signal handlers for graceful shutdown (Ctrl+C, SIGTERM)
     signal.signal(signal.SIGINT, _signal_handler)
@@ -989,7 +1051,20 @@ def start_downloader(gallery_list=None):
         _, gallery_list = pre_download_checks(gallery_list)
         if not gallery_list:
             logger.warning("No galleries to download. Exiting.")
+            scraperapi.Cache.Save.queued_galleries([]) # Clear gallery queue
+            _clear_runtime_progress()
             return
+
+    _write_runtime_progress({
+        "current_gallery_number": 0,
+        "current_gallery_id": None,
+        "total_galleries": len(gallery_list),
+        "pages_processed": 0,
+        "total_pages": 0,
+        "pages_per_second": 0,
+        "eta_seconds": None,
+        "download_speed_bytes": 0,
+    })
     
     for batch_num in range(0, len(gallery_list), BATCH_SIZE):
         batch_list = gallery_list[batch_num:batch_num + BATCH_SIZE]
@@ -1007,7 +1082,7 @@ def start_downloader(gallery_list=None):
         log_clarification()
         logger.info(f"Downloading Batch {current_out_of_total_batch_number} with {len(batch_list)} Galleries...")
     
-        start_batch(current_batch_number, total_batch_numbers, batch_list) # Start batch.
+        start_batch(current_batch_number, total_batch_numbers, batch_list, overall_start_index=batch_num, overall_total_galleries=len(gallery_list)) # Start batch.
         
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             log_clarification()
@@ -1051,3 +1126,6 @@ def start_downloader(gallery_list=None):
                 logger.info(f"Cleaned up temp archive folder: {ARCHIVE_TEMP_ROOT}")
         except Exception as e:
             logger.warning(f"Failed to clean up temp archive folder: {e}")
+
+    scraperapi.Cache.Save.queued_galleries([]) # Clear gallery queue
+    _clear_runtime_progress()

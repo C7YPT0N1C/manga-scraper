@@ -49,9 +49,9 @@ def create_app():
     def gallery_page():
         return render_template("gallery.html")
     
-        @app.route("/logs")
-        def logs_page():
-            return render_template("logs.html")
+    @app.route("/logs")
+    def logs_page():
+        return render_template("logs.html")
 
     @app.route("/scraper")
     def scraper_page():

@@ -102,6 +102,7 @@ select {
 }
 
 #resultsTable,
+#otherResultsTable,
 #queueTable {
   width: 100%;
   border-collapse: collapse;
@@ -110,6 +111,7 @@ select {
 
 #galleryTable th, #galleryTable td,
 #resultsTable th, #resultsTable td,
+#otherResultsTable th, #otherResultsTable td,
 #queueTable th, #queueTable td {
   border: 1px solid #444;
   padding: 6px 10px;
@@ -118,12 +120,14 @@ select {
 
 #galleryTable th,
 #resultsTable th,
+#otherResultsTable th,
 #queueTable th {
   background: #333;
 }
 
 #galleryTable tr:nth-child(even),
 #resultsTable tr:nth-child(even),
+#otherResultsTable tr:nth-child(even),
 #queueTable tr:nth-child(even) {
   background: #2a2a2a;
 }
@@ -309,8 +313,8 @@ select {
   cursor: default;
 }
 
-/* Floating runtime bar */
-.runtime-dock {
+/* Dynamic bar */
+.dynamic-bar {
   position: fixed;
   left: 12px;
   right: 12px;
@@ -325,14 +329,14 @@ select {
   font-size: 0.92rem;
 }
 
-.runtime-dock-title {
+.dynamic-bar-title {
   font-size: 0.74rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.8;
 }
 
-#runtimeDockContent {
+#dynamicBarContent {
   margin-top: 3px;
   font-family: Consolas, "Liberation Mono", Menlo, monospace;
 }
@@ -367,5 +371,94 @@ main {
 #streamPathInfo {
   font-size: 0.85rem;
   color: #a8d4ee;
+
+  /* ── Gallery detail modal ───────────────────────────────────────── */
+  .detail-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .detail-modal-panel {
+    background: #1e252e;
+    border: 1px solid #3a4a5a;
+    border-radius: 8px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .detail-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #3a4a5a;
+    font-size: 1em;
+  }
+
+  .detail-modal-body {
+    padding: 14px 16px;
+    line-height: 1.65;
+    font-size: 0.9em;
+  }
+
+  .detail-modal-body p {
+    margin: 4px 0;
+    word-break: break-word;
+  }
+
+  /* ── Filter panel ───────────────────────────────────────────────── */
+  #filterPanel {
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: #1a2030;
+    border: 1px solid #334;
+    border-radius: 6px;
+  }
+
+  #filterPanel h4 {
+    margin: 0 0 10px;
+    font-size: 0.95em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #aac;
+  }
+
+  #filterGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  #filterGrid label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.82em;
+    gap: 3px;
+  }
+
+  #filterGrid input {
+    padding: 4px 7px;
+    border-radius: 4px;
+    border: 1px solid #445;
+    background: #1a1a2e;
+    color: #dde;
+    font-size: 0.9em;
+  }
+
+  /* Inline Detail button in results table */
+  .detailBtn {
+    font-size: 0.72em;
+    padding: 2px 7px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
   margin-top: 4px;
 }

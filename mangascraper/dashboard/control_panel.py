@@ -52,10 +52,10 @@ def create_app():
     @app.route("/database")
     def database_page():
         return render_template("database.html")
-    
-        @app.route("/logs")
-        def logs_page():
-            return render_template("logs.html")
+
+    @app.route("/logs")
+    def logs_page():
+        return render_template("logs.html")
 
     @app.route("/gallery")
     def gallery_page():
