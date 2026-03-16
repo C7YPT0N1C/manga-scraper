@@ -20,7 +20,7 @@
 
 	<div id="searchFilterBar">
 		<div class="filter-field">
-			<label for="searchInput">Search</label>
+			<label for="searchInput">Search Galleries</label>
 			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}">
 		</div>
 		<div class="filter-group" id="filterGroup"></div>
@@ -30,7 +30,7 @@
 
 	<div class="pagination-controls" id="paginationControls" style="display:none">
 		<button id="prevPageBtn">← Previous</button>
-		<span class="pagination-info"><span id="pageNum">1</span> of <span id="totalPages">1</span></span>
+		<span class="pagination-info">Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
 		<button id="nextPageBtn">Next →</button>
 	</div>
 </div>
@@ -347,6 +347,12 @@ function createGalleryGrid(items, itemType, onClick) {
 			galleryChip.className = 'gallery-chip';
 			galleryChip.textContent = `${Number(item.gallery_count || 0)} galleries`;
 			metaDiv.appendChild(galleryChip);
+			if (item.favourite) {
+				const favouriteChip = document.createElement('span');
+				favouriteChip.className = 'gallery-chip';
+				favouriteChip.textContent = 'Favourite';
+				metaDiv.appendChild(favouriteChip);
+			}
 			if (Array.isArray(item.languages) && item.languages.length) {
 				const languageChip = document.createElement('span');
 				languageChip.className = 'gallery-chip';

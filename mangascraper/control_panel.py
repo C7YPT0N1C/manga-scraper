@@ -56,7 +56,7 @@ def create_app():
 
     @app.route("/logs")
     def logs_page():
-        return render_template("logs.html")
+        return render_template("diagnostics.html")
 
     return app
 
