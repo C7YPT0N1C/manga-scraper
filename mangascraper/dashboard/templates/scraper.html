@@ -1132,7 +1132,9 @@ document.getElementById('startBtn').onclick = async () => {
 
 document.getElementById('stopBtn').onclick = async () => {
   setGlobalStatus('Stopping scraper...');
-  await fetch('/api/scraper/stop', { method: 'POST' });
+  const res = await fetch('/api/scraper/stop', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  document.getElementById('searchMsg').textContent = data.message || 'Stop request sent.';
   await refreshStatus();
   clearGlobalStatus();
 };

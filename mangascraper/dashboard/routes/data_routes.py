@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/data_routes.py
-#
-# Merged replacement for database_routes.py + gallery_routes.py.
-# Exposes two blueprints (db_bp, gallery_bp) so URL prefixes are unchanged.
 
 import os
 import tempfile
@@ -299,6 +296,28 @@ def _build_filter_options(items: list[dict], item_type: str) -> dict:
             "max": max(gallery_counts) if gallery_counts else 0,
         }
     return result
+
+
+def _prefer_gallery_item(existing: dict | None, candidate: dict) -> dict:
+    if not existing:
+        return candidate
+
+    existing_id = existing.get("gallery_id")
+    candidate_id = candidate.get("gallery_id")
+    if existing_id is None and candidate_id is not None:
+        return candidate
+    if existing_id is not None and candidate_id is None:
+        return existing
+
+    existing_score = len(existing.get("tags") or []) + len(existing.get("languages") or [])
+    candidate_score = len(candidate.get("tags") or []) + len(candidate.get("languages") or [])
+    if candidate_score > existing_score:
+        return candidate
+
+    if not existing.get("favourite") and candidate.get("favourite"):
+        return candidate
+
+    return existing
 
 
 def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict], dict[str, list[dict]]]:
@@ -787,7 +806,8 @@ def list_galleries(creator):
 
     deduped = {}
     for item in galleries:
-        deduped[str(item.get("name") or "")] = item
+        key = str(item.get("name") or "")
+        deduped[key] = _prefer_gallery_item(deduped.get(key), item)
     gallery_items = sorted(deduped.values(), key=lambda item: (-(int(item["gallery_id"]) if item.get("gallery_id") is not None else -1), str(item.get("name") or "").lower()))
     return jsonify({"creator": creator, "galleries": gallery_items, "filters": _build_filter_options(gallery_items, "gallery"), "root_path": ""})
 

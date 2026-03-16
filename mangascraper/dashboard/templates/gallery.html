@@ -5,7 +5,7 @@
 
 <div id="refreshToolbar">
 	<button id="refreshGalleriesBtn" type="button">Refresh Galleries</button>
-	<button id="toggleFilterBtn" type="button" title="Show or hide the search and filter bar">▾ Filters</button>
+	<button id="toggleFilterBtn" type="button" title="Show or hide the search and filter bar">Hide Search And Filters</button>
 	<span id="refreshStatus"></span>
 </div>
 
@@ -62,6 +62,23 @@
 	</div>
 </div>
 
+<div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
+	<div id="galleryDetailPanel" class="detail-modal-panel">
+		<div class="detail-modal-header">
+			<strong id="galleryDetailTitle">Gallery</strong>
+			<button id="galleryDetailClose" type="button">&#x2715; Close</button>
+		</div>
+		<div class="detail-modal-body">
+			<div id="galleryDetailMeta"></div>
+			<div id="galleryDetailTags"></div>
+		</div>
+		<div class="detail-modal-actions">
+			<button id="galleryDetailReadBtn" type="button">Read Gallery</button>
+			<button id="galleryDetailFavBtn" type="button" class="fav-btn">☆ Favourite</button>
+		</div>
+	</div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -85,6 +102,7 @@ let _currentPage = 1;
 let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
+let _detailGallery = null;
 
 const reader = {
 	pages: [],
@@ -128,50 +146,32 @@ function createFilterField(labelText, inputElement) {
 	return wrapper;
 }
 
-function createChipFilter(key, labelText, options, allLabel) {
+function createSelectFilter(key, labelText, options, allLabel) {
 	const wrapper = document.createElement('div');
-	wrapper.className = 'filter-chips-field';
-	const labelEl = document.createElement('span');
-	labelEl.className = 'filter-chips-label';
-	labelEl.textContent = labelText;
-	wrapper.appendChild(labelEl);
-	const row = document.createElement('div');
-	row.className = 'filter-chips';
-	const makeChip = (value, text) => {
-		const c = document.createElement('button');
-		c.type = 'button';
-		c.className = 'filter-chip' + (String(_activeFilters[key] || '') === value ? ' active' : '');
-		c.textContent = text;
-		c.dataset.value = value;
-		return c;
-	};
-	row.appendChild(makeChip('', allLabel));
-	(options || []).forEach(v => row.appendChild(makeChip(String(v), String(v))));
-	row.addEventListener('click', e => {
-		const chip = e.target.closest('.filter-chip');
-		if (!chip) return;
-		row.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-		chip.classList.add('active');
-		_activeFilters[key] = chip.dataset.value;
+	wrapper.className = 'filter-field filter-inline-field';
+	const label = document.createElement('label');
+	label.textContent = labelText;
+	wrapper.appendChild(label);
+	const select = document.createElement('select');
+	select.className = 'filter-select';
+	const allOption = document.createElement('option');
+	allOption.value = '';
+	allOption.textContent = allLabel;
+	select.appendChild(allOption);
+	(options || []).forEach(value => {
+		const option = document.createElement('option');
+		option.value = String(value);
+		option.textContent = String(value);
+		select.appendChild(option);
+	});
+	select.value = String(_activeFilters[key] || '');
+	select.addEventListener('change', () => {
+		_activeFilters[key] = select.value;
 		_currentPage = 1;
 		refreshDisplay();
 	});
-	wrapper.appendChild(row);
+	wrapper.appendChild(select);
 	return wrapper;
-}
-
-function createNumberFilter(key, labelText, placeholder) {
-	const input = document.createElement('input');
-	input.type = 'number';
-	input.min = '0';
-	input.placeholder = placeholder;
-	input.value = _activeFilters[key] || '';
-	input.addEventListener('input', event => {
-		_activeFilters[key] = event.target.value;
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	return createFilterField(labelText, input);
 }
 
 function setupSearchAndFilters() {
@@ -201,61 +201,11 @@ function getFilteredItems() {
 	items = items.filter(item => {
 		const languages = normaliseList(item.languages).map(normaliseText);
 		const tags = normaliseList(item.tags).map(normaliseText);
-		const pageCount = Number(item.page_count || 0);
-		const tagCount = Number(item.tag_count || 0);
 
 		if (_activeFilters.language && !languages.includes(normaliseText(_activeFilters.language))) {
 			return false;
 		}
 		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
-			return false;
-		}
-
-		const minTagCount = Number(_activeFilters.minTagCount || 0);
-		if (minTagCount > 0 && tagCount < minTagCount) {
-			return false;
-		}
-
-		if (_currentItemType === 'creators') {
-			const minPages = Number(_activeFilters.minPages || 0);
-			const maxPages = Number(_activeFilters.maxPages || 0);
-			const minCreatorPages = Number(item.min_page_count || 0);
-			const maxCreatorPages = Number(item.max_page_count || 0);
-			const minGalleryCount = Number(_activeFilters.minGalleryCount || 0);
-
-			if (_activeFilters.favourite === 'yes' && !item.favourite) {
-				return false;
-			}
-			if (_activeFilters.favourite === 'no' && item.favourite) {
-				return false;
-			}
-			if (minGalleryCount > 0 && Number(item.gallery_count || 0) < minGalleryCount) {
-				return false;
-			}
-			if (minPages > 0 && maxCreatorPages > 0 && maxCreatorPages < minPages) {
-				return false;
-			}
-			if (maxPages > 0 && minCreatorPages > maxPages) {
-				return false;
-			}
-			return true;
-		}
-
-		const minPages = Number(_activeFilters.minPages || 0);
-		const maxPages = Number(_activeFilters.maxPages || 0);
-		if (minPages > 0 && pageCount < minPages) {
-			return false;
-		}
-		if (maxPages > 0 && pageCount > maxPages) {
-			return false;
-		}
-		if (_activeFilters.status && normaliseText(item.status) !== normaliseText(_activeFilters.status)) {
-			return false;
-		}
-		if (_activeFilters.favourite === 'yes' && !item.favourite) {
-			return false;
-		}
-		if (_activeFilters.favourite === 'no' && item.favourite) {
 			return false;
 		}
 		return true;
@@ -298,25 +248,15 @@ function updatePaginationControls(totalPages) {
 function setupFiltersForCreators(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createChipFilter('language', 'Language', filters.languages || [], 'Any'));
-	filterGroup.appendChild(createChipFilter('tag', 'Tag', filters.tags || [], 'Any'));
-	filterGroup.appendChild(createChipFilter('favourite', 'Favourite', ['yes', 'no'], 'Any'));
-	filterGroup.appendChild(createNumberFilter('minGalleryCount', 'Gallery Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
-	filterGroup.appendChild(createNumberFilter('maxPages', 'Page Num Max', 'Max'));
+	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 function setupFiltersForGalleries(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createChipFilter('language', 'Language', filters.languages || [], 'Any'));
-	filterGroup.appendChild(createChipFilter('tag', 'Tag', filters.tags || [], 'Any'));
-	filterGroup.appendChild(createChipFilter('status', 'Status', filters.statuses || [], 'Any'));
-	filterGroup.appendChild(createChipFilter('favourite', 'Favourite', ['yes', 'no'], 'Any'));
-	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
-	filterGroup.appendChild(createNumberFilter('maxPages', 'Page Num Max', 'Max'));
+	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 document.querySelectorAll('.modeTab').forEach(btn => {
@@ -356,7 +296,7 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 	const status = document.getElementById('refreshStatus');
 	if (!galleryId) {
 		status.textContent = 'This gallery is not in the database yet.';
-		return;
+		return null;
 	}
 	try {
 		const res = await fetch(`/api/gallery/favourite/gallery/${encodeURIComponent(galleryId)}`, {
@@ -374,9 +314,42 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 		});
 		status.textContent = `${galleryName} ${isFav ? 'favourited' : 'unfavourited'}.`;
 		refreshDisplay();
+		return isFav;
 	} catch (err) {
 		status.textContent = `Could not update gallery favourite: ${err.message}`;
+		return null;
 	}
+}
+
+function _renderGalleryDetail(gallery) {
+	const title = String(gallery.label || gallery.name || 'Gallery');
+	const pageCount = Number(gallery.page_count || 0);
+	const languageList = normaliseList(gallery.languages);
+	const tagList = normaliseList(gallery.tags);
+
+	document.getElementById('galleryDetailTitle').textContent = title;
+	document.getElementById('galleryDetailMeta').innerHTML = `
+		<p><strong>Pages:</strong> ${pageCount}</p>
+		<p><strong>Languages:</strong> ${languageList.length ? languageList.join(', ') : 'Unknown'}</p>
+	`;
+	document.getElementById('galleryDetailTags').innerHTML = `
+		<p><strong>Tags:</strong> ${tagList.length ? tagList.join(', ') : 'None'}</p>
+	`;
+
+	const favBtn = document.getElementById('galleryDetailFavBtn');
+	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
+	favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+}
+
+function openGalleryDetail(gallery) {
+	_detailGallery = gallery;
+	_renderGalleryDetail(gallery);
+	document.getElementById('galleryDetailModal').style.display = '';
+}
+
+function closeGalleryDetail() {
+	_detailGallery = null;
+	document.getElementById('galleryDetailModal').style.display = 'none';
 }
 
 function createGalleryGrid(items, itemType, onClick) {
@@ -440,21 +413,19 @@ function createGalleryGrid(items, itemType, onClick) {
 			}
 		}
 
-		const favBtn = document.createElement('button');
-		favBtn.type = 'button';
-		favBtn.className = 'fav-btn' + (item.favourite ? ' fav-active' : '');
-		favBtn.textContent = item.favourite ? '★ Unfavourite' : '☆ Favourite';
-		favBtn.addEventListener('click', event => {
-			event.preventDefault();
-			event.stopPropagation();
-			const newTarget = !Boolean(item.favourite);
-			if (itemType === 'creator') {
+		if (itemType === 'creator') {
+			const favBtn = document.createElement('button');
+			favBtn.type = 'button';
+			favBtn.className = 'fav-btn' + (item.favourite ? ' fav-active' : '');
+			favBtn.textContent = item.favourite ? '★ Unfavourite' : '☆ Favourite';
+			favBtn.addEventListener('click', event => {
+				event.preventDefault();
+				event.stopPropagation();
+				const newTarget = !Boolean(item.favourite);
 				toggleCreatorFavourite(label, newTarget);
-				return;
-			}
-			toggleGalleryFavourite(item.gallery_id, label, newTarget);
-		});
-		controlsDiv.appendChild(favBtn);
+			});
+			controlsDiv.appendChild(favBtn);
+		}
 
 		square.appendChild(imageDiv);
 		square.appendChild(titleDiv);
@@ -466,7 +437,7 @@ function createGalleryGrid(items, itemType, onClick) {
 				onClick(itemLabel(item));
 				return;
 			}
-			onClick(item);
+			openGalleryDetail(item);
 		});
 		el.appendChild(square);
 	});
@@ -565,7 +536,6 @@ async function loadPages(creator, gallery) {
 	]);
 	try {
 		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`);
-		const mode = data.mode || 'directory';
 		const pages = (data.pages || []).map(
 			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`
 		);
@@ -574,9 +544,8 @@ async function loadPages(creator, gallery) {
 			document.getElementById('localList').className = '';
 			return;
 		}
-		const title = mode === 'archive' ? `${galleryName} (archive)` : galleryName;
 		_readerFromStream = false;
-		openReader(pages, title, () => {
+		openReader(pages, galleryName, () => {
 			document.getElementById('localPane').style.display = '';
 			loadGalleries(creator);
 		});
@@ -731,7 +700,27 @@ document.getElementById('refreshGalleriesBtn').addEventListener('click', refresh
 document.getElementById('toggleFilterBtn').addEventListener('click', () => {
 	_filterBarVisible = !_filterBarVisible;
 	document.getElementById('searchFilterBar').style.display = _filterBarVisible ? '' : 'none';
-	document.getElementById('toggleFilterBtn').textContent = (_filterBarVisible ? '▾' : '▸') + ' Filters';
+	document.getElementById('toggleFilterBtn').textContent = _filterBarVisible ? 'Hide Search And Filters' : 'Show Search And Filters';
+});
+
+document.getElementById('galleryDetailClose').addEventListener('click', closeGalleryDetail);
+document.getElementById('galleryDetailModal').addEventListener('click', e => {
+	if (e.target.id === 'galleryDetailModal') closeGalleryDetail();
+});
+document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
+	if (!_detailGallery || !_currentCreator) return;
+	const current = _detailGallery;
+	closeGalleryDetail();
+	loadPages(_currentCreator, current);
+});
+document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
+	if (!_detailGallery) return;
+	const galleryName = itemLabel(_detailGallery);
+	const newTarget = !Boolean(_detailGallery.favourite);
+	const isFav = await toggleGalleryFavourite(_detailGallery.gallery_id, galleryName, newTarget);
+	if (isFav === null) return;
+	_detailGallery.favourite = isFav;
+	_renderGalleryDetail(_detailGallery);
 });
 
 setupSearchAndFilters();

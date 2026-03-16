@@ -590,7 +590,7 @@ table tr:nth-child(even) {
   grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 2fr);
   gap: 0.8rem;
   margin-bottom: 1.2rem;
-  align-items: start;
+  align-items: end;
 }
 
 #searchInput {
@@ -600,14 +600,25 @@ table tr:nth-child(even) {
 
 .filter-group {
   display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
+  flex-direction: row;
+  gap: 0.6rem;
+  align-items: end;
+  flex-wrap: wrap;
 }
 
 .filter-field {
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
+}
+
+.filter-inline-field {
+  min-width: 170px;
+  max-width: 240px;
+}
+
+.filter-select {
+  width: 100%;
 }
 
 .filter-field label {
@@ -626,17 +637,17 @@ table tr:nth-child(even) {
 }
 
 #toggleFilterBtn {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #50576c;
+  color: #fff;
   font-size: 0.82rem;
-  padding: 0.3rem 0.7rem;
+  padding: 0.34rem 0.78rem;
 }
 
 #toggleFilterBtn:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--ink-2);
-  color: var(--ink-1);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #8a93a9;
+  color: #fff;
   transform: none;
   filter: none;
 }
@@ -725,54 +736,6 @@ table tr:nth-child(even) {
   color: #f0c040;
   border-color: #6a5a20;
   background: #1a1608;
-}
-
-/* ── Filter chips ─────────────────────────────────────────── */
-
-.filter-chips-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-}
-
-.filter-chips-label {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-2);
-}
-
-.filter-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.28rem;
-  max-height: 88px;
-  overflow-y: auto;
-}
-
-.filter-chip {
-  border: 1px solid #2e3242;
-  background: #0d1018;
-  color: var(--ink-2);
-  padding: 0.18rem 0.55rem;
-  font-size: 0.76rem;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
-}
-
-.filter-chip:hover {
-  border-color: #5a4e6a;
-  color: var(--ink-1);
-  transform: none;
-  filter: none;
-}
-
-.filter-chip.active {
-  background: var(--accent);
-  border-color: var(--accent-2);
-  color: #fff;
 }
 
 #readerBody {
