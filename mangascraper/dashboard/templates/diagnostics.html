@@ -4,18 +4,13 @@
 
 <section>
   <div id="diagTabs" style="display:flex; gap:0.45rem; margin-bottom:0.8rem; flex-wrap:wrap;">
-    <button id="diagTabSelfTest" class="modeTab active" type="button">Self-Test</button>
-    <button id="diagTabLogs" class="modeTab" type="button">Log Browser</button>
+    <button id="diagTabLogs" class="modeTab active" type="button">Log Browser</button>
+    <button id="diagTabDatabase" class="modeTab" type="button">Database</button>
+    <button id="diagTabFiles" class="modeTab" type="button">File Browser</button>
+    <button id="diagTabSelfTest" class="modeTab" type="button">Self-Test</button>
   </div>
 
-  <div id="diagPaneSelfTest">
-    <h3>Self-Test</h3>
-    <button id="runSelfTestBtn" type="button">Run Self-Test</button>
-    <p id="selfTestMsg">Run the automated self-test suite from the dashboard.</p>
-    <pre id="selfTestOutput" style="white-space:pre-wrap;max-height:35vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
-  </div>
-
-  <div id="diagPaneLogs" style="display:none;">
+  <div id="diagPaneLogs">
     <h3>Log Browser</h3>
     <div id="controls">
       <button id="refreshLogsBtn" type="button">Refresh Logs</button>
@@ -29,19 +24,79 @@
     <p id="logsMsg">Choose a log file to view.</p>
     <pre id="logViewer" style="white-space:pre-wrap;max-height:65vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
   </div>
+
+  <div id="diagPaneDatabase" style="display:none;">
+    <h3>Database Viewer</h3>
+    <div id="dbControls">
+      <button id="dbRefreshBtn" type="button">Refresh</button>
+      <select id="dbTableSelect" title="Choose which database table to view">
+        <option value="">-- loading tables... --</option>
+      </select>
+      <input type="text" id="dbSearchBox" placeholder="Search any column...">
+    </div>
+    <p id="dbStatusMsg">Select a table to begin.</p>
+    <div id="dbTableWrap" style="overflow-x:auto">
+      <table id="dbDataTable">
+        <thead><tr id="dbTableHead"></tr></thead>
+        <tbody id="dbTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="diagPaneFiles" style="display:none;">
+    <h3>File Browser</h3>
+    <div id="fileControls">
+      <button id="fileRefreshBtn" type="button">Refresh</button>
+      <select id="fileRootSelect" title="Choose root folder"></select>
+      <select id="fileCreatorSelect" title="Choose creator">
+        <option value="">-- creator --</option>
+      </select>
+      <select id="fileGallerySelect" title="Choose gallery">
+        <option value="">-- gallery --</option>
+      </select>
+      <button id="fileOpenBtn" type="button">Open Reader</button>
+    </div>
+    <p id="fileStatusMsg">Choose a root and creator to browse files.</p>
+    <pre id="fileListViewer" style="white-space:pre-wrap;max-height:55vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+  </div>
+
+  <div id="diagPaneSelfTest" style="display:none;">
+    <h3>Self-Test</h3>
+    <button id="runSelfTestBtn" type="button">Run Self-Test</button>
+    <p id="selfTestMsg">Run the automated self-test suite from the dashboard.</p>
+    <pre id="selfTestOutput" style="white-space:pre-wrap;max-height:35vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+  </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script>
 let currentLogName = '';
+let _dbCurrentTable = '';
+let _dbAutoRefreshTimer = null;
+let _fileRoots = [];
+let _fileCurrentRoot = '';
+let _fileCurrentCreator = '';
 
 function activateDiagTab(tab) {
-  const showSelfTest = tab === 'selftest';
-  document.getElementById('diagPaneSelfTest').style.display = showSelfTest ? '' : 'none';
-  document.getElementById('diagPaneLogs').style.display = showSelfTest ? 'none' : '';
-  document.getElementById('diagTabSelfTest').classList.toggle('active', showSelfTest);
-  document.getElementById('diagTabLogs').classList.toggle('active', !showSelfTest);
+  const panes = {
+    logs: 'diagPaneLogs',
+    database: 'diagPaneDatabase',
+    files: 'diagPaneFiles',
+    selftest: 'diagPaneSelfTest',
+  };
+  const tabs = {
+    logs: 'diagTabLogs',
+    database: 'diagTabDatabase',
+    files: 'diagTabFiles',
+    selftest: 'diagTabSelfTest',
+  };
+
+  Object.values(panes).forEach(id => { document.getElementById(id).style.display = 'none'; });
+  Object.values(tabs).forEach(id => { document.getElementById(id).classList.remove('active'); });
+
+  document.getElementById(panes[tab]).style.display = '';
+  document.getElementById(tabs[tab]).classList.add('active');
 }
 
 async function runSelfTest() {
@@ -58,6 +113,218 @@ async function runSelfTest() {
   } catch (err) {
     msg.textContent = `Self-test request failed: ${err.message}`;
   }
+}
+
+async function loadDbTables() {
+  const sel = document.getElementById('dbTableSelect');
+  const status = document.getElementById('dbStatusMsg');
+  try {
+    const res = await fetch('/api/db/tables');
+    const data = await res.json();
+    sel.innerHTML = '<option value="">-- select a table --</option>';
+    (data.tables || []).forEach(tableName => {
+      const opt = document.createElement('option');
+      opt.value = tableName;
+      opt.textContent = tableName;
+      if (tableName === 'Galleries') opt.selected = true;
+      sel.appendChild(opt);
+    });
+    _dbCurrentTable = sel.value;
+    if (_dbCurrentTable) {
+      await loadDbTable(_dbCurrentTable, '');
+    } else {
+      status.textContent = 'No tables found.';
+    }
+  } catch (err) {
+    status.textContent = `Failed to load table list: ${err.message}`;
+  }
+}
+
+async function loadDbTable(tableName, search) {
+  if (!tableName) return;
+  _dbCurrentTable = tableName;
+  const status = document.getElementById('dbStatusMsg');
+  const head = document.getElementById('dbTableHead');
+  const body = document.getElementById('dbTableBody');
+  const searchVal = search !== undefined ? search : document.getElementById('dbSearchBox').value.trim();
+
+  status.textContent = `Loading ${tableName}...`;
+  head.innerHTML = '';
+  body.innerHTML = '';
+
+  try {
+    const params = new URLSearchParams({ limit: 1000 });
+    if (searchVal) params.set('search', searchVal);
+    const res = await fetch(`/api/db/table/${encodeURIComponent(tableName)}?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) {
+      status.textContent = data.error;
+      return;
+    }
+
+    (data.columns || []).forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      head.appendChild(th);
+    });
+
+    (data.rows || []).forEach(row => {
+      const tr = document.createElement('tr');
+      row.forEach(cell => {
+        const td = document.createElement('td');
+        td.textContent = cell === null ? '' : String(cell);
+        if (td.textContent.length > 120) {
+          td.title = td.textContent;
+          td.textContent = `${td.textContent.slice(0, 117)}...`;
+        }
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+
+    status.textContent = `${(data.rows || []).length} rows in ${tableName}${searchVal ? ' (filtered)' : ''}.`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
+}
+
+function startDbAutoRefresh() {
+  if (_dbAutoRefreshTimer) clearInterval(_dbAutoRefreshTimer);
+  _dbAutoRefreshTimer = setInterval(() => {
+    if (_dbCurrentTable) loadDbTable(_dbCurrentTable);
+  }, 20000);
+}
+
+function _fileApiBase(path) {
+  const root = _fileCurrentRoot ? `?root=${encodeURIComponent(_fileCurrentRoot)}` : '';
+  return `${path}${root}`;
+}
+
+async function loadFileRoots() {
+  const select = document.getElementById('fileRootSelect');
+  const status = document.getElementById('fileStatusMsg');
+  try {
+    const res = await fetch('/api/gallery/list_locations');
+    const data = await res.json();
+    _fileRoots = Array.isArray(data.locations) ? data.locations : [];
+    select.innerHTML = '<option value="">-- root --</option>';
+    _fileRoots.forEach(item => {
+      const rootPath = String(item.root_path || '');
+      if (!rootPath) return;
+      const opt = document.createElement('option');
+      opt.value = rootPath;
+      const ext = String(item.extension_used || '').trim();
+      opt.textContent = ext ? `${ext}: ${rootPath}` : rootPath;
+      select.appendChild(opt);
+    });
+    _fileCurrentRoot = String(data.selected_root || '');
+    if (_fileCurrentRoot) {
+      select.value = _fileCurrentRoot;
+    } else if (select.options.length > 1) {
+      select.selectedIndex = 1;
+      _fileCurrentRoot = select.value;
+    }
+    await loadFileCreators();
+  } catch (err) {
+    status.textContent = `Failed to load roots: ${err.message}`;
+  }
+}
+
+async function loadFileCreators() {
+  const creatorSelect = document.getElementById('fileCreatorSelect');
+  const gallerySelect = document.getElementById('fileGallerySelect');
+  const listViewer = document.getElementById('fileListViewer');
+  const status = document.getElementById('fileStatusMsg');
+  creatorSelect.innerHTML = '<option value="">-- creator --</option>';
+  gallerySelect.innerHTML = '<option value="">-- gallery --</option>';
+  listViewer.textContent = '';
+  _fileCurrentCreator = '';
+
+  if (!_fileCurrentRoot) {
+    status.textContent = 'Choose a root folder first.';
+    return;
+  }
+
+  try {
+    const res = await fetch(_fileApiBase('/api/gallery/list_creators'));
+    const data = await res.json();
+    const creators = Array.isArray(data.creators) ? data.creators : [];
+    creators.forEach(item => {
+      const name = String(item.name || item.label || '');
+      if (!name) return;
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${name} (${Number(item.gallery_count || 0)} galleries)`;
+      creatorSelect.appendChild(opt);
+    });
+    status.textContent = `${creators.length} creators found.`;
+  } catch (err) {
+    status.textContent = `Failed to load creators: ${err.message}`;
+  }
+}
+
+async function loadFileGalleries() {
+  const creator = document.getElementById('fileCreatorSelect').value;
+  const gallerySelect = document.getElementById('fileGallerySelect');
+  const listViewer = document.getElementById('fileListViewer');
+  const status = document.getElementById('fileStatusMsg');
+  gallerySelect.innerHTML = '<option value="">-- gallery --</option>';
+  listViewer.textContent = '';
+  _fileCurrentCreator = creator;
+
+  if (!creator) {
+    status.textContent = 'Choose a creator.';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${_fileApiBase('/api/gallery/list_galleries/' + encodeURIComponent(creator))}`);
+    const data = await res.json();
+    const galleries = Array.isArray(data.galleries) ? data.galleries : [];
+    galleries.forEach(item => {
+      const name = String(item.name || item.label || '');
+      if (!name) return;
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${name} (${Number(item.page_count || 0)} pages)`;
+      gallerySelect.appendChild(opt);
+    });
+    status.textContent = `${galleries.length} galleries for ${creator}.`;
+  } catch (err) {
+    status.textContent = `Failed to load galleries: ${err.message}`;
+  }
+}
+
+async function loadFilePages() {
+  const creator = document.getElementById('fileCreatorSelect').value;
+  const gallery = document.getElementById('fileGallerySelect').value;
+  const listViewer = document.getElementById('fileListViewer');
+  const status = document.getElementById('fileStatusMsg');
+  listViewer.textContent = '';
+
+  if (!creator || !gallery) {
+    status.textContent = 'Choose a gallery to list files.';
+    return;
+  }
+
+  try {
+    const url = `${_fileApiBase('/api/gallery/list_pages/' + encodeURIComponent(creator) + '/' + encodeURIComponent(gallery))}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = Array.isArray(data.pages) ? data.pages : [];
+    status.textContent = `${pages.length} files in ${gallery}.`;
+    listViewer.textContent = pages.length ? pages.join('\n') : '(empty gallery)';
+  } catch (err) {
+    status.textContent = `Failed to load files: ${err.message}`;
+  }
+}
+
+function openFileReader() {
+  const creator = document.getElementById('fileCreatorSelect').value;
+  const gallery = document.getElementById('fileGallerySelect').value;
+  if (!creator || !gallery) return;
+  window.location.href = `/?creator=${encodeURIComponent(creator)}&gallery=${encodeURIComponent(gallery)}`;
 }
 
 async function fetchLogsList(options = {}) {
@@ -124,8 +391,10 @@ async function loadLogFile() {
   }
 }
 
-document.getElementById('diagTabSelfTest').addEventListener('click', () => activateDiagTab('selftest'));
 document.getElementById('diagTabLogs').addEventListener('click', () => activateDiagTab('logs'));
+document.getElementById('diagTabDatabase').addEventListener('click', () => activateDiagTab('database'));
+document.getElementById('diagTabFiles').addEventListener('click', () => activateDiagTab('files'));
+document.getElementById('diagTabSelfTest').addEventListener('click', () => activateDiagTab('selftest'));
 document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
   await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
 });
@@ -133,8 +402,27 @@ document.getElementById('runSelfTestBtn').addEventListener('click', runSelfTest)
 document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
 document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
 
-activateDiagTab('selftest');
+document.getElementById('dbRefreshBtn').addEventListener('click', () => loadDbTable(_dbCurrentTable));
+document.getElementById('dbTableSelect').addEventListener('change', e => {
+  document.getElementById('dbSearchBox').value = '';
+  loadDbTable(e.target.value, '');
+});
+document.getElementById('dbSearchBox').addEventListener('input', e => loadDbTable(_dbCurrentTable, e.target.value));
+
+document.getElementById('fileRefreshBtn').addEventListener('click', loadFileRoots);
+document.getElementById('fileRootSelect').addEventListener('change', e => {
+  _fileCurrentRoot = e.target.value;
+  loadFileCreators();
+});
+document.getElementById('fileCreatorSelect').addEventListener('change', loadFileGalleries);
+document.getElementById('fileGallerySelect').addEventListener('change', loadFilePages);
+document.getElementById('fileOpenBtn').addEventListener('click', openFileReader);
+
+activateDiagTab('logs');
 fetchLogsList();
 setInterval(fetchLogsList, 20000);
+loadDbTables();
+startDbAutoRefresh();
+loadFileRoots();
 </script>
 {% endblock %}
