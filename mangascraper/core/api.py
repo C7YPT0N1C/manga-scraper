@@ -729,6 +729,49 @@ class DB:
         return DB.init_db()
 
     @staticmethod
+    def list_table_names() -> list[str]:
+        """Return all user-created table names in the database."""
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def query_table(table_name: str, search: str = None, limit: int = 500, offset: int = 0) -> dict:
+        """
+        Return rows and column names for any table in the database.
+        table_name is validated against the live table list to prevent injection.
+        Optional search filters any column that contains the search string.
+        """
+        DB.init_db()
+        allowed = DB.list_table_names()
+        if table_name not in allowed:
+            return {"columns": [], "rows": [], "error": f"Unknown table '{table_name}'"}
+
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"PRAGMA table_info({table_name})")  # table name already validated above
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if search and search.strip():
+                like = f"%{search.strip()}%"
+                conditions = " OR ".join(f"CAST({col} AS TEXT) LIKE ?" for col in columns)
+                params = [like] * len(columns) + [limit, offset]
+                cursor.execute(
+                    f"SELECT * FROM {table_name} WHERE {conditions} LIMIT ? OFFSET ?",
+                    params,
+                )
+            else:
+                cursor.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (limit, offset))
+
+            rows = [list(row) for row in cursor.fetchall()]
+
+        return {"columns": columns, "rows": rows}
+
+    @staticmethod
     def set_queued_galleries(ids):
         """Write a list of Gallery IDs into the database gallery queue."""
         DB.init_db()
@@ -1103,6 +1146,28 @@ class DB:
         @staticmethod
         def list_by_status(status):
             return DB.list_galleries(status=status)
+
+        @staticmethod
+        def list_as_dicts(status=None) -> list[dict]:
+            """Return gallery rows as dicts with string-safe fields."""
+            rows = DB.list_galleries(status=status)
+            result = []
+            for row in rows:
+                if isinstance(row, dict):
+                    result.append({
+                        "id": row.get("id"),
+                        "status": row.get("status"),
+                        "started_at": row.get("started_at"),
+                        "completed_at": row.get("completed_at"),
+                    })
+                elif isinstance(row, (list, tuple)) and len(row) >= 4:
+                    result.append({
+                        "id": row[0],
+                        "status": row[1],
+                        "started_at": row[2],
+                        "completed_at": row[3],
+                    })
+            return result
 
 class Sleep:
     """Adaptive retry sleep calculations."""

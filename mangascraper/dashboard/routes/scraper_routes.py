@@ -23,6 +23,7 @@ _SEARCH_TYPES = {
     "homepage",
     "id_range",
     "ids",
+    "cache_key",
     "search",
     "artist",
     "group",
@@ -193,7 +194,7 @@ def _start_process(cli_args: list[str]):
 def list_extensions():
     """Return installed extensions from the local manifest."""
     try:
-        from mangascraper.extensions.extension_manager import load_local_manifest
+        from mangascraper.extensions.extension_manager import calculate_extension_download_path, load_local_manifest
         manifest = load_local_manifest()
         extensions = [
             {
@@ -202,6 +203,7 @@ def list_extensions():
                 "description": ext.get("description", ""),
                 "version": ext.get("version", ""),
                 "installed": ext.get("installed", False),
+                "default_output_folder": calculate_extension_download_path(ext.get("name", "")) if ext.get("name") else "",
             }
             for ext in (manifest.get("extensions") or [])
             if ext.get("name")
@@ -242,7 +244,12 @@ def search_galleries():
     cache_key = None
     ids = []
 
-    if query_type == "id_range":
+    if query_type == "cache_key":
+        if not query_value:
+            return jsonify({"message": "cache_key is required for query_type=cache_key."}), 400
+        cache_key = query_value
+        ids = scraperapi.Cache.Load.cache(cache_key=cache_key)
+    elif query_type == "id_range":
         start_id = _safe_int(payload.get("start_id"), None)
         end_id = _safe_int(payload.get("end_id"), None)
         if start_id is None:
@@ -276,16 +283,62 @@ def search_galleries():
             "results": [],
         })
 
-    metadata = scraperapi.Fetch.all_galleries_metadata(ids, cache_key=cache_key)
+    # Keep dashboard searches responsive: render IDs immediately from cached metadata only.
+    # This avoids long blocking API fetches that can leave the UI stuck on "Searching...".
+    metadata = scraperapi.Cache.Load.id_metadata(ids)
     rows = _queue_rows(sorted(ids, reverse=True), metadata)
     summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
 
     return jsonify({
+        "message": f"Loaded {len(ids)} galleries.",
         "cache_key": cache_key,
         "ids": ids,
         "summary": summary,
         "results": rows,
     })
+
+
+@scraper_bp.route("/cache/clear", methods=["POST"])
+def cache_clear():
+    payload = request.get_json(silent=True) or {}
+    cache_key = str(payload.get("cache_key") or "").strip() or None
+    gallery_id = _safe_int(payload.get("gallery_id"), None)
+    cleared = scraperapi.Cache.clear_cache(cache_key=cache_key, gallery_id=gallery_id)
+    return jsonify({"message": "Cache cleared.", "cleared": cleared})
+
+
+@scraper_bp.route("/search/history", methods=["GET"])
+def search_history_list():
+    references = scraperapi.Cache.Load.cache() or {}
+    rows = []
+    for key, entry in references.items():
+        if not isinstance(entry, dict):
+            continue
+        ids = entry.get("ids") or []
+        cache_type = str(entry.get("cache_type") or "")
+        cache_target = str(entry.get("cache_target") or "")
+        rows.append({
+            "cache_key": str(key),
+            "cache_type": cache_type,
+            "cache_target": cache_target,
+            "ids_count": len(ids),
+            "expires_at": entry.get("expires_at"),
+            "label": f"{cache_type}:{cache_target}" if cache_target else str(key),
+        })
+
+    rows.sort(key=lambda r: str(r.get("cache_key") or ""))
+    return jsonify({"history": rows})
+
+
+@scraper_bp.route("/search/history/remove", methods=["POST"])
+def search_history_remove():
+    payload = request.get_json(silent=True) or {}
+    cache_key = str(payload.get("cache_key") or "").strip()
+    if not cache_key:
+        return jsonify({"message": "cache_key is required."}), 400
+
+    cleared = scraperapi.Cache.clear_cache(cache_key=cache_key)
+    return jsonify({"message": f"Removed search history item '{cache_key}'.", "cleared": cleared})
 
 
 @scraper_bp.route("/queue", methods=["GET"])

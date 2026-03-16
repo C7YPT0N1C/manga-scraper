@@ -5,7 +5,7 @@
 <!-- ===== RUNTIME ===== -->
 <section>
   <h3>Runtime</h3>
-  <button id="refreshStatusBtn">Refresh Status</button>
+  <button id="refreshAllBtn">Refresh Scraper</button>
   <button id="startBtn">Start Scraper</button>
   <button id="stopBtn">Stop Scraper</button>
   <button id="startQueueBtn">Start From Queue</button>
@@ -121,14 +121,15 @@
       Search...
       <select id="queryType">
         <option value="homepage">The Homepage</option>
-        <option value="id_range">by ID Range</option>
-        <option value="ids">by Explicit IDs</option>
+        <option value="id_range">By ID Range</option>
+        <option value="ids">By Explicit IDs</option>
+        <option value="cache_key">By Cache Key</option>
         <option value="search">General Search (keyword)</option>
-        <option value="artist">by Artist</option>
-        <option value="group">by Group</option>
-        <option value="tag">by Tag</option>
-        <option value="character">by Character</option>
-        <option value="parody">by Parody / Series</option>
+        <option value="artist">By Artist</option>
+        <option value="group">By Group</option>
+        <option value="tag">By Tag</option>
+        <option value="character">By Character</option>
+        <option value="parody">By Parody / Series</option>
       </select>
     </label>
 
@@ -182,10 +183,27 @@
 
   </div>
   <button id="searchBtn">Search</button>
+  <button id="refreshHistoryBtn">Refresh Search History</button>
+  <button id="clearCacheBtn">Clear Entire Cache</button>
   <button id="addAllBtn">Add All Results To Queue</button>
   <button id="addSelectedBtn">Add Selected Results</button>
   <p id="searchMsg"></p>
   <p id="summaryMsg"></p>
+
+  <h4>Search History (Cache Keys)</h4>
+  <p id="historyMsg"></p>
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>Cache Key</th>
+        <th>Type</th>
+        <th>Target</th>
+        <th>IDs</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <table id="resultsTable">
     <thead>
@@ -229,6 +247,7 @@
 {% block scripts %}
 <script>
 let currentResults = [];
+let extensionOutputFolders = {};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -252,18 +271,61 @@ function renderRows(tableSelector, rows) {
   const tbody = document.querySelector(`${tableSelector} tbody`);
   tbody.innerHTML = '';
   rows.forEach(row => {
+    const idValue = row.id ?? row.gallery_id;
+    const artists = Array.isArray(row.artists) ? row.artists : [];
+    const groups = Array.isArray(row.groups) ? row.groups : [];
+    const langsArr = Array.isArray(row.languages) ? row.languages : [];
     const people = [...(row.artists || []), ...(row.groups || [])].join(', ');
     const langs = (row.languages || []).join(', ');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" value="${row.id}"></td>
-      <td>${asText(row.id)}</td>
+      <td><input type="checkbox" value="${asText(idValue, '')}"></td>
+      <td>${asText(idValue)}</td>
       <td>${asText(row.title, '(no title)')}</td>
-      <td>${asText(people, '-')}</td>
-      <td>${asText(langs, '-')}</td>
+      <td>${asText([...artists, ...groups].join(', '), '-')}</td>
+      <td>${asText(langsArr.join(', '), '-')}</td>
       <td>${asText(row.pages, '0')}</td>
     `;
     tbody.appendChild(tr);
+  });
+}
+
+function renderHistoryRows(rows) {
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${asText(row.cache_key, '-')}</td>
+      <td>${asText(row.cache_type, '-')}</td>
+      <td>${asText(row.cache_target, '-')}</td>
+      <td>${asText(row.ids_count, 0)}</td>
+      <td>
+        <button class="histSearchBtn" data-key="${asText(row.cache_key, '')}">Search</button>
+        <button class="histDeleteBtn" data-key="${asText(row.cache_key, '')}">Remove</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.histSearchBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key || '';
+      if (!key) return;
+      document.getElementById('queryType').value = 'cache_key';
+      updateSearchFields();
+      document.getElementById('queryValue').value = key;
+      runSearch();
+    });
+  });
+
+  tbody.querySelectorAll('.histDeleteBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.key || '';
+      if (!key) return;
+      await removeHistoryItem(key);
+    });
   });
 }
 
@@ -282,7 +344,7 @@ function clearGlobalStatus() {
 
 const SEARCH_FIELD_RULES = {
   // row id  → array of query types that SHOW this row
-  row_queryValue: ['search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_queryValue: ['cache_key', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_idsValue:   ['ids'],
   row_sort:       ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_startPage:  ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
@@ -293,6 +355,14 @@ const SEARCH_FIELD_RULES = {
 
 function updateSearchFields() {
   const type = document.getElementById('queryType').value;
+  const queryValue = document.getElementById('queryValue');
+  if (queryValue) {
+    if (type === 'cache_key') {
+      queryValue.placeholder = 'e.g. artist:enma';
+    } else {
+      queryValue.placeholder = 'e.g. english';
+    }
+  }
   for (const [rowId, visibleFor] of Object.entries(SEARCH_FIELD_RULES)) {
     const el = document.getElementById(rowId);
     if (el) el.style.display = visibleFor.includes(type) ? '' : 'none';
@@ -309,6 +379,7 @@ async function loadExtensions() {
     const res = await fetch('/api/scraper/extensions');
     const data = await res.json();
     const sel = document.getElementById('cfg_extension');
+    extensionOutputFolders = {};
     // Clear all except the first "none" option
     while (sel.options.length > 1) sel.remove(1);
     (data.extensions || []).forEach(ext => {
@@ -316,6 +387,9 @@ async function loadExtensions() {
       opt.value = ext.name;
       opt.textContent = ext.label || ext.name;
       sel.appendChild(opt);
+      if (ext.name && ext.default_output_folder) {
+        extensionOutputFolders[ext.name] = ext.default_output_folder;
+      }
     });
   } catch (e) {
     // Non-fatal: extension list stays as "none"
@@ -327,9 +401,14 @@ async function loadExtensions() {
 function setupOutputFolderDropdown(currentFolder) {
   const sel = document.getElementById('cfg_output_folder_select');
   const custom = document.getElementById('cfg_output_folder_custom');
+  const selectedExtension = document.getElementById('cfg_extension').value;
+  const extensionDefaultFolder = extensionOutputFolders[selectedExtension] || '';
 
   // Populate known paths — always include the current value if non-empty
   const knownPaths = [];
+  if (extensionDefaultFolder && !knownPaths.includes(extensionDefaultFolder)) {
+    knownPaths.push(extensionDefaultFolder);
+  }
   if (currentFolder && !knownPaths.includes(currentFolder)) {
     knownPaths.push(currentFolder);
   }
@@ -388,6 +467,14 @@ function getOutputFolder() {
   }
   return sel.value;
 }
+
+document.getElementById('cfg_extension').addEventListener('change', function () {
+  const ext = this.value;
+  const extDefaultFolder = extensionOutputFolders[ext] || '';
+  if (extDefaultFolder) {
+    setupOutputFolderDropdown(extDefaultFolder);
+  }
+});
 
 // ── Runtime status ────────────────────────────────────────────────────────────
 
@@ -490,23 +577,81 @@ async function runSearch() {
   document.getElementById('searchMsg').textContent = 'Searching...';
   setGlobalStatus('Fetching gallery IDs...');
 
-  const res = await fetch('/api/scraper/search', {
+  try {
+    const res = await fetch('/api/scraper/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    const ids = Array.isArray(data.ids) ? data.ids : [];
+    const results = Array.isArray(data.results) ? data.results : [];
+    const rowById = new Map(results.map(r => [Number(r.id), r]));
+
+    currentResults = ids.map(id => rowById.get(Number(id)) || {
+      id,
+      title: `Gallery ${id}`,
+      artists: [],
+      groups: [],
+      languages: [],
+      pages: 0,
+    });
+    renderRows('#resultsTable', currentResults);
+
+    const s = data.summary || {};
+    document.getElementById('summaryMsg').textContent = Object.keys(s).length
+      ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
+      : 'Summary: none';
+
+    document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentResults.length} results.`;
+  } catch (err) {
+    document.getElementById('searchMsg').textContent = `Search failed: ${err.message}`;
+  } finally {
+    clearGlobalStatus();
+  }
+}
+
+// ── Cache / search history ───────────────────────────────────────────────────
+
+async function refreshSearchHistory() {
+  const msg = document.getElementById('historyMsg');
+  try {
+    msg.textContent = 'Loading search history...';
+    const res = await fetch('/api/scraper/search/history');
+    const data = await res.json();
+    const rows = data.history || [];
+    renderHistoryRows(rows);
+    msg.textContent = `Search history: ${rows.length} cache keys.`;
+  } catch (err) {
+    msg.textContent = `Failed to load search history: ${err.message}`;
+  }
+}
+
+async function removeHistoryItem(cacheKey) {
+  const ok = window.confirm(`Remove search history item '${cacheKey}'? This will delete its cache key from the database.`);
+  if (!ok) return;
+
+  await fetch('/api/scraper/search/history/remove', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ cache_key: cacheKey })
   });
-  const data = await res.json();
+  await refreshSearchHistory();
+}
 
+async function clearEntireCache() {
+  const ok = window.confirm('Clear the entire cache? This removes all cache keys and cached metadata.');
+  if (!ok) return;
+
+  setGlobalStatus('Clearing cache...');
+  await fetch('/api/scraper/cache/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  await refreshSearchHistory();
   clearGlobalStatus();
-  currentResults = data.results || [];
-  renderRows('#resultsTable', currentResults);
-
-  const s = data.summary || {};
-  document.getElementById('summaryMsg').textContent = Object.keys(s).length
-    ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}–${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
-    : 'Summary: none';
-
-  document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentResults.length} results.`;
 }
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
@@ -533,7 +678,11 @@ async function addIdsToQueue(ids) {
 
 // ── Event bindings ────────────────────────────────────────────────────────────
 
-document.getElementById('refreshStatusBtn').onclick = refreshStatus;
+document.getElementById('refreshAllBtn').onclick = async () => {
+  await refreshStatus();
+  await refreshQueue();
+  await loadConfig();
+};
 
 document.getElementById('startBtn').onclick = async () => {
   setGlobalStatus('Starting scraper...');
@@ -560,6 +709,8 @@ document.getElementById('loadConfigBtn').onclick = loadConfig;
 document.getElementById('saveConfigBtn').onclick = saveConfig;
 
 document.getElementById('searchBtn').onclick = runSearch;
+document.getElementById('refreshHistoryBtn').onclick = refreshSearchHistory;
+document.getElementById('clearCacheBtn').onclick = clearEntireCache;
 document.getElementById('addAllBtn').onclick = async () => addIdsToQueue(currentResults.map(r => r.id));
 document.getElementById('addSelectedBtn').onclick = async () => addIdsToQueue(selectedIds('#resultsTable'));
 
@@ -585,6 +736,9 @@ document.getElementById('queueSelectAll').addEventListener('change', (e) => setS
 loadConfig();
 refreshStatus();
 refreshQueue();
+refreshSearchHistory();
 setInterval(refreshStatus, 5000);
+setInterval(refreshQueue, 15000);
+setInterval(refreshSearchHistory, 30000);
 </script>
 {% endblock %}

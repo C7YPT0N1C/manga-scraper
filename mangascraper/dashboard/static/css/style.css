@@ -147,3 +147,164 @@ select {
 #searchGrid label[style*="display: none"] {
   display: none !important;
 }
+/* -- Database viewer ----------------------------------- */
+#tableSelect {
+  min-width: 200px;
+}
+
+#dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1em;
+  font-size: 0.88rem;
+}
+
+#dataTable th,
+#dataTable td {
+  border: 1px solid #444;
+  padding: 5px 9px;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#dataTable th {
+  background: #333;
+  position: sticky;
+  top: 0;
+}
+
+#dataTable tr:nth-child(even) {
+  background: #2a2a2a;
+}
+
+/* -- Gallery viewer ------------------------------------ */
+#modeTabs {
+  margin-bottom: 1em;
+}
+
+.modeTab {
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+}
+
+.modeTab.active {
+  background: #1e3d55;
+  border-bottom-color: #9cf;
+}
+
+#localNav {
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+#localNav a {
+  color: #9cf;
+  text-decoration: none;
+}
+
+#localNav a:hover {
+  text-decoration: underline;
+}
+
+.listItem {
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.listItem:hover {
+  background: #2a3f52;
+}
+
+#streamControls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 1em;
+}
+
+#streamIdInput {
+  width: 140px;
+}
+
+#readerOverlay {
+  position: fixed;
+  inset: 0;
+  background: #090909;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+#readerHeader {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding: 8px 16px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+#readerTitle {
+  flex: 1;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#readerCounter {
+  color: #aaa;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+#readerBody {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#readerImgWrap {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+#readerImg {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.navBtn {
+  font-size: 1.6rem;
+  padding: 12px 18px;
+  flex-shrink: 0;
+  height: 100%;
+  border-radius: 0;
+  background: rgba(0,0,0,0.4);
+  border: none;
+}
+
+.navBtn:hover {
+  background: rgba(46,77,102,0.8);
+}
+
+.navBtn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}

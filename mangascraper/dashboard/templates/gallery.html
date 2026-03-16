@@ -1,5 +1,233 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>📖 Gallery Viewer</h2>
-<div id="gallery"></div>
+<h2>Gallery Viewer</h2>
+
+<!-- Tab switcher -->
+<div id="modeTabs">
+	<button class="modeTab active" data-mode="local">Local Galleries</button>
+	<button class="modeTab" data-mode="stream">Stream by ID</button>
+</div>
+
+<!-- ===== LOCAL MODE ===== -->
+<div id="localPane" class="modePane">
+	<div id="localNav">
+		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
+	</div>
+	<div id="localList"></div>
+</div>
+
+<!-- ===== STREAM MODE ===== -->
+<div id="streamPane" class="modePane" style="display:none">
+	<div id="streamControls">
+		<label for="streamIdInput">Gallery ID:</label>
+		<input type="number" id="streamIdInput" min="1" placeholder="e.g. 123456">
+		<button id="streamStartBtn">Open</button>
+	</div>
+	<p id="streamStatus">Enter a gallery ID and click Open.</p>
+</div>
+
+<!-- ===== SHARED READER OVERLAY ===== -->
+<div id="readerOverlay" style="display:none">
+	<div id="readerHeader">
+		<button id="readerClose">&#x2715; Close</button>
+		<span id="readerTitle"></span>
+		<span id="readerCounter"></span>
+	</div>
+	<div id="readerBody">
+		<button id="prevBtn" class="navBtn">&#8592;</button>
+		<div id="readerImgWrap">
+			<img id="readerImg" src="" alt="manga page">
+		</div>
+		<button id="nextBtn" class="navBtn">&#8594;</button>
+	</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _activeStreamId = null;
+
+const reader = {
+	pages: [],    // array of URL strings
+	index: 0,
+	title: '',
+	onClose: null
+};
+
+// ── Utility ────────────────────────────────────────────────────────────────
+async function apiFetch(url) {
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	return res.json();
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.modeTab').forEach(btn => {
+	btn.addEventListener('click', () => {
+		document.querySelectorAll('.modeTab').forEach(b => b.classList.remove('active'));
+		document.querySelectorAll('.modePane').forEach(p => p.style.display = 'none');
+		btn.classList.add('active');
+		const pane = document.getElementById(btn.dataset.mode + 'Pane');
+		if (pane) pane.style.display = '';
+	});
+});
+
+// ── Local gallery browser ──────────────────────────────────────────────────
+function setLocalList(items, onClick, emptyMsg) {
+	const el = document.getElementById('localList');
+	el.innerHTML = '';
+	if (!items.length) { el.textContent = emptyMsg || 'Nothing here.'; return; }
+	items.forEach(item => {
+		const div = document.createElement('div');
+		div.className = 'listItem';
+		div.textContent = item;
+		div.addEventListener('click', () => onClick(item));
+		el.appendChild(div);
+	});
+}
+
+function setBreadcrumb(parts) {
+	// parts: [{label, onClick}, ...]
+	const el = document.getElementById('localBreadcrumb');
+	el.innerHTML = '';
+	parts.forEach((part, i) => {
+		if (i > 0) { const sep = document.createTextNode(' / '); el.appendChild(sep); }
+		const a = document.createElement('a');
+		a.href = '#';
+		a.textContent = part.label;
+		if (part.onClick) a.addEventListener('click', e => { e.preventDefault(); part.onClick(); });
+		el.appendChild(a);
+	});
+}
+
+async function loadCreators() {
+	setBreadcrumb([{ label: 'Creators' }]);
+	setLocalList([], () => {}, 'Loading...');
+	try {
+		const data = await apiFetch('/api/gallery/list_creators');
+		setLocalList(data.creators || [], loadGalleries, 'No local creators found.');
+	} catch (err) {
+		document.getElementById('localList').textContent = 'Error: ' + err.message;
+	}
+}
+
+async function loadGalleries(creator) {
+	setBreadcrumb([
+		{ label: 'Creators', onClick: loadCreators },
+		{ label: creator }
+	]);
+	setLocalList([], () => {}, 'Loading...');
+	try {
+		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`);
+		setLocalList(data.galleries || [], gallery => loadPages(creator, gallery), 'No galleries found.');
+	} catch (err) {
+		document.getElementById('localList').textContent = 'Error: ' + err.message;
+	}
+}
+
+async function loadPages(creator, gallery) {
+	setBreadcrumb([
+		{ label: 'Creators', onClick: loadCreators },
+		{ label: creator, onClick: () => loadGalleries(creator) },
+		{ label: gallery }
+	]);
+	setLocalList([], () => {}, 'Loading...');
+	try {
+		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`);
+		const pages = (data.pages || []).map(
+			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`
+		);
+		if (!pages.length) { document.getElementById('localList').textContent = 'Gallery is empty.'; return; }
+		openReader(pages, gallery, () => {
+			document.getElementById('localPane').style.display = '';
+			loadPages(creator, gallery);
+		});
+	} catch (err) {
+		document.getElementById('localList').textContent = 'Error: ' + err.message;
+	}
+}
+
+// ── Stream mode ────────────────────────────────────────────────────────────
+document.getElementById('streamStartBtn').addEventListener('click', startStream);
+document.getElementById('streamIdInput').addEventListener('keydown', e => {
+	if (e.key === 'Enter') startStream();
+});
+
+async function startStream() {
+	const input = document.getElementById('streamIdInput');
+	const status = document.getElementById('streamStatus');
+	const id = parseInt(input.value, 10);
+	if (!id || id < 1) { status.textContent = 'Please enter a valid gallery ID.'; return; }
+
+	status.textContent = `Fetching metadata for #${id}...`;
+	try {
+		const data = await apiFetch(`/api/gallery/stream/${id}`);
+		if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+		_activeStreamId = id;
+		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
+		openReader(data.page_urls, data.title || `Gallery #${id}`, closeStream);
+	} catch (err) {
+		status.textContent = 'Failed: ' + err.message;
+	}
+}
+
+async function closeStream() {
+	if (_activeStreamId === null) return;
+	try {
+		await fetch(`/api/gallery/stream/${_activeStreamId}/close`, { method: 'POST' });
+	} catch { /* best effort */ }
+	_activeStreamId = null;
+	document.getElementById('streamStatus').textContent = 'Session closed.';
+}
+
+// ── Shared reader ──────────────────────────────────────────────────────────
+function openReader(pages, title, onClose) {
+	reader.pages = pages;
+	reader.index = 0;
+	reader.title = title;
+	reader.onClose = onClose;
+	document.getElementById('readerTitle').textContent = title;
+	document.getElementById('localPane').style.display = 'none';
+	document.getElementById('streamPane').style.display = 'none';
+	document.getElementById('readerOverlay').style.display  = '';
+	showPage();
+}
+
+function showPage() {
+	const img = document.getElementById('readerImg');
+	const counter = document.getElementById('readerCounter');
+	img.src = reader.pages[reader.index];
+	counter.textContent = `${reader.index + 1} / ${reader.pages.length}`;
+	document.getElementById('prevBtn').disabled = reader.index === 0;
+	document.getElementById('nextBtn').disabled = reader.index === reader.pages.length - 1;
+}
+
+document.getElementById('prevBtn').addEventListener('click', () => {
+	if (reader.index > 0) { reader.index--; showPage(); }
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+	if (reader.index < reader.pages.length - 1) { reader.index++; showPage(); }
+});
+document.addEventListener('keydown', e => {
+	if (document.getElementById('readerOverlay').style.display === 'none') return;
+	if (e.key === 'ArrowLeft' && reader.index > 0) { reader.index--; showPage(); }
+	if (e.key === 'ArrowRight' && reader.index < reader.pages.length - 1) { reader.index++; showPage(); }
+	if (e.key === 'Escape') closeReader();
+});
+
+document.getElementById('readerClose').addEventListener('click', closeReader);
+function closeReader() {
+	document.getElementById('readerOverlay').style.display = 'none';
+	// Re-show the active mode pane
+	const activeMode = document.querySelector('.modeTab.active').dataset.mode;
+	document.getElementById(activeMode + 'Pane').style.display = '';
+	if (reader.onClose) reader.onClose();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadCreators();
+</script>
 {% endblock %}
