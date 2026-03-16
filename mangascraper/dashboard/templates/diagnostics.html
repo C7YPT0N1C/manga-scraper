@@ -4,10 +4,10 @@
 
 <section>
   <div id="diagTabs" style="display:flex; gap:0.45rem; margin-bottom:0.8rem; flex-wrap:wrap;">
-    <button id="diagTabLogs" class="modeTab active" type="button">Log Browser</button>
+    <button id="diagTabSelfTest" class="modeTab active" type="button">Self-Test</button>
+    <button id="diagTabLogs" class="modeTab" type="button">Log Browser</button>
     <button id="diagTabDatabase" class="modeTab" type="button">Database</button>
     <button id="diagTabFiles" class="modeTab" type="button">File Browser</button>
-    <button id="diagTabSelfTest" class="modeTab" type="button">Self-Test</button>
   </div>
 
   <div id="diagPaneLogs">
@@ -563,7 +563,7 @@ document.getElementById('fileMkdirInput').addEventListener('keydown', e => {
   if (e.key === 'Escape') document.getElementById('fileMkdirModal').style.display = 'none';
 });
 
-activateDiagTab('logs');
+activateDiagTab('selftest');
 fetchLogsList();
 setInterval(fetchLogsList, 20000);
 loadDbTables();
