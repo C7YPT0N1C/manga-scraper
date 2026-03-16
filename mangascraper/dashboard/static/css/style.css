@@ -308,3 +308,64 @@ select {
   opacity: 0.2;
   cursor: default;
 }
+
+/* Floating runtime bar */
+.runtime-dock {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 1100;
+  background: linear-gradient(90deg, #16354b 0%, #245a7a 50%, #16354b 100%);
+  color: #eaf6ff;
+  border: 1px solid #4f8db5;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+.runtime-dock-title {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+#runtimeDockContent {
+  margin-top: 3px;
+  font-family: Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+main {
+  padding-bottom: 90px;
+}
+
+/* Search history spacing */
+#historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.6em;
+  margin-bottom: 1em;
+}
+
+#historyTable th,
+#historyTable td {
+  border: 1px solid #444;
+  padding: 8px 12px;
+}
+
+#historyTable th {
+  background: #2f3a42;
+}
+
+#historyTable tr:nth-child(even) {
+  background: #222a30;
+}
+
+/* Gallery stream helper text */
+#streamPathInfo {
+  font-size: 0.85rem;
+  color: #a8d4ee;
+  margin-top: 4px;
+}

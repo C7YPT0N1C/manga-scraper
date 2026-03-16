@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Logs</h2>
+
+<section>
+  <h3>Log Browser</h3>
+  <div id="controls">
+    <button id="refreshLogsBtn">Refresh Logs</button>
+    <select id="logFileSelect">
+      <option value="">-- select log file --</option>
+    </select>
+    <label for="logLinesInput">Lines</label>
+    <input id="logLinesInput" type="number" min="50" max="5000" step="50" value="400">
+    <button id="loadLogBtn">Load</button>
+  </div>
+  <p id="logsMsg">Choose a log file to view.</p>
+  <pre id="logViewer" style="white-space:pre-wrap;max-height:65vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function fetchLogsList() {
+  const select = document.getElementById('logFileSelect');
+  const msg = document.getElementById('logsMsg');
+  try {
+    const res = await fetch('/api/scraper/logs');
+    const data = await res.json();
+    select.innerHTML = '<option value="">-- select log file --</option>';
+    (data.files || []).forEach(file => {
+      const opt = document.createElement('option');
+      opt.value = file.name;
+      const sizeKb = (Number(file.size || 0) / 1024).toFixed(1);
+      opt.textContent = `${file.name} (${sizeKb} KB)`;
+      select.appendChild(opt);
+    });
+    msg.textContent = `${(data.files || []).length} log files found.`;
+  } catch (err) {
+    msg.textContent = `Failed to load logs list: ${err.message}`;
+  }
+}
+
+async function loadLogFile() {
+  const name = document.getElementById('logFileSelect').value;
+  const lines = Number(document.getElementById('logLinesInput').value || 400);
+  const viewer = document.getElementById('logViewer');
+  const msg = document.getElementById('logsMsg');
+  if (!name) {
+    msg.textContent = 'Please choose a log file first.';
+    return;
+  }
+
+  try {
+    msg.textContent = `Loading ${name}...`;
+    const res = await fetch(`/api/scraper/logs/${encodeURIComponent(name)}?lines=${encodeURIComponent(lines)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || `Failed to load log: HTTP ${res.status}`;
+      viewer.textContent = '';
+      return;
+    }
+    viewer.textContent = data.content || '(empty file)';
+    msg.textContent = `Showing last ${data.lines} lines of ${data.name}.`;
+    viewer.scrollTop = viewer.scrollHeight;
+  } catch (err) {
+    msg.textContent = `Failed to read log: ${err.message}`;
+  }
+}
+
+document.getElementById('refreshLogsBtn').addEventListener('click', fetchLogsList);
+document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
+document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
+
+fetchLogsList();
+setInterval(fetchLogsList, 20000);
+</script>
+{% endblock %}

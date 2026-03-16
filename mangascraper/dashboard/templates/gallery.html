@@ -22,8 +22,10 @@
 		<label for="streamIdInput">Gallery ID:</label>
 		<input type="number" id="streamIdInput" min="1" placeholder="e.g. 123456">
 		<button id="streamStartBtn">Open</button>
+		<button id="streamDownloadBtn" type="button">Download This Gallery</button>
 	</div>
 	<p id="streamStatus">Enter a gallery ID and click Open.</p>
+	<p id="streamPathInfo"></p>
 </div>
 
 <!-- ===== SHARED READER OVERLAY ===== -->
@@ -137,11 +139,13 @@ async function loadPages(creator, gallery) {
 	setLocalList([], () => {}, 'Loading...');
 	try {
 		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`);
+		const mode = data.mode || 'directory';
 		const pages = (data.pages || []).map(
 			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`
 		);
 		if (!pages.length) { document.getElementById('localList').textContent = 'Gallery is empty.'; return; }
-		openReader(pages, gallery, () => {
+		const title = mode === 'archive' ? `${gallery} (archive)` : gallery;
+		openReader(pages, title, () => {
 			document.getElementById('localPane').style.display = '';
 			loadPages(creator, gallery);
 		});
@@ -152,6 +156,7 @@ async function loadPages(creator, gallery) {
 
 // ── Stream mode ────────────────────────────────────────────────────────────
 document.getElementById('streamStartBtn').addEventListener('click', startStream);
+document.getElementById('streamDownloadBtn').addEventListener('click', downloadStreamGallery);
 document.getElementById('streamIdInput').addEventListener('keydown', e => {
 	if (e.key === 'Enter') startStream();
 });
@@ -168,9 +173,31 @@ async function startStream() {
 		if (data.error) { status.textContent = 'Error: ' + data.error; return; }
 		_activeStreamId = id;
 		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
+		document.getElementById('streamPathInfo').textContent =
+			`Temporary files: ${data.temp_dir} (auto-cleaned after ${data.expires_in_seconds}s inactivity)`;
 		openReader(data.page_urls, data.title || `Gallery #${id}`, closeStream);
 	} catch (err) {
 		status.textContent = 'Failed: ' + err.message;
+	}
+}
+
+async function downloadStreamGallery() {
+	const input = document.getElementById('streamIdInput');
+	const status = document.getElementById('streamStatus');
+	const id = parseInt(input.value, 10);
+	if (!id || id < 1) {
+		status.textContent = 'Please enter a valid gallery ID first.';
+		return;
+	}
+	try {
+		await fetch('/api/scraper/queue/add', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ids: [id] })
+		});
+		status.textContent = `Gallery #${id} added to queue.`;
+	} catch (err) {
+		status.textContent = `Could not queue gallery #${id}: ${err.message}`;
 	}
 }
 

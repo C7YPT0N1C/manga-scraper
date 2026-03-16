@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/dashboard/control_panel.py
+# mangascraper/control_panel.py
 
 import os
 
@@ -37,21 +37,13 @@ def create_app():
 
     # Register blueprints for API routes
     app.register_blueprint(scraper_bp, url_prefix="/api/scraper")
-    app.register_blueprint(gallery_bp, url_prefix="/api/gallery")
     app.register_blueprint(db_bp, url_prefix="/api/db")
+    app.register_blueprint(gallery_bp, url_prefix="/api/gallery")
 
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
         return render_template("dashboard.html")
-    
-    @app.route("/gallery")
-    def gallery_page():
-        return render_template("gallery.html")
-    
-        @app.route("/logs")
-        def logs_page():
-            return render_template("logs.html")
 
     @app.route("/scraper")
     def scraper_page():
@@ -60,6 +52,14 @@ def create_app():
     @app.route("/database")
     def database_page():
         return render_template("database.html")
+    
+        @app.route("/logs")
+        def logs_page():
+            return render_template("logs.html")
+
+    @app.route("/gallery")
+    def gallery_page():
+        return render_template("gallery.html")
 
     return app
 

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import os
 
 from flask import Blueprint, jsonify, request
 
@@ -283,9 +284,8 @@ def search_galleries():
             "results": [],
         })
 
-    # Keep dashboard searches responsive: render IDs immediately from cached metadata only.
-    # This avoids long blocking API fetches that can leave the UI stuck on "Searching...".
-    metadata = scraperapi.Cache.Load.id_metadata(ids)
+    # Hydrate metadata so the dashboard can show proper titles/artists instead of placeholders.
+    metadata = scraperapi.Fetch.all_galleries_metadata(ids, cache_key=None)
     rows = _queue_rows(sorted(ids, reverse=True), metadata)
     summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
 
@@ -305,6 +305,64 @@ def cache_clear():
     gallery_id = _safe_int(payload.get("gallery_id"), None)
     cleared = scraperapi.Cache.clear_cache(cache_key=cache_key, gallery_id=gallery_id)
     return jsonify({"message": "Cache cleared.", "cleared": cleared})
+
+
+@scraper_bp.route("/logs", methods=["GET"])
+def logs_list():
+    log_dir = getattr(orchestrator, "LOG_DIR", None)
+    if not log_dir or not os.path.isdir(log_dir):
+        return jsonify({"files": []})
+
+    files = []
+    for name in sorted(os.listdir(log_dir), reverse=True):
+        full = os.path.join(log_dir, name)
+        if not os.path.isfile(full):
+            continue
+        if not name.endswith(".log"):
+            continue
+        try:
+            size = os.path.getsize(full)
+            mtime = os.path.getmtime(full)
+        except OSError:
+            continue
+        files.append({"name": name, "size": size, "mtime": mtime})
+    return jsonify({"files": files})
+
+
+@scraper_bp.route("/logs/<path:filename>", methods=["GET"])
+def logs_read(filename):
+    log_dir = getattr(orchestrator, "LOG_DIR", None)
+    if not log_dir or not os.path.isdir(log_dir):
+        return jsonify({"message": "Log directory not found."}), 404
+
+    safe_name = os.path.basename(filename)
+    if safe_name != filename:
+        return jsonify({"message": "Invalid log filename."}), 400
+
+    full = os.path.realpath(os.path.join(log_dir, safe_name))
+    log_dir_real = os.path.realpath(log_dir)
+    if not full.startswith(log_dir_real + os.sep):
+        return jsonify({"message": "Invalid log filename."}), 400
+    if not os.path.isfile(full):
+        return jsonify({"message": "Log file not found."}), 404
+
+    lines = _safe_int(request.args.get("lines"), 400)
+    if lines is None or lines < 1:
+        lines = 400
+    lines = min(lines, 5000)
+
+    try:
+        with open(full, "r", encoding="utf-8", errors="replace") as f:
+            content_lines = f.readlines()
+        tail = "".join(content_lines[-lines:])
+    except OSError as e:
+        return jsonify({"message": f"Could not read log: {e}"}), 500
+
+    return jsonify({
+        "name": safe_name,
+        "lines": lines,
+        "content": tail,
+    })
 
 
 @scraper_bp.route("/search/history", methods=["GET"])

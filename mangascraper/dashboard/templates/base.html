@@ -10,9 +10,10 @@
     <h1>MangaScraper Dashboard</h1>
     <nav>
       <a href="/">Home</a> |
-      <a href="/scraper">Scraper</a> |
       <a href="/gallery">Gallery</a> |
-      <a href="/database">Database</a>
+      <a href="/scraper">Scraper</a> |
+      <a href="/database">Database</a> |
+      <a href="/logs">Logs</a>
     </nav>
     <div id="globalStatus"></div>
   </header>
@@ -21,7 +22,36 @@
     {% block content %}{% endblock %}
   </main>
 
+  <div id="runtimeDock" class="runtime-dock" style="display:none">
+    <div class="runtime-dock-title">Scraper Runtime</div>
+    <div id="runtimeDockContent">Status unavailable.</div>
+  </div>
+
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script>
+    async function _updateRuntimeDockGlobal() {
+      const dock = document.getElementById('runtimeDock');
+      const content = document.getElementById('runtimeDockContent');
+      if (!dock || !content) return;
+
+      try {
+        const res = await fetch('/api/scraper/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const c = data.counts || {};
+        const line =
+          `Status: ${String(data.status || 'unknown').toUpperCase()} | PID: ${data.pid ?? 'N/A'} | ` +
+          `Uptime: ${data.uptime_seconds ?? 0}s | Galleries: total=${c.total ?? 0} completed=${c.completed ?? 0} failed=${c.failed ?? 0} skipped=${c.skipped ?? 0}`;
+        content.textContent = line;
+        dock.style.display = '';
+      } catch (err) {
+        content.textContent = 'Status unavailable.';
+      }
+    }
+
+    _updateRuntimeDockGlobal();
+    setInterval(_updateRuntimeDockGlobal, 5000);
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -9,7 +9,7 @@
   <button id="startBtn">Start Scraper</button>
   <button id="stopBtn">Stop Scraper</button>
   <button id="startQueueBtn">Start From Queue</button>
-  <p id="runtimeStatus">Status: loading...</p>
+  <p id="runtimeStatus">Loading runtime status...</p>
 </section>
 
 <!-- ===== CONFIGURATION ===== -->
@@ -112,6 +112,25 @@
   <p id="configMsg"></p>
 </section>
 
+<!-- ===== SEARCH HISTORY ===== -->
+<section>
+  <h3>Search History</h3>
+  <button id="refreshHistoryBtn">Refresh History</button>
+  <button id="clearCacheBtn">Clear Entire Cache</button>
+  <p id="historyMsg"></p>
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Target</th>
+        <th>IDs</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
 <!-- ===== SEARCH ===== -->
 <section>
   <h3>Search</h3>
@@ -183,27 +202,10 @@
 
   </div>
   <button id="searchBtn">Search</button>
-  <button id="refreshHistoryBtn">Refresh Search History</button>
-  <button id="clearCacheBtn">Clear Entire Cache</button>
   <button id="addAllBtn">Add All Results To Queue</button>
   <button id="addSelectedBtn">Add Selected Results</button>
   <p id="searchMsg"></p>
   <p id="summaryMsg"></p>
-
-  <h4>Search History (Cache Keys)</h4>
-  <p id="historyMsg"></p>
-  <table id="historyTable">
-    <thead>
-      <tr>
-        <th>Cache Key</th>
-        <th>Type</th>
-        <th>Target</th>
-        <th>IDs</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
 
   <table id="resultsTable">
     <thead>
@@ -295,15 +297,15 @@ function renderHistoryRows(rows) {
   tbody.innerHTML = '';
 
   rows.forEach(row => {
+    const key = asText(row.cache_key, '');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${asText(row.cache_key, '-')}</td>
       <td>${asText(row.cache_type, '-')}</td>
-      <td>${asText(row.cache_target, '-')}</td>
+      <td>${asText(row.cache_target || '(none)', '-')}</td>
       <td>${asText(row.ids_count, 0)}</td>
       <td>
-        <button class="histSearchBtn" data-key="${asText(row.cache_key, '')}">Search</button>
-        <button class="histDeleteBtn" data-key="${asText(row.cache_key, '')}">Remove</button>
+        <button class="histSearchBtn" data-key="${key}">Search</button>
+        <button class="histDeleteBtn" data-key="${key}">Remove</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -482,10 +484,26 @@ async function refreshStatus() {
   const res = await fetch('/api/scraper/status');
   const data = await res.json();
   const counts = data.counts || {};
-  document.getElementById('runtimeStatus').textContent =
-    `Status: ${data.status} | PID: ${asText(data.pid)} | Uptime: ${asText(data.uptime_seconds, 0)}s | ` +
-    `Galleries: total=${asText(counts.total, 0)} completed=${asText(counts.completed, 0)} ` +
-    `failed=${asText(counts.failed, 0)} skipped=${asText(counts.skipped, 0)}`;
+
+  const statusText = `${String(data.status || 'unknown').toUpperCase()}`;
+  const pidText = asText(data.pid, 'N/A');
+  const uptimeText = `${asText(data.uptime_seconds, 0)}s`;
+  const total = asText(counts.total, 0);
+  const completed = asText(counts.completed, 0);
+  const failed = asText(counts.failed, 0);
+  const skipped = asText(counts.skipped, 0);
+
+  const pretty =
+    `Status: ${statusText} | PID: ${pidText} | Uptime: ${uptimeText} | ` +
+    `Galleries -> Total: ${total}, Completed: ${completed}, Failed: ${failed}, Skipped: ${skipped}`;
+  document.getElementById('runtimeStatus').textContent = pretty;
+
+  const dock = document.getElementById('runtimeDock');
+  const dockContent = document.getElementById('runtimeDockContent');
+  if (dock && dockContent) {
+    dock.style.display = '';
+    dockContent.textContent = pretty;
+  }
 }
 
 // ── Config load / save ────────────────────────────────────────────────────────
@@ -622,7 +640,7 @@ async function refreshSearchHistory() {
     const data = await res.json();
     const rows = data.history || [];
     renderHistoryRows(rows);
-    msg.textContent = `Search history: ${rows.length} cache keys.`;
+    msg.textContent = `Showing ${rows.length} saved searches.`;
   } catch (err) {
     msg.textContent = `Failed to load search history: ${err.message}`;
   }

@@ -8,6 +8,9 @@ import os
 import tempfile
 import threading
 import time
+import io
+import zipfile
+import posixpath
 
 import requests
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
@@ -37,6 +40,25 @@ def _safe_path(base: str, *parts: str) -> str | None:
 def _download_path() -> str:
     orchestrator.refresh_globals()
     return orchestrator.download_path or orchestrator.DEFAULT_DOWNLOAD_PATH
+
+
+def _is_archive(path: str) -> bool:
+    return os.path.isfile(path) and os.path.splitext(path)[1].lower() in {".cbz", ".zip"}
+
+
+def _archive_pages(archive_path: str) -> list[str]:
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+    pages = []
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        for name in zf.namelist():
+            normalised = posixpath.normpath(name)
+            if normalised.startswith("../") or normalised.startswith("/"):
+                continue
+            if normalised.endswith("/"):
+                continue
+            if os.path.splitext(normalised)[1].lower() in IMAGE_EXTS:
+                pages.append(normalised)
+    return sorted(pages)
 
 
 # ── DB routes — /api/db/... ───────────────────────────────────────────────────
@@ -108,14 +130,22 @@ def list_pages(creator, gallery):
     """Return sorted list of image filenames for a local gallery folder."""
     base = _download_path()
     gallery_path = _safe_path(base, creator, gallery)
-    if not gallery_path or not os.path.isdir(gallery_path):
+    if not gallery_path:
         abort(404)
-    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
-    pages = sorted(
-        name for name in os.listdir(gallery_path)
-        if os.path.splitext(name)[1].lower() in IMAGE_EXTS
-    )
-    return jsonify({"creator": creator, "gallery": gallery, "pages": pages})
+
+    if os.path.isdir(gallery_path):
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+        pages = sorted(
+            name for name in os.listdir(gallery_path)
+            if os.path.splitext(name)[1].lower() in IMAGE_EXTS
+        )
+        return jsonify({"creator": creator, "gallery": gallery, "pages": pages, "mode": "directory"})
+
+    if _is_archive(gallery_path):
+        pages = _archive_pages(gallery_path)
+        return jsonify({"creator": creator, "gallery": gallery, "pages": pages, "mode": "archive"})
+
+    abort(404)
 
 
 @gallery_bp.route("/view/<path:creator>/<path:gallery>/<path:filename>", methods=["GET"])
@@ -123,13 +153,37 @@ def view_image(creator, gallery, filename):
     """Serve a local gallery image to the frontend reader."""
     base = _download_path()
     gallery_path = _safe_path(base, creator, gallery)
-    if not gallery_path or not os.path.isdir(gallery_path):
+    if not gallery_path:
         abort(404)
-    # Validate filename stays inside the gallery folder
-    file_path = _safe_path(gallery_path, filename)
-    if not file_path or not os.path.isfile(file_path):
-        abort(404)
-    return send_from_directory(gallery_path, filename)
+
+    if os.path.isdir(gallery_path):
+        # Validate filename stays inside the gallery folder
+        file_path = _safe_path(gallery_path, filename)
+        if not file_path or not os.path.isfile(file_path):
+            abort(404)
+        return send_from_directory(gallery_path, filename)
+
+    if _is_archive(gallery_path):
+        normalised = posixpath.normpath(filename)
+        if normalised.startswith("../") or normalised.startswith("/"):
+            abort(404)
+        with zipfile.ZipFile(gallery_path, "r") as zf:
+            try:
+                payload = zf.read(normalised)
+            except KeyError:
+                abort(404)
+        ext = os.path.splitext(normalised)[1].lower()
+        mime_map = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".avif": "image/avif",
+        }
+        return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"), download_name=os.path.basename(normalised))
+
+    abort(404)
 
 
 # ── Gallery streaming — fetch pages from nhentai by ID ───────────────────────
@@ -142,6 +196,13 @@ _stream_lock = threading.Lock()
 _active_streams: dict[int, dict] = {}   # gallery_id → {tmpdir, meta, expires}
 
 _STREAM_TTL = 60 * 30   # 30 minutes before auto-cleanup
+
+
+def _stream_temp_root() -> str:
+    """Use the scraper temp root for stream sessions (e.g. /tmp/manga-scraper/)."""
+    root = getattr(orchestrator, "TEMP_DIR", "/tmp/manga-scraper") or "/tmp/manga-scraper"
+    os.makedirs(root, exist_ok=True)
+    return root
 
 
 def _cleanup_expired_streams():
@@ -174,7 +235,7 @@ def stream_info(gallery_id):
     # Prepare temp dir for this stream session
     with _stream_lock:
         if gallery_id not in _active_streams:
-            tmpdir = tempfile.mkdtemp(prefix=f"ms_stream_{gallery_id}_")
+            tmpdir = tempfile.mkdtemp(prefix=f"ms_stream_{gallery_id}_", dir=_stream_temp_root())
             _active_streams[gallery_id] = {
                 "tmpdir": tmpdir,
                 "meta": meta,
@@ -191,8 +252,10 @@ def stream_info(gallery_id):
     return jsonify({
         "gallery_id": gallery_id,
         "title": title,
-        "pages": pages,
+        "page_count": pages,
         "page_urls": page_urls,
+        "temp_dir": _active_streams[gallery_id]["tmpdir"],
+        "expires_in_seconds": _STREAM_TTL,
     })
 
 
@@ -212,7 +275,7 @@ def stream_page(gallery_id, page):
         meta = scraperapi.Fetch.gallery_metadata(gallery_id)
         if not meta:
             abort(404)
-        tmpdir = tempfile.mkdtemp(prefix=f"ms_stream_{gallery_id}_")
+        tmpdir = tempfile.mkdtemp(prefix=f"ms_stream_{gallery_id}_", dir=_stream_temp_root())
         stream = {"tmpdir": tmpdir, "meta": meta, "expires": time.time() + _STREAM_TTL}
         with _stream_lock:
             _active_streams[gallery_id] = stream
