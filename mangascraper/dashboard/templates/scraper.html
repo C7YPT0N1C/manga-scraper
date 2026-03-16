@@ -705,9 +705,7 @@ function getOutputFolder() {
 document.getElementById('cfg_extension').addEventListener('change', function () {
   const ext = this.value;
   const extDefaultFolder = extensionOutputFolders[ext] || '';
-  if (extDefaultFolder) {
-    setupOutputFolderDropdown(extDefaultFolder);
-  }
+  setupOutputFolderDropdown(extDefaultFolder);
 });
 
 // ── Runtime status ────────────────────────────────────────────────────────────

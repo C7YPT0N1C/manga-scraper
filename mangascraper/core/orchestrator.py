@@ -88,14 +88,12 @@ RUNTIME_LOG_FILE = _resolve_runtime_log_file()
 
 
 def _cleanup_empty_runtime_logs():
-    """Delete zero-byte runtime log files left behind by short-lived processes/reloads."""
+    """Delete zero-byte files in the runtime log directory left behind by short-lived processes/reloads."""
     try:
         if not os.path.isdir(LOG_DIR):
             return
         for name in os.listdir(LOG_DIR):
             if name == os.path.basename(_ACTIVE_RUNTIME_LOG_POINTER):
-                continue
-            if not name.startswith("runtime-") or not name.endswith(".log"):
                 continue
             path = os.path.join(LOG_DIR, name)
             if not os.path.isfile(path):
@@ -108,26 +106,6 @@ def _cleanup_empty_runtime_logs():
     except Exception:
         # Best-effort cleanup only.
         pass
-
-class ResilientFileHandler(logging.FileHandler):
-    """
-    Recreates the log directory and file if they are deleted between writes
-    (e.g. when /tmp is wiped during testing).
-    """
-    def emit(self, record):
-        try:
-            if not os.path.exists(self.baseFilename):
-                os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
-                if self.stream:
-                    try:
-                        self.stream.close()
-                    except Exception:
-                        pass
-                self.stream = self._open()
-            super().emit(record)
-        except Exception:
-            self.handleError(record)
-
 
 class ConditionalFormatter(logging.Formatter):
     """
@@ -155,7 +133,7 @@ if not logger.handlers:  # Only add default handler if none exist (prevents dupl
 
     # File handler: always DEBUG
     try:
-        fh = ResilientFileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8", delay=True)
+        fh = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8", delay=True)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         logger.addHandler(fh)
@@ -201,7 +179,7 @@ def setup_logger(calm=False, debug=False):
     # File handler: always DEBUG
     os.makedirs(LOG_DIR, exist_ok=True)
     _cleanup_empty_runtime_logs()
-    fh = ResilientFileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8", delay=True)
+    fh = logging.FileHandler(RUNTIME_LOG_FILE, mode="a", encoding="utf-8", delay=True)
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
     logger.addHandler(fh)

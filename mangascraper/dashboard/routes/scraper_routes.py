@@ -236,7 +236,7 @@ def list_extensions():
         return tuple(int(p) for p in parts) if parts else (0,)
 
     try:
-        from mangascraper.extensions.extension_manager import calculate_extension_download_path, load_local_manifest
+        from mangascraper.extensions.extension_manager import load_local_manifest
         manifest = load_local_manifest()
 
         # Try local sibling repo for version comparison (no network required)
@@ -269,7 +269,7 @@ def list_extensions():
                 "remote_version": remote_v,
                 "update_available": update_available,
                 "installed": ext.get("installed", False),
-                "default_output_folder": calculate_extension_download_path(name) if name else "",
+                "default_output_folder": str(ext.get("image_download_path") or ""),
             })
     except Exception:
         extensions = []
