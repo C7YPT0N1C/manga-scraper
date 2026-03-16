@@ -25,15 +25,46 @@
   </main>
 
   <div id="dynamicBar" class="dynamic-bar" style="display:none">
-    <div class="dynamic-bar-title">Live Run Telemetry</div>
+    <div class="dynamic-bar-head">
+      <div class="dynamic-bar-title">Live Run Telemetry</div>
+      <button id="dynamicBarToggle" type="button" class="dynamic-bar-toggle" title="Collapse or expand telemetry">▾</button>
+    </div>
     <div id="dynamicBarContent">Status unavailable.</div>
   </div>
 
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   <script>
     window.__dynamicBarStatusOverride = '';
+    window.__dynamicBarCollapsed = false;
     window.__globalStatusOverride = '';
     window.__globalStatusOverrideUntil = 0;
+
+    function _loadDynamicBarCollapsedState() {
+      try {
+        return localStorage.getItem('mangascraper.dynamicBarCollapsed') === '1';
+      } catch {
+        return false;
+      }
+    }
+
+    function _saveDynamicBarCollapsedState(value) {
+      try {
+        localStorage.setItem('mangascraper.dynamicBarCollapsed', value ? '1' : '0');
+      } catch {
+        // ignore storage errors
+      }
+    }
+
+    function _applyDynamicBarCollapsedState() {
+      const content = document.getElementById('dynamicBarContent');
+      const toggle = document.getElementById('dynamicBarToggle');
+      const bar = document.getElementById('dynamicBar');
+      if (!content || !toggle || !bar) return;
+      content.style.display = window.__dynamicBarCollapsed ? 'none' : '';
+      bar.classList.toggle('dynamic-bar-collapsed', window.__dynamicBarCollapsed);
+      toggle.textContent = window.__dynamicBarCollapsed ? '▸' : '▾';
+      toggle.title = window.__dynamicBarCollapsed ? 'Expand telemetry' : 'Collapse telemetry';
+    }
 
     function _formatHudDuration(seconds) {
       const total = Number(seconds || 0);
@@ -91,6 +122,12 @@
       window.__globalStatusOverride = '';
       window.__globalStatusOverrideUntil = 0;
     };
+
+    document.getElementById('dynamicBarToggle').addEventListener('click', () => {
+      window.__dynamicBarCollapsed = !window.__dynamicBarCollapsed;
+      _saveDynamicBarCollapsedState(window.__dynamicBarCollapsed);
+      _applyDynamicBarCollapsedState();
+    });
 
     async function _updateDynamicBarGlobal() {
       const dock = document.getElementById('dynamicBar');
@@ -159,6 +196,8 @@
       }
     }
 
+    window.__dynamicBarCollapsed = _loadDynamicBarCollapsedState();
+    _applyDynamicBarCollapsedState();
     _updateDynamicBarGlobal();
     setInterval(_updateDynamicBarGlobal, 5000);
   </script>

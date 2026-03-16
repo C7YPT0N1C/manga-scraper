@@ -320,6 +320,80 @@ def _prefer_gallery_item(existing: dict | None, candidate: dict) -> dict:
     return existing
 
 
+def _build_gallery_lookup_by_creator_and_title(
+    cursor,
+    tag_name_map: dict[int, str],
+    language_name_map: dict[int, str],
+) -> dict[tuple[str, str], dict]:
+    """Build fallback lookup for gallery metadata by (creator, title)."""
+    creator_names_by_id: dict[int, set[str]] = {}
+    cursor.execute("SELECT id, name, display_name FROM Creators")
+    for creator_id, name, display_name in cursor.fetchall():
+        cid = int(creator_id)
+        names = set()
+        for raw in (name, display_name):
+            text = str(raw or "").strip().lower()
+            if text:
+                names.add(text)
+        if names:
+            creator_names_by_id[cid] = names
+
+    lookup: dict[tuple[str, str], dict] = {}
+    cursor.execute(
+        """
+        SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating, creator_ids
+        FROM Galleries
+        """
+    )
+    for row in cursor.fetchall():
+        gallery_id = int(row[0])
+        clean_title = str(row[1] or "").strip()
+        raw_title = str(row[2] or "").strip()
+        tag_ids = _parse_json_int_list(row[4])
+        language_ids = _parse_json_int_list(row[5])
+        creator_ids = _parse_json_int_list(row[9])
+
+        creator_names: set[str] = set()
+        for creator_id in creator_ids:
+            creator_names.update(creator_names_by_id.get(int(creator_id), set()))
+        if not creator_names:
+            continue
+
+        title_candidates = {
+            text.lower()
+            for text in (clean_title, raw_title)
+            if text
+        }
+        if not title_candidates:
+            continue
+
+        meta = {
+            "gallery_id": gallery_id,
+            "clean_title": clean_title,
+            "raw_title": raw_title,
+            "num_pages": int(row[3]) if row[3] is not None else None,
+            "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
+            "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
+            "status": str(row[6] or ""),
+            "favourite": bool(row[7]),
+            "rating": float(row[8]) if row[8] is not None else None,
+        }
+
+        for creator_name in creator_names:
+            for title in title_candidates:
+                key = (creator_name, title)
+                existing = lookup.get(key)
+                if not existing:
+                    lookup[key] = meta
+                    continue
+                existing_score = len(existing.get("tags") or []) + len(existing.get("languages") or [])
+                meta_score = len(meta.get("tags") or []) + len(meta.get("languages") or [])
+                if meta_score > existing_score:
+                    lookup[key] = meta
+
+    return lookup
+
+
 def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     creators: dict[str, dict] = {}
     galleries_by_creator: dict[str, list[dict]] = {}
@@ -344,6 +418,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
             gallery_ids.add(int(row["gallery_id"]))
 
     gallery_meta = {}
+    gallery_lookup = {}
     tag_name_map = {}
     language_name_map = {}
     creator_favourite_map = {}
@@ -381,6 +456,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 tag_ids = _parse_json_int_list(row[4])
                 language_ids = _parse_json_int_list(row[5])
                 gallery_meta[gallery_id] = {
+                    "gallery_id": gallery_id,
                     "clean_title": str(row[1] or ""),
                     "raw_title": str(row[2] or ""),
                     "num_pages": int(row[3]) if row[3] is not None else None,
@@ -391,11 +467,17 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                     "rating": float(row[8]) if row[8] is not None else None,
                 }
 
+        gallery_lookup = _build_gallery_lookup_by_creator_and_title(cursor, tag_name_map, language_name_map)
+
     for row in valid_rows:
         creator_name = row["creator_name"]
         gallery_name = row["gallery_name"]
         gallery_id = row.get("gallery_id")
         meta = gallery_meta.get(int(gallery_id)) if gallery_id is not None else {}
+        if not meta:
+            meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_name or "").strip().lower()), {})
+            if meta and gallery_id is None:
+                gallery_id = meta.get("gallery_id")
         page_count = meta.get("num_pages") if meta else None
         if page_count is None:
             page_count = _count_pages_on_disk(row.get("download_path", ""))
@@ -463,18 +545,22 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
             if gallery_name in existing_names:
                 continue
             gallery_path = _safe_path(root_path, creator_name, gallery_name)
-            page_count = _count_pages_on_disk(gallery_path or "")
+            meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_name or "").strip().lower()), {})
+            gallery_id = meta.get("gallery_id")
+            page_count = meta.get("num_pages") if meta else None
+            if page_count is None:
+                page_count = _count_pages_on_disk(gallery_path or "")
             gallery_item = {
                 "label": gallery_name,
                 "name": gallery_name,
-                "gallery_id": None,
+                "gallery_id": gallery_id,
                 "page_count": page_count,
-                "languages": [],
-                "tags": [],
-                "tag_count": 0,
-                "status": "",
-                "favourite": False,
-                "rating": None,
+                "languages": list(meta.get("languages") or []),
+                "tags": list(meta.get("tags") or []),
+                "tag_count": len(meta.get("tags") or []),
+                "status": str(meta.get("status") or ""),
+                "favourite": bool(meta.get("favourite")),
+                "rating": meta.get("rating"),
             }
             galleries_by_creator.setdefault(creator_name, []).append(gallery_item)
             creators[creator_name]["gallery_count"] += 1

@@ -842,6 +842,32 @@ table tr:nth-child(even) {
   font-size: 0.9rem;
 }
 
+.dynamic-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dynamic-bar-toggle {
+  margin: 0;
+  padding: 0.05rem 0.45rem;
+  min-width: 1.75rem;
+  line-height: 1.2;
+  border-radius: 8px;
+  border: 1px solid #8e445a;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff2f8;
+}
+
+.dynamic-bar-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.dynamic-bar-collapsed {
+  padding-bottom: 0.4rem;
+}
+
 .dynamic-bar-title {
   font-size: 0.72rem;
   text-transform: uppercase;
