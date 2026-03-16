@@ -48,15 +48,14 @@
     <div id="fileControls">
       <button id="fileRefreshBtn" type="button">Refresh</button>
       <select id="fileRootSelect" title="Choose root folder"></select>
-      <select id="fileCreatorSelect" title="Choose creator">
-        <option value="">-- creator --</option>
+      <button id="fileUpBtn" type="button">Up</button>
+      <input id="filePathInput" type="text" readonly value="/" title="Current relative path">
+      <select id="fileEntrySelect" title="Choose entry">
+        <option value="">-- entry --</option>
       </select>
-      <select id="fileGallerySelect" title="Choose gallery">
-        <option value="">-- gallery --</option>
-      </select>
-      <button id="fileOpenBtn" type="button">Open Reader</button>
+      <button id="fileOpenEntryBtn" type="button">Open</button>
     </div>
-    <p id="fileStatusMsg">Choose a root and creator to browse files.</p>
+    <p id="fileStatusMsg">Choose a root folder and browse directories.</p>
     <pre id="fileListViewer" style="white-space:pre-wrap;max-height:55vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
   </div>
 
@@ -76,7 +75,7 @@ let _dbCurrentTable = '';
 let _dbAutoRefreshTimer = null;
 let _fileRoots = [];
 let _fileCurrentRoot = '';
-let _fileCurrentCreator = '';
+let _fileCurrentPath = '';
 
 function activateDiagTab(tab) {
   const panes = {
@@ -196,11 +195,6 @@ function startDbAutoRefresh() {
   }, 20000);
 }
 
-function _fileApiBase(path) {
-  const root = _fileCurrentRoot ? `?root=${encodeURIComponent(_fileCurrentRoot)}` : '';
-  return `${path}${root}`;
-}
-
 async function loadFileRoots() {
   const select = document.getElementById('fileRootSelect');
   const status = document.getElementById('fileStatusMsg');
@@ -225,106 +219,103 @@ async function loadFileRoots() {
       select.selectedIndex = 1;
       _fileCurrentRoot = select.value;
     }
-    await loadFileCreators();
+    _fileCurrentPath = '';
+    await loadFileEntries('');
   } catch (err) {
     status.textContent = `Failed to load roots: ${err.message}`;
   }
 }
 
-async function loadFileCreators() {
-  const creatorSelect = document.getElementById('fileCreatorSelect');
-  const gallerySelect = document.getElementById('fileGallerySelect');
+async function loadFileEntries(path = undefined) {
+  const filePath = path !== undefined ? String(path || '') : _fileCurrentPath;
+  const entrySelect = document.getElementById('fileEntrySelect');
+  const pathInput = document.getElementById('filePathInput');
   const listViewer = document.getElementById('fileListViewer');
   const status = document.getElementById('fileStatusMsg');
-  creatorSelect.innerHTML = '<option value="">-- creator --</option>';
-  gallerySelect.innerHTML = '<option value="">-- gallery --</option>';
+  entrySelect.innerHTML = '<option value="">-- entry --</option>';
   listViewer.textContent = '';
-  _fileCurrentCreator = '';
 
   if (!_fileCurrentRoot) {
     status.textContent = 'Choose a root folder first.';
+    pathInput.value = '/';
     return;
   }
 
   try {
-    const res = await fetch(_fileApiBase('/api/gallery/list_creators'));
+    const query = new URLSearchParams();
+    query.set('root', _fileCurrentRoot);
+    if (filePath) {
+      query.set('path', filePath);
+    }
+    const res = await fetch(`/api/gallery/files?${query.toString()}`);
     const data = await res.json();
-    const creators = Array.isArray(data.creators) ? data.creators : [];
-    creators.forEach(item => {
-      const name = String(item.name || item.label || '');
-      if (!name) return;
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    _fileCurrentPath = String(data.current_path || '');
+    pathInput.value = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
+
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    entries.forEach(item => {
+      const name = String(item.name || '');
+      if (!name) {
+        return;
+      }
+      const isDir = !!item.is_dir;
       const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = `${name} (${Number(item.gallery_count || 0)} galleries)`;
-      creatorSelect.appendChild(opt);
+      opt.value = JSON.stringify({ name, is_dir: isDir });
+      opt.textContent = isDir ? `[DIR] ${name}` : name;
+      entrySelect.appendChild(opt);
     });
-    status.textContent = `${creators.length} creators found.`;
+    status.textContent = `${entries.length} entries in ${pathInput.value}.`;
+
+    const lines = entries.map(item => {
+      const name = String(item.name || '');
+      if (item.is_dir) {
+        return `[DIR] ${name}`;
+      }
+      const size = Number(item.size || 0);
+      return `${name} (${size} bytes)`;
+    });
+    listViewer.textContent = lines.length ? lines.join('\n') : '(empty folder)';
   } catch (err) {
-    status.textContent = `Failed to load creators: ${err.message}`;
+    status.textContent = `Failed to load folder: ${err.message}`;
   }
 }
 
-async function loadFileGalleries() {
-  const creator = document.getElementById('fileCreatorSelect').value;
-  const gallerySelect = document.getElementById('fileGallerySelect');
-  const listViewer = document.getElementById('fileListViewer');
+function openSelectedEntry() {
+  const select = document.getElementById('fileEntrySelect');
   const status = document.getElementById('fileStatusMsg');
-  gallerySelect.innerHTML = '<option value="">-- gallery --</option>';
-  listViewer.textContent = '';
-  _fileCurrentCreator = creator;
-
-  if (!creator) {
-    status.textContent = 'Choose a creator.';
+  if (!select.value) {
+    status.textContent = 'Choose an entry first.';
     return;
   }
 
   try {
-    const res = await fetch(`${_fileApiBase('/api/gallery/list_galleries/' + encodeURIComponent(creator))}`);
-    const data = await res.json();
-    const galleries = Array.isArray(data.galleries) ? data.galleries : [];
-    galleries.forEach(item => {
-      const name = String(item.name || item.label || '');
-      if (!name) return;
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = `${name} (${Number(item.page_count || 0)} pages)`;
-      gallerySelect.appendChild(opt);
-    });
-    status.textContent = `${galleries.length} galleries for ${creator}.`;
+    const entry = JSON.parse(select.value);
+    if (!entry || !entry.name) {
+      status.textContent = 'Invalid entry selected.';
+      return;
+    }
+    if (entry.is_dir) {
+      const nextPath = _fileCurrentPath ? `${_fileCurrentPath}/${entry.name}` : entry.name;
+      loadFileEntries(nextPath);
+      return;
+    }
+    status.textContent = `Selected file: ${entry.name}`;
   } catch (err) {
-    status.textContent = `Failed to load galleries: ${err.message}`;
+    status.textContent = `Could not open entry: ${err.message}`;
   }
 }
 
-async function loadFilePages() {
-  const creator = document.getElementById('fileCreatorSelect').value;
-  const gallery = document.getElementById('fileGallerySelect').value;
-  const listViewer = document.getElementById('fileListViewer');
-  const status = document.getElementById('fileStatusMsg');
-  listViewer.textContent = '';
-
-  if (!creator || !gallery) {
-    status.textContent = 'Choose a gallery to list files.';
+function fileNavigateUp() {
+  if (!_fileCurrentPath) {
     return;
   }
-
-  try {
-    const url = `${_fileApiBase('/api/gallery/list_pages/' + encodeURIComponent(creator) + '/' + encodeURIComponent(gallery))}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const pages = Array.isArray(data.pages) ? data.pages : [];
-    status.textContent = `${pages.length} files in ${gallery}.`;
-    listViewer.textContent = pages.length ? pages.join('\n') : '(empty gallery)';
-  } catch (err) {
-    status.textContent = `Failed to load files: ${err.message}`;
-  }
-}
-
-function openFileReader() {
-  const creator = document.getElementById('fileCreatorSelect').value;
-  const gallery = document.getElementById('fileGallerySelect').value;
-  if (!creator || !gallery) return;
-  window.location.href = `/?creator=${encodeURIComponent(creator)}&gallery=${encodeURIComponent(gallery)}`;
+  const parts = _fileCurrentPath.split('/').filter(Boolean);
+  parts.pop();
+  loadFileEntries(parts.join('/'));
 }
 
 async function fetchLogsList(options = {}) {
@@ -412,11 +403,23 @@ document.getElementById('dbSearchBox').addEventListener('input', e => loadDbTabl
 document.getElementById('fileRefreshBtn').addEventListener('click', loadFileRoots);
 document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileCurrentRoot = e.target.value;
-  loadFileCreators();
+  _fileCurrentPath = '';
+  loadFileEntries('');
 });
-document.getElementById('fileCreatorSelect').addEventListener('change', loadFileGalleries);
-document.getElementById('fileGallerySelect').addEventListener('change', loadFilePages);
-document.getElementById('fileOpenBtn').addEventListener('click', openFileReader);
+document.getElementById('fileUpBtn').addEventListener('click', fileNavigateUp);
+document.getElementById('fileOpenEntryBtn').addEventListener('click', openSelectedEntry);
+document.getElementById('fileEntrySelect').addEventListener('change', () => {
+  const val = document.getElementById('fileEntrySelect').value;
+  if (!val) return;
+  try {
+    const entry = JSON.parse(val);
+    if (!entry.is_dir) {
+      document.getElementById('fileStatusMsg').textContent = `Selected file: ${entry.name}`;
+    }
+  } catch {
+    // ignore invalid selection payload
+  }
+});
 
 activateDiagTab('logs');
 fetchLogsList();

@@ -208,6 +208,12 @@ function getFilteredItems() {
 			const maxCreatorPages = Number(item.max_page_count || 0);
 			const minGalleryCount = Number(_activeFilters.minGalleryCount || 0);
 
+			if (_activeFilters.favourite === 'yes' && !item.favourite) {
+				return false;
+			}
+			if (_activeFilters.favourite === 'no' && item.favourite) {
+				return false;
+			}
 			if (minGalleryCount > 0 && Number(item.gallery_count || 0) < minGalleryCount) {
 				return false;
 			}
@@ -279,6 +285,7 @@ function setupFiltersForCreators(filters) {
 	filterGroup.innerHTML = '';
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All Languages'));
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All Tags'));
+	filterGroup.appendChild(createSelectFilter('favourite', 'Favourite', ['yes', 'no'], 'Any Favourite'));
 	filterGroup.appendChild(createNumberFilter('minGalleryCount', 'Gallery Count', 'Min'));
 	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
 	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
@@ -306,6 +313,56 @@ document.querySelectorAll('.modeTab').forEach(btn => {
 		if (pane) pane.style.display = '';
 	});
 });
+
+async function toggleCreatorFavourite(creatorName, targetValue) {
+	const status = document.getElementById('refreshStatus');
+	try {
+		const res = await fetch('/api/gallery/favourite/creator', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ creator: creatorName, favourite: targetValue }),
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		const isFav = Boolean(data.favourite);
+		_allCreators.forEach(item => {
+			if (itemLabel(item) === creatorName) {
+				item.favourite = isFav;
+			}
+		});
+		status.textContent = `${creatorName} ${isFav ? 'favourited' : 'unfavourited'}.`;
+		refreshDisplay();
+	} catch (err) {
+		status.textContent = `Could not update creator favourite: ${err.message}`;
+	}
+}
+
+async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
+	const status = document.getElementById('refreshStatus');
+	if (!galleryId) {
+		status.textContent = 'This gallery is not in the database yet.';
+		return;
+	}
+	try {
+		const res = await fetch(`/api/gallery/favourite/gallery/${encodeURIComponent(galleryId)}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ favourite: targetValue }),
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		const isFav = Boolean(data.favourite);
+		_allGalleries.forEach(item => {
+			if (Number(item.gallery_id || 0) === Number(galleryId)) {
+				item.favourite = isFav;
+			}
+		});
+		status.textContent = `${galleryName} ${isFav ? 'favourited' : 'unfavourited'}.`;
+		refreshDisplay();
+	} catch (err) {
+		status.textContent = `Could not update gallery favourite: ${err.message}`;
+	}
+}
 
 function createGalleryGrid(items, itemType, onClick) {
 	const el = document.getElementById('localList');
@@ -342,6 +399,8 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
+		const controlsDiv = document.createElement('div');
+		controlsDiv.className = 'gallery-square-controls';
 		if (itemType === 'creator') {
 			const galleryChip = document.createElement('span');
 			galleryChip.className = 'gallery-chip';
@@ -378,11 +437,51 @@ function createGalleryGrid(items, itemType, onClick) {
 			}
 		}
 
+		const favTargetValue = !Boolean(item.favourite);
+		const starBtn = document.createElement('button');
+		starBtn.type = 'button';
+		starBtn.className = 'fav-star-btn';
+		starBtn.textContent = item.favourite ? '★' : '☆';
+		starBtn.title = item.favourite ? 'Unfavourite' : 'Favourite';
+		starBtn.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (itemType === 'creator') {
+				toggleCreatorFavourite(label, favTargetValue);
+				return;
+			}
+			toggleGalleryFavourite(item.gallery_id, label, favTargetValue);
+		});
+
+		const actionBtn = document.createElement('button');
+		actionBtn.type = 'button';
+		actionBtn.className = 'fav-action-btn';
+		actionBtn.textContent = item.favourite ? 'Unfavourite' : 'Favourite';
+		actionBtn.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (itemType === 'creator') {
+				toggleCreatorFavourite(label, favTargetValue);
+				return;
+			}
+			toggleGalleryFavourite(item.gallery_id, label, favTargetValue);
+		});
+
+		controlsDiv.appendChild(starBtn);
+		controlsDiv.appendChild(actionBtn);
+
 		square.appendChild(imageDiv);
 		square.appendChild(titleDiv);
 		square.appendChild(metaDiv);
+		square.appendChild(controlsDiv);
 
-		square.addEventListener('click', () => onClick(item));
+		square.addEventListener('click', () => {
+			if (itemType === 'creator') {
+				onClick(itemLabel(item));
+				return;
+			}
+			onClick(item);
+		});
 		el.appendChild(square);
 	});
 }
@@ -440,7 +539,8 @@ async function loadCreators() {
 }
 
 async function loadGalleries(creator) {
-	_currentCreator = creator;
+	const creatorName = itemLabel(creator);
+	_currentCreator = creatorName;
 	_currentItemType = 'galleries';
 	_currentPage = 1;
 	_searchTerm = '';
@@ -449,7 +549,7 @@ async function loadGalleries(creator) {
 
 	setBreadcrumb([
 		{ label: 'Creators', onClick: loadCreators },
-		{ label: creator }
+		{ label: creatorName }
 	]);
 
 	document.getElementById('searchInput').value = '';
@@ -458,7 +558,7 @@ async function loadGalleries(creator) {
 	document.getElementById('localList').textContent = 'Loading galleries...';
 	document.getElementById('localList').className = '';
 	try {
-		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`);
+		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creatorName)}`);
 		_allGalleries = Array.isArray(data.galleries) ? data.galleries : [];
 		_availableFilters = data.filters || {};
 		setupFiltersForGalleries(_availableFilters);
@@ -535,8 +635,6 @@ async function startStream() {
 		_activeStreamId = id;
 		_readerFromStream = true;
 		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
-		document.getElementById('streamPathInfo').textContent =
-			`Temporary files: ${data.temp_dir} (auto-cleaned after ${data.expires_in_seconds}s inactivity)`;
 		openReader(data.page_urls, data.title || `Gallery #${id}`, closeStream);
 	} catch (err) {
 		status.textContent = 'Failed: ' + err.message;
@@ -569,6 +667,7 @@ async function closeStream() {
 		await fetch(`/api/gallery/stream/${_activeStreamId}/close`, { method: 'POST' });
 	} catch { /* best effort */ }
 	_activeStreamId = null;
+	document.getElementById('streamPathInfo').textContent = '';
 	document.getElementById('streamStatus').textContent = 'Session closed.';
 }
 

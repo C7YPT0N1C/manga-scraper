@@ -465,6 +465,27 @@ table tr:nth-child(even) {
   padding: 0 0.4rem 0.2rem;
 }
 
+.gallery-square-controls {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.4rem 0.2rem;
+}
+
+.fav-star-btn,
+.fav-action-btn {
+  border: 1px solid #3a3e4d;
+  background: #0d1018;
+  color: var(--ink-1);
+  margin: 0;
+  padding: 0.22rem 0.42rem;
+  font-size: 0.78rem;
+}
+
+.fav-star-btn {
+  min-width: 30px;
+  font-size: 0.9rem;
+}
+
 .gallery-chip {
   display: inline-flex;
   align-items: center;

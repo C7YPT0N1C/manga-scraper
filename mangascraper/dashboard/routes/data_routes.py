@@ -244,6 +244,7 @@ def _build_filter_options(items: list[dict], item_type: str) -> dict:
     languages = set()
     tags = set()
     statuses = set()
+    favourites = set()
     page_values = []
     tag_counts = []
     gallery_counts = []
@@ -266,6 +267,8 @@ def _build_filter_options(items: list[dict], item_type: str) -> dict:
         if isinstance(tag_count, (int, float)):
             tag_counts.append(int(tag_count))
 
+        favourites.add("yes" if bool(item.get("favourite")) else "no")
+
         if item_type == "gallery":
             status = str(item.get("status") or "").strip()
             if status:
@@ -278,6 +281,7 @@ def _build_filter_options(items: list[dict], item_type: str) -> dict:
     result = {
         "languages": sorted(languages, key=str.lower),
         "tags": sorted(tags, key=str.lower),
+        "favourites": sorted(favourites),
         "page_count": {
             "min": min(page_values) if page_values else 0,
             "max": max(page_values) if page_values else 0,
@@ -323,9 +327,19 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
     gallery_meta = {}
     tag_name_map = {}
     language_name_map = {}
+    creator_favourite_map = {}
 
     with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
         cursor = conn.cursor()
+
+        cursor.execute("PRAGMA table_info(Creators)")
+        creator_columns = {str(row[1] or "") for row in cursor.fetchall()}
+        if "favourite" in creator_columns:
+            cursor.execute("SELECT name, display_name, favourite FROM Creators")
+            for name, display_name, favourite in cursor.fetchall():
+                for key in (str(name or "").strip().lower(), str(display_name or "").strip().lower()):
+                    if key:
+                        creator_favourite_map[key] = bool(favourite)
 
         cursor.execute("SELECT id, name FROM Tags")
         tag_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
@@ -382,11 +396,13 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
 
         galleries_by_creator.setdefault(creator_name, []).append(gallery_item)
 
+        creator_key = str(creator_name or "").strip().lower()
         creator_item = creators.setdefault(
             creator_name,
             {
                 "label": creator_name,
                 "name": creator_name,
+                "favourite": bool(creator_favourite_map.get(creator_key, False)),
                 "gallery_count": 0,
                 "languages": set(),
                 "tags": set(),
@@ -395,6 +411,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 "max_page_count": None,
             },
         )
+        creator_item["favourite"] = bool(creator_item.get("favourite")) or bool(gallery_item.get("favourite"))
         creator_item["gallery_count"] += 1
         creator_item["languages"].update(gallery_item["languages"])
         creator_item["tags"].update(gallery_item["tags"])
@@ -407,11 +424,13 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
 
     filesystem_creators = _scan_creators_from_filesystem(root_path)
     for creator_name in filesystem_creators:
+        creator_key = str(creator_name or "").strip().lower()
         creators.setdefault(
             creator_name,
             {
                 "label": creator_name,
                 "name": creator_name,
+                "favourite": bool(creator_favourite_map.get(creator_key, False)),
                 "gallery_count": 0,
                 "languages": set(),
                 "tags": set(),
@@ -511,6 +530,89 @@ def list_locations():
     return jsonify({"locations": roots, "selected_root": _resolve_root_path()})
 
 
+@gallery_bp.route("/files", methods=["GET"])
+def list_files():
+    root = _resolve_root_path()
+    if not root or not os.path.isdir(root):
+        return jsonify({"error": "Root path not found.", "root_path": root or "", "current_path": "", "entries": []}), 404
+
+    raw_path = str(request.args.get("path") or "").strip().replace("\\", "/")
+    path_parts = [part for part in raw_path.split("/") if part and part != "."]
+    current_abs = _safe_path(root, *path_parts)
+    if not current_abs or not os.path.isdir(current_abs):
+        return jsonify({"error": "Path not found.", "root_path": root, "current_path": "/".join(path_parts), "entries": []}), 404
+
+    entries = []
+    try:
+        names = sorted(os.listdir(current_abs), key=str.lower)
+    except OSError as exc:
+        return jsonify({"error": f"Failed to read directory: {exc}", "root_path": root, "current_path": "/".join(path_parts), "entries": []}), 500
+
+    for name in names:
+        if not name or name.startswith("."):
+            continue
+        entry_abs = _safe_path(current_abs, name)
+        if not entry_abs:
+            continue
+
+        is_dir = os.path.isdir(entry_abs)
+        is_file = os.path.isfile(entry_abs)
+        if not is_dir and not is_file:
+            continue
+
+        size = None
+        if is_file:
+            try:
+                size = int(os.path.getsize(entry_abs))
+            except OSError:
+                size = None
+
+        entries.append(
+            {
+                "name": name,
+                "is_dir": is_dir,
+                "is_file": is_file,
+                "size": size,
+            }
+        )
+
+    current_path = "/".join(path_parts)
+    parent_path = "/".join(path_parts[:-1]) if path_parts else ""
+    return jsonify(
+        {
+            "root_path": root,
+            "current_path": current_path,
+            "parent_path": parent_path,
+            "entries": entries,
+        }
+    )
+
+
+@gallery_bp.route("/favourite/gallery/<int:gallery_id>", methods=["POST"])
+def favourite_gallery(gallery_id):
+    payload = request.get_json(silent=True) or {}
+    set_value = payload.get("favourite") if isinstance(payload, dict) else None
+    if set_value is None:
+        favourite_value = scraperapi.DB.Gallery.favourite(gallery_id)
+    else:
+        favourite_value = scraperapi.DB.Gallery.favourite(gallery_id, bool(set_value))
+    return jsonify({"gallery_id": int(gallery_id), "favourite": int(favourite_value)})
+
+
+@gallery_bp.route("/favourite/creator", methods=["POST"])
+def favourite_creator():
+    payload = request.get_json(silent=True) or {}
+    creator_name = str(payload.get("creator") or "").strip()
+    if not creator_name:
+        return jsonify({"error": "creator is required."}), 400
+    set_value = payload.get("favourite") if isinstance(payload, dict) else None
+    if set_value is None:
+        favourite_value = scraperapi.DB.Creator.favourite(creator_name)
+    else:
+        favourite_value = scraperapi.DB.Creator.favourite(creator_name, bool(set_value))
+    return jsonify({"creator": creator_name, "favourite": int(favourite_value)})
+
+
 @gallery_bp.route("/list_creators", methods=["GET"])
 def list_creators():
     requested = _requested_root()
@@ -546,6 +648,7 @@ def list_creators():
             existing_tags.update(creator_item.get("tags") or [])
             existing["tags"] = sorted(existing_tags, key=str.lower)
             existing["tag_count"] = len(existing["tags"])
+            existing["favourite"] = bool(existing.get("favourite")) or bool(creator_item.get("favourite"))
 
             min_pages = int(existing.get("min_page_count") or 0)
             other_min = int(creator_item.get("min_page_count") or 0)
