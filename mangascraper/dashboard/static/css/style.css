@@ -220,6 +220,41 @@ button:active {
   transform: translateY(0);
 }
 
+.panel {
+  background: linear-gradient(180deg, rgba(22, 24, 33, 0.92), rgba(14, 16, 23, 0.92));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 0.95rem;
+  margin-bottom: 0.9rem;
+}
+
+.row-wrap {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.row-wrap > * {
+  flex: 1 1 220px;
+}
+
+.row-wrap button {
+  flex: 0 0 auto;
+}
+
+.danger {
+  border-color: #762b2b;
+  background: linear-gradient(180deg, #c44444, #8f2f2f);
+}
+
+.filter-row .filter-key {
+  max-width: 96px;
+  flex: 0 0 96px;
+}
+
 button:disabled {
   opacity: 0.52;
   cursor: default;

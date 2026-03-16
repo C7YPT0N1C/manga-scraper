@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Collections</h2>
+
+<div class="panel">
+  <h3>Create Collection</h3>
+  <div class="row-wrap">
+    <input id="newCollectionName" type="text" placeholder="Collection name">
+    <select id="newCollectionType">
+      <option value="normal">Normal</option>
+      <option value="smart">Smart</option>
+    </select>
+    <input id="newCollectionDescription" type="text" placeholder="Description (optional)">
+    <button id="createCollectionBtn" type="button">Create</button>
+  </div>
+  <p id="createCollectionMsg"></p>
+</div>
+
+<div class="panel">
+  <h3>Collections</h3>
+  <div id="collectionList"></div>
+</div>
+
+<div class="panel" id="collectionEditor" style="display:none">
+  <h3 id="editorTitle">Collection</h3>
+  <div class="row-wrap">
+    <input id="editCollectionName" type="text" placeholder="Collection name">
+    <input id="editCollectionDescription" type="text" placeholder="Description">
+    <select id="editCollectionSortMode">
+      <option value="id_desc">ID (Highest first)</option>
+      <option value="id_asc">ID (Lowest first)</option>
+      <option value="title_asc">Title (A-Z)</option>
+      <option value="title_desc">Title (Z-A)</option>
+      <option value="manual">Manual</option>
+    </select>
+    <button id="saveCollectionBtn" type="button">Save</button>
+    <button id="deleteCollectionBtn" type="button" class="danger">Delete</button>
+  </div>
+
+  <h4>Filters</h4>
+  <div id="filterRows"></div>
+  <div class="row-wrap">
+    <button id="addFilterRowBtn" type="button">Add Filter</button>
+    <button id="saveFiltersBtn" type="button">Save Filters</button>
+  </div>
+
+  <h4>Smart Rule</h4>
+  <div class="row-wrap">
+    <input id="smartExpression" type="text" placeholder="(F1 OR F2) AND NOT F3">
+    <button id="saveRuleBtn" type="button">Save Rule</button>
+    <button id="refreshRuleBtn" type="button">Refresh Smart Collection</button>
+  </div>
+
+  <h4>Manual Adds</h4>
+  <div class="row-wrap">
+    <input id="addCreatorInput" type="text" placeholder="Creator name (snapshot add)">
+    <button id="addCreatorBtn" type="button">Add Creator Galleries</button>
+  </div>
+  <div class="row-wrap">
+    <input id="addGalleryIdsInput" type="text" placeholder="Gallery IDs (comma separated)">
+    <button id="addGalleryIdsBtn" type="button">Add Galleries</button>
+  </div>
+
+  <h4>Items</h4>
+  <div id="collectionItems"></div>
+  <p id="editorMsg"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+
+let selectedCollectionId = null;
+
+function parseCommaSeparatedIds(value) {
+  return String(value || '')
+    .split(',')
+    .map(part => Number(part.trim()))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .map(n => Math.trunc(n));
+}
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload && payload.error ? payload.error : `HTTP ${response.status}`;
+    const err = new Error(message);
+    err.payload = payload;
+    err.status = response.status;
+    throw err;
+  }
+  return payload;
+}
+
+function filterRowHtml(index, row = {}) {
+  const key = row.key || `F${index + 1}`;
+  const type = row.type || 'tag';
+  const value = row.value || '';
+  return `
+    <div class="row-wrap filter-row" data-index="${index}">
+      <input class="filter-key" type="text" value="${key}" placeholder="F1">
+      <select class="filter-type">
+        <option value="id" ${type === 'id' ? 'selected' : ''}>ID</option>
+        <option value="language" ${type === 'language' ? 'selected' : ''}>Language</option>
+        <option value="tag" ${type === 'tag' ? 'selected' : ''}>Tag</option>
+        <option value="creator" ${type === 'creator' ? 'selected' : ''}>Creator</option>
+        <option value="favourite" ${type === 'favourite' ? 'selected' : ''}>Favourite</option>
+        <option value="status" ${type === 'status' ? 'selected' : ''}>Status</option>
+        <option value="rating_min" ${type === 'rating_min' ? 'selected' : ''}>Rating Min</option>
+        <option value="rating_max" ${type === 'rating_max' ? 'selected' : ''}>Rating Max</option>
+        <option value="page_min" ${type === 'page_min' ? 'selected' : ''}>Page Min</option>
+        <option value="page_max" ${type === 'page_max' ? 'selected' : ''}>Page Max</option>
+      </select>
+      <input class="filter-value" type="text" value="${value}" placeholder="Filter value">
+      <button type="button" class="remove-filter-btn">Remove</button>
+    </div>
+  `;
+}
+
+function readFilterRows() {
+  const rows = [];
+  document.querySelectorAll('#filterRows .filter-row').forEach(row => {
+    const key = row.querySelector('.filter-key').value.trim().toUpperCase();
+    const type = row.querySelector('.filter-type').value;
+    const value = row.querySelector('.filter-value').value.trim();
+    if (key && type && value) {
+      rows.push({ key, type, value });
+    }
+  });
+  return rows;
+}
+
+function renderItems(items) {
+  const host = document.getElementById('collectionItems');
+  if (!Array.isArray(items) || !items.length) {
+    host.innerHTML = '<p>No items in this collection.</p>';
+    return;
+  }
+  host.innerHTML = items.map(item => {
+    const title = item.title || `Gallery ${item.gallery_id}`;
+    const flags = [item.is_manual ? 'manual' : '', item.is_rule ? 'rule' : ''].filter(Boolean).join(', ');
+    return `
+      <div class="row-wrap">
+        <span>#${item.gallery_id} ${title} (${flags || 'none'})</span>
+        <button type="button" class="remove-item-btn" data-gallery-id="${item.gallery_id}">Remove</button>
+      </div>
+    `;
+  }).join('');
+
+  host.querySelectorAll('.remove-item-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!selectedCollectionId) return;
+      const galleryId = Number(btn.dataset.galleryId);
+      try {
+        await api(`/api/collections/${selectedCollectionId}/remove_gallery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gallery_id: galleryId }),
+        });
+        await loadCollection(selectedCollectionId);
+      } catch (err) {
+        document.getElementById('editorMsg').textContent = err.message;
+      }
+    });
+  });
+}
+
+async function loadCollections() {
+  const data = await api('/api/collections/list');
+  const host = document.getElementById('collectionList');
+  const collections = Array.isArray(data.collections) ? data.collections : [];
+  if (!collections.length) {
+    host.innerHTML = '<p>No collections yet.</p>';
+    return;
+  }
+
+  host.innerHTML = collections.map(item => {
+    return `
+      <div class="row-wrap">
+        <button type="button" class="open-collection-btn" data-id="${item.id}">${item.name}</button>
+        <span>${item.collection_type} | ${item.total_count || 0} items</span>
+      </div>
+    `;
+  }).join('');
+
+  host.querySelectorAll('.open-collection-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      loadCollection(Number(btn.dataset.id));
+    });
+  });
+}
+
+async function loadCollection(collectionId) {
+  selectedCollectionId = Number(collectionId);
+  const data = await api(`/api/collections/${selectedCollectionId}`);
+  const itemData = await api(`/api/collections/${selectedCollectionId}/items`);
+
+  document.getElementById('collectionEditor').style.display = '';
+  document.getElementById('editorTitle').textContent = `${data.name} (${data.collection_type})`;
+  document.getElementById('editCollectionName').value = data.name || '';
+  document.getElementById('editCollectionDescription').value = data.description || '';
+  document.getElementById('editCollectionSortMode').value = data.sort_mode || 'id_desc';
+  document.getElementById('smartExpression').value = data.smart_expression || '';
+
+  const sortSelect = document.getElementById('editCollectionSortMode');
+  sortSelect.disabled = data.collection_type === 'smart';
+  if (data.collection_type === 'smart') {
+    sortSelect.value = 'id_desc';
+  }
+
+  const filterRows = Array.isArray(data.filters) ? data.filters : [];
+  const filtersHost = document.getElementById('filterRows');
+  filtersHost.innerHTML = '';
+  filterRows.forEach((row, index) => {
+    filtersHost.insertAdjacentHTML('beforeend', filterRowHtml(index, row));
+  });
+
+  renderItems(itemData.items || []);
+
+  filtersHost.querySelectorAll('.remove-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.filter-row').remove();
+    });
+  });
+}
+
+async function createCollection() {
+  const name = document.getElementById('newCollectionName').value.trim();
+  const collectionType = document.getElementById('newCollectionType').value;
+  const description = document.getElementById('newCollectionDescription').value.trim();
+  const msg = document.getElementById('createCollectionMsg');
+  if (!name) {
+    msg.textContent = 'Collection name is required.';
+    return;
+  }
+
+  try {
+    await api('/api/collections/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        description,
+        collection_type: collectionType,
+        sort_mode: collectionType === 'smart' ? 'id_desc' : 'id_desc',
+      }),
+    });
+    msg.textContent = 'Collection created.';
+    document.getElementById('newCollectionName').value = '';
+    document.getElementById('newCollectionDescription').value = '';
+    await loadCollections();
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+}
+
+async function saveCollectionMeta() {
+  if (!selectedCollectionId) return;
+  const payload = {
+    name: document.getElementById('editCollectionName').value.trim(),
+    description: document.getElementById('editCollectionDescription').value.trim(),
+    sort_mode: document.getElementById('editCollectionSortMode').value,
+  };
+  try {
+    await api(`/api/collections/${selectedCollectionId}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    document.getElementById('editorMsg').textContent = 'Collection updated.';
+    await loadCollections();
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function saveFilters() {
+  if (!selectedCollectionId) return;
+  const filters = readFilterRows();
+  try {
+    await api(`/api/collections/${selectedCollectionId}/filters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filters }),
+    });
+    document.getElementById('editorMsg').textContent = 'Filters saved.';
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function saveSmartRule() {
+  if (!selectedCollectionId) return;
+  const expression = document.getElementById('smartExpression').value.trim();
+  try {
+    await api(`/api/collections/${selectedCollectionId}/rule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smart_expression: expression, confirm_rebuild: false }),
+    });
+    document.getElementById('editorMsg').textContent = 'Smart rule saved and rebuilt.';
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    if (err.status === 409 && err.payload && err.payload.requires_confirmation) {
+      const ok = window.confirm(err.payload.error + '\n\nContinue?');
+      if (ok) {
+        try {
+          await api(`/api/collections/${selectedCollectionId}/rule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ smart_expression: expression, confirm_rebuild: true }),
+          });
+          document.getElementById('editorMsg').textContent = 'Smart rule saved and rebuilt.';
+          await loadCollection(selectedCollectionId);
+          return;
+        } catch (err2) {
+          document.getElementById('editorMsg').textContent = err2.message;
+          return;
+        }
+      }
+    }
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function refreshSmartCollection() {
+  if (!selectedCollectionId) return;
+  try {
+    await api(`/api/collections/${selectedCollectionId}/refresh`, { method: 'POST' });
+    document.getElementById('editorMsg').textContent = 'Smart collection refreshed.';
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function addCreatorSnapshot() {
+  if (!selectedCollectionId) return;
+  const creator = document.getElementById('addCreatorInput').value.trim();
+  if (!creator) return;
+  try {
+    await api(`/api/collections/${selectedCollectionId}/add_creator`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator }),
+    });
+    document.getElementById('addCreatorInput').value = '';
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function addGalleryIds() {
+  if (!selectedCollectionId) return;
+  const ids = parseCommaSeparatedIds(document.getElementById('addGalleryIdsInput').value);
+  if (!ids.length) return;
+  try {
+    await api(`/api/collections/${selectedCollectionId}/add_galleries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gallery_ids: ids }),
+    });
+    document.getElementById('addGalleryIdsInput').value = '';
+    await loadCollection(selectedCollectionId);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+async function deleteCollection() {
+  if (!selectedCollectionId) return;
+  if (!window.confirm('Delete this collection?')) return;
+  try {
+    await api(`/api/collections/${selectedCollectionId}/delete`, { method: 'POST' });
+    selectedCollectionId = null;
+    document.getElementById('collectionEditor').style.display = 'none';
+    await loadCollections();
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+}
+
+document.getElementById('createCollectionBtn').addEventListener('click', createCollection);
+document.getElementById('saveCollectionBtn').addEventListener('click', saveCollectionMeta);
+document.getElementById('deleteCollectionBtn').addEventListener('click', deleteCollection);
+document.getElementById('saveFiltersBtn').addEventListener('click', saveFilters);
+document.getElementById('saveRuleBtn').addEventListener('click', saveSmartRule);
+document.getElementById('refreshRuleBtn').addEventListener('click', refreshSmartCollection);
+document.getElementById('addCreatorBtn').addEventListener('click', addCreatorSnapshot);
+document.getElementById('addGalleryIdsBtn').addEventListener('click', addGalleryIds);
+document.getElementById('addFilterRowBtn').addEventListener('click', () => {
+  const host = document.getElementById('filterRows');
+  const index = host.querySelectorAll('.filter-row').length;
+  host.insertAdjacentHTML('beforeend', filterRowHtml(index, { key: `F${index + 1}`, type: 'tag', value: '' }));
+  host.querySelectorAll('.remove-filter-btn').forEach(btn => {
+    btn.onclick = () => btn.closest('.filter-row').remove();
+  });
+});
+
+loadCollections();
+</script>
+{% endblock %}

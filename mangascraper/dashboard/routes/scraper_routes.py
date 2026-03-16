@@ -392,10 +392,21 @@ def search_galleries():
         if not query_value:
             return jsonify({"message": "cache_key is required for query_type=cache_key."}), 400
         cache_key = query_value
+        try:
+            scraperapi.logger.debug(
+                f"[DashboardSearch] query_type=cache_key request key='{cache_key}' sort='{sort_value}' "
+                f"start_page={start_page} end_page={end_page} fetch_all_pages={fetch_all_pages}"
+            )
+        except Exception:
+            pass
         ids = scraperapi.Cache.Load.cache(cache_key=cache_key)
         try:
             scraperapi.logger.info(
                 f"[DashboardSearch] cache_key='{cache_key}' resolved {len(ids)} IDs"
+            )
+            preview = ",".join(str(gid) for gid in ids[:10]) if ids else ""
+            scraperapi.logger.debug(
+                f"[DashboardSearch] cache_key='{cache_key}' ids_preview='{preview}'"
             )
         except Exception:
             pass
@@ -425,6 +436,13 @@ def search_galleries():
         )
 
     if not ids:
+        if query_type == "cache_key":
+            try:
+                scraperapi.logger.debug(
+                    f"[DashboardSearch] cache_key='{cache_key}' produced no IDs; returning empty result set"
+                )
+            except Exception:
+                pass
         return jsonify({
             "message": "No galleries found.",
             "cache_key": cache_key,

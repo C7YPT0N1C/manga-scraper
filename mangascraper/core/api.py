@@ -279,6 +279,9 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
 
     # CacheReferences: single key lookup
     if cache_key is not None:
+        lookup_key = Helpers.safe_text(cache_key, "")
+        lookup_now = time.time()
+        logger.debug(f"[CacheLookup] Checking CacheReferences for key='{lookup_key}' at now={lookup_now}")
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -288,10 +291,11 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 WHERE cache_key = ?
                   AND (expires_at IS NULL OR expires_at > ?)
                 """,
-                (str(cache_key), time.time()),
+                (lookup_key, lookup_now),
             )
             row = cursor.fetchone()
             if not row:
+                logger.debug(f"[CacheLookup] MISS key='{lookup_key}' (no non-expired CacheReferences row)")
                 return {"references": {}, "metadata": {}}
             cache_key_val, cache_type, cache_target, ids_json, expires_at = row
             parsed_ids = []
@@ -307,6 +311,10 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                 "ids": parsed_ids,
                 "expires_at": Helpers.safe_float(expires_at),
             }
+            logger.debug(
+                f"[CacheLookup] HIT key='{lookup_key}' type='{entry['cache_type']}' target='{entry['cache_target']}' "
+                f"ids={len(parsed_ids)} expires_at={entry['expires_at']}"
+            )
             return {"references": {str(cache_key_val): entry}, "metadata": {}}
 
     # CachedMetadata: one or more gallery lookups
@@ -851,7 +859,45 @@ class DB:
                 ids TEXT,
                 expires_at REAL
             );
+
+            CREATE TABLE IF NOT EXISTS Collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                collection_type TEXT NOT NULL DEFAULT 'normal',
+                sort_mode TEXT NOT NULL DEFAULT 'id_desc',
+                smart_expression TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                last_refreshed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS CollectionFilters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id INTEGER NOT NULL,
+                filter_key TEXT NOT NULL,
+                filter_type TEXT NOT NULL,
+                filter_value TEXT NOT NULL,
+                FOREIGN KEY (collection_id) REFERENCES Collections(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS CollectionItems (
+                collection_id INTEGER NOT NULL,
+                gallery_id INTEGER NOT NULL,
+                is_manual INTEGER DEFAULT 0,
+                is_rule INTEGER DEFAULT 0,
+                manual_order INTEGER DEFAULT 0,
+                added_at TEXT,
+                updated_at TEXT,
+                PRIMARY KEY (collection_id, gallery_id),
+                FOREIGN KEY (collection_id) REFERENCES Collections(id) ON DELETE CASCADE
+            );
             """)
+
+            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionfilters_collection_id ON CollectionFilters(collection_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionfilters_key ON CollectionFilters(filter_key)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_collection_id ON CollectionItems(collection_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_gallery_id ON CollectionItems(gallery_id)")
 
             c.execute("PRAGMA table_info(CacheReferences)")
             cache_ref_columns = [row[1] for row in c.fetchall()]
@@ -1088,6 +1134,784 @@ class DB:
             return result
 
     @staticmethod
+    def _normalise_collection_type(value: str) -> str:
+        text = Helpers.safe_text(value, "normal").strip().lower()
+        return "smart" if text == "smart" else "normal"
+
+    @staticmethod
+    def _normalise_sort_mode(value: str, collection_type: str) -> str:
+        if collection_type == "smart":
+            return "id_desc"
+        text = Helpers.safe_text(value, "id_desc").strip().lower()
+        allowed = {"id_desc", "id_asc", "title_asc", "title_desc", "manual"}
+        return text if text in allowed else "id_desc"
+
+    @staticmethod
+    def _normalise_collection_filter_type(value: str) -> str:
+        text = Helpers.safe_text(value, "").strip().lower()
+        allowed = {
+            "id",
+            "language",
+            "tag",
+            "creator",
+            "favourite",
+            "status",
+            "rating_min",
+            "rating_max",
+            "page_min",
+            "page_max",
+        }
+        return text if text in allowed else ""
+
+    @staticmethod
+    def _parse_bool_text(value: str) -> bool | None:
+        text = Helpers.safe_text(value, "").strip().lower()
+        if text in {"1", "true", "yes", "y", "on"}:
+            return True
+        if text in {"0", "false", "no", "n", "off"}:
+            return False
+        return None
+
+    @staticmethod
+    def _parse_json_int_list(value) -> list[int]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [int(v) for v in Helpers.normalise_integer_list(value)]
+        text = Helpers.safe_text(value, "").strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return []
+        return [int(v) for v in Helpers.normalise_integer_list(parsed)]
+
+    @staticmethod
+    def _read_collection_row(cursor, collection_id: int):
+        cursor.execute(
+            """
+            SELECT id, name, description, collection_type, sort_mode, smart_expression,
+                   created_at, updated_at, last_refreshed_at
+            FROM Collections
+            WHERE id=?
+            """,
+            (int(collection_id),),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": int(row[0]),
+            "name": Helpers.safe_text(row[1], ""),
+            "description": Helpers.safe_text(row[2], ""),
+            "collection_type": Helpers.safe_text(row[3], "normal"),
+            "sort_mode": Helpers.safe_text(row[4], "id_desc"),
+            "smart_expression": Helpers.safe_text(row[5], ""),
+            "created_at": Helpers.safe_text(row[6], ""),
+            "updated_at": Helpers.safe_text(row[7], ""),
+            "last_refreshed_at": Helpers.safe_text(row[8], ""),
+        }
+
+    @staticmethod
+    def _tokenise_smart_expression(expression: str) -> list[str]:
+        text = Helpers.safe_text(expression, "").strip()
+        if not text:
+            return []
+        tokens = re.findall(r"F\d+|AND|OR|NOT|\(|\)", text, flags=re.IGNORECASE)
+        normalised = [token.upper() for token in tokens]
+        compact_source = re.sub(r"\s+", "", text).upper()
+        compact_tokens = "".join(normalised)
+        if compact_source != compact_tokens:
+            raise ValueError("Expression contains unsupported tokens. Use only F#, AND, OR, NOT, and brackets.")
+        return normalised
+
+    @staticmethod
+    def _smart_expression_to_rpn(expression: str) -> list[str]:
+        tokens = DB._tokenise_smart_expression(expression)
+        if not tokens:
+            raise ValueError("Smart expression is required for smart collections.")
+
+        def _kind(token: str) -> str:
+            if re.fullmatch(r"F\d+", token):
+                return "operand"
+            if token in {"AND", "OR"}:
+                return "binary"
+            if token == "NOT":
+                return "unary"
+            if token == "(":
+                return "lparen"
+            if token == ")":
+                return "rparen"
+            return "unknown"
+
+        prev_kind = None
+        balance = 0
+        for token in tokens:
+            kind = _kind(token)
+            if kind == "unknown":
+                raise ValueError(f"Unsupported token '{token}'.")
+
+            if kind == "lparen":
+                balance += 1
+            elif kind == "rparen":
+                balance -= 1
+                if balance < 0:
+                    raise ValueError("Expression has mismatched brackets.")
+
+            if prev_kind is None:
+                if kind not in {"operand", "unary", "lparen"}:
+                    raise ValueError("Expression must start with a filter, NOT, or '(' .")
+            elif prev_kind in {"operand", "rparen"}:
+                if kind in {"operand", "unary", "lparen"}:
+                    raise ValueError("Explicit AND is required between filters and groups.")
+            elif prev_kind in {"binary", "unary", "lparen"}:
+                if kind in {"binary", "rparen"}:
+                    raise ValueError("Expression has an operator in an invalid position.")
+
+            prev_kind = kind
+
+        if balance != 0:
+            raise ValueError("Expression has mismatched brackets.")
+        if prev_kind in {"binary", "unary", "lparen"}:
+            raise ValueError("Expression cannot end with an operator.")
+
+        precedence = {"NOT": 3, "AND": 2, "OR": 1}
+        right_associative = {"NOT"}
+        output = []
+        stack = []
+
+        for token in tokens:
+            if re.fullmatch(r"F\d+", token):
+                output.append(token)
+                continue
+            if token in {"AND", "OR", "NOT"}:
+                while stack and stack[-1] in precedence:
+                    top = stack[-1]
+                    if top not in precedence:
+                        break
+                    if precedence[top] > precedence[token] or (
+                        precedence[top] == precedence[token] and token not in right_associative
+                    ):
+                        output.append(stack.pop())
+                    else:
+                        break
+                stack.append(token)
+                continue
+            if token == "(":
+                stack.append(token)
+                continue
+            if token == ")":
+                while stack and stack[-1] != "(":
+                    output.append(stack.pop())
+                if not stack:
+                    raise ValueError("Expression has mismatched brackets.")
+                stack.pop()
+
+        while stack:
+            top = stack.pop()
+            if top in {"(", ")"}:
+                raise ValueError("Expression has mismatched brackets.")
+            output.append(top)
+
+        return output
+
+    @staticmethod
+    def _evaluate_smart_rpn(rpn_tokens: list[str], filter_result_map: dict[str, bool]) -> bool:
+        stack = []
+        for token in rpn_tokens:
+            if re.fullmatch(r"F\d+", token):
+                stack.append(bool(filter_result_map.get(token, False)))
+                continue
+            if token == "NOT":
+                if not stack:
+                    return False
+                stack.append(not stack.pop())
+                continue
+            if token in {"AND", "OR"}:
+                if len(stack) < 2:
+                    return False
+                right = bool(stack.pop())
+                left = bool(stack.pop())
+                stack.append(left and right if token == "AND" else left or right)
+        return bool(stack[-1]) if len(stack) == 1 else False
+
+    @staticmethod
+    def _collection_gallery_dataset(cursor) -> tuple[list[dict], dict[int, str], dict[int, str]]:
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
+
+        cursor.execute("SELECT id, name, display_name FROM Creators")
+        creator_name_map: dict[int, set[str]] = {}
+        for row in cursor.fetchall():
+            creator_id = Helpers.normalise_integer(row[0])
+            if creator_id is None:
+                continue
+            values = set()
+            for text in (row[1], row[2]):
+                value = Helpers.safe_text(text, "").strip().lower()
+                if value:
+                    values.add(value)
+            creator_name_map[int(creator_id)] = values
+
+        cursor.execute(
+            """
+            SELECT id, clean_title, raw_title, status, favourite, rating, num_pages,
+                   creator_ids, tag_ids, language_ids
+            FROM Galleries
+            WHERE LOWER(COALESCE(status,'')) = 'completed'
+            """
+        )
+
+        galleries = []
+        for row in cursor.fetchall():
+            gallery_id = Helpers.normalise_integer(row[0])
+            if gallery_id is None:
+                continue
+            creator_ids = DB._parse_json_int_list(row[7])
+            tag_ids = DB._parse_json_int_list(row[8])
+            language_ids = DB._parse_json_int_list(row[9])
+            creator_names = set()
+            for creator_id in creator_ids:
+                creator_names.update(creator_name_map.get(int(creator_id), set()))
+
+            galleries.append(
+                {
+                    "id": int(gallery_id),
+                    "title": Helpers.safe_text(row[1] or row[2], ""),
+                    "status": Helpers.safe_text(row[3], "").strip().lower(),
+                    "favourite": bool(row[4]),
+                    "rating": Helpers.safe_float(row[5], 0.0),
+                    "num_pages": Helpers.normalise_integer(row[6]) or 0,
+                    "creator_names": creator_names,
+                    "tag_names": {Helpers.safe_text(tag_map.get(tag_id), "").strip().lower() for tag_id in tag_ids if tag_id in tag_map},
+                    "language_names": {Helpers.safe_text(language_map.get(language_id), "").strip().lower() for language_id in language_ids if language_id in language_map},
+                }
+            )
+        return galleries, tag_map, language_map
+
+    @staticmethod
+    def _filter_matches_gallery(filter_type: str, filter_value: str, gallery_row: dict) -> bool:
+        text_value = Helpers.safe_text(filter_value, "").strip()
+        if not text_value:
+            return False
+        lower_value = text_value.lower()
+
+        if filter_type == "id":
+            gid = Helpers.normalise_integer(text_value)
+            return gid is not None and int(gallery_row.get("id") or 0) == int(gid)
+        if filter_type == "language":
+            return lower_value in (gallery_row.get("language_names") or set())
+        if filter_type == "tag":
+            return lower_value in (gallery_row.get("tag_names") or set())
+        if filter_type == "creator":
+            return lower_value in (gallery_row.get("creator_names") or set())
+        if filter_type == "favourite":
+            expected = DB._parse_bool_text(text_value)
+            return expected is not None and bool(gallery_row.get("favourite")) == expected
+        if filter_type == "status":
+            return Helpers.safe_text(gallery_row.get("status"), "").strip().lower() == lower_value
+        if filter_type == "rating_min":
+            try:
+                return Helpers.safe_float(gallery_row.get("rating"), 0.0) >= float(text_value)
+            except Exception:
+                return False
+        if filter_type == "rating_max":
+            try:
+                return Helpers.safe_float(gallery_row.get("rating"), 0.0) <= float(text_value)
+            except Exception:
+                return False
+        if filter_type == "page_min":
+            try:
+                return int(gallery_row.get("num_pages") or 0) >= int(float(text_value))
+            except Exception:
+                return False
+        if filter_type == "page_max":
+            try:
+                return int(gallery_row.get("num_pages") or 0) <= int(float(text_value))
+            except Exception:
+                return False
+        return False
+
+    @staticmethod
+    def _recompute_creator_rollups(cursor) -> None:
+        cursor.execute("SELECT id FROM Creators")
+        creator_ids = [Helpers.normalise_integer(row[0]) for row in cursor.fetchall()]
+        creator_ids = [int(cid) for cid in creator_ids if cid is not None]
+
+        for creator_id in creator_ids:
+            cursor.execute("SELECT id FROM Galleries WHERE creator_ids IS NOT NULL AND creator_ids != ''")
+            related_gallery_ids = []
+            for (gid,) in cursor.fetchall():
+                gallery_id = Helpers.normalise_integer(gid)
+                if gallery_id is None:
+                    continue
+                cursor.execute("SELECT creator_ids FROM Galleries WHERE id=?", (int(gallery_id),))
+                row = cursor.fetchone()
+                if not row:
+                    continue
+                creator_list = DB._parse_json_int_list(row[0])
+                if int(creator_id) in creator_list:
+                    related_gallery_ids.append(int(gallery_id))
+
+            tag_counter = {}
+            for gallery_id in related_gallery_ids:
+                cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (int(gallery_id),))
+                row = cursor.fetchone()
+                if not row or not row[0]:
+                    continue
+                for tag_id in DB._parse_json_int_list(row[0]):
+                    tag_counter[int(tag_id)] = tag_counter.get(int(tag_id), 0) + 1
+
+            most_popular = [tid for tid, _ in sorted(tag_counter.items(), key=lambda item: item[1], reverse=True)[:15]]
+            cursor.execute(
+                "UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?",
+                (len(related_gallery_ids), json.dumps(most_popular), datetime.now(timezone.utc).isoformat(), int(creator_id)),
+            )
+
+    class Collection:
+        @staticmethod
+        def list() -> list[dict]:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT c.id, c.name, c.description, c.collection_type, c.sort_mode,
+                           c.smart_expression, c.created_at, c.updated_at, c.last_refreshed_at,
+                           SUM(CASE WHEN ci.is_manual=1 THEN 1 ELSE 0 END) AS manual_count,
+                           SUM(CASE WHEN ci.is_rule=1 THEN 1 ELSE 0 END) AS rule_count,
+                           COUNT(ci.gallery_id) AS total_count
+                    FROM Collections c
+                    LEFT JOIN CollectionItems ci ON ci.collection_id = c.id
+                    GROUP BY c.id
+                    ORDER BY LOWER(c.name)
+                    """
+                )
+                rows = []
+                for row in cursor.fetchall():
+                    rows.append(
+                        {
+                            "id": int(row[0]),
+                            "name": Helpers.safe_text(row[1], ""),
+                            "description": Helpers.safe_text(row[2], ""),
+                            "collection_type": Helpers.safe_text(row[3], "normal"),
+                            "sort_mode": Helpers.safe_text(row[4], "id_desc"),
+                            "smart_expression": Helpers.safe_text(row[5], ""),
+                            "created_at": Helpers.safe_text(row[6], ""),
+                            "updated_at": Helpers.safe_text(row[7], ""),
+                            "last_refreshed_at": Helpers.safe_text(row[8], ""),
+                            "manual_count": int(row[9] or 0),
+                            "rule_count": int(row[10] or 0),
+                            "total_count": int(row[11] or 0),
+                        }
+                    )
+                return rows
+
+        @staticmethod
+        def get(collection_id: int) -> dict | None:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return None
+                cursor.execute(
+                    "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
+                    (int(collection_id),),
+                )
+                collection["filters"] = [
+                    {
+                        "key": Helpers.safe_text(row[0], ""),
+                        "type": Helpers.safe_text(row[1], ""),
+                        "value": Helpers.safe_text(row[2], ""),
+                    }
+                    for row in cursor.fetchall()
+                ]
+                return collection
+
+        @staticmethod
+        def create(name: str, description: str = "", collection_type: str = "normal", sort_mode: str = "id_desc") -> dict:
+            DB.init_db()
+            now = datetime.now(timezone.utc).isoformat()
+            ctype = DB._normalise_collection_type(collection_type)
+            smode = DB._normalise_sort_mode(sort_mode, ctype)
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO Collections (name, description, collection_type, sort_mode, smart_expression, created_at, updated_at, last_refreshed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (Helpers.safe_text(name, "").strip(), Helpers.safe_text(description, ""), ctype, smode, "", now, now, ""),
+                )
+                conn.commit()
+                collection_id = int(cursor.lastrowid)
+                return DB.Collection.get(collection_id) or {"id": collection_id}
+
+        @staticmethod
+        def update(collection_id: int, name: str | None = None, description: str | None = None, sort_mode: str | None = None) -> dict | None:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return None
+                ctype = DB._normalise_collection_type(collection.get("collection_type", "normal"))
+                new_name = Helpers.safe_text(name, collection["name"]).strip()
+                new_description = Helpers.safe_text(description, collection.get("description", ""))
+                new_sort = DB._normalise_sort_mode(sort_mode or collection.get("sort_mode", "id_desc"), ctype)
+                now = datetime.now(timezone.utc).isoformat()
+                cursor.execute(
+                    "UPDATE Collections SET name=?, description=?, sort_mode=?, updated_at=? WHERE id=?",
+                    (new_name, new_description, new_sort, now, int(collection_id)),
+                )
+                conn.commit()
+                return DB.Collection.get(int(collection_id))
+
+        @staticmethod
+        def delete(collection_id: int) -> bool:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM Collections WHERE id=?", (int(collection_id),))
+                conn.commit()
+                return bool(cursor.rowcount)
+
+        @staticmethod
+        def set_filters(collection_id: int, filters: list[dict]) -> dict | None:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return None
+
+                cleaned = []
+                seen = set()
+                for entry in (filters or []):
+                    if not isinstance(entry, dict):
+                        continue
+                    key = Helpers.safe_text(entry.get("key"), "").strip().upper()
+                    ftype = DB._normalise_collection_filter_type(entry.get("type"))
+                    fvalue = Helpers.safe_text(entry.get("value"), "").strip()
+                    if not key or not re.fullmatch(r"F\d+", key):
+                        continue
+                    if key in seen:
+                        raise ValueError(f"Duplicate filter key '{key}'.")
+                    if not ftype or not fvalue:
+                        raise ValueError(f"Filter '{key}' requires a valid type and value.")
+                    seen.add(key)
+                    cleaned.append((key, ftype, fvalue))
+
+                cursor.execute("DELETE FROM CollectionFilters WHERE collection_id=?", (int(collection_id),))
+                for key, ftype, fvalue in cleaned:
+                    cursor.execute(
+                        "INSERT INTO CollectionFilters (collection_id, filter_key, filter_type, filter_value) VALUES (?, ?, ?, ?)",
+                        (int(collection_id), key, ftype, fvalue),
+                    )
+
+                cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                conn.commit()
+            return DB.Collection.get(int(collection_id))
+
+        @staticmethod
+        def set_smart_rule(collection_id: int, expression: str, clear_existing_items: bool = True) -> dict | None:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return None
+                if DB._normalise_collection_type(collection.get("collection_type", "normal")) != "smart":
+                    raise ValueError("Smart rule can only be set for smart collections.")
+
+                rpn = DB._smart_expression_to_rpn(expression)
+                if not rpn:
+                    raise ValueError("Smart expression cannot be empty.")
+
+                cursor.execute("SELECT filter_key FROM CollectionFilters WHERE collection_id=?", (int(collection_id),))
+                known_filters = {Helpers.safe_text(row[0], "").strip().upper() for row in cursor.fetchall()}
+                used_filters = {token for token in rpn if re.fullmatch(r"F\d+", token)}
+                missing = sorted(filter_key for filter_key in used_filters if filter_key not in known_filters)
+                if missing:
+                    raise ValueError(f"Expression references unknown filters: {', '.join(missing)}")
+
+                now = datetime.now(timezone.utc).isoformat()
+                cursor.execute(
+                    "UPDATE Collections SET smart_expression=?, updated_at=? WHERE id=?",
+                    (Helpers.safe_text(expression, "").strip(), now, int(collection_id)),
+                )
+                if clear_existing_items:
+                    cursor.execute("DELETE FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
+                conn.commit()
+
+            DB.Collection.refresh_smart(int(collection_id))
+            return DB.Collection.get(int(collection_id))
+
+        @staticmethod
+        def add_galleries(collection_id: int, gallery_ids: list[int], manual: bool = True) -> dict:
+            DB.init_db()
+            ids = sorted({int(gid) for gid in Helpers.normalise_integer_list(gallery_ids)})
+            if not ids:
+                return {"added": 0, "ids": []}
+
+            now = datetime.now(timezone.utc).isoformat()
+            added = 0
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM Collections WHERE id=?", (int(collection_id),))
+                if not cursor.fetchone():
+                    return {"added": 0, "ids": []}
+
+                cursor.execute("SELECT COALESCE(MAX(manual_order), 0) FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
+                next_order = int((cursor.fetchone() or [0])[0] or 0)
+
+                for gid in ids:
+                    cursor.execute("SELECT id FROM Galleries WHERE id=?", (int(gid),))
+                    if not cursor.fetchone():
+                        continue
+                    next_order += 1
+                    cursor.execute(
+                        """
+                        INSERT INTO CollectionItems (collection_id, gallery_id, is_manual, is_rule, manual_order, added_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(collection_id, gallery_id) DO UPDATE SET
+                            is_manual = CASE WHEN excluded.is_manual=1 THEN 1 ELSE CollectionItems.is_manual END,
+                            is_rule = CASE WHEN excluded.is_rule=1 THEN 1 ELSE CollectionItems.is_rule END,
+                            manual_order = CASE WHEN excluded.is_manual=1 THEN excluded.manual_order ELSE CollectionItems.manual_order END,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            int(collection_id),
+                            int(gid),
+                            1 if manual else 0,
+                            0 if manual else 1,
+                            next_order,
+                            now,
+                            now,
+                        ),
+                    )
+                    added += 1
+
+                cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (now, int(collection_id)))
+                conn.commit()
+            return {"added": added, "ids": ids}
+
+        @staticmethod
+        def add_creator_snapshot(collection_id: int, creator_name: str) -> dict:
+            DB.init_db()
+            creator_text = Helpers.safe_text(creator_name, "").strip().lower()
+            if not creator_text:
+                return {"added": 0, "ids": []}
+
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                galleries, _, _ = DB._collection_gallery_dataset(cursor)
+                ids = [int(row["id"]) for row in galleries if creator_text in (row.get("creator_names") or set())]
+            return DB.Collection.add_galleries(int(collection_id), ids, manual=True)
+
+        @staticmethod
+        def remove_gallery(collection_id: int, gallery_id: int) -> bool:
+            DB.init_db()
+            gid = Helpers.normalise_integer(gallery_id)
+            if gid is None:
+                return False
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND gallery_id=?", (int(collection_id), int(gid)))
+                changed = bool(cursor.rowcount)
+                if changed:
+                    cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                conn.commit()
+                return changed
+
+        @staticmethod
+        def clear_items(collection_id: int) -> bool:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
+                changed = bool(cursor.rowcount)
+                if changed:
+                    cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                conn.commit()
+                return changed
+
+        @staticmethod
+        def refresh_smart(collection_id: int) -> dict:
+            DB.init_db()
+            now = datetime.now(timezone.utc).isoformat()
+
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return {"updated": False, "matched": 0}
+                if DB._normalise_collection_type(collection.get("collection_type", "normal")) != "smart":
+                    return {"updated": False, "matched": 0}
+
+                expression = Helpers.safe_text(collection.get("smart_expression"), "").strip()
+                if not expression:
+                    cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND is_rule=1", (int(collection_id),))
+                    cursor.execute(
+                        "UPDATE Collections SET last_refreshed_at=?, updated_at=? WHERE id=?",
+                        (now, now, int(collection_id)),
+                    )
+                    conn.commit()
+                    return {"updated": True, "matched": 0}
+
+                rpn = DB._smart_expression_to_rpn(expression)
+                cursor.execute(
+                    "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
+                    (int(collection_id),),
+                )
+                filters = [
+                    {
+                        "key": Helpers.safe_text(row[0], "").strip().upper(),
+                        "type": Helpers.safe_text(row[1], "").strip().lower(),
+                        "value": Helpers.safe_text(row[2], "").strip(),
+                    }
+                    for row in cursor.fetchall()
+                ]
+                filter_map = {row["key"]: row for row in filters if row.get("key")}
+
+                referenced_keys = {token for token in rpn if re.fullmatch(r"F\d+", token)}
+                missing = sorted([key for key in referenced_keys if key not in filter_map])
+                if missing:
+                    raise ValueError(f"Smart expression references unknown filters: {', '.join(missing)}")
+
+                galleries, _, _ = DB._collection_gallery_dataset(cursor)
+                matched_gallery_ids = []
+                for gallery_row in galleries:
+                    result_map = {}
+                    for key in referenced_keys:
+                        rule = filter_map.get(key)
+                        result_map[key] = DB._filter_matches_gallery(rule["type"], rule["value"], gallery_row) if rule else False
+                    if DB._evaluate_smart_rpn(rpn, result_map):
+                        matched_gallery_ids.append(int(gallery_row["id"]))
+
+                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND is_rule=1", (int(collection_id),))
+
+                cursor.execute("SELECT COALESCE(MAX(manual_order), 0) FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
+                next_order = int((cursor.fetchone() or [0])[0] or 0)
+
+                for gid in sorted(set(matched_gallery_ids)):
+                    next_order += 1
+                    cursor.execute(
+                        """
+                        INSERT INTO CollectionItems (collection_id, gallery_id, is_manual, is_rule, manual_order, added_at, updated_at)
+                        VALUES (?, ?, 0, 1, ?, ?, ?)
+                        ON CONFLICT(collection_id, gallery_id) DO UPDATE SET
+                            is_rule = 1,
+                            updated_at = excluded.updated_at
+                        """,
+                        (int(collection_id), int(gid), next_order, now, now),
+                    )
+
+                cursor.execute(
+                    "UPDATE Collections SET last_refreshed_at=?, updated_at=? WHERE id=?",
+                    (now, now, int(collection_id)),
+                )
+                conn.commit()
+                return {"updated": True, "matched": len(set(matched_gallery_ids))}
+
+        @staticmethod
+        def refresh_all_smart() -> dict:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM Collections WHERE LOWER(collection_type)='smart'")
+                ids = [int(row[0]) for row in cursor.fetchall() if row and row[0] is not None]
+
+            refreshed = 0
+            total_matches = 0
+            errors = []
+            for collection_id in ids:
+                try:
+                    result = DB.Collection.refresh_smart(int(collection_id))
+                    if result.get("updated"):
+                        refreshed += 1
+                    total_matches += int(result.get("matched") or 0)
+                except Exception as exc:
+                    errors.append(f"Collection {collection_id}: {exc}")
+            return {"refreshed": refreshed, "matched": total_matches, "errors": errors}
+
+        @staticmethod
+        def items(collection_id: int) -> list[dict]:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return []
+
+                sort_mode = DB._normalise_sort_mode(collection.get("sort_mode", "id_desc"), DB._normalise_collection_type(collection.get("collection_type", "normal")))
+                order_clause = "g.id DESC"
+                if sort_mode == "id_asc":
+                    order_clause = "g.id ASC"
+                elif sort_mode == "title_asc":
+                    order_clause = "LOWER(COALESCE(g.clean_title, g.raw_title, '')) ASC"
+                elif sort_mode == "title_desc":
+                    order_clause = "LOWER(COALESCE(g.clean_title, g.raw_title, '')) DESC"
+                elif sort_mode == "manual":
+                    order_clause = "ci.manual_order ASC, g.id DESC"
+
+                cursor.execute(
+                    f"""
+                    SELECT ci.gallery_id, ci.is_manual, ci.is_rule, ci.manual_order,
+                           g.clean_title, g.raw_title, g.num_pages, g.status, g.favourite, g.rating
+                    FROM CollectionItems ci
+                    JOIN Galleries g ON g.id = ci.gallery_id
+                    WHERE ci.collection_id=?
+                    ORDER BY {order_clause}
+                    """,
+                    (int(collection_id),),
+                )
+                rows = []
+                for row in cursor.fetchall():
+                    rows.append(
+                        {
+                            "gallery_id": int(row[0]),
+                            "is_manual": bool(row[1]),
+                            "is_rule": bool(row[2]),
+                            "manual_order": int(row[3] or 0),
+                            "title": Helpers.safe_text(row[4] or row[5], ""),
+                            "page_count": Helpers.normalise_integer(row[6]) or 0,
+                            "status": Helpers.safe_text(row[7], ""),
+                            "favourite": bool(row[8]),
+                            "rating": Helpers.safe_float(row[9], 0.0) if row[9] is not None else None,
+                        }
+                    )
+                return rows
+
+    @staticmethod
+    def remove_gallery_from_database(gallery_id: int) -> dict:
+        DB.init_db()
+        gid = Helpers.normalise_integer(gallery_id)
+        if gid is None:
+            return {"removed": False, "gallery_id": None}
+
+        removed = False
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM CollectionItems WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM GalleryLanguages WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM CachedMetadata WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM Galleries WHERE id=?", (int(gid),))
+            removed = bool(cursor.rowcount)
+
+            DB._recompute_creator_rollups(cursor)
+            conn.commit()
+
+        return {"removed": removed, "gallery_id": int(gid)}
+
+    @staticmethod
     def upsert_gallery_location(gallery_id, extension_used=None, download_path=None, cover_path=None, first_seen=None, last_seen=None, root_path=None):
         DB.init_db()
         gallery_id = Helpers.normalise_integer(gallery_id)
@@ -1183,7 +2007,7 @@ class DB:
     @staticmethod
     def prune_unmanaged_download_locations() -> dict:
         """Remove DownloadLocations rows whose root path is missing the marker file."""
-        # Note: Do NOT call init_db here; called by database_cleanup or by list_download_locations
+        # Note: Do NOT call init_db() here; called by database_cleanup() or by list_download_locations()
         removed = {"roots": 0, "gallery_locations": 0}
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
@@ -1234,6 +2058,7 @@ class DB:
             "removed_galleries": 0,
             "page_checks": 0,
             "pages_downloaded": 0,
+            "smart_collections_refreshed": 0,
             "errors": [],
         }
         
@@ -1300,7 +2125,8 @@ class DB:
                         try:
                             cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=? AND location_id=?", (gid, location_id))
                             cursor.execute("SELECT COUNT(*) FROM GalleryLocations WHERE gallery_id=?", (gid,))
-                            remaining = cursor.fetchone()[0] if cursor.fetchone() else 0
+                            remaining_row = cursor.fetchone()
+                            remaining = int(remaining_row[0]) if remaining_row and remaining_row[0] is not None else 0
                             if remaining == 0:
                                 cursor.execute("DELETE FROM Galleries WHERE id=?", (gid,))
                                 stats["removed_galleries"] += 1
@@ -1356,6 +2182,20 @@ class DB:
                         logger.debug(f"[DATABASE_CLEANUP] Gallery {gid}: {actual_count}/{num_p} pages (missing {missing_count})")
                 except Exception as e:
                     logger.debug(f"[DATABASE_CLEANUP] Error checking pages for gallery {gid}: {e}")
+
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                DB._recompute_creator_rollups(cursor)
+                conn.commit()
+
+            try:
+                refresh_result = DB.Collection.refresh_all_smart()
+                stats["smart_collections_refreshed"] = int(refresh_result.get("refreshed") or 0)
+                for err in refresh_result.get("errors") or []:
+                    stats["errors"].append(str(err))
+            except Exception as e:
+                stats["errors"].append(f"Smart collection refresh failed: {e}")
+                logger.warning(f"[DATABASE_CLEANUP] Smart collection refresh failed: {e}")
             
             stats["page_checks"] = len(missing_pages)
             
@@ -1748,6 +2588,11 @@ class DB:
                     cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
                 conn.commit()
+
+            try:
+                DB.Collection.refresh_all_smart()
+            except Exception as e:
+                logger.warning(f"[DATABASE] Smart collection refresh after gallery completion failed: {e}")
             
             logger.debug(f"[DATABASE] Marked gallery {gallery_id} as completed.")
             #logger.debug(f"[DATABASE] Data: status=completed, completed_at={now}, download_path={download_path}, cover_path={cover_path}, extension_used={extension_used}, started_at={started_at}")
@@ -3108,11 +3953,14 @@ class Cache:
             
             # Return the list of Gallery IDs for a specific cache_key
             if cache_key is not None:
-                references_entry = read_cached_metadata_entry(cache_key=cache_key)["references"].get(str(cache_key))
+                lookup_key = Helpers.safe_text(cache_key, "")
+                references_entry = read_cached_metadata_entry(cache_key=lookup_key)["references"].get(str(lookup_key))
                 if not references_entry or not isinstance(references_entry, dict):
+                    logger.debug(f"[CacheLoad] cache_key='{lookup_key}' returned no references entry")
                     return []
                 ids = references_entry.get("ids")
                 if not ids or not isinstance(ids, list):
+                    logger.debug(f"[CacheLoad] cache_key='{lookup_key}' had empty/non-list ids payload")
                     return []
                 normalised_ids = []
                 for gid in ids:
@@ -3120,6 +3968,9 @@ class Cache:
                         normalised_ids.append(int(gid))
                     except (TypeError, ValueError):
                         continue
+                logger.debug(
+                    f"[CacheLoad] cache_key='{lookup_key}' loaded ids_raw={len(ids)} ids_normalised={len(normalised_ids)}"
+                )
                 return normalised_ids
             
             # Return clean metadata for a specific Gallery ID

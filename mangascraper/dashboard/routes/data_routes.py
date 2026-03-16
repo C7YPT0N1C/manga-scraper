@@ -21,6 +21,7 @@ from mangascraper.core import orchestrator
 
 db_bp = Blueprint("database", __name__)
 gallery_bp = Blueprint("gallery", __name__)
+collections_bp = Blueprint("collections", __name__)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,37 @@ def _creator_and_gallery_from_location(root_path: str, download_path: str) -> tu
 
 def _is_archive(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in {".cbz", ".zip"}
+
+
+def _gallery_ids_for_deleted_path(root_path: str, relative_parts: list[str]) -> list[int]:
+    """Resolve gallery IDs affected by a filesystem delete path."""
+    if not root_path or not relative_parts:
+        return []
+
+    creator_target = str(relative_parts[0] or "").strip().lower()
+    gallery_target = str(relative_parts[1] or "").strip().lower() if len(relative_parts) >= 2 else ""
+    matched = set()
+
+    for row in scraperapi.DB.list_gallery_locations(root_path=root_path):
+        gid = row.get("gallery_id")
+        dpath = row.get("download_path")
+        if gid is None or not dpath:
+            continue
+        creator_name, gallery_name = _creator_and_gallery_from_location(root_path, dpath)
+        creator_key = str(creator_name or "").strip().lower()
+        gallery_key = str(gallery_name or "").strip().lower()
+        if not creator_key:
+            continue
+
+        if len(relative_parts) == 1:
+            if creator_key == creator_target:
+                matched.add(int(gid))
+            continue
+
+        if creator_key == creator_target and gallery_key == gallery_target:
+            matched.add(int(gid))
+
+    return sorted(matched)
 
 
 def _scan_creators_from_filesystem(root_path: str) -> set[str]:
@@ -1104,7 +1136,166 @@ def delete_file():
             os.remove(target)
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
+
+    removed_gallery_ids = _gallery_ids_for_deleted_path(root, parts)
+    removed_from_db = 0
+    for gallery_id in removed_gallery_ids:
+        result = scraperapi.DB.remove_gallery_from_database(gallery_id)
+        if result.get("removed"):
+            removed_from_db += 1
+
     return jsonify({"ok": True})
+
+
+# ── Collections routes — /api/collections/... ───────────────────────────────
+
+@collections_bp.route("/list", methods=["GET"])
+def collections_list():
+    return jsonify({"collections": scraperapi.DB.Collection.list()})
+
+
+@collections_bp.route("/<int:collection_id>", methods=["GET"])
+def collections_get(collection_id):
+    item = scraperapi.DB.Collection.get(collection_id)
+    if not item:
+        return jsonify({"error": "Collection not found."}), 404
+    return jsonify(item)
+
+
+@collections_bp.route("/create", methods=["POST"])
+def collections_create():
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Collection name is required."}), 400
+    description = str(payload.get("description") or "")
+    collection_type = str(payload.get("collection_type") or "normal")
+    sort_mode = str(payload.get("sort_mode") or "id_desc")
+    try:
+        item = scraperapi.DB.Collection.create(name=name, description=description, collection_type=collection_type, sort_mode=sort_mode)
+        return jsonify(item)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@collections_bp.route("/<int:collection_id>/update", methods=["POST"])
+def collections_update(collection_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        item = scraperapi.DB.Collection.update(
+            collection_id=collection_id,
+            name=payload.get("name"),
+            description=payload.get("description"),
+            sort_mode=payload.get("sort_mode"),
+        )
+        if not item:
+            return jsonify({"error": "Collection not found."}), 404
+        return jsonify(item)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@collections_bp.route("/<int:collection_id>/delete", methods=["POST"])
+def collections_delete(collection_id):
+    deleted = scraperapi.DB.Collection.delete(collection_id)
+    if not deleted:
+        return jsonify({"error": "Collection not found."}), 404
+    return jsonify({"ok": True, "id": int(collection_id)})
+
+
+@collections_bp.route("/<int:collection_id>/filters", methods=["POST"])
+def collections_set_filters(collection_id):
+    payload = request.get_json(silent=True) or {}
+    filters = payload.get("filters") if isinstance(payload.get("filters"), list) else []
+    try:
+        item = scraperapi.DB.Collection.set_filters(collection_id, filters)
+        if not item:
+            return jsonify({"error": "Collection not found."}), 404
+        return jsonify(item)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@collections_bp.route("/<int:collection_id>/rule", methods=["POST"])
+def collections_set_rule(collection_id):
+    payload = request.get_json(silent=True) or {}
+    expression = str(payload.get("smart_expression") or "").strip()
+    confirm_rebuild = bool(payload.get("confirm_rebuild", False))
+
+    existing_items = scraperapi.DB.Collection.items(collection_id)
+    if existing_items and not confirm_rebuild:
+        return jsonify(
+            {
+                "error": "Updating the smart rule will clear all current collection items before rebuilding.",
+                "requires_confirmation": True,
+            }
+        ), 409
+
+    try:
+        item = scraperapi.DB.Collection.set_smart_rule(collection_id, expression, clear_existing_items=True)
+        if not item:
+            return jsonify({"error": "Collection not found."}), 404
+        return jsonify(item)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@collections_bp.route("/<int:collection_id>/items", methods=["GET"])
+def collections_items(collection_id):
+    collection = scraperapi.DB.Collection.get(collection_id)
+    if not collection:
+        return jsonify({"error": "Collection not found."}), 404
+    items = scraperapi.DB.Collection.items(collection_id)
+    return jsonify({"collection": collection, "items": items})
+
+
+@collections_bp.route("/<int:collection_id>/add_galleries", methods=["POST"])
+def collections_add_galleries(collection_id):
+    payload = request.get_json(silent=True) or {}
+    ids = payload.get("gallery_ids") if isinstance(payload.get("gallery_ids"), list) else []
+    result = scraperapi.DB.Collection.add_galleries(collection_id, ids, manual=True)
+    return jsonify(result)
+
+
+@collections_bp.route("/<int:collection_id>/add_creator", methods=["POST"])
+def collections_add_creator(collection_id):
+    payload = request.get_json(silent=True) or {}
+    creator = str(payload.get("creator") or "").strip()
+    if not creator:
+        return jsonify({"error": "creator is required."}), 400
+    result = scraperapi.DB.Collection.add_creator_snapshot(collection_id, creator)
+    return jsonify(result)
+
+
+@collections_bp.route("/<int:collection_id>/remove_gallery", methods=["POST"])
+def collections_remove_gallery(collection_id):
+    payload = request.get_json(silent=True) or {}
+    gallery_id = payload.get("gallery_id")
+    removed = scraperapi.DB.Collection.remove_gallery(collection_id, gallery_id)
+    if not removed:
+        return jsonify({"error": "Gallery not found in collection."}), 404
+    return jsonify({"ok": True, "gallery_id": gallery_id})
+
+
+@collections_bp.route("/<int:collection_id>/clear_items", methods=["POST"])
+def collections_clear_items(collection_id):
+    changed = scraperapi.DB.Collection.clear_items(collection_id)
+    return jsonify({"ok": True, "cleared": bool(changed)})
+
+
+@collections_bp.route("/<int:collection_id>/refresh", methods=["POST"])
+def collections_refresh(collection_id):
+    try:
+        result = scraperapi.DB.Collection.refresh_smart(collection_id)
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@collections_bp.route("/refresh_smart_all", methods=["POST"])
+def collections_refresh_smart_all():
+    result = scraperapi.DB.Collection.refresh_all_smart()
+    return jsonify(result)
 
 
 @gallery_bp.route("/files/mkdir", methods=["POST"])

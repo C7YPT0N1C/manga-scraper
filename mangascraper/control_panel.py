@@ -9,7 +9,7 @@ from flask_cors import CORS
 from mangascraper.core import api as scraperapi
 from mangascraper.core import orchestrator
 from mangascraper.dashboard.routes.scraper_routes import scraper_bp
-from mangascraper.dashboard.routes.data_routes import db_bp, gallery_bp
+from mangascraper.dashboard.routes.data_routes import db_bp, gallery_bp, collections_bp
 
 
 def _dashboard_asset_paths() -> tuple[str, str]:
@@ -40,6 +40,7 @@ def create_app():
     app.register_blueprint(scraper_bp, url_prefix="/api/scraper")
     app.register_blueprint(db_bp, url_prefix="/api/db")
     app.register_blueprint(gallery_bp, url_prefix="/api/gallery")
+    app.register_blueprint(collections_bp, url_prefix="/api/collections")
 
     # --- Web dashboard routes ---
     @app.route("/")
@@ -57,6 +58,10 @@ def create_app():
     @app.route("/logs")
     def logs_page():
         return render_template("diagnostics.html")
+
+    @app.route("/collections")
+    def collections_page():
+        return render_template("collections.html")
 
     return app
 
