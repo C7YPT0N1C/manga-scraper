@@ -213,10 +213,6 @@
     </label>
 
   </div>
-  <label id="row_archiveMode" title="Fetch every page of results and add all galleries directly to the queue without going through the results browser. Use for bulk archiving only — can take a long time.">
-    Archive Mode
-    <input id="archiveMode" type="checkbox">
-  </label>
   <button id="searchBtn">Search</button>
   <button id="addAllBtn">Add All Results To Queue</button>
   <button id="addSelectedBtn">Add Selected Results</button>
@@ -931,16 +927,12 @@ async function runSearch() {
     queryValue = document.getElementById('queryValue').value.trim();
   }
 
-  const archiveMode = document.getElementById('archiveMode').checked;
   const startPage = Number(document.getElementById('startPage').value || 1);
   const endPageRaw = document.getElementById('endPage').value.trim();
   const endPageNum = (endPageRaw === '' || endPageRaw.toLowerCase() === 'all') ? null : Number(endPageRaw);
 
-  if (!archiveMode && endPageNum !== null && endPageNum - startPage >= 20) {
+  if (endPageNum !== null && endPageNum - startPage >= 20) {
     if (!confirm(`Fetching ${endPageNum - startPage + 1} pages may take a long time and risk rate limiting.\nContinue?`)) return;
-  }
-  if (archiveMode) {
-    if (!confirm(`Archive mode will fetch ALL pages and add every gallery to the queue.\nThis can take hours and risks rate limiting.\nContinue?`)) return;
   }
 
   const payload = {
@@ -952,7 +944,7 @@ async function runSearch() {
     end_page: endPageRaw,
     start_id: Number(document.getElementById('startId').value || 0),
     end_id: Number(document.getElementById('endId').value || 0),
-    fetch_all_pages: archiveMode,
+    fetch_all_pages: false,
   };
 
   document.getElementById('searchMsg').textContent = '';
@@ -997,12 +989,7 @@ async function runSearch() {
       ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
       : 'Summary: none';
 
-    if (archiveMode && ids.length) {
-      await addIdsToQueue(ids);
-      document.getElementById('searchMsg').textContent = `Archive mode: ${ids.length} galleries added to queue.`;
-    } else {
       document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentSearchRows().length} current results.`;
-    }
   } catch (err) {
     document.getElementById('searchMsg').textContent = `Search failed: ${err.message}`;
   } finally {

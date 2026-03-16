@@ -5,6 +5,7 @@
 
 <div id="refreshToolbar">
 	<button id="refreshGalleriesBtn" type="button">Refresh Galleries</button>
+	<button id="toggleFilterBtn" type="button" title="Show or hide the search and filter bar">▾ Filters</button>
 	<span id="refreshStatus"></span>
 </div>
 
@@ -60,6 +61,7 @@
 		<button id="nextBtn" class="navBtn">&#8594;</button>
 	</div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -90,6 +92,8 @@ const reader = {
 	title: '',
 	onClose: null
 };
+
+let _filterBarVisible = true;
 
 // ── Utility ────────────────────────────────────────────────────────────────
 async function apiFetch(url) {
@@ -124,25 +128,36 @@ function createFilterField(labelText, inputElement) {
 	return wrapper;
 }
 
-function createSelectFilter(key, labelText, options, allLabel) {
-	const select = document.createElement('select');
-	select.dataset.filterKey = key;
-	select.innerHTML = `<option value="">${allLabel}</option>`;
-	(options || []).forEach(optionValue => {
-		const option = document.createElement('option');
-		option.value = String(optionValue);
-		option.textContent = String(optionValue);
-		if (String(_activeFilters[key] || '') === option.value) {
-			option.selected = true;
-		}
-		select.appendChild(option);
-	});
-	select.addEventListener('change', event => {
-		_activeFilters[key] = event.target.value;
+function createChipFilter(key, labelText, options, allLabel) {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'filter-chips-field';
+	const labelEl = document.createElement('span');
+	labelEl.className = 'filter-chips-label';
+	labelEl.textContent = labelText;
+	wrapper.appendChild(labelEl);
+	const row = document.createElement('div');
+	row.className = 'filter-chips';
+	const makeChip = (value, text) => {
+		const c = document.createElement('button');
+		c.type = 'button';
+		c.className = 'filter-chip' + (String(_activeFilters[key] || '') === value ? ' active' : '');
+		c.textContent = text;
+		c.dataset.value = value;
+		return c;
+	};
+	row.appendChild(makeChip('', allLabel));
+	(options || []).forEach(v => row.appendChild(makeChip(String(v), String(v))));
+	row.addEventListener('click', e => {
+		const chip = e.target.closest('.filter-chip');
+		if (!chip) return;
+		row.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+		chip.classList.add('active');
+		_activeFilters[key] = chip.dataset.value;
 		_currentPage = 1;
 		refreshDisplay();
 	});
-	return createFilterField(labelText, select);
+	wrapper.appendChild(row);
+	return wrapper;
 }
 
 function createNumberFilter(key, labelText, placeholder) {
@@ -283,9 +298,9 @@ function updatePaginationControls(totalPages) {
 function setupFiltersForCreators(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All Languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All Tags'));
-	filterGroup.appendChild(createSelectFilter('favourite', 'Favourite', ['yes', 'no'], 'Any Favourite'));
+	filterGroup.appendChild(createChipFilter('language', 'Language', filters.languages || [], 'Any'));
+	filterGroup.appendChild(createChipFilter('tag', 'Tag', filters.tags || [], 'Any'));
+	filterGroup.appendChild(createChipFilter('favourite', 'Favourite', ['yes', 'no'], 'Any'));
 	filterGroup.appendChild(createNumberFilter('minGalleryCount', 'Gallery Count', 'Min'));
 	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
 	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
@@ -295,10 +310,10 @@ function setupFiltersForCreators(filters) {
 function setupFiltersForGalleries(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All Languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All Tags'));
-	filterGroup.appendChild(createSelectFilter('status', 'Status', filters.statuses || [], 'All Statuses'));
-	filterGroup.appendChild(createSelectFilter('favourite', 'Favourite', ['yes', 'no'], 'Any Favourite'));
+	filterGroup.appendChild(createChipFilter('language', 'Language', filters.languages || [], 'Any'));
+	filterGroup.appendChild(createChipFilter('tag', 'Tag', filters.tags || [], 'Any'));
+	filterGroup.appendChild(createChipFilter('status', 'Status', filters.statuses || [], 'Any'));
+	filterGroup.appendChild(createChipFilter('favourite', 'Favourite', ['yes', 'no'], 'Any'));
 	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
 	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
 	filterGroup.appendChild(createNumberFilter('maxPages', 'Page Num Max', 'Max'));
@@ -406,12 +421,6 @@ function createGalleryGrid(items, itemType, onClick) {
 			galleryChip.className = 'gallery-chip';
 			galleryChip.textContent = `${Number(item.gallery_count || 0)} galleries`;
 			metaDiv.appendChild(galleryChip);
-			if (item.favourite) {
-				const favouriteChip = document.createElement('span');
-				favouriteChip.className = 'gallery-chip';
-				favouriteChip.textContent = 'Favourite';
-				metaDiv.appendChild(favouriteChip);
-			}
 			if (Array.isArray(item.languages) && item.languages.length) {
 				const languageChip = document.createElement('span');
 				languageChip.className = 'gallery-chip';
@@ -429,46 +438,23 @@ function createGalleryGrid(items, itemType, onClick) {
 				languageChip.textContent = item.languages[0];
 				metaDiv.appendChild(languageChip);
 			}
-			if (item.favourite) {
-				const favouriteChip = document.createElement('span');
-				favouriteChip.className = 'gallery-chip';
-				favouriteChip.textContent = 'Favourite';
-				metaDiv.appendChild(favouriteChip);
-			}
 		}
 
-		const favTargetValue = !Boolean(item.favourite);
-		const starBtn = document.createElement('button');
-		starBtn.type = 'button';
-		starBtn.className = 'fav-star-btn';
-		starBtn.textContent = item.favourite ? '★' : '☆';
-		starBtn.title = item.favourite ? 'Unfavourite' : 'Favourite';
-		starBtn.addEventListener('click', event => {
+		const favBtn = document.createElement('button');
+		favBtn.type = 'button';
+		favBtn.className = 'fav-btn' + (item.favourite ? ' fav-active' : '');
+		favBtn.textContent = item.favourite ? '★ Unfavourite' : '☆ Favourite';
+		favBtn.addEventListener('click', event => {
 			event.preventDefault();
 			event.stopPropagation();
+			const newTarget = !Boolean(item.favourite);
 			if (itemType === 'creator') {
-				toggleCreatorFavourite(label, favTargetValue);
+				toggleCreatorFavourite(label, newTarget);
 				return;
 			}
-			toggleGalleryFavourite(item.gallery_id, label, favTargetValue);
+			toggleGalleryFavourite(item.gallery_id, label, newTarget);
 		});
-
-		const actionBtn = document.createElement('button');
-		actionBtn.type = 'button';
-		actionBtn.className = 'fav-action-btn';
-		actionBtn.textContent = item.favourite ? 'Unfavourite' : 'Favourite';
-		actionBtn.addEventListener('click', event => {
-			event.preventDefault();
-			event.stopPropagation();
-			if (itemType === 'creator') {
-				toggleCreatorFavourite(label, favTargetValue);
-				return;
-			}
-			toggleGalleryFavourite(item.gallery_id, label, favTargetValue);
-		});
-
-		controlsDiv.appendChild(starBtn);
-		controlsDiv.appendChild(actionBtn);
+		controlsDiv.appendChild(favBtn);
 
 		square.appendChild(imageDiv);
 		square.appendChild(titleDiv);
@@ -741,6 +727,13 @@ async function refreshGalleries() {
 }
 
 document.getElementById('refreshGalleriesBtn').addEventListener('click', refreshGalleries);
+
+document.getElementById('toggleFilterBtn').addEventListener('click', () => {
+	_filterBarVisible = !_filterBarVisible;
+	document.getElementById('searchFilterBar').style.display = _filterBarVisible ? '' : 'none';
+	document.getElementById('toggleFilterBtn').textContent = (_filterBarVisible ? '▾' : '▸') + ' Filters';
+});
+
 setupSearchAndFilters();
 loadCreators();
 </script>
