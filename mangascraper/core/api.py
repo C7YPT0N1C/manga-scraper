@@ -287,12 +287,31 @@ class Helpers:
     @staticmethod
     def infer_location_root(download_path: str) -> str:
         """Infer the extension/root download directory from a stored gallery path.
-        Expects a path of the form <root>/<creator>/<title> and returns <root>.
+        Prefers matching known DownloadLocations, then falls back to <path>/../.. .
         """
         safe_path = str(download_path or "").strip()
         if not safe_path:
             return ""
         normalised = os.path.normpath(safe_path)
+        try:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT root_path FROM DownloadLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
+                roots = [Helpers.safe_text(row[0], "") for row in cursor.fetchall()]
+            matches = []
+            norm_case = os.path.normcase(normalised)
+            for root in roots:
+                root_norm = os.path.normpath(root)
+                root_case = os.path.normcase(root_norm)
+                if norm_case == root_case or norm_case.startswith(root_case + os.sep):
+                    matches.append(root_norm)
+            if matches:
+                # Most specific root wins.
+                return max(matches, key=len)
+        except Exception:
+            # Best-effort inference only; continue to legacy fallback.
+            pass
         parent = os.path.dirname(normalised)
         if not parent:
             return ""
@@ -916,7 +935,7 @@ class DB:
             return result
 
     @staticmethod
-    def upsert_gallery_location(gallery_id, extension_used=None, download_path=None, cover_path=None, first_seen=None, last_seen=None):
+    def upsert_gallery_location(gallery_id, extension_used=None, download_path=None, cover_path=None, first_seen=None, last_seen=None, root_path=None):
         DB.init_db()
         gallery_id = Helpers.normalise_integer(gallery_id)
         download_path = Helpers.safe_text(download_path, "")
@@ -924,7 +943,13 @@ class DB:
             return
         extension_used = Helpers.safe_text(extension_used, "")
         cover_path = Helpers.safe_text(cover_path, "")
-        root_path = Helpers.infer_location_root(download_path)
+        explicit_root = Helpers.safe_text(root_path, "")
+        if explicit_root:
+            explicit_root = os.path.normpath(explicit_root)
+        if explicit_root:
+            root_path = explicit_root
+        else:
+            root_path = Helpers.infer_location_root(download_path)
         if not root_path:
             return
         first_seen = Helpers.safe_text(first_seen, "") or datetime.now(timezone.utc).isoformat()
@@ -1199,6 +1224,7 @@ class DB:
                 cover_path=cover_path,
                 first_seen=started_at or now,
                 last_seen=now,
+                root_path=ext_download_path,
             )
             
             cache = read_cached_metadata_entry(ids=[gallery_id])

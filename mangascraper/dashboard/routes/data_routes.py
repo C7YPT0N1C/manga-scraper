@@ -112,6 +112,26 @@ def _resolve_root_path() -> str:
     return roots[0]["root_path"] if roots else _download_path()
 
 
+def _creator_and_gallery_from_location(root_path: str, download_path: str) -> tuple[str, str] | tuple[None, None]:
+    root_real = os.path.realpath(str(root_path or ""))
+    file_real = os.path.realpath(str(download_path or ""))
+    if not root_real or not file_real:
+        return None, None
+    if file_real != root_real and not file_real.startswith(root_real + os.sep):
+        return None, None
+    rel = os.path.relpath(file_real, root_real)
+    if rel in {".", ""}:
+        return None, None
+    parts = [part for part in rel.split(os.sep) if part and part != "."]
+    if len(parts) < 2:
+        return None, None
+    creator = parts[0]
+    gallery = parts[1]
+    if creator.startswith(".") or gallery.startswith("."):
+        return None, None
+    return creator, gallery
+
+
 def _is_archive(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in {".cbz", ".zip"}
 
@@ -179,50 +199,54 @@ def list_locations():
 @gallery_bp.route("/list_creators", methods=["GET"])
 def list_creators():
     requested = _requested_root()
+    creators = set()
+
     if requested:
         base = _resolve_root_path()
-        if not base or not os.path.isdir(base):
-            return jsonify({"creators": [], "root_path": base})
-        creators = [
-            name for name in sorted(os.listdir(base))
-            if os.path.isdir(os.path.join(base, name)) and not name.startswith(".")
-        ]
-        return jsonify({"creators": creators, "root_path": base})
+        if not base:
+            return jsonify({"creators": [], "root_path": ""})
+        for row in scraperapi.DB.list_gallery_locations(root_path=base):
+            creator, _gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            if creator:
+                creators.add(creator)
+        return jsonify({"creators": sorted(creators), "root_path": base})
 
-    creators = set()
     for item in _available_roots():
         base = item.get("root_path")
-        if not base or not os.path.isdir(base):
+        if not base:
             continue
-        for name in os.listdir(base):
-            if not name.startswith(".") and os.path.isdir(os.path.join(base, name)):
-                creators.add(name)
+        for row in scraperapi.DB.list_gallery_locations(root_path=base):
+            creator, _gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            if creator:
+                creators.add(creator)
     return jsonify({"creators": sorted(creators), "root_path": ""})
 
 
 @gallery_bp.route("/list_galleries/<path:creator>", methods=["GET"])
 def list_galleries(creator):
     requested = _requested_root()
+    galleries = set()
+
     if requested:
         base = _resolve_root_path()
-        creator_path = _safe_path(base, creator)
-        if not creator_path or not os.path.isdir(creator_path):
+        if not base:
             abort(404)
-        galleries = sorted(
-            name for name in os.listdir(creator_path)
-            if not name.startswith(".")
-        )
-        return jsonify({"creator": creator, "galleries": galleries, "root_path": base})
+        for row in scraperapi.DB.list_gallery_locations(root_path=base):
+            creator_name, gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            if creator_name == creator and gallery:
+                galleries.add(gallery)
+        if not galleries:
+            abort(404)
+        return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": base})
 
-    galleries = set()
     for item in _available_roots():
         base = item.get("root_path")
-        creator_path = _safe_path(base, creator)
-        if not creator_path or not os.path.isdir(creator_path):
+        if not base:
             continue
-        for name in os.listdir(creator_path):
-            if not name.startswith("."):
-                galleries.add(name)
+        for row in scraperapi.DB.list_gallery_locations(root_path=base):
+            creator_name, gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            if creator_name == creator and gallery:
+                galleries.add(gallery)
     if not galleries:
         abort(404)
     return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": ""})

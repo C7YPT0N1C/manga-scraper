@@ -5,7 +5,6 @@ import os, time, sys, argparse, re, subprocess, urllib.parse
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
-from mangascraper.interactive import interactive_config_menu, interactive_search_menu
 from mangascraper.core import api as scraperapi
 from mangascraper.core.downloader import start_downloader
 from mangascraper.extensions.extension_manager import (
@@ -65,6 +64,7 @@ def run_installer(flag: str):
 
     sys.exit(0)  # Exit after running installer
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Manga scraper CLI",
@@ -82,7 +82,6 @@ def parse_args():
     logging_group = parser.add_argument_group("Logging")
     
     # Mutually exclusive groups
-    interactive_mode_group = parser.add_mutually_exclusive_group()
     summary_mode_group = runtime_group.add_mutually_exclusive_group()
 
     # Installer / Updater flags
@@ -115,14 +114,6 @@ def parse_args():
         action="store_true",
         default=argparse.SUPPRESS,
         help="Disable SSL certificate verification for downloads (use only if mirrors have expired certs)",
-    )
-    
-    # Gallery selection
-    interactive_mode_group.add_argument(
-        "--interactive",
-        action="store_true",
-        default=False,
-        help="Enter interactive mode to search/browse galleries and configure settings (mutually exclusive with --unattended)",
     )
     
     source_group.add_argument(
@@ -326,7 +317,7 @@ def parse_args():
         "--unattended",
         action="store_true",
         default=False,
-        help="Skip all confirmation prompts and warnings (use with caution, mutually exclusive with --interactive)",
+        help="Skip all confirmation prompts and warnings (use with caution)",
     )
     
     # Make calm/debug mutually exclusive
@@ -372,8 +363,6 @@ def _parse_archive_flag(value: str) -> bool | None:
 
 
 def _validate_args(args):
-    if args.interactive and args.unattended:
-        raise ValueError("--interactive and --unattended cannot be used together.")
     if args.range:
         start, end = args.range
         if start <= 0 or end <= 0:
@@ -991,28 +980,26 @@ def main():
     if args.uninstall_extension:
         uninstall_selected_extension(args.uninstall_extension)
         return
-    
+
     logger.debug("CLI: Ready.")
     log("CLI: Debugging Started.", "debug")
     
-    # --- Handle --interactive flag (allow with other gallery-selection flags) ---
-    if not args.interactive:
-        # If no gallery input is provided, default to homepage
-        gallery_args = [
-            args.file,
-            args.homepage,
-            args.range,
-            args.galleries,
-            args.artist,
-            args.group,
-            args.tag,
-            args.character,
-            args.parody,
-            args.search,
-            args.archive,
-        ]
-        if not any(gallery_args):
-            args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
+    # If no gallery input is provided, default to homepage
+    gallery_args = [
+        args.file,
+        args.homepage,
+        args.range,
+        args.galleries,
+        args.artist,
+        args.group,
+        args.tag,
+        args.character,
+        args.parody,
+        args.search,
+        args.archive,
+    ]
+    if not any(gallery_args):
+        args.homepage = [DEFAULT_PAGE_RANGE_START, DEFAULT_PAGE_RANGE_END] # Use defaults.
         
     # Update Config With CLI Args
     # Allows session to use correct config values on creation
@@ -1024,103 +1011,14 @@ def main():
         ok = tester.main()
         sys.exit(0 if ok else 1)
     
-    # --- Handle --interactive mode (before building gallery list) ---
-    if args.interactive:
-        log_clarification()
-        logger.info("Entering interactive mode...")
-        log_clarification()
-        
-        # Show config menu - read from orchestrator to preserve .env values
-        current_config = {
-            'extension': orchestrator.extension,
-            'use_tor': orchestrator.use_tor,
-            'dry_run': orchestrator.dry_run,
-            'threads_galleries': orchestrator.threads_galleries,
-            'threads_images': orchestrator.threads_images,
-            'format': orchestrator.gallery_format,
-            'language': ','.join(orchestrator.language) if isinstance(orchestrator.language, list) else orchestrator.language,
-            'title_type': orchestrator.title_type,
-            'excluded_tags': ','.join(orchestrator.excluded_tags) if isinstance(orchestrator.excluded_tags, list) else orchestrator.excluded_tags,
-            'mirrors': ','.join(orchestrator.nhentai_mirrors) if isinstance(orchestrator.nhentai_mirrors, list) else orchestrator.nhentai_mirrors,
-            'output_folder': orchestrator.download_path,
-            'max_retries': orchestrator.max_retries,
-            'calm': orchestrator.calm,
-            'verify_ssl': orchestrator.verify_ssl,
-            'use_daemon_threads': orchestrator.use_daemon_threads,
-        }
-        
-        modified_config = interactive_config_menu(current_config)
-        
-        # Only update .env for values that actually changed in the interactive menu
-        # This prevents overwriting .env with unchanged values
-        if modified_config.get('extension') != current_config.get('extension'):
-            update_env('EXTENSION', modified_config['extension'])
-        if modified_config.get('mirrors') != current_config.get('mirrors'):
-            update_env('NHENTAI_MIRRORS', modified_config['mirrors'])
-        if modified_config.get('verify_ssl') != current_config.get('verify_ssl'):
-            update_env('VERIFY_SSL', modified_config['verify_ssl'])
-        if modified_config.get('language') != current_config.get('language'):
-            update_env('LANGUAGE', modified_config['language'])
-        if modified_config.get('title_type') != current_config.get('title_type'):
-            update_env('TITLE_TYPE', modified_config['title_type'])
-        if modified_config.get('excluded_tags') != current_config.get('excluded_tags'):
-            update_env('EXCLUDED_TAGS', modified_config['excluded_tags'])
-        if modified_config.get('output_folder') != current_config.get('output_folder'):
-            update_env('DOWNLOAD_PATH', modified_config['output_folder'])
-            update_env('EXTENSION_DOWNLOAD_PATH', modified_config['output_folder'])
-        if modified_config.get('format') != current_config.get('format'):
-            update_env('GALLERY_FORMAT', modified_config['format'])
-        if modified_config.get('use_tor') != current_config.get('use_tor'):
-            update_env('USE_TOR', modified_config['use_tor'])
-        if modified_config.get('dry_run') != current_config.get('dry_run'):
-            update_env('DRY_RUN', modified_config['dry_run'])
-        if modified_config.get('threads_galleries') != current_config.get('threads_galleries'):
-            update_env('THREADS_GALLERIES', modified_config['threads_galleries'])
-        if modified_config.get('threads_images') != current_config.get('threads_images'):
-            update_env('THREADS_IMAGES', modified_config['threads_images'])
-        if modified_config.get('use_daemon_threads') != current_config.get('use_daemon_threads'):
-            update_env('USE_DAEMON_THREADS', modified_config['use_daemon_threads'])
-        if modified_config.get('max_retries') != current_config.get('max_retries'):
-            update_env('MAX_RETRIES', modified_config['max_retries'])
-        if modified_config.get('calm') != current_config.get('calm'):
-            update_env('CALM', modified_config['calm'])
-        
-        orchestrator.refresh_globals()
-        
-        # Seed interactive selections from CLI gallery flags if provided
-        gallery_args = [
-            args.file,
-            args.homepage,
-            args.range,
-            args.galleries,
-            args.artist,
-            args.group,
-            args.tag,
-            args.character,
-            args.parody,
-            args.search,
-            args.archive,
-        ]
-        initial_gallery_list = []
-        if any(gallery_args):
-            scraperapi.Get.session(referrer="CLI", status="build")
-            initial_gallery_list = build_gallery_list(args)
+    # Build initial session.
+    scraperapi.Get.session(referrer="CLI", status="build")
 
-        # Enter gallery search mode
-        log_clarification()
-        gallery_list = interactive_search_menu(initial_gallery_list, unattended=args.unattended)
-        if not gallery_list:
-            logger.warning("No galleries selected. Exiting.")
-            sys.exit(0)
-    else:
-        # Build initial session.
-        scraperapi.Get.session(referrer="CLI", status="build")
-        
-        # Build Gallery List (make sure not empty.)
-        gallery_list = build_gallery_list(args)
-        if not gallery_list:
-            logger.warning("No galleries provided. Exiting.")
-            sys.exit(0)  # Or just return
+    # Build Gallery List (make sure not empty.)
+    gallery_list = build_gallery_list(args)
+    if not gallery_list:
+        logger.warning("No galleries provided. Exiting.")
+        sys.exit(0)  # Or just return
     
     # --- Show summary before downloading (if requested) ---
     if args.show_summary:

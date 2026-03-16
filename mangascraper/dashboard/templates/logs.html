@@ -20,9 +20,14 @@
 
 {% block scripts %}
 <script>
-async function fetchLogsList() {
+let currentLogName = '';
+
+async function fetchLogsList(options = {}) {
+  const preserveSelection = options.preserveSelection !== false;
+  const reloadCurrent = !!options.reloadCurrent;
   const select = document.getElementById('logFileSelect');
   const msg = document.getElementById('logsMsg');
+  const previous = preserveSelection ? (currentLogName || select.value || '') : '';
   try {
     const res = await fetch('/api/scraper/logs');
     const data = await res.json();
@@ -34,7 +39,19 @@ async function fetchLogsList() {
       opt.textContent = `${file.name} (${sizeKb} KB)`;
       select.appendChild(opt);
     });
+    if (previous) {
+      const existing = Array.from(select.options).find(opt => opt.value === previous);
+      if (existing) {
+        select.value = previous;
+        currentLogName = previous;
+      } else {
+        currentLogName = '';
+      }
+    }
     msg.textContent = `${(data.files || []).length} log files found.`;
+    if (reloadCurrent && currentLogName) {
+      await loadLogFile();
+    }
   } catch (err) {
     msg.textContent = `Failed to load logs list: ${err.message}`;
   }
@@ -46,9 +63,11 @@ async function loadLogFile() {
   const viewer = document.getElementById('logViewer');
   const msg = document.getElementById('logsMsg');
   if (!name) {
+    currentLogName = '';
     msg.textContent = 'Please choose a log file first.';
     return;
   }
+  currentLogName = name;
 
   try {
     msg.textContent = `Loading ${name}...`;
@@ -67,7 +86,9 @@ async function loadLogFile() {
   }
 }
 
-document.getElementById('refreshLogsBtn').addEventListener('click', fetchLogsList);
+document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
+  await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
+});
 document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
 document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
 

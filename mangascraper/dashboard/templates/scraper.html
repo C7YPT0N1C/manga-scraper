@@ -223,6 +223,11 @@
     </thead>
     <tbody></tbody>
   </table>
+  <div id="resultsPager" style="display:none;margin-top:8px">
+    <button id="resultsPrevPageBtn" type="button">Previous</button>
+    <span id="resultsPageInfo"></span>
+    <button id="resultsNextPageBtn" type="button">Next</button>
+  </div>
 
   <div id="otherResultsPanel" style="display:none">
     <h4>Other / Previous Search Results</h4>
@@ -240,26 +245,13 @@
       </thead>
       <tbody></tbody>
     </table>
+    <div id="otherResultsPager" style="display:none;margin-top:8px">
+      <button id="otherResultsPrevPageBtn" type="button">Previous</button>
+      <span id="otherResultsPageInfo"></span>
+      <button id="otherResultsNextPageBtn" type="button">Next</button>
+    </div>
   </div>
 </section>
-
-<!-- ===== QUEUE ===== -->
-<!-- ===== RESULTS FILTER ===== -->
-<div id="filterPanel" style="display:none">
-  <h4>Filter Results</h4>
-  <div id="filterGrid">
-    <label>Artists <input id="flt_artists" type="text" placeholder="comma-separated"></label>
-    <label>Groups <input id="flt_groups" type="text" placeholder="comma-separated"></label>
-    <label>Include Tags <input id="flt_tags" type="text" placeholder="comma-separated"></label>
-    <label>Exclude Tags <input id="flt_excludeTags" type="text" placeholder="comma-separated"></label>
-    <label>Languages <input id="flt_language" type="text" placeholder="comma-separated"></label>
-    <label>Min Pages <input id="flt_minPages" type="number" min="0" placeholder="0"></label>
-    <label>Max Pages <input id="flt_maxPages" type="number" min="0" placeholder="∞"></label>
-  </div>
-  <button id="applyFilterBtn">Apply Filters</button>
-  <button id="clearFilterBtn">Clear Filters</button>
-  <p id="filterMsg"></p>
-</div>
 
 <!-- ===== GALLERY DETAIL MODAL ===== -->
 <div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
@@ -279,6 +271,23 @@
       <p><strong>Parodies:</strong> <span id="gdParodies"></span></p>
     </div>
   </div>
+</div>
+
+<!-- ===== RESULTS FILTER ===== -->
+<div id="filterPanel" style="display:none">
+  <h4>Filter Results</h4>
+  <div id="filterGrid">
+    <label>Artists <input id="flt_artists" type="text" placeholder="comma-separated"></label>
+    <label>Groups <input id="flt_groups" type="text" placeholder="comma-separated"></label>
+    <label>Include Tags <input id="flt_tags" type="text" placeholder="comma-separated"></label>
+    <label>Exclude Tags <input id="flt_excludeTags" type="text" placeholder="comma-separated"></label>
+    <label>Languages <input id="flt_language" type="text" placeholder="comma-separated"></label>
+    <label>Min Pages <input id="flt_minPages" type="number" min="0" placeholder="0"></label>
+    <label>Max Pages <input id="flt_maxPages" type="number" min="0" placeholder="∞"></label>
+  </div>
+  <button id="applyFilterBtn">Apply Filters</button>
+  <button id="clearFilterBtn">Clear Filters</button>
+  <p id="filterMsg"></p>
 </div>
 
 <!-- ===== QUEUE ===== -->
@@ -312,6 +321,10 @@ let previousResults = [];
 let queueIds = new Set();
 let extensionOutputFolders = {};
 let _resultsById = {};
+let filteredResultsRows = null;
+let activeResultsPage = 1;
+let otherResultsPage = 1;
+const RESULTS_PAGE_SIZE = 25;
 const selectedRows = {
   '#resultsTable': new Set(),
   '#otherResultsTable': new Set(),
@@ -414,6 +427,13 @@ function currentSearchRows() {
   return dedupeRows(currentResults).filter(row => !queueIds.has(Number(row.id ?? row.gallery_id)));
 }
 
+function activeSearchRows() {
+  if (!Array.isArray(filteredResultsRows)) {
+    return currentSearchRows();
+  }
+  return dedupeRows(filteredResultsRows).filter(row => !queueIds.has(Number(row.id ?? row.gallery_id)));
+}
+
 function previousSearchRows() {
   const currentIds = new Set(dedupeRows(currentResults).map(row => Number(row.id ?? row.gallery_id)).filter(Number.isFinite));
   return dedupeRows(previousResults).filter(row => {
@@ -423,15 +443,53 @@ function previousSearchRows() {
 }
 
 function renderSearchTables() {
-  const activeRows = currentSearchRows();
+  const activeRows = activeSearchRows();
   const otherRows = previousSearchRows();
+
+  const activeTotalPages = Math.max(1, Math.ceil(activeRows.length / RESULTS_PAGE_SIZE));
+  const otherTotalPages = Math.max(1, Math.ceil(otherRows.length / RESULTS_PAGE_SIZE));
+  activeResultsPage = Math.min(Math.max(activeResultsPage, 1), activeTotalPages);
+  otherResultsPage = Math.min(Math.max(otherResultsPage, 1), otherTotalPages);
+
+  const activeStart = (activeResultsPage - 1) * RESULTS_PAGE_SIZE;
+  const otherStart = (otherResultsPage - 1) * RESULTS_PAGE_SIZE;
+  const activePageRows = activeRows.slice(activeStart, activeStart + RESULTS_PAGE_SIZE);
+  const otherPageRows = otherRows.slice(otherStart, otherStart + RESULTS_PAGE_SIZE);
+
   _resultsById = {};
   [...activeRows, ...otherRows].forEach(row => {
     _resultsById[Number(row.id ?? row.gallery_id)] = row;
   });
-  renderRows('#resultsTable', activeRows, { showDetail: true });
-  renderRows('#otherResultsTable', otherRows, { showDetail: true });
-  document.getElementById('otherResultsPanel').style.display = otherRows.length ? '' : 'none';
+
+  renderRows('#resultsTable', activePageRows, { showDetail: true });
+  renderRows('#otherResultsTable', otherPageRows, { showDetail: true });
+
+  const resultsPager = document.getElementById('resultsPager');
+  const resultsPageInfo = document.getElementById('resultsPageInfo');
+  const resultsPrevPageBtn = document.getElementById('resultsPrevPageBtn');
+  const resultsNextPageBtn = document.getElementById('resultsNextPageBtn');
+  if (resultsPager && resultsPageInfo && resultsPrevPageBtn && resultsNextPageBtn) {
+    resultsPager.style.display = activeRows.length ? '' : 'none';
+    resultsPageInfo.textContent = `Page ${activeResultsPage} of ${activeTotalPages} (${activeRows.length} total)`;
+    resultsPrevPageBtn.disabled = activeResultsPage <= 1;
+    resultsNextPageBtn.disabled = activeResultsPage >= activeTotalPages;
+  }
+
+  const otherResultsPanel = document.getElementById('otherResultsPanel');
+  const otherResultsPager = document.getElementById('otherResultsPager');
+  const otherResultsPageInfo = document.getElementById('otherResultsPageInfo');
+  const otherResultsPrevPageBtn = document.getElementById('otherResultsPrevPageBtn');
+  const otherResultsNextPageBtn = document.getElementById('otherResultsNextPageBtn');
+  if (otherResultsPanel) {
+    otherResultsPanel.style.display = otherRows.length ? '' : 'none';
+  }
+  if (otherResultsPager && otherResultsPageInfo && otherResultsPrevPageBtn && otherResultsNextPageBtn) {
+    otherResultsPager.style.display = otherRows.length ? '' : 'none';
+    otherResultsPageInfo.textContent = `Page ${otherResultsPage} of ${otherTotalPages} (${otherRows.length} total)`;
+    otherResultsPrevPageBtn.disabled = otherResultsPage <= 1;
+    otherResultsNextPageBtn.disabled = otherResultsPage >= otherTotalPages;
+  }
+
   document.getElementById('filterPanel').style.display = activeRows.length || otherRows.length ? '' : 'none';
 }
 
@@ -807,6 +865,12 @@ async function runSearch() {
   };
 
   document.getElementById('searchMsg').textContent = '';
+  previousResults = [];
+  selectedRows['#otherResultsTable'].clear();
+  filteredResultsRows = null;
+  activeResultsPage = 1;
+  otherResultsPage = 1;
+  renderSearchTables();
   window.setDynamicBarStatusOverride('Searching');
   await refreshStatus();
 
@@ -833,7 +897,7 @@ async function runSearch() {
       pages: 0,
     });
 
-    previousResults = dedupeRows([...currentResults, ...previousResults].filter(row => !ids.includes(Number(row.id ?? row.gallery_id))));
+    previousResults = [];
     currentResults = incomingResults;
     renderSearchTables();
 
@@ -923,7 +987,9 @@ function applyFilters() {
   if (minPages > 0) filtered = filtered.filter(r => (r.pages || 0) >= minPages);
   if (maxPages > 0) filtered = filtered.filter(r => (r.pages || 0) <= maxPages);
 
-  renderRows('#resultsTable', filtered, { showDetail: true });
+  filteredResultsRows = filtered;
+  activeResultsPage = 1;
+  renderSearchTables();
   document.getElementById('filterMsg').textContent = `Showing ${filtered.length} of ${currentSearchRows().length} current results.`;
 }
 
@@ -931,6 +997,8 @@ function clearFilters() {
   ['flt_artists', 'flt_groups', 'flt_tags', 'flt_excludeTags', 'flt_language', 'flt_minPages', 'flt_maxPages'].forEach(id => {
     document.getElementById(id).value = '';
   });
+  filteredResultsRows = null;
+  activeResultsPage = 1;
   renderSearchTables();
   document.getElementById('filterMsg').textContent = '';
 }
@@ -945,7 +1013,7 @@ async function refreshQueue() {
   queueIds = new Set((data.ids || []).map(Number).filter(Number.isFinite));
   renderRows('#queueTable', rows);
   renderSearchTables();
-  document.getElementById('queueMsg').textContent = `Queue: ${rows.length} galleries.`;
+  document.getElementById('queueMsg').textContent = `${rows.length} Galleries Queued.`;
   await refreshStatus();
 }
 
@@ -1032,6 +1100,22 @@ document.getElementById('clearQueueBtn').onclick = async () => {
 document.getElementById('resultsSelectAll').addEventListener('change', (e) => setSelectAll('#resultsTable', e.target.checked));
 document.getElementById('otherResultsSelectAll').addEventListener('change', (e) => setSelectAll('#otherResultsTable', e.target.checked));
 document.getElementById('queueSelectAll').addEventListener('change', (e) => setSelectAll('#queueTable', e.target.checked));
+document.getElementById('resultsPrevPageBtn').addEventListener('click', () => {
+  activeResultsPage = Math.max(1, activeResultsPage - 1);
+  renderSearchTables();
+});
+document.getElementById('resultsNextPageBtn').addEventListener('click', () => {
+  activeResultsPage += 1;
+  renderSearchTables();
+});
+document.getElementById('otherResultsPrevPageBtn').addEventListener('click', () => {
+  otherResultsPage = Math.max(1, otherResultsPage - 1);
+  renderSearchTables();
+});
+document.getElementById('otherResultsNextPageBtn').addEventListener('click', () => {
+  otherResultsPage += 1;
+  renderSearchTables();
+});
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
