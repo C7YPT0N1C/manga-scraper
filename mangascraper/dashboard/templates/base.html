@@ -2,19 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title if title else "MangaScraper Dashboard" }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <header>
-    <h1>MangaScraper Dashboard</h1>
-    <nav>
-      <a href="/">Home</a> |
-      <a href="/scraper">Scraper</a> |
-      <a href="/database">Database</a> |
+  <header class="topbar">
+    <h1><span class="logo-pill">MangaScraper</span> Dashboard</h1>
+    <nav class="main-nav">
+      <a href="/">Home</a>
+      <a href="/scraper">Scraper</a>
+      <a href="/database">Database</a>
       <a href="/logs">Diagnostics</a>
     </nav>
-    <div id="globalStatus"></div>
+    <div id="globalStatus" class="status-chip"></div>
   </header>
 
   <main>
@@ -22,7 +26,7 @@
   </main>
 
   <div id="dynamicBar" class="dynamic-bar" style="display:none">
-    <div class="dynamic-bar-title">Dynamic Bar</div>
+    <div class="dynamic-bar-title">Live Run Telemetry</div>
     <div id="dynamicBarContent">Status unavailable.</div>
   </div>
 
