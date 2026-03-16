@@ -6,9 +6,8 @@
 <section>
   <h3>Runtime</h3>
   <button id="refreshAllBtn">Refresh Scraper</button>
-  <button id="startBtn" title="Start a default scraper run using the current configuration, not the queue.">Start Default Run</button>
+  <button id="startBtn" title="Start a scraper run using only galleries currently selected in the queue.">Start Scraper</button>
   <button id="stopBtn">Stop Scraper</button>
-  <button id="startQueueBtn" title="Start a scraper run using only the galleries currently in the queue.">Start Queue Run</button>
 </section>
 
 <!-- ===== CONFIGURATION ===== -->
@@ -122,7 +121,7 @@
       <tr>
         <th>Query Type</th>
         <th>Query Target</th>
-        <th>No of Galleries</th>
+        <th>No. of Galleries</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -979,12 +978,8 @@ document.getElementById('refreshAllBtn').onclick = async () => {
 };
 
 document.getElementById('startBtn').onclick = async () => {
-  setGlobalStatus('Starting scraper...');
-  await fetch('/api/scraper/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ args: [] })
-  });
+  setGlobalStatus('Starting scraper from selected queue...');
+  await fetch('/api/scraper/queue/start', { method: 'POST' });
   await refreshStatus();
   clearGlobalStatus();
 };
@@ -992,13 +987,6 @@ document.getElementById('startBtn').onclick = async () => {
 document.getElementById('stopBtn').onclick = async () => {
   setGlobalStatus('Stopping scraper...');
   await fetch('/api/scraper/stop', { method: 'POST' });
-  await refreshStatus();
-  clearGlobalStatus();
-};
-
-document.getElementById('startQueueBtn').onclick = async () => {
-  setGlobalStatus('Starting scraper from queue...');
-  await fetch('/api/scraper/queue/start', { method: 'POST' });
   await refreshStatus();
   clearGlobalStatus();
 };
@@ -1019,6 +1007,13 @@ document.getElementById('galleryDetailClose').onclick = closeGalleryDetail;
 document.getElementById('refreshQueueBtn').onclick = refreshQueue;
 document.getElementById('removeSelectedQueueBtn').onclick = async () => {
   const ids = selectedIds('#queueTable');
+  if (!ids.length) {
+    document.getElementById('queueMsg').textContent = 'No queue items selected.';
+    return;
+  }
+  if (!window.confirm(`Remove ${ids.length} selected gallery${ids.length === 1 ? '' : 'ies'} from queue?`)) {
+    return;
+  }
   await fetch('/api/scraper/queue/remove', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1027,6 +1022,9 @@ document.getElementById('removeSelectedQueueBtn').onclick = async () => {
   await refreshQueue();
 };
 document.getElementById('clearQueueBtn').onclick = async () => {
+  if (!window.confirm('Clear the entire queue?')) {
+    return;
+  }
   await fetch('/api/scraper/queue/clear', { method: 'POST' });
   await refreshQueue();
 };

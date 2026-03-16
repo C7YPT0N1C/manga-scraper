@@ -52,8 +52,6 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let _activeStreamId = null;
 let _readerFromStream = false;
-let _selectedRootPath = '';
-let _locationOptions = [];
 
 const reader = {
 	pages: [],    // array of URL strings
@@ -109,36 +107,14 @@ function setBreadcrumb(parts) {
 }
 
 function buildLocalUrl(path) {
-	const url = new URL(path, window.location.origin);
-	if (_selectedRootPath) url.searchParams.set('root', _selectedRootPath);
-	return url.pathname + url.search;
+	return path;
 }
 
 async function loadCreators() {
-	setBreadcrumb([{ label: 'Locations' }]);
+	setBreadcrumb([{ label: 'Creators' }]);
 	setLocalList([], () => {}, 'Loading...');
 	try {
-		const data = await apiFetch('/api/gallery/list_locations');
-		_locationOptions = (data.locations || []).map(item => ({
-			...item,
-			label: item.extension_used ? `${item.extension_used} | ${item.root_path}` : item.root_path,
-		}));
-		_selectedRootPath = data.selected_root || (_locationOptions[0] && _locationOptions[0].root_path) || '';
-		setLocalList(_locationOptions, loadCreatorsForLocation, 'No local download locations found.');
-	} catch (err) {
-		document.getElementById('localList').textContent = 'Error: ' + err.message;
-	}
-}
-
-async function loadCreatorsForLocation(location) {
-	_selectedRootPath = typeof location === 'string' ? location : (location.root_path || '');
-	setBreadcrumb([
-		{ label: 'Locations', onClick: loadCreators },
-		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath }
-	]);
-	setLocalList([], () => {}, 'Loading...');
-	try {
-		const data = await apiFetch(buildLocalUrl('/api/gallery/list_creators'));
+		const data = await apiFetch('/api/gallery/list_creators');
 		setLocalList(data.creators || [], loadGalleries, 'No local creators found.');
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
@@ -147,8 +123,7 @@ async function loadCreatorsForLocation(location) {
 
 async function loadGalleries(creator) {
 	setBreadcrumb([
-		{ label: 'Locations', onClick: loadCreators },
-		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath, onClick: () => loadCreatorsForLocation(_selectedRootPath) },
+		{ label: 'Creators', onClick: loadCreators },
 		{ label: creator }
 	]);
 	setLocalList([], () => {}, 'Loading...');
@@ -162,8 +137,7 @@ async function loadGalleries(creator) {
 
 async function loadPages(creator, gallery) {
 	setBreadcrumb([
-		{ label: 'Locations', onClick: loadCreators },
-		{ label: (_locationOptions.find(item => item.root_path === _selectedRootPath) || {}).label || _selectedRootPath, onClick: () => loadCreatorsForLocation(_selectedRootPath) },
+		{ label: 'Creators', onClick: loadCreators },
 		{ label: creator, onClick: () => loadGalleries(creator) },
 		{ label: gallery }
 	]);
@@ -179,7 +153,7 @@ async function loadPages(creator, gallery) {
 		_readerFromStream = false;
 		openReader(pages, title, () => {
 			document.getElementById('localPane').style.display = '';
-			loadPages(creator, gallery);
+			loadGalleries(creator);
 		});
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;

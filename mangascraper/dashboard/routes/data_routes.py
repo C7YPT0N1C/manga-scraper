@@ -46,14 +46,60 @@ def _requested_root() -> str:
     return str(request.args.get("root") or "").strip()
 
 
+def _extension_short_name(value: str) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    if "." in text:
+        text = text.split(".")[-1]
+    if text.endswith("__msext"):
+        text = text[:-7]
+    return text
+
+
+def _prioritise_roots(roots: list[dict]) -> list[dict]:
+    orchestrator.refresh_globals()
+    selected_extension = _extension_short_name(getattr(orchestrator, "extension", ""))
+
+    def rank(item: dict) -> tuple:
+        ext = _extension_short_name(item.get("extension_used", ""))
+        if ext == "skeleton":
+            pri = 0
+        elif selected_extension and ext == selected_extension:
+            pri = 1
+        else:
+            pri = 2
+        return (pri, ext, str(item.get("root_path") or ""))
+
+    return sorted(roots, key=rank)
+
+
 def _available_roots() -> list[dict]:
     roots = scraperapi.DB.list_download_locations()
     if roots:
-        return roots
+        return _prioritise_roots(roots)
     fallback = _download_path()
     if fallback:
         return [{"root_path": fallback, "extension_used": "", "count": 0}]
     return []
+
+
+def _resolve_gallery_path(creator: str, gallery: str) -> tuple[str | None, str | None]:
+    requested = _requested_root()
+    roots = _available_roots()
+    if requested and any(item.get("root_path") == requested for item in roots):
+        roots = [item for item in roots if item.get("root_path") == requested]
+
+    for item in roots:
+        root = item.get("root_path")
+        if not root:
+            continue
+        path = _safe_path(root, creator, gallery)
+        if not path:
+            continue
+        if os.path.isdir(path) or _is_archive(path):
+            return root, path
+    return None, None
 
 
 def _resolve_root_path() -> str:
@@ -132,34 +178,60 @@ def list_locations():
 
 @gallery_bp.route("/list_creators", methods=["GET"])
 def list_creators():
-    base = _resolve_root_path()
-    if not base or not os.path.isdir(base):
-        return jsonify({"creators": [], "root_path": base})
-    creators = [
-        name for name in sorted(os.listdir(base))
-        if os.path.isdir(os.path.join(base, name)) and not name.startswith(".")
-    ]
-    return jsonify({"creators": creators, "root_path": base})
+    requested = _requested_root()
+    if requested:
+        base = _resolve_root_path()
+        if not base or not os.path.isdir(base):
+            return jsonify({"creators": [], "root_path": base})
+        creators = [
+            name for name in sorted(os.listdir(base))
+            if os.path.isdir(os.path.join(base, name)) and not name.startswith(".")
+        ]
+        return jsonify({"creators": creators, "root_path": base})
+
+    creators = set()
+    for item in _available_roots():
+        base = item.get("root_path")
+        if not base or not os.path.isdir(base):
+            continue
+        for name in os.listdir(base):
+            if not name.startswith(".") and os.path.isdir(os.path.join(base, name)):
+                creators.add(name)
+    return jsonify({"creators": sorted(creators), "root_path": ""})
 
 
 @gallery_bp.route("/list_galleries/<path:creator>", methods=["GET"])
 def list_galleries(creator):
-    base = _resolve_root_path()
-    creator_path = _safe_path(base, creator)
-    if not creator_path or not os.path.isdir(creator_path):
+    requested = _requested_root()
+    if requested:
+        base = _resolve_root_path()
+        creator_path = _safe_path(base, creator)
+        if not creator_path or not os.path.isdir(creator_path):
+            abort(404)
+        galleries = sorted(
+            name for name in os.listdir(creator_path)
+            if not name.startswith(".")
+        )
+        return jsonify({"creator": creator, "galleries": galleries, "root_path": base})
+
+    galleries = set()
+    for item in _available_roots():
+        base = item.get("root_path")
+        creator_path = _safe_path(base, creator)
+        if not creator_path or not os.path.isdir(creator_path):
+            continue
+        for name in os.listdir(creator_path):
+            if not name.startswith("."):
+                galleries.add(name)
+    if not galleries:
         abort(404)
-    galleries = sorted(
-        name for name in os.listdir(creator_path)
-        if not name.startswith(".")
-    )
-    return jsonify({"creator": creator, "galleries": galleries, "root_path": base})
+    return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": ""})
 
 
 @gallery_bp.route("/list_pages/<path:creator>/<path:gallery>", methods=["GET"])
 def list_pages(creator, gallery):
     """Return sorted list of image filenames for a local gallery folder."""
-    base = _resolve_root_path()
-    gallery_path = _safe_path(base, creator, gallery)
+    base, gallery_path = _resolve_gallery_path(creator, gallery)
     if not gallery_path:
         abort(404)
 
@@ -181,8 +253,7 @@ def list_pages(creator, gallery):
 @gallery_bp.route("/view/<path:creator>/<path:gallery>/<path:filename>", methods=["GET"])
 def view_image(creator, gallery, filename):
     """Serve a local gallery image to the frontend reader."""
-    base = _resolve_root_path()
-    gallery_path = _safe_path(base, creator, gallery)
+    base, gallery_path = _resolve_gallery_path(creator, gallery)
     if not gallery_path:
         abort(404)
 
