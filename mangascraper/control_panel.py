@@ -7,22 +7,9 @@ from flask import Flask, render_template
 from flask_cors import CORS
 
 from mangascraper.core import api as scraperapi
+from mangascraper.core import orchestrator
 from mangascraper.dashboard.routes.scraper_routes import scraper_bp
 from mangascraper.dashboard.routes.data_routes import db_bp, gallery_bp
-
-
-DASHBOARD_HOST = "0.0.0.0"
-DASHBOARD_PORT = 6969
-DASHBOARD_DEBUG = True
-DASHBOARD_USE_RELOADER = True
-
-GALLERY_VIEWER_CONFIG = {
-    "creatorPageSize": 25,
-    "galleryPageSize": 25,
-    "tileMinWidthPx": 120,
-    "tileAspectRatio": "2 / 3",
-    "searchPlaceholder": "Search creators or galleries...",
-}
 
 
 def _dashboard_asset_paths() -> tuple[str, str]:
@@ -57,7 +44,7 @@ def create_app():
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
-        return render_template("gallery.html", gallery_viewer_config=GALLERY_VIEWER_CONFIG)
+        return render_template("gallery.html", gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEWER_CONFIG)
 
     @app.route("/scraper")
     def scraper_page():
@@ -77,8 +64,8 @@ def create_app():
 if __name__ == "__main__":
     app = create_app()
     app.run(
-        host=DASHBOARD_HOST,
-        port=DASHBOARD_PORT,
-        debug=DASHBOARD_DEBUG,
-        use_reloader=DASHBOARD_USE_RELOADER,
+        host=orchestrator.DASHBOARD_HOST,
+        port=orchestrator.DASHBOARD_PORT,
+        debug=orchestrator.DASHBOARD_DEBUG,
+        use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
     )

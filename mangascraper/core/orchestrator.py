@@ -182,6 +182,27 @@ os.makedirs(SCRAPER_DIR, exist_ok=True)
 # Load environment variables
 if os.path.exists(ENV_FILE):
     load_dotenv(dotenv_path=ENV_FILE)
+    
+# ------------------------------------------------------------
+# Dashboard
+# ------------------------------------------------------------
+DEFAULT_DASHBOARD_HOST = "0.0.0.0"
+DEFAULT_DASHBOARD_PORT = 6969
+DEFAULT_DASHBOARD_DEBUG = True
+DEFAULT_DASHBOARD_USE_RELOADER = True
+
+DASHBOARD_HOST = DEFAULT_DASHBOARD_HOST
+DASHBOARD_PORT = DEFAULT_DASHBOARD_PORT
+DASHBOARD_DEBUG = DEFAULT_DASHBOARD_DEBUG
+DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
+
+DASHBOARD_GALLERY_VIEWER_CONFIG = {
+    "creatorPageSize": 25,
+    "galleryPageSize": 25,
+    "tileMinWidthPx": 420,
+    "tileAspectRatio": "2 / 3",
+    "searchPlaceholder": "Search creators or galleries...",
+}
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
