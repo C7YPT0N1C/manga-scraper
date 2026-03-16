@@ -490,6 +490,11 @@ table tr:nth-child(even) {
   padding: 0 0.4rem 0.3rem;
 }
 
+.gallery-square-controls .remove-item-btn {
+  margin: 0;
+  width: 100%;
+}
+
 .gallery-chip {
   display: inline-flex;
   align-items: center;
@@ -500,6 +505,12 @@ table tr:nth-child(even) {
   color: var(--ink-2);
   font-size: 0.74rem;
   line-height: 1.1;
+}
+
+.gallery-chip.status-chip {
+  border-color: rgba(199, 47, 86, 0.5);
+  color: #ffd9e3;
+  background: rgba(199, 47, 86, 0.16);
 }
 
 /* ── File Browser ─────────────────────────────────────────── */
@@ -820,6 +831,55 @@ table tr:nth-child(even) {
 .detail-modal-body {
   padding: 0.82rem 0.9rem;
   line-height: 1.65;
+}
+
+.detail-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(170px, 210px) 1fr;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.detail-modal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.detail-modal-cover {
+  width: 100%;
+  aspect-ratio: var(--gallery-tile-aspect-ratio, 2 / 3);
+  border-radius: 10px;
+  border: 1px solid #3a3e4d;
+  background-color: #0f131e;
+  background-image: linear-gradient(135deg, #2a2f3c, #1a1f2e);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.detail-modal-actions-inline {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.detail-modal-actions-inline button {
+  margin: 0;
+  flex: 1;
+}
+
+.detail-modal-main p {
+  margin: 0 0 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .detail-modal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-modal-cover {
+    max-width: 240px;
+  }
 }
 
 .dynamic-bar {

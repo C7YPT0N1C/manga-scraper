@@ -1620,6 +1620,70 @@ def get_gallery_cover(creator, gallery):
     abort(404)
 
 
+@gallery_bp.route("/cover_by_id/<int:gallery_id>", methods=["GET"])
+def get_gallery_cover_by_id(gallery_id):
+    """Serve a gallery cover by gallery ID, with fallbacks to first page."""
+    locations = scraperapi.DB.list_gallery_locations(gallery_id=int(gallery_id))
+    if not locations:
+        abort(404)
+
+    requested_root = _requested_root()
+
+    for row in locations:
+        root_path = str(row.get("root_path") or "")
+        if requested_root and root_path != requested_root:
+            continue
+
+        cover_base = str(row.get("cover_path") or "")
+        if cover_base:
+            cover_candidates = [cover_base]
+            if not os.path.splitext(cover_base)[1]:
+                cover_candidates.extend(f"{cover_base}.{ext}" for ext in ("jpg", "jpeg", "png", "gif", "webp", "avif"))
+            for candidate in cover_candidates:
+                if os.path.isfile(candidate):
+                    return send_file(candidate)
+
+        gallery_path = str(row.get("download_path") or "")
+        if not gallery_path:
+            continue
+
+        if os.path.isdir(gallery_path):
+            image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+            try:
+                pages = sorted(
+                    name for name in os.listdir(gallery_path)
+                    if os.path.splitext(name)[1].lower() in image_exts
+                )
+                if pages:
+                    return send_from_directory(gallery_path, pages[0])
+            except OSError:
+                continue
+        elif _is_archive(gallery_path):
+            image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+            try:
+                with zipfile.ZipFile(gallery_path, "r") as zf:
+                    pages = sorted(
+                        name for name in zf.namelist()
+                        if not name.endswith("/") and os.path.splitext(name)[1].lower() in image_exts
+                    )
+                    if pages:
+                        payload = zf.read(pages[0])
+                        ext = os.path.splitext(pages[0])[1].lower()
+                        mime_map = {
+                            ".jpg": "image/jpeg",
+                            ".jpeg": "image/jpeg",
+                            ".png": "image/png",
+                            ".gif": "image/gif",
+                            ".webp": "image/webp",
+                            ".avif": "image/avif",
+                        }
+                        return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"))
+            except Exception:
+                continue
+
+    abort(404)
+
+
 # ── Gallery streaming — fetch pages from nhentai by ID ───────────────────────
 #
 # Streams are short-lived: images are downloaded to a temp directory and

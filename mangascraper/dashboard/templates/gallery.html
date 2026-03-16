@@ -69,12 +69,21 @@
 			<button id="galleryDetailClose" type="button">&#x2715; Close</button>
 		</div>
 		<div class="detail-modal-body">
-			<div id="galleryDetailMeta"></div>
-			<div id="galleryDetailTags"></div>
-		</div>
-		<div class="detail-modal-actions">
-			<button id="galleryDetailReadBtn" type="button">Read Gallery</button>
-			<button id="galleryDetailFavBtn" type="button" class="fav-btn">☆ Favourite</button>
+			<div class="detail-modal-layout">
+				<div class="detail-modal-side">
+					<div id="galleryDetailCover" class="detail-modal-cover" role="img" aria-label="Gallery cover"></div>
+					<div class="detail-modal-actions-inline">
+						<button id="galleryDetailReadBtn" type="button">Read Gallery</button>
+						<button id="galleryDetailFavBtn" type="button" class="fav-btn">☆ Favourite</button>
+					</div>
+				</div>
+				<div class="detail-modal-main">
+					<p><strong>Creators:</strong> <span id="galleryDetailCreators">Unknown</span></p>
+					<p><strong>Tags:</strong> <span id="galleryDetailTags">None</span></p>
+					<p><strong>Languages:</strong> <span id="galleryDetailLanguages">Unknown</span></p>
+					<p><strong>Pages:</strong> <span id="galleryDetailPages">0</span></p>
+				</div>
+			</div>
 		</div>
 	</div>
 </div>
@@ -341,15 +350,23 @@ function _renderGalleryDetail(gallery) {
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
 	const tagList = normaliseList(gallery.tags);
+	const creatorList = normaliseList(gallery.creators);
+	const galleryId = Number(gallery.gallery_id || 0);
+	let coverUrl = '';
+	if (galleryId > 0) {
+		coverUrl = `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`;
+	} else if (_currentCreator) {
+		coverUrl = `/api/gallery/cover/${encodeURIComponent(_currentCreator)}/${encodeURIComponent(title)}`;
+	}
 
 	document.getElementById('galleryDetailTitle').textContent = title;
-	document.getElementById('galleryDetailMeta').innerHTML = `
-		<p><strong>Pages:</strong> ${pageCount}</p>
-		<p><strong>Languages:</strong> ${languageList.length ? languageList.join(', ') : 'Unknown'}</p>
-	`;
-	document.getElementById('galleryDetailTags').innerHTML = `
-		<p><strong>Tags:</strong> ${tagList.length ? tagList.join(', ') : 'None'}</p>
-	`;
+	document.getElementById('galleryDetailCreators').textContent = creatorList.length ? creatorList.join(', ') : 'Unknown';
+	document.getElementById('galleryDetailTags').textContent = tagList.length ? tagList.join(', ') : 'None';
+	document.getElementById('galleryDetailLanguages').textContent = languageList.length ? languageList.join(', ') : 'Unknown';
+	document.getElementById('galleryDetailPages').textContent = String(pageCount);
+
+	const coverEl = document.getElementById('galleryDetailCover');
+	coverEl.style.backgroundImage = coverUrl ? `url('${coverUrl}')` : '';
 
 	const favBtn = document.getElementById('galleryDetailFavBtn');
 	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
@@ -357,7 +374,7 @@ function _renderGalleryDetail(gallery) {
 }
 
 async function openGalleryDetail(gallery) {
-	_detailGallery = { ...gallery };
+	_detailGallery = { ...gallery, creators: (_currentCreator ? [_currentCreator] : []) };
 	if (!_detailGallery.gallery_id) {
 		_detailGallery.gallery_id = parseGalleryId(itemLabel(gallery));
 	}
@@ -381,6 +398,14 @@ async function openGalleryDetail(gallery) {
 		_detailGallery.page_count = Number(data.page_count || _detailGallery.page_count || 0);
 		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
 		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
+		_detailGallery.status = String(data.status || _detailGallery.status || '');
+		if (Array.isArray(data.creators) && data.creators.length) {
+			_detailGallery.creators = data.creators;
+		} else if (data.creator) {
+			_detailGallery.creators = [String(data.creator)];
+		} else if (!_detailGallery.creators || !_detailGallery.creators.length) {
+			_detailGallery.creators = _currentCreator ? [_currentCreator] : [];
+		}
 		_detailGallery.favourite = Boolean(data.favourite);
 
 		for (const item of _allGalleries) {
@@ -389,6 +414,7 @@ async function openGalleryDetail(gallery) {
 				item.languages = _detailGallery.languages;
 				item.tags = _detailGallery.tags;
 				item.tag_count = _detailGallery.tags.length;
+				item.status = _detailGallery.status;
 				item.favourite = _detailGallery.favourite;
 				item.page_count = _detailGallery.page_count;
 			}

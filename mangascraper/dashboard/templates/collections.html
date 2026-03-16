@@ -135,19 +135,69 @@ function readFilterRows() {
 function renderItems(items) {
   const host = document.getElementById('collectionItems');
   if (!Array.isArray(items) || !items.length) {
+    host.className = '';
     host.innerHTML = '<p>No items in this collection.</p>';
     return;
   }
-  host.innerHTML = items.map(item => {
-    const title = item.title || `Gallery ${item.gallery_id}`;
-    const flags = [item.is_manual ? 'manual' : '', item.is_rule ? 'rule' : ''].filter(Boolean).join(', ');
-    return `
-      <div class="row-wrap">
-        <span>#${item.gallery_id} ${title} (${flags || 'none'})</span>
-        <button type="button" class="remove-item-btn" data-gallery-id="${item.gallery_id}">Remove</button>
-      </div>
-    `;
-  }).join('');
+  host.innerHTML = '';
+  host.className = 'gallery-grid';
+
+  items.forEach(item => {
+    const galleryId = Number(item.gallery_id || 0);
+    const title = String(item.title || `Gallery ${galleryId}`).trim();
+    const pageCount = Number(item.page_count || 0);
+    const status = String(item.status || '').trim();
+    const sourceFlags = [item.is_manual ? 'manual' : '', item.is_rule ? 'rule' : ''].filter(Boolean);
+
+    const card = document.createElement('div');
+    card.className = 'gallery-square';
+
+    const imageDiv = document.createElement('div');
+    imageDiv.className = 'gallery-square-image';
+    imageDiv.style.backgroundImage = `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')`;
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'gallery-square-title';
+    titleDiv.textContent = `#${galleryId} ${title}`;
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'gallery-square-meta';
+
+    const pagesChip = document.createElement('span');
+    pagesChip.className = 'gallery-chip';
+    pagesChip.textContent = `${pageCount} pages`;
+    metaDiv.appendChild(pagesChip);
+
+    if (status) {
+      const statusChip = document.createElement('span');
+      statusChip.className = 'gallery-chip status-chip';
+      statusChip.textContent = status;
+      metaDiv.appendChild(statusChip);
+    }
+
+    if (sourceFlags.length) {
+      const sourceChip = document.createElement('span');
+      sourceChip.className = 'gallery-chip';
+      sourceChip.textContent = sourceFlags.join(' + ');
+      metaDiv.appendChild(sourceChip);
+    }
+
+    const controlsDiv = document.createElement('div');
+    controlsDiv.className = 'gallery-square-controls';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-item-btn danger';
+    removeBtn.dataset.galleryId = String(galleryId);
+    removeBtn.textContent = 'Remove';
+    controlsDiv.appendChild(removeBtn);
+
+    card.appendChild(imageDiv);
+    card.appendChild(titleDiv);
+    card.appendChild(metaDiv);
+    card.appendChild(controlsDiv);
+    host.appendChild(card);
+  });
 
   host.querySelectorAll('.remove-item-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
