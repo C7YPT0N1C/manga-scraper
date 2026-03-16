@@ -65,6 +65,9 @@ DOWNLOAD_ROOT_MARKER_WARNING = (
     "If you remove this file while this folder still contains galleries, it could break things.\n"
 )
 
+####################################################################################################################
+# HELPERS
+####################################################################################################################
 
 class _RuntimeProgressRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -859,6 +862,11 @@ class DB:
             cached_meta_columns = [row[1] for row in c.fetchall()]
             if "expires_at" not in cached_meta_columns:
                 c.execute("ALTER TABLE CachedMetadata ADD COLUMN expires_at REAL")
+
+            c.execute("PRAGMA table_info(Creators)")
+            creators_columns = [row[1] for row in c.fetchall()]
+            if "favourite" not in creators_columns:
+                c.execute("ALTER TABLE Creators ADD COLUMN favourite INTEGER DEFAULT 0")
 
             now = time.time()
             c.execute(
@@ -1779,6 +1787,74 @@ class DB:
                 payload["locations"] = DB.list_gallery_locations(gallery_id=gid)
                 result.append(payload)
             return result
+
+        @staticmethod
+        def favourite(gallery_id, value=None):
+            """Toggle or set favourite for a gallery and return the new value (0 or 1)."""
+            DB.init_db()
+            gallery_id = Helpers.normalise_integer(gallery_id)
+            if gallery_id is None:
+                return 0
+
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT favourite FROM Galleries WHERE id=?", (gallery_id,))
+                row = cursor.fetchone()
+                current = int(row[0]) if row and row[0] is not None else 0
+                if value is None:
+                    new_value = 0 if current else 1
+                else:
+                    new_value = 1 if bool(value) else 0
+                cursor.execute(
+                    "INSERT INTO Galleries (id, favourite) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET favourite=excluded.favourite",
+                    (gallery_id, new_value),
+                )
+                conn.commit()
+                return int(new_value)
+
+    class Creator:
+        @staticmethod
+        def favourite(creator_name, value=None):
+            """Toggle or set favourite for a creator and return the new value (0 or 1)."""
+            DB.init_db()
+            creator_name = Helpers.safe_text(creator_name, "").strip()
+            if not creator_name:
+                return 0
+
+            display_name = Helpers.sanitise(creator_name)
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT id, favourite
+                    FROM Creators
+                    WHERE LOWER(name)=LOWER(?) OR LOWER(display_name)=LOWER(?)
+                    ORDER BY CASE WHEN LOWER(name)=LOWER(?) THEN 0 ELSE 1 END
+                    LIMIT 1
+                    """,
+                    (creator_name, display_name, creator_name),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    creator_id = int(row[0])
+                    current = int(row[1]) if row[1] is not None else 0
+                else:
+                    cursor.execute(
+                        "INSERT INTO Creators (name, display_name, creator_type, first_seen, last_updated, total_galleries, most_popular_tags, notes, favourite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (creator_name, display_name, "", "", "", 0, "[]", "", 0),
+                    )
+                    creator_id = int(cursor.lastrowid)
+                    current = 0
+
+                if value is None:
+                    new_value = 0 if current else 1
+                else:
+                    new_value = 1 if bool(value) else 0
+
+                cursor.execute("UPDATE Creators SET favourite=? WHERE id=?", (new_value, creator_id))
+                conn.commit()
+                return int(new_value)
 
 class Sleep:
     """Adaptive retry sleep calculations."""

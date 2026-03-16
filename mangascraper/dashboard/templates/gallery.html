@@ -5,6 +5,7 @@
 
 <div id="refreshToolbar">
 	<button id="refreshGalleriesBtn" type="button">Refresh Galleries</button>
+	<button id="toggleFilterBtn" type="button" title="Show or hide the search and filter bar">Hide Search And Filters</button>
 	<span id="refreshStatus"></span>
 </div>
 
@@ -20,7 +21,7 @@
 
 	<div id="searchFilterBar">
 		<div class="filter-field">
-			<label for="searchInput">Search</label>
+			<label for="searchInput">Search Galleries</label>
 			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}">
 		</div>
 		<div class="filter-group" id="filterGroup"></div>
@@ -30,7 +31,7 @@
 
 	<div class="pagination-controls" id="paginationControls" style="display:none">
 		<button id="prevPageBtn">← Previous</button>
-		<span class="pagination-info"><span id="pageNum">1</span> of <span id="totalPages">1</span></span>
+		<span class="pagination-info">Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
 		<button id="nextPageBtn">Next →</button>
 	</div>
 </div>
@@ -60,6 +61,24 @@
 		<button id="nextBtn" class="navBtn">&#8594;</button>
 	</div>
 </div>
+
+<div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
+	<div id="galleryDetailPanel" class="detail-modal-panel">
+		<div class="detail-modal-header">
+			<strong id="galleryDetailTitle">Gallery</strong>
+			<button id="galleryDetailClose" type="button">&#x2715; Close</button>
+		</div>
+		<div class="detail-modal-body">
+			<div id="galleryDetailMeta"></div>
+			<div id="galleryDetailTags"></div>
+		</div>
+		<div class="detail-modal-actions">
+			<button id="galleryDetailReadBtn" type="button">Read Gallery</button>
+			<button id="galleryDetailFavBtn" type="button" class="fav-btn">☆ Favourite</button>
+		</div>
+	</div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -83,6 +102,8 @@ let _currentPage = 1;
 let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
+let _detailGallery = null;
+let _currentRootPath = '';
 
 const reader = {
 	pages: [],
@@ -90,6 +111,8 @@ const reader = {
 	title: '',
 	onClose: null
 };
+
+let _filterBarVisible = true;
 
 // ── Utility ────────────────────────────────────────────────────────────────
 async function apiFetch(url) {
@@ -114,6 +137,20 @@ function itemLabel(item) {
 	return typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
 }
 
+function parseGalleryId(value) {
+	const text = String(value || '').trim();
+	const match = text.match(/^\((\d+)\)/);
+	if (!match) return null;
+	const galleryId = Number(match[1]);
+	return Number.isFinite(galleryId) ? galleryId : null;
+}
+
+function _withRoot(url) {
+	if (!_currentRootPath) return url;
+	const sep = url.includes('?') ? '&' : '?';
+	return `${url}${sep}root=${encodeURIComponent(_currentRootPath)}`;
+}
+
 function createFilterField(labelText, inputElement) {
 	const wrapper = document.createElement('div');
 	wrapper.className = 'filter-field';
@@ -125,38 +162,31 @@ function createFilterField(labelText, inputElement) {
 }
 
 function createSelectFilter(key, labelText, options, allLabel) {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'filter-field filter-inline-field';
+	const label = document.createElement('label');
+	label.textContent = labelText;
+	wrapper.appendChild(label);
 	const select = document.createElement('select');
-	select.dataset.filterKey = key;
-	select.innerHTML = `<option value="">${allLabel}</option>`;
-	(options || []).forEach(optionValue => {
+	select.className = 'filter-select';
+	const allOption = document.createElement('option');
+	allOption.value = '';
+	allOption.textContent = allLabel;
+	select.appendChild(allOption);
+	(options || []).forEach(value => {
 		const option = document.createElement('option');
-		option.value = String(optionValue);
-		option.textContent = String(optionValue);
-		if (String(_activeFilters[key] || '') === option.value) {
-			option.selected = true;
-		}
+		option.value = String(value);
+		option.textContent = String(value);
 		select.appendChild(option);
 	});
-	select.addEventListener('change', event => {
-		_activeFilters[key] = event.target.value;
+	select.value = String(_activeFilters[key] || '');
+	select.addEventListener('change', () => {
+		_activeFilters[key] = select.value;
 		_currentPage = 1;
 		refreshDisplay();
 	});
-	return createFilterField(labelText, select);
-}
-
-function createNumberFilter(key, labelText, placeholder) {
-	const input = document.createElement('input');
-	input.type = 'number';
-	input.min = '0';
-	input.placeholder = placeholder;
-	input.value = _activeFilters[key] || '';
-	input.addEventListener('input', event => {
-		_activeFilters[key] = event.target.value;
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	return createFilterField(labelText, input);
+	wrapper.appendChild(select);
+	return wrapper;
 }
 
 function setupSearchAndFilters() {
@@ -186,55 +216,11 @@ function getFilteredItems() {
 	items = items.filter(item => {
 		const languages = normaliseList(item.languages).map(normaliseText);
 		const tags = normaliseList(item.tags).map(normaliseText);
-		const pageCount = Number(item.page_count || 0);
-		const tagCount = Number(item.tag_count || 0);
 
 		if (_activeFilters.language && !languages.includes(normaliseText(_activeFilters.language))) {
 			return false;
 		}
 		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
-			return false;
-		}
-
-		const minTagCount = Number(_activeFilters.minTagCount || 0);
-		if (minTagCount > 0 && tagCount < minTagCount) {
-			return false;
-		}
-
-		if (_currentItemType === 'creators') {
-			const minPages = Number(_activeFilters.minPages || 0);
-			const maxPages = Number(_activeFilters.maxPages || 0);
-			const minCreatorPages = Number(item.min_page_count || 0);
-			const maxCreatorPages = Number(item.max_page_count || 0);
-			const minGalleryCount = Number(_activeFilters.minGalleryCount || 0);
-
-			if (minGalleryCount > 0 && Number(item.gallery_count || 0) < minGalleryCount) {
-				return false;
-			}
-			if (minPages > 0 && maxCreatorPages > 0 && maxCreatorPages < minPages) {
-				return false;
-			}
-			if (maxPages > 0 && minCreatorPages > maxPages) {
-				return false;
-			}
-			return true;
-		}
-
-		const minPages = Number(_activeFilters.minPages || 0);
-		const maxPages = Number(_activeFilters.maxPages || 0);
-		if (minPages > 0 && pageCount < minPages) {
-			return false;
-		}
-		if (maxPages > 0 && pageCount > maxPages) {
-			return false;
-		}
-		if (_activeFilters.status && normaliseText(item.status) !== normaliseText(_activeFilters.status)) {
-			return false;
-		}
-		if (_activeFilters.favourite === 'yes' && !item.favourite) {
-			return false;
-		}
-		if (_activeFilters.favourite === 'no' && item.favourite) {
 			return false;
 		}
 		return true;
@@ -277,24 +263,15 @@ function updatePaginationControls(totalPages) {
 function setupFiltersForCreators(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All Languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All Tags'));
-	filterGroup.appendChild(createNumberFilter('minGalleryCount', 'Gallery Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
-	filterGroup.appendChild(createNumberFilter('maxPages', 'Page Num Max', 'Max'));
+	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 function setupFiltersForGalleries(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
-	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All Languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All Tags'));
-	filterGroup.appendChild(createSelectFilter('status', 'Status', filters.statuses || [], 'All Statuses'));
-	filterGroup.appendChild(createSelectFilter('favourite', 'Favourite', ['yes', 'no'], 'Any Favourite'));
-	filterGroup.appendChild(createNumberFilter('minTagCount', 'Tag Count', 'Min'));
-	filterGroup.appendChild(createNumberFilter('minPages', 'Page Num Min', 'Min'));
-	filterGroup.appendChild(createNumberFilter('maxPages', 'Page Num Max', 'Max'));
+	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 document.querySelectorAll('.modeTab').forEach(btn => {
@@ -306,6 +283,126 @@ document.querySelectorAll('.modeTab').forEach(btn => {
 		if (pane) pane.style.display = '';
 	});
 });
+
+async function toggleCreatorFavourite(creatorName, targetValue) {
+	const status = document.getElementById('refreshStatus');
+	try {
+		const res = await fetch('/api/gallery/favourite/creator', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ creator: creatorName, favourite: targetValue }),
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		const isFav = Boolean(data.favourite);
+		_allCreators.forEach(item => {
+			if (itemLabel(item) === creatorName) {
+				item.favourite = isFav;
+			}
+		});
+		status.textContent = `${creatorName} ${isFav ? 'favourited' : 'unfavourited'}.`;
+		refreshDisplay();
+	} catch (err) {
+		status.textContent = `Could not update creator favourite: ${err.message}`;
+	}
+}
+
+async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
+	const status = document.getElementById('refreshStatus');
+	if (!galleryId) {
+		status.textContent = 'This gallery is not in the database yet.';
+		return null;
+	}
+	try {
+		const res = await fetch(`/api/gallery/favourite/gallery/${encodeURIComponent(galleryId)}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ favourite: targetValue }),
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		const isFav = Boolean(data.favourite);
+		_allGalleries.forEach(item => {
+			if (Number(item.gallery_id || 0) === Number(galleryId)) {
+				item.favourite = isFav;
+			}
+		});
+		status.textContent = `${galleryName} ${isFav ? 'favourited' : 'unfavourited'}.`;
+		refreshDisplay();
+		return isFav;
+	} catch (err) {
+		status.textContent = `Could not update gallery favourite: ${err.message}`;
+		return null;
+	}
+}
+
+function _renderGalleryDetail(gallery) {
+	const title = String(gallery.label || gallery.name || 'Gallery');
+	const pageCount = Number(gallery.page_count || 0);
+	const languageList = normaliseList(gallery.languages);
+	const tagList = normaliseList(gallery.tags);
+
+	document.getElementById('galleryDetailTitle').textContent = title;
+	document.getElementById('galleryDetailMeta').innerHTML = `
+		<p><strong>Pages:</strong> ${pageCount}</p>
+		<p><strong>Languages:</strong> ${languageList.length ? languageList.join(', ') : 'Unknown'}</p>
+	`;
+	document.getElementById('galleryDetailTags').innerHTML = `
+		<p><strong>Tags:</strong> ${tagList.length ? tagList.join(', ') : 'None'}</p>
+	`;
+
+	const favBtn = document.getElementById('galleryDetailFavBtn');
+	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
+	favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+}
+
+async function openGalleryDetail(gallery) {
+	_detailGallery = { ...gallery };
+	if (!_detailGallery.gallery_id) {
+		_detailGallery.gallery_id = parseGalleryId(itemLabel(gallery));
+	}
+	_renderGalleryDetail(_detailGallery);
+	document.getElementById('galleryDetailModal').style.display = '';
+
+	if (!_currentCreator) return;
+	try {
+		let data;
+		if (_detailGallery.gallery_id) {
+			data = await apiFetch(`/api/gallery/details_by_id/${encodeURIComponent(_detailGallery.gallery_id)}`);
+		} else {
+			const creatorName = encodeURIComponent(_currentCreator);
+			const galleryName = encodeURIComponent(itemLabel(gallery));
+			data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
+		}
+
+		if (data.gallery_id) {
+			_detailGallery.gallery_id = data.gallery_id;
+		}
+		_detailGallery.page_count = Number(data.page_count || _detailGallery.page_count || 0);
+		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
+		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
+		_detailGallery.favourite = Boolean(data.favourite);
+
+		for (const item of _allGalleries) {
+			if (itemLabel(item) === itemLabel(_detailGallery)) {
+				if (_detailGallery.gallery_id) item.gallery_id = _detailGallery.gallery_id;
+				item.languages = _detailGallery.languages;
+				item.tags = _detailGallery.tags;
+				item.tag_count = _detailGallery.tags.length;
+				item.favourite = _detailGallery.favourite;
+				item.page_count = _detailGallery.page_count;
+			}
+		}
+		_renderGalleryDetail(_detailGallery);
+	} catch (err) {
+		document.getElementById('refreshStatus').textContent = `Could not load gallery metadata: ${err.message}`;
+	}
+}
+
+function closeGalleryDetail() {
+	_detailGallery = null;
+	document.getElementById('galleryDetailModal').style.display = 'none';
+}
 
 function createGalleryGrid(items, itemType, onClick) {
 	const el = document.getElementById('localList');
@@ -342,6 +439,8 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
+		const controlsDiv = document.createElement('div');
+		controlsDiv.className = 'gallery-square-controls';
 		if (itemType === 'creator') {
 			const galleryChip = document.createElement('span');
 			galleryChip.className = 'gallery-chip';
@@ -364,19 +463,34 @@ function createGalleryGrid(items, itemType, onClick) {
 				languageChip.textContent = item.languages[0];
 				metaDiv.appendChild(languageChip);
 			}
-			if (item.favourite) {
-				const favouriteChip = document.createElement('span');
-				favouriteChip.className = 'gallery-chip';
-				favouriteChip.textContent = 'Favourite';
-				metaDiv.appendChild(favouriteChip);
-			}
+		}
+
+		if (itemType === 'creator') {
+			const favBtn = document.createElement('button');
+			favBtn.type = 'button';
+			favBtn.className = 'fav-btn' + (item.favourite ? ' fav-active' : '');
+			favBtn.textContent = item.favourite ? '★ Unfavourite' : '☆ Favourite';
+			favBtn.addEventListener('click', event => {
+				event.preventDefault();
+				event.stopPropagation();
+				const newTarget = !Boolean(item.favourite);
+				toggleCreatorFavourite(label, newTarget);
+			});
+			controlsDiv.appendChild(favBtn);
 		}
 
 		square.appendChild(imageDiv);
 		square.appendChild(titleDiv);
 		square.appendChild(metaDiv);
+		square.appendChild(controlsDiv);
 
-		square.addEventListener('click', () => onClick(item));
+		square.addEventListener('click', () => {
+			if (itemType === 'creator') {
+				onClick(itemLabel(item));
+				return;
+			}
+			openGalleryDetail(item);
+		});
 		el.appendChild(square);
 	});
 }
@@ -425,6 +539,7 @@ async function loadCreators() {
 		const data = await apiFetch('/api/gallery/list_creators');
 		_allCreators = data.creators || [];
 		_availableFilters = data.filters || {};
+		_currentRootPath = String(data.root_path || '');
 		setupFiltersForCreators(_availableFilters);
 		refreshDisplay();
 	} catch (err) {
@@ -434,7 +549,8 @@ async function loadCreators() {
 }
 
 async function loadGalleries(creator) {
-	_currentCreator = creator;
+	const creatorName = itemLabel(creator);
+	_currentCreator = creatorName;
 	_currentItemType = 'galleries';
 	_currentPage = 1;
 	_searchTerm = '';
@@ -443,7 +559,7 @@ async function loadGalleries(creator) {
 
 	setBreadcrumb([
 		{ label: 'Creators', onClick: loadCreators },
-		{ label: creator }
+		{ label: creatorName }
 	]);
 
 	document.getElementById('searchInput').value = '';
@@ -452,9 +568,10 @@ async function loadGalleries(creator) {
 	document.getElementById('localList').textContent = 'Loading galleries...';
 	document.getElementById('localList').className = '';
 	try {
-		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`);
+		const data = await apiFetch(_withRoot(`/api/gallery/list_galleries/${encodeURIComponent(creatorName)}`));
 		_allGalleries = Array.isArray(data.galleries) ? data.galleries : [];
 		_availableFilters = data.filters || {};
+		_currentRootPath = String(data.root_path || _currentRootPath || '');
 		setupFiltersForGalleries(_availableFilters);
 		refreshDisplay();
 	} catch (err) {
@@ -472,19 +589,17 @@ async function loadPages(creator, gallery) {
 		{ label: galleryName }
 	]);
 	try {
-		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`);
-		const mode = data.mode || 'directory';
+		const data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`));
 		const pages = (data.pages || []).map(
-			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`
+			f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`)
 		);
 		if (!pages.length) {
 			document.getElementById('localList').textContent = 'Gallery is empty.';
 			document.getElementById('localList').className = '';
 			return;
 		}
-		const title = mode === 'archive' ? `${galleryName} (archive)` : galleryName;
 		_readerFromStream = false;
-		openReader(pages, title, () => {
+		openReader(pages, galleryName, () => {
 			document.getElementById('localPane').style.display = '';
 			loadGalleries(creator);
 		});
@@ -529,8 +644,6 @@ async function startStream() {
 		_activeStreamId = id;
 		_readerFromStream = true;
 		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
-		document.getElementById('streamPathInfo').textContent =
-			`Temporary files: ${data.temp_dir} (auto-cleaned after ${data.expires_in_seconds}s inactivity)`;
 		openReader(data.page_urls, data.title || `Gallery #${id}`, closeStream);
 	} catch (err) {
 		status.textContent = 'Failed: ' + err.message;
@@ -563,6 +676,7 @@ async function closeStream() {
 		await fetch(`/api/gallery/stream/${_activeStreamId}/close`, { method: 'POST' });
 	} catch { /* best effort */ }
 	_activeStreamId = null;
+	document.getElementById('streamPathInfo').textContent = '';
 	document.getElementById('streamStatus').textContent = 'Session closed.';
 }
 
@@ -636,6 +750,36 @@ async function refreshGalleries() {
 }
 
 document.getElementById('refreshGalleriesBtn').addEventListener('click', refreshGalleries);
+
+document.getElementById('toggleFilterBtn').addEventListener('click', () => {
+	_filterBarVisible = !_filterBarVisible;
+	document.getElementById('searchFilterBar').style.display = _filterBarVisible ? '' : 'none';
+	document.getElementById('toggleFilterBtn').textContent = _filterBarVisible ? 'Hide Search And Filters' : 'Show Search And Filters';
+});
+
+document.getElementById('galleryDetailClose').addEventListener('click', closeGalleryDetail);
+document.getElementById('galleryDetailModal').addEventListener('click', e => {
+	if (e.target.id === 'galleryDetailModal') closeGalleryDetail();
+});
+document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
+	if (!_detailGallery || !_currentCreator) return;
+	const current = _detailGallery;
+	closeGalleryDetail();
+	loadPages(_currentCreator, current);
+});
+document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
+	if (!_detailGallery) return;
+	const galleryName = itemLabel(_detailGallery);
+	if (!_detailGallery.gallery_id) {
+		_detailGallery.gallery_id = parseGalleryId(galleryName);
+	}
+	const newTarget = !Boolean(_detailGallery.favourite);
+	const isFav = await toggleGalleryFavourite(_detailGallery.gallery_id, galleryName, newTarget);
+	if (isFav === null) return;
+	_detailGallery.favourite = isFav;
+	_renderGalleryDetail(_detailGallery);
+});
+
 setupSearchAndFilters();
 loadCreators();
 </script>

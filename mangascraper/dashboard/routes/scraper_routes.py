@@ -393,6 +393,12 @@ def search_galleries():
             return jsonify({"message": "cache_key is required for query_type=cache_key."}), 400
         cache_key = query_value
         ids = scraperapi.Cache.Load.cache(cache_key=cache_key)
+        try:
+            scraperapi.logger.info(
+                f"[DashboardSearch] cache_key='{cache_key}' resolved {len(ids)} IDs"
+            )
+        except Exception:
+            pass
     elif query_type == "id_range":
         start_id = _safe_int(payload.get("start_id"), None)
         end_id = _safe_int(payload.get("end_id"), None)
@@ -429,6 +435,17 @@ def search_galleries():
 
     # Hydrate metadata so the dashboard can show proper titles/artists instead of placeholders.
     metadata = scraperapi.Fetch.all_galleries_metadata(ids, cache_key=None)
+    try:
+        missing_meta_ids = [int(gid) for gid in ids if int(gid) not in set(int(k) for k in (metadata or {}).keys())]
+        scraperapi.logger.info(
+            f"[DashboardSearch] query_type='{query_type}' ids={len(ids)} metadata={len(metadata or {})} missing={len(missing_meta_ids)}"
+        )
+        if missing_meta_ids:
+            scraperapi.logger.warning(
+                "[DashboardSearch] Missing metadata IDs: " + ",".join(str(gid) for gid in missing_meta_ids[:50])
+            )
+    except Exception:
+        pass
     rows = _queue_rows(sorted(ids, reverse=True), metadata)
     summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
 

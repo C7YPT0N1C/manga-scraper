@@ -52,11 +52,11 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        return render_template("database.html")
+        return render_template("diagnostics.html")
 
     @app.route("/logs")
     def logs_page():
-        return render_template("logs.html")
+        return render_template("diagnostics.html")
 
     return app
 

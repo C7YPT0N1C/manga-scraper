@@ -1,0 +1,573 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Diagnostics</h2>
+
+<section>
+  <div id="diagTabs" style="display:flex; gap:0.45rem; margin-bottom:0.8rem; flex-wrap:wrap;">
+    <button id="diagTabLogs" class="modeTab active" type="button">Log Browser</button>
+    <button id="diagTabDatabase" class="modeTab" type="button">Database</button>
+    <button id="diagTabFiles" class="modeTab" type="button">File Browser</button>
+    <button id="diagTabSelfTest" class="modeTab" type="button">Self-Test</button>
+  </div>
+
+  <div id="diagPaneLogs">
+    <h3>Log Browser</h3>
+    <div id="controls">
+      <button id="refreshLogsBtn" type="button">Refresh Logs</button>
+      <select id="logFileSelect">
+        <option value="">-- select log file --</option>
+      </select>
+      <label for="logLinesInput">Lines</label>
+      <input id="logLinesInput" type="number" min="50" max="5000" step="50" value="400">
+      <button id="loadLogBtn" type="button">Load</button>
+    </div>
+    <p id="logsMsg">Choose a log file to view.</p>
+    <pre id="logViewer" style="white-space:pre-wrap;max-height:65vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+  </div>
+
+  <div id="diagPaneDatabase" style="display:none;">
+    <h3>Database Viewer</h3>
+    <div id="dbControls">
+      <button id="dbRefreshBtn" type="button">Refresh</button>
+      <select id="dbTableSelect" title="Choose which database table to view">
+        <option value="">-- loading tables... --</option>
+      </select>
+      <input type="text" id="dbSearchBox" placeholder="Search any column...">
+    </div>
+    <p id="dbStatusMsg">Select a table to begin.</p>
+    <div id="dbTableWrap" style="overflow-x:auto">
+      <table id="dbDataTable">
+        <thead><tr id="dbTableHead"></tr></thead>
+        <tbody id="dbTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="diagPaneFiles" style="display:none;">
+    <h3>File Browser</h3>
+    <div id="fileControls">
+      <button id="fileRefreshBtn" type="button">Refresh</button>
+      <select id="fileRootSelect" title="Choose root folder"></select>
+      <button id="fileNewFolderBtn" type="button">New Folder</button>
+    </div>
+    <div id="fileBreadcrumb" class="file-breadcrumb"></div>
+    <p id="fileStatusMsg">Choose a root folder to begin.</p>
+    <div id="fileListPanel" style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+      <table id="fileTable" class="file-table">
+        <thead><tr><th>Name</th><th>Size</th><th>Actions</th></tr></thead>
+        <tbody id="fileTableBody"></tbody>
+      </table>
+    </div>
+    <div id="fileRenameModal" class="file-modal" style="display:none">
+      <div class="file-modal-box">
+        <p>Rename to:</p>
+        <input id="fileRenameInput" type="text" autocomplete="off">
+        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+          <button id="fileRenameConfirmBtn" type="button">Rename</button>
+          <button id="fileRenameCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="fileMkdirModal" class="file-modal" style="display:none">
+      <div class="file-modal-box">
+        <p>New folder name:</p>
+        <input id="fileMkdirInput" type="text" autocomplete="off">
+        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
+          <button id="fileMkdirConfirmBtn" type="button">Create</button>
+          <button id="fileMkdirCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="diagPaneSelfTest" style="display:none;">
+    <h3>Self-Test</h3>
+    <button id="runSelfTestBtn" type="button">Run Self-Test</button>
+    <p id="selfTestMsg">Run the automated self-test suite from the dashboard.</p>
+    <pre id="selfTestOutput" style="white-space:pre-wrap;max-height:35vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentLogName = '';
+let _dbCurrentTable = '';
+let _dbAutoRefreshTimer = null;
+let _fileRoots = [];
+let _fileCurrentRoot = '';
+let _fileCurrentPath = '';
+
+function activateDiagTab(tab) {
+  const panes = {
+    logs: 'diagPaneLogs',
+    database: 'diagPaneDatabase',
+    files: 'diagPaneFiles',
+    selftest: 'diagPaneSelfTest',
+  };
+  const tabs = {
+    logs: 'diagTabLogs',
+    database: 'diagTabDatabase',
+    files: 'diagTabFiles',
+    selftest: 'diagTabSelfTest',
+  };
+
+  Object.values(panes).forEach(id => { document.getElementById(id).style.display = 'none'; });
+  Object.values(tabs).forEach(id => { document.getElementById(id).classList.remove('active'); });
+
+  document.getElementById(panes[tab]).style.display = '';
+  document.getElementById(tabs[tab]).classList.add('active');
+}
+
+async function runSelfTest() {
+  const msg = document.getElementById('selfTestMsg');
+  const output = document.getElementById('selfTestOutput');
+  msg.textContent = 'Running self-test... this may take a while.';
+  output.textContent = '';
+  try {
+    const res = await fetch('/api/scraper/self-test', { method: 'POST' });
+    const data = await res.json();
+    msg.textContent = data.message || `Self-test finished with HTTP ${res.status}.`;
+    output.textContent = data.output_tail || '(no output)';
+    await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
+  } catch (err) {
+    msg.textContent = `Self-test request failed: ${err.message}`;
+  }
+}
+
+async function loadDbTables() {
+  const sel = document.getElementById('dbTableSelect');
+  const status = document.getElementById('dbStatusMsg');
+  try {
+    const res = await fetch('/api/db/tables');
+    const data = await res.json();
+    sel.innerHTML = '<option value="">-- select a table --</option>';
+    (data.tables || []).forEach(tableName => {
+      const opt = document.createElement('option');
+      opt.value = tableName;
+      opt.textContent = tableName;
+      if (tableName === 'Galleries') opt.selected = true;
+      sel.appendChild(opt);
+    });
+    _dbCurrentTable = sel.value;
+    if (_dbCurrentTable) {
+      await loadDbTable(_dbCurrentTable, '');
+    } else {
+      status.textContent = 'No tables found.';
+    }
+  } catch (err) {
+    status.textContent = `Failed to load table list: ${err.message}`;
+  }
+}
+
+async function loadDbTable(tableName, search) {
+  if (!tableName) return;
+  _dbCurrentTable = tableName;
+  const status = document.getElementById('dbStatusMsg');
+  const head = document.getElementById('dbTableHead');
+  const body = document.getElementById('dbTableBody');
+  const searchVal = search !== undefined ? search : document.getElementById('dbSearchBox').value.trim();
+
+  status.textContent = `Loading ${tableName}...`;
+  head.innerHTML = '';
+  body.innerHTML = '';
+
+  try {
+    const params = new URLSearchParams({ limit: 1000 });
+    if (searchVal) params.set('search', searchVal);
+    const res = await fetch(`/api/db/table/${encodeURIComponent(tableName)}?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) {
+      status.textContent = data.error;
+      return;
+    }
+
+    (data.columns || []).forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      head.appendChild(th);
+    });
+
+    (data.rows || []).forEach(row => {
+      const tr = document.createElement('tr');
+      row.forEach(cell => {
+        const td = document.createElement('td');
+        td.textContent = cell === null ? '' : String(cell);
+        if (td.textContent.length > 120) {
+          td.title = td.textContent;
+          td.textContent = `${td.textContent.slice(0, 117)}...`;
+        }
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+
+    status.textContent = `${(data.rows || []).length} rows in ${tableName}${searchVal ? ' (filtered)' : ''}.`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
+}
+
+function startDbAutoRefresh() {
+  if (_dbAutoRefreshTimer) clearInterval(_dbAutoRefreshTimer);
+  _dbAutoRefreshTimer = setInterval(() => {
+    if (_dbCurrentTable) loadDbTable(_dbCurrentTable);
+  }, 20000);
+}
+
+async function loadFileRoots() {
+  const select = document.getElementById('fileRootSelect');
+  const status = document.getElementById('fileStatusMsg');
+  try {
+    const res = await fetch('/api/gallery/list_locations');
+    const data = await res.json();
+    _fileRoots = Array.isArray(data.locations) ? data.locations : [];
+    select.innerHTML = '<option value="">-- root --</option>';
+    _fileRoots.forEach(item => {
+      const rootPath = String(item.root_path || '');
+      if (!rootPath) return;
+      const opt = document.createElement('option');
+      opt.value = rootPath;
+      const ext = String(item.extension_used || '').trim();
+      opt.textContent = ext ? `${ext}: ${rootPath}` : rootPath;
+      select.appendChild(opt);
+    });
+    _fileCurrentRoot = String(data.selected_root || '');
+    if (_fileCurrentRoot) {
+      select.value = _fileCurrentRoot;
+    } else if (select.options.length > 1) {
+      select.selectedIndex = 1;
+      _fileCurrentRoot = select.value;
+    }
+    _fileCurrentPath = '';
+    await loadFileEntries('');
+  } catch (err) {
+    status.textContent = `Failed to load roots: ${err.message}`;
+  }
+}
+
+async function loadFileEntries(path) {
+  const filePath = path !== undefined ? String(path || '') : _fileCurrentPath;
+  const status = document.getElementById('fileStatusMsg');
+  const tbody = document.getElementById('fileTableBody');
+  tbody.innerHTML = '';
+
+  if (!_fileCurrentRoot) {
+    status.textContent = 'Choose a root folder first.';
+    _renderBreadcrumb([]);
+    return;
+  }
+
+  try {
+    const query = new URLSearchParams({ root: _fileCurrentRoot });
+    if (filePath) query.set('path', filePath);
+    const res = await fetch(`/api/gallery/files?${query}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    _fileCurrentPath = String(data.current_path || '');
+    const parts = _fileCurrentPath ? _fileCurrentPath.split('/').filter(Boolean) : [];
+    _renderBreadcrumb(parts);
+
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+
+    // Up row if not at root
+    if (_fileCurrentPath) {
+      const tr = document.createElement('tr');
+      tr.className = 'file-row file-row-up';
+      tr.innerHTML = `<td colspan="3"><span class="file-icon">&#x21A9;</span> <a class="file-link" href="#">..</a></td>`;
+      tr.querySelector('.file-link').addEventListener('click', e => { e.preventDefault(); _fileNavigateUp(); });
+      tbody.appendChild(tr);
+    }
+
+    entries.forEach(item => {
+      const name = String(item.name || '');
+      if (!name) return;
+      const isDir = !!item.is_dir;
+      const relPath = _fileCurrentPath ? `${_fileCurrentPath}/${name}` : name;
+
+      const tr = document.createElement('tr');
+      tr.className = 'file-row';
+
+      // Name cell
+      const tdName = document.createElement('td');
+      const icon = document.createElement('span');
+      icon.className = 'file-icon';
+      icon.textContent = isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+      tdName.appendChild(icon);
+      tdName.append(' ');
+      if (isDir) {
+        const a = document.createElement('a');
+        a.className = 'file-link';
+        a.href = '#';
+        a.textContent = name;
+        a.addEventListener('click', e => { e.preventDefault(); loadFileEntries(relPath); });
+        tdName.appendChild(a);
+      } else {
+        const span = document.createElement('span');
+        span.textContent = name;
+        tdName.appendChild(span);
+      }
+
+      // Size cell
+      const tdSize = document.createElement('td');
+      tdSize.className = 'file-size';
+      if (!isDir && item.size !== null && item.size !== undefined) {
+        tdSize.textContent = _formatFileSize(item.size);
+      } else if (isDir) {
+        tdSize.textContent = '';
+      }
+
+      // Actions cell
+      const tdActions = document.createElement('td');
+      tdActions.className = 'file-actions';
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'file-action-btn';
+      renameBtn.textContent = 'Rename';
+      renameBtn.addEventListener('click', () => _showRenameModal(relPath, name));
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'file-action-btn file-action-delete';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => _confirmDelete(relPath, name, isDir));
+      tdActions.appendChild(renameBtn);
+      tdActions.appendChild(deleteBtn);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdSize);
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
+    });
+
+    const loc = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
+    status.textContent = `${entries.length} item${entries.length !== 1 ? 's' : ''} in ${loc}`;
+  } catch (err) {
+    status.textContent = `Failed to load folder: ${err.message}`;
+  }
+}
+
+function _renderBreadcrumb(parts) {
+  const el = document.getElementById('fileBreadcrumb');
+  el.innerHTML = '';
+  const makeLink = (label, path) => {
+    const a = document.createElement('a');
+    a.className = 'file-bc-link';
+    a.href = '#';
+    a.textContent = label;
+    a.addEventListener('click', e => { e.preventDefault(); loadFileEntries(path); });
+    return a;
+  };
+  el.appendChild(makeLink(_fileCurrentRoot || 'Root', ''));
+  parts.forEach((part, i) => {
+    const sep = document.createElement('span');
+    sep.className = 'file-bc-sep';
+    sep.textContent = '/';
+    el.appendChild(sep);
+    const path = parts.slice(0, i + 1).join('/');
+    el.appendChild(makeLink(part, path));
+  });
+}
+
+function _formatFileSize(bytes) {
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+function _fileNavigateUp() {
+  if (!_fileCurrentPath) return;
+  const parts = _fileCurrentPath.split('/').filter(Boolean);
+  parts.pop();
+  loadFileEntries(parts.join('/'));
+}
+
+let _renameTargetPath = '';
+function _showRenameModal(relPath, currentName) {
+  _renameTargetPath = relPath;
+  const input = document.getElementById('fileRenameInput');
+  input.value = currentName;
+  document.getElementById('fileRenameModal').style.display = 'flex';
+  input.focus();
+  input.select();
+}
+
+async function _doRename() {
+  const newName = document.getElementById('fileRenameInput').value.trim();
+  const status = document.getElementById('fileStatusMsg');
+  document.getElementById('fileRenameModal').style.display = 'none';
+  if (!newName) return;
+  try {
+    const res = await fetch('/api/gallery/files/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _renameTargetPath, new_name: newName }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Rename failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Rename error: ${err.message}`;
+  }
+}
+
+async function _confirmDelete(relPath, name, isDir) {
+  const kind = isDir ? 'folder' : 'file';
+  if (!confirm(`Delete ${kind} "${name}"?${isDir ? ' This will delete everything inside it.' : ''}`)) return;
+  const status = document.getElementById('fileStatusMsg');
+  try {
+    const res = await fetch('/api/gallery/files/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: relPath }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Delete failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Delete error: ${err.message}`;
+  }
+}
+
+function _showMkdirModal() {
+  const input = document.getElementById('fileMkdirInput');
+  input.value = '';
+  document.getElementById('fileMkdirModal').style.display = 'flex';
+  input.focus();
+}
+
+async function _doMkdir() {
+  const name = document.getElementById('fileMkdirInput').value.trim();
+  const status = document.getElementById('fileStatusMsg');
+  document.getElementById('fileMkdirModal').style.display = 'none';
+  if (!name) return;
+  try {
+    const res = await fetch('/api/gallery/files/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileCurrentPath, name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Create folder failed: ${data.error || res.status}`; return; }
+    await loadFileEntries(_fileCurrentPath);
+  } catch (err) {
+    status.textContent = `Create folder error: ${err.message}`;
+  }
+}
+
+async function fetchLogsList(options = {}) {
+  const preserveSelection = options.preserveSelection !== false;
+  const reloadCurrent = !!options.reloadCurrent;
+  const select = document.getElementById('logFileSelect');
+  const msg = document.getElementById('logsMsg');
+  const previous = preserveSelection ? (currentLogName || select.value || '') : '';
+  try {
+    const res = await fetch('/api/scraper/logs');
+    const data = await res.json();
+    select.innerHTML = '<option value="">-- select log file --</option>';
+    (data.files || []).forEach(file => {
+      const opt = document.createElement('option');
+      opt.value = file.name;
+      const sizeKb = (Number(file.size || 0) / 1024).toFixed(1);
+      opt.textContent = `${file.name} (${sizeKb} KB)`;
+      select.appendChild(opt);
+    });
+    if (previous) {
+      const existing = Array.from(select.options).find(opt => opt.value === previous);
+      if (existing) {
+        select.value = previous;
+        currentLogName = previous;
+      } else {
+        currentLogName = '';
+      }
+    }
+    msg.textContent = `${(data.files || []).length} log files found.`;
+    if (reloadCurrent && currentLogName) {
+      await loadLogFile();
+    }
+  } catch (err) {
+    msg.textContent = `Failed to load logs list: ${err.message}`;
+  }
+}
+
+async function loadLogFile() {
+  const name = document.getElementById('logFileSelect').value;
+  const lines = Number(document.getElementById('logLinesInput').value || 400);
+  const viewer = document.getElementById('logViewer');
+  const msg = document.getElementById('logsMsg');
+  if (!name) {
+    currentLogName = '';
+    msg.textContent = 'Please choose a log file first.';
+    return;
+  }
+  currentLogName = name;
+
+  try {
+    msg.textContent = `Loading ${name}...`;
+    const res = await fetch(`/api/scraper/logs/${encodeURIComponent(name)}?lines=${encodeURIComponent(lines)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || `Failed to load log: HTTP ${res.status}`;
+      viewer.textContent = '';
+      return;
+    }
+    viewer.textContent = data.content || '(empty file)';
+    msg.textContent = `Showing last ${data.lines} lines of ${data.name}.`;
+    viewer.scrollTop = viewer.scrollHeight;
+  } catch (err) {
+    msg.textContent = `Failed to read log: ${err.message}`;
+  }
+}
+
+document.getElementById('diagTabLogs').addEventListener('click', () => activateDiagTab('logs'));
+document.getElementById('diagTabDatabase').addEventListener('click', () => activateDiagTab('database'));
+document.getElementById('diagTabFiles').addEventListener('click', () => activateDiagTab('files'));
+document.getElementById('diagTabSelfTest').addEventListener('click', () => activateDiagTab('selftest'));
+document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
+  await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
+});
+document.getElementById('runSelfTestBtn').addEventListener('click', runSelfTest);
+document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
+document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
+
+document.getElementById('dbRefreshBtn').addEventListener('click', () => loadDbTable(_dbCurrentTable));
+document.getElementById('dbTableSelect').addEventListener('change', e => {
+  document.getElementById('dbSearchBox').value = '';
+  loadDbTable(e.target.value, '');
+});
+document.getElementById('dbSearchBox').addEventListener('input', e => loadDbTable(_dbCurrentTable, e.target.value));
+
+document.getElementById('fileRefreshBtn').addEventListener('click', () => loadFileEntries(_fileCurrentPath));
+document.getElementById('fileRootSelect').addEventListener('change', e => {
+  _fileCurrentRoot = e.target.value;
+  _fileCurrentPath = '';
+  loadFileEntries('');
+});
+document.getElementById('fileNewFolderBtn').addEventListener('click', _showMkdirModal);
+document.getElementById('fileRenameConfirmBtn').addEventListener('click', _doRename);
+document.getElementById('fileRenameCancelBtn').addEventListener('click', () => {
+  document.getElementById('fileRenameModal').style.display = 'none';
+});
+document.getElementById('fileRenameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') _doRename();
+  if (e.key === 'Escape') document.getElementById('fileRenameModal').style.display = 'none';
+});
+document.getElementById('fileMkdirConfirmBtn').addEventListener('click', _doMkdir);
+document.getElementById('fileMkdirCancelBtn').addEventListener('click', () => {
+  document.getElementById('fileMkdirModal').style.display = 'none';
+});
+document.getElementById('fileMkdirInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') _doMkdir();
+  if (e.key === 'Escape') document.getElementById('fileMkdirModal').style.display = 'none';
+});
+
+activateDiagTab('logs');
+fetchLogsList();
+setInterval(fetchLogsList, 20000);
+loadDbTables();
+startDbAutoRefresh();
+loadFileRoots();
+</script>
+{% endblock %}

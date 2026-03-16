@@ -15,10 +15,8 @@
     <nav class="main-nav">
       <a href="/">Home</a>
       <a href="/scraper">Scraper</a>
-      <a href="/database">Database</a>
       <a href="/logs">Diagnostics</a>
     </nav>
-    <div id="globalStatus" class="status-chip"></div>
   </header>
 
   <main>
@@ -26,13 +24,45 @@
   </main>
 
   <div id="dynamicBar" class="dynamic-bar" style="display:none">
-    <div class="dynamic-bar-title">Live Run Telemetry</div>
+    <div class="dynamic-bar-head">
+      <div class="dynamic-bar-title">Live Run Telemetry</div>
+      <button id="dynamicBarToggle" type="button" class="dynamic-bar-toggle" title="Collapse or expand telemetry">▾</button>
+    </div>
     <div id="dynamicBarContent">Status unavailable.</div>
   </div>
 
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   <script>
     window.__dynamicBarStatusOverride = '';
+    window.__dynamicBarStatusOverrideUntil = 0;
+    window.__dynamicBarCollapsed = false;
+
+    function _loadDynamicBarCollapsedState() {
+      try {
+        return localStorage.getItem('mangascraper.dynamicBarCollapsed') === '1';
+      } catch {
+        return false;
+      }
+    }
+
+    function _saveDynamicBarCollapsedState(value) {
+      try {
+        localStorage.setItem('mangascraper.dynamicBarCollapsed', value ? '1' : '0');
+      } catch {
+        // ignore storage errors
+      }
+    }
+
+    function _applyDynamicBarCollapsedState() {
+      const content = document.getElementById('dynamicBarContent');
+      const toggle = document.getElementById('dynamicBarToggle');
+      const bar = document.getElementById('dynamicBar');
+      if (!content || !toggle || !bar) return;
+      content.style.display = window.__dynamicBarCollapsed ? 'none' : '';
+      bar.classList.toggle('dynamic-bar-collapsed', window.__dynamicBarCollapsed);
+      toggle.textContent = window.__dynamicBarCollapsed ? '▸' : '◂';
+      toggle.title = window.__dynamicBarCollapsed ? 'Expand telemetry' : 'Collapse telemetry';
+    }
 
     function _formatHudDuration(seconds) {
       const total = Number(seconds || 0);
@@ -65,7 +95,27 @@
 
     window.setDynamicBarStatusOverride = function(statusText) {
       window.__dynamicBarStatusOverride = String(statusText || '').trim();
+      window.__dynamicBarStatusOverrideUntil = 0;
     };
+
+    // Backward-compatible helper used by page scripts; now writes into dynamic bar status area.
+    window.setGlobalStatusBadge = function(text, options = {}) {
+      const durationMs = Number(options.durationMs || 0);
+      const value = String(text || '').trim();
+      window.__dynamicBarStatusOverride = value;
+      window.__dynamicBarStatusOverrideUntil = durationMs > 0 ? Date.now() + durationMs : 0;
+    };
+
+    window.clearGlobalStatusBadge = function() {
+      window.__dynamicBarStatusOverride = '';
+      window.__dynamicBarStatusOverrideUntil = 0;
+    };
+
+    document.getElementById('dynamicBarToggle').addEventListener('click', () => {
+      window.__dynamicBarCollapsed = !window.__dynamicBarCollapsed;
+      _saveDynamicBarCollapsedState(window.__dynamicBarCollapsed);
+      _applyDynamicBarCollapsedState();
+    });
 
     async function _updateDynamicBarGlobal() {
       const dock = document.getElementById('dynamicBar');
@@ -78,6 +128,10 @@
         const data = await res.json();
         const c = data.counts || {};
         const p = data.progress || {};
+        if (window.__dynamicBarStatusOverrideUntil > 0 && Date.now() >= window.__dynamicBarStatusOverrideUntil) {
+          window.__dynamicBarStatusOverride = '';
+          window.__dynamicBarStatusOverrideUntil = 0;
+        }
         const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
         const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
         const completedCount = Number(c.completed ?? p.completed ?? 0);
@@ -111,6 +165,8 @@
       }
     }
 
+    window.__dynamicBarCollapsed = _loadDynamicBarCollapsedState();
+    _applyDynamicBarCollapsedState();
     _updateDynamicBarGlobal();
     setInterval(_updateDynamicBarGlobal, 5000);
   </script>
