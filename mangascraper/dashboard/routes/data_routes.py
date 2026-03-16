@@ -136,6 +136,58 @@ def _is_archive(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in {".cbz", ".zip"}
 
 
+def _scan_creators_from_filesystem(root_path: str) -> set[str]:
+    creators = set()
+    if not root_path or not os.path.isdir(root_path):
+        return creators
+
+    try:
+        for creator_name in os.listdir(root_path):
+            if not creator_name or creator_name.startswith("."):
+                continue
+            creator_path = _safe_path(root_path, creator_name)
+            if not creator_path or not os.path.isdir(creator_path):
+                continue
+
+            has_gallery = False
+            for entry_name in os.listdir(creator_path):
+                if not entry_name or entry_name.startswith("."):
+                    continue
+                entry_path = os.path.join(creator_path, entry_name)
+                if os.path.isdir(entry_path) or _is_archive(entry_path):
+                    has_gallery = True
+                    break
+
+            if has_gallery:
+                creators.add(creator_name)
+    except OSError:
+        return creators
+
+    return creators
+
+
+def _scan_galleries_from_filesystem(root_path: str, creator: str) -> set[str]:
+    galleries = set()
+    if not root_path:
+        return galleries
+
+    creator_path = _safe_path(root_path, creator)
+    if not creator_path or not os.path.isdir(creator_path):
+        return galleries
+
+    try:
+        for entry_name in os.listdir(creator_path):
+            if not entry_name or entry_name.startswith("."):
+                continue
+            entry_path = os.path.join(creator_path, entry_name)
+            if os.path.isdir(entry_path) or _is_archive(entry_path):
+                galleries.add(entry_name)
+    except OSError:
+        return galleries
+
+    return galleries
+
+
 def _archive_pages(archive_path: str) -> list[str]:
     IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
     pages = []
@@ -213,6 +265,7 @@ def list_creators():
             creator, _gallery = _creator_and_gallery_from_location(base, download_path)
             if creator:
                 creators.add(creator)
+        creators.update(_scan_creators_from_filesystem(base))
         return jsonify({"creators": sorted(creators), "root_path": base})
 
     for item in _available_roots():
@@ -227,6 +280,7 @@ def list_creators():
             creator, _gallery = _creator_and_gallery_from_location(base, download_path)
             if creator:
                 creators.add(creator)
+        creators.update(_scan_creators_from_filesystem(base))
     return jsonify({"creators": sorted(creators), "root_path": ""})
 
 
@@ -247,6 +301,7 @@ def list_galleries(creator):
             creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
             if creator_name == creator and gallery:
                 galleries.add(gallery)
+        galleries.update(_scan_galleries_from_filesystem(base, creator))
         if not galleries:
             abort(404)
         return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": base})
@@ -263,6 +318,7 @@ def list_galleries(creator):
             creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
             if creator_name == creator and gallery:
                 galleries.add(gallery)
+        galleries.update(_scan_galleries_from_filesystem(base, creator))
     if not galleries:
         abort(404)
     return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": ""})
