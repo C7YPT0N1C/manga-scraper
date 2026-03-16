@@ -1,30 +1,310 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>🎛️ Scraper Control</h2>
+<h2>Scraper Control Panel</h2>
 
-<button id="startBtn">Start Scraper</button>
-<button id="stopBtn">Stop Scraper</button>
+<section>
+  <h3>Runtime</h3>
+  <button id="refreshStatusBtn">Refresh Status</button>
+  <button id="startBtn">Start Scraper</button>
+  <button id="stopBtn">Stop Scraper</button>
+  <button id="startQueueBtn">Start From Queue</button>
+  <p id="runtimeStatus">Status: loading...</p>
+</section>
 
-<p>Status: <span id="status">Loading...</span></p>
+<section>
+  <h3>Configuration</h3>
+  <div id="configGrid">
+    <label>Extension <input id="cfg_extension" type="text"></label>
+    <label>Mirrors <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net"></label>
+    <label>Language(s) <input id="cfg_language" type="text" placeholder="english"></label>
+    <label>Title Type
+      <select id="cfg_title_type">
+        <option value="english">english</option>
+        <option value="japanese">japanese</option>
+        <option value="pretty">pretty</option>
+      </select>
+    </label>
+    <label>Excluded Tags <input id="cfg_excluded_tags" type="text"></label>
+    <label>Output Folder <input id="cfg_output_folder" type="text"></label>
+    <label>Format
+      <select id="cfg_format">
+        <option value="directory">directory</option>
+        <option value="zip">zip</option>
+        <option value="cbz">cbz</option>
+      </select>
+    </label>
+    <label>Gallery Threads <input id="cfg_threads_galleries" type="number" min="1"></label>
+    <label>Image Threads <input id="cfg_threads_images" type="number" min="1"></label>
+    <label>Max Retries <input id="cfg_max_retries" type="number" min="0"></label>
+    <label>Use Tor <input id="cfg_use_tor" type="checkbox"></label>
+    <label>Dry Run <input id="cfg_dry_run" type="checkbox"></label>
+    <label>Verify SSL <input id="cfg_verify_ssl" type="checkbox"></label>
+    <label>Daemon Threads <input id="cfg_use_daemon_threads" type="checkbox"></label>
+    <label>Reduce Logs <input id="cfg_calm" type="checkbox"></label>
+  </div>
+  <button id="loadConfigBtn">Load Config</button>
+  <button id="saveConfigBtn">Save Config</button>
+  <p id="configMsg"></p>
+</section>
+
+<section>
+  <h3>Search</h3>
+  <div id="searchGrid">
+    <label>Query Type
+      <select id="queryType">
+        <option value="homepage">homepage</option>
+        <option value="id_range">id range</option>
+        <option value="ids">explicit ids</option>
+        <option value="search">search</option>
+        <option value="artist">artist</option>
+        <option value="group">group</option>
+        <option value="tag">tag</option>
+        <option value="character">character</option>
+        <option value="parody">parody</option>
+      </select>
+    </label>
+    <label>Query / IDs <input id="queryValue" type="text" placeholder="e.g. english or 123,456"></label>
+    <label>Sort <input id="sortValue" type="text" value="date" placeholder="date / popular-week"></label>
+    <label>Start Page <input id="startPage" type="number" min="1" value="1"></label>
+    <label>End Page <input id="endPage" type="text" value="10" placeholder="10 or all"></label>
+    <label>Start ID <input id="startId" type="number" min="1" placeholder="for id_range"></label>
+    <label>End ID <input id="endId" type="number" min="1" placeholder="for id_range"></label>
+    <label>Fetch All Pages <input id="fetchAll" type="checkbox"></label>
+  </div>
+  <button id="searchBtn">Search</button>
+  <button id="addAllBtn">Add All Results To Queue</button>
+  <button id="addSelectedBtn">Add Selected Results</button>
+  <p id="searchMsg"></p>
+  <p id="summaryMsg"></p>
+
+  <table id="resultsTable">
+    <thead>
+      <tr>
+        <th><input id="resultsSelectAll" type="checkbox"></th>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Artists/Groups</th>
+        <th>Language</th>
+        <th>Pages</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section>
+  <h3>Selected Queue</h3>
+  <button id="refreshQueueBtn">Refresh Queue</button>
+  <button id="removeSelectedQueueBtn">Remove Selected</button>
+  <button id="clearQueueBtn">Clear Queue</button>
+  <p id="queueMsg"></p>
+
+  <table id="queueTable">
+    <thead>
+      <tr>
+        <th><input id="queueSelectAll" type="checkbox"></th>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Artists/Groups</th>
+        <th>Language</th>
+        <th>Pages</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
-async function updateStatus() {
-  const res = await fetch('/api/scraper/status');
-  const data = await res.json();
-  document.getElementById('status').textContent = data.status;
+let currentResults = [];
+
+function asText(v, fallback = '-') {
+  if (v === null || v === undefined || v === '') return fallback;
+  return String(v);
 }
 
+function selectedIds(tableSelector) {
+  const rows = document.querySelectorAll(`${tableSelector} tbody input[type="checkbox"]:checked`);
+  return Array.from(rows).map(cb => Number(cb.value)).filter(Number.isFinite);
+}
+
+function setSelectAll(selector, checked) {
+  document.querySelectorAll(`${selector} tbody input[type="checkbox"]`).forEach(cb => {
+    cb.checked = checked;
+  });
+}
+
+function renderRows(tableSelector, rows) {
+  const tbody = document.querySelector(`${tableSelector} tbody`);
+  tbody.innerHTML = '';
+  rows.forEach(row => {
+    const people = [...(row.artists || []), ...(row.groups || [])].join(', ');
+    const langs = (row.languages || []).join(', ');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" value="${row.id}"></td>
+      <td>${asText(row.id)}</td>
+      <td>${asText(row.title, '(no title)')}</td>
+      <td>${asText(people, '-')}</td>
+      <td>${asText(langs, '-')}</td>
+      <td>${asText(row.pages, '0')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function refreshStatus() {
+  const res = await fetch('/api/scraper/status');
+  const data = await res.json();
+  const counts = data.counts || {};
+  document.getElementById('runtimeStatus').textContent =
+    `Status: ${data.status} | PID: ${asText(data.pid)} | Uptime: ${asText(data.uptime_seconds, 0)}s | ` +
+    `DB total=${asText(counts.total, 0)} completed=${asText(counts.completed, 0)} failed=${asText(counts.failed, 0)} skipped=${asText(counts.skipped, 0)}`;
+}
+
+async function loadConfig() {
+  const res = await fetch('/api/scraper/config');
+  const data = await res.json();
+  const c = data.config || {};
+
+  document.getElementById('cfg_extension').value = c.extension || '';
+  document.getElementById('cfg_mirrors').value = c.mirrors || '';
+  document.getElementById('cfg_language').value = c.language || '';
+  document.getElementById('cfg_title_type').value = c.title_type || 'pretty';
+  document.getElementById('cfg_excluded_tags').value = c.excluded_tags || '';
+  document.getElementById('cfg_output_folder').value = c.output_folder || '';
+  document.getElementById('cfg_format').value = c.format || 'directory';
+  document.getElementById('cfg_threads_galleries').value = c.threads_galleries || 2;
+  document.getElementById('cfg_threads_images').value = c.threads_images || 10;
+  document.getElementById('cfg_max_retries').value = c.max_retries || 5;
+  document.getElementById('cfg_use_tor').checked = !!c.use_tor;
+  document.getElementById('cfg_dry_run').checked = !!c.dry_run;
+  document.getElementById('cfg_verify_ssl').checked = !!c.verify_ssl;
+  document.getElementById('cfg_use_daemon_threads').checked = !!c.use_daemon_threads;
+  document.getElementById('cfg_calm').checked = !!c.calm;
+
+  document.getElementById('configMsg').textContent = 'Configuration loaded.';
+}
+
+async function saveConfig() {
+  const payload = {
+    extension: document.getElementById('cfg_extension').value.trim(),
+    mirrors: document.getElementById('cfg_mirrors').value.trim(),
+    language: document.getElementById('cfg_language').value.trim(),
+    title_type: document.getElementById('cfg_title_type').value,
+    excluded_tags: document.getElementById('cfg_excluded_tags').value.trim(),
+    output_folder: document.getElementById('cfg_output_folder').value.trim(),
+    format: document.getElementById('cfg_format').value,
+    threads_galleries: Number(document.getElementById('cfg_threads_galleries').value || 0),
+    threads_images: Number(document.getElementById('cfg_threads_images').value || 0),
+    max_retries: Number(document.getElementById('cfg_max_retries').value || 0),
+    use_tor: document.getElementById('cfg_use_tor').checked,
+    dry_run: document.getElementById('cfg_dry_run').checked,
+    verify_ssl: document.getElementById('cfg_verify_ssl').checked,
+    use_daemon_threads: document.getElementById('cfg_use_daemon_threads').checked,
+    calm: document.getElementById('cfg_calm').checked
+  };
+
+  const res = await fetch('/api/scraper/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  document.getElementById('configMsg').textContent = data.message || 'Configuration updated.';
+}
+
+async function runSearch() {
+  const payload = {
+    query_type: document.getElementById('queryType').value,
+    query_value: document.getElementById('queryValue').value.trim(),
+    sort: document.getElementById('sortValue').value.trim(),
+    start_page: Number(document.getElementById('startPage').value || 1),
+    end_page: document.getElementById('endPage').value.trim(),
+    start_id: Number(document.getElementById('startId').value || 0),
+    end_id: Number(document.getElementById('endId').value || 0),
+    fetch_all_pages: document.getElementById('fetchAll').checked
+  };
+
+  const res = await fetch('/api/scraper/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  currentResults = data.results || [];
+  renderRows('#resultsTable', currentResults);
+
+  const s = data.summary || {};
+  document.getElementById('summaryMsg').textContent = Object.keys(s).length
+    ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
+    : 'Summary: none';
+
+  document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentResults.length} results.`;
+}
+
+async function refreshQueue() {
+  const res = await fetch('/api/scraper/queue');
+  const data = await res.json();
+  const rows = data.queue || [];
+  renderRows('#queueTable', rows);
+  document.getElementById('queueMsg').textContent = `Queue: ${rows.length} galleries.`;
+}
+
+async function addIdsToQueue(ids) {
+  if (!ids.length) return;
+  await fetch('/api/scraper/queue/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  await refreshQueue();
+}
+
+document.getElementById('refreshStatusBtn').onclick = refreshStatus;
 document.getElementById('startBtn').onclick = async () => {
-  await fetch('/api/scraper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  updateStatus();
+  await fetch('/api/scraper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ args: [] }) });
+  await refreshStatus();
 };
 document.getElementById('stopBtn').onclick = async () => {
   await fetch('/api/scraper/stop', { method: 'POST' });
-  updateStatus();
+  await refreshStatus();
+};
+document.getElementById('startQueueBtn').onclick = async () => {
+  await fetch('/api/scraper/queue/start', { method: 'POST' });
+  await refreshStatus();
 };
 
-updateStatus();
+document.getElementById('loadConfigBtn').onclick = loadConfig;
+document.getElementById('saveConfigBtn').onclick = saveConfig;
+
+document.getElementById('searchBtn').onclick = runSearch;
+document.getElementById('addAllBtn').onclick = async () => addIdsToQueue(currentResults.map(r => r.id));
+document.getElementById('addSelectedBtn').onclick = async () => addIdsToQueue(selectedIds('#resultsTable'));
+
+document.getElementById('refreshQueueBtn').onclick = refreshQueue;
+document.getElementById('removeSelectedQueueBtn').onclick = async () => {
+  const ids = selectedIds('#queueTable');
+  await fetch('/api/scraper/queue/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  await refreshQueue();
+};
+document.getElementById('clearQueueBtn').onclick = async () => {
+  await fetch('/api/scraper/queue/clear', { method: 'POST' });
+  await refreshQueue();
+};
+
+document.getElementById('resultsSelectAll').addEventListener('change', (e) => setSelectAll('#resultsTable', e.target.checked));
+document.getElementById('queueSelectAll').addEventListener('change', (e) => setSelectAll('#queueTable', e.target.checked));
+
+loadConfig();
+refreshStatus();
+refreshQueue();
+setInterval(refreshStatus, 5000);
 </script>
 {% endblock %}

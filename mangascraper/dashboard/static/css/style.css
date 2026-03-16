@@ -21,6 +21,64 @@ main {
   padding: 2em;
 }
 
+section {
+  background: #1b1b1b;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+section h3 {
+  margin-top: 0;
+}
+
+button {
+  background: #2e4d66;
+  color: #fff;
+  border: 1px solid #45657f;
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #3a607f;
+}
+
+#configGrid,
+#searchGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#configGrid label,
+#searchGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+#configGrid input[type="checkbox"],
+#searchGrid input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+input,
+select {
+  background: #222;
+  color: #fff;
+  border: 1px solid #666;
+  border-radius: 6px;
+  padding: 6px;
+}
+
 #controls {
   margin: 1em 0;
   display: flex;
@@ -43,17 +101,30 @@ main {
   margin-top: 1em;
 }
 
-#galleryTable th, #galleryTable td {
+#resultsTable,
+#queueTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1em;
+}
+
+#galleryTable th, #galleryTable td,
+#resultsTable th, #resultsTable td,
+#queueTable th, #queueTable td {
   border: 1px solid #444;
   padding: 6px 10px;
   text-align: left;
 }
 
-#galleryTable th {
+#galleryTable th,
+#resultsTable th,
+#queueTable th {
   background: #333;
 }
 
-#galleryTable tr:nth-child(even) {
+#galleryTable tr:nth-child(even),
+#resultsTable tr:nth-child(even),
+#queueTable tr:nth-child(even) {
   background: #2a2a2a;
 }
 

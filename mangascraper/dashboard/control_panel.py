@@ -6,9 +6,9 @@ from flask import Flask, render_template
 from flask_cors import CORS
 
 from mangascraper.core import api as scraperapi
-from mangascraper.dashboard.routes.scraper_routes import scraper_bp
-from mangascraper.dashboard.routes.database_routes import db_bp
-from mangascraper.dashboard.routes.gallery_routes import gallery_bp
+from mangascraper.dashboard.routes import scraper_routes
+from mangascraper.dashboard.routes import database_routes
+from mangascraper.dashboard.routes import gallery_routes
 
 def create_app():
     app = Flask(
@@ -21,9 +21,9 @@ def create_app():
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # Register blueprints for API routes
-    app.register_blueprint(scraper_bp, url_prefix="/api/scraper")
-    app.register_blueprint(db_bp, url_prefix="/api/db")
-    app.register_blueprint(gallery_bp, url_prefix="/api/gallery")
+    app.register_blueprint(scraper_routes, url_prefix="/api/scraper")
+    app.register_blueprint(database_routes, url_prefix="/api/db")
+    app.register_blueprint(gallery_routes, url_prefix="/api/gallery")
 
     # --- Web dashboard routes ---
     @app.route("/")
