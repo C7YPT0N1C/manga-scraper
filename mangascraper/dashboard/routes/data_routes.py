@@ -298,6 +298,166 @@ def _build_filter_options(items: list[dict], item_type: str) -> dict:
     return result
 
 
+def _table_filter_options() -> dict:
+    """Return filter options directly from Tags and Languages tables."""
+    scraperapi.DB.init_db()
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM Languages WHERE name IS NOT NULL AND TRIM(name) != ''")
+        languages = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
+        cursor.execute("SELECT name FROM Tags WHERE name IS NOT NULL AND TRIM(name) != ''")
+        tags = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
+    return {"languages": languages, "tags": tags}
+
+
+def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
+    """Hydrate gallery metadata directly from Galleries table by GalleryId."""
+    ids = sorted({int(gid) for gid in (gallery_ids or []) if gid is not None})
+    if not ids:
+        return {}
+
+    scraperapi.DB.init_db()
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_name_map = {int(tag_id): str(name) for tag_id, name in cursor.fetchall() if tag_id is not None and name}
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
+
+        placeholders = ",".join("?" for _ in ids)
+        cursor.execute(
+            f"""
+            SELECT id, num_pages, tag_ids, language_ids, status, favourite, rating
+            FROM Galleries
+            WHERE id IN ({placeholders})
+            """,
+            tuple(ids),
+        )
+
+        result = {}
+        for row in cursor.fetchall():
+            gid = int(row[0])
+            tag_ids = _parse_json_int_list(row[2])
+            language_ids = _parse_json_int_list(row[3])
+            result[gid] = {
+                "page_count": int(row[1]) if row[1] is not None else 0,
+                "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
+                "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
+                "status": str(row[4] or ""),
+                "favourite": bool(row[5]),
+                "rating": float(row[6]) if row[6] is not None else None,
+            }
+        return result
+
+
+def _apply_gallery_db_meta(items: list[dict]) -> list[dict]:
+    """Overlay gallery rows with authoritative DB values from Galleries table."""
+    gallery_ids = []
+    for item in items or []:
+        gid = item.get("gallery_id")
+        if gid is None:
+            continue
+        try:
+            gallery_ids.append(int(gid))
+        except Exception:
+            continue
+
+    meta_by_id = _gallery_meta_by_ids(gallery_ids)
+    if not meta_by_id:
+        return items
+
+    for item in items:
+        gid = item.get("gallery_id")
+        if gid is None:
+            continue
+        try:
+            gid_int = int(gid)
+        except Exception:
+            continue
+        meta = meta_by_id.get(gid_int)
+        if not meta:
+            continue
+        item["page_count"] = meta["page_count"]
+        item["tags"] = list(meta["tags"])
+        item["languages"] = list(meta["languages"])
+        item["tag_count"] = len(meta["tags"])
+        item["status"] = meta["status"]
+        item["favourite"] = bool(meta["favourite"])
+        item["rating"] = meta["rating"]
+
+    return items
+
+
+def _db_filter_options_for_creator(creator_name: str, roots: list[str] | None = None) -> dict:
+    """Return language/tag filter values from DB via GalleryLocations path mapping."""
+    creator_key = str(creator_name or "").strip().lower()
+    if not creator_key:
+        return {"languages": [], "tags": []}
+
+    root_candidates = [str(root or "").strip() for root in (roots or []) if str(root or "").strip()]
+    if not root_candidates:
+        root_candidates = [item.get("root_path") for item in _available_roots() if item.get("root_path")]
+
+    gallery_ids: set[int] = set()
+    for root in root_candidates:
+        for row in scraperapi.DB.list_gallery_locations(root_path=root):
+            gid = row.get("gallery_id")
+            dpath = row.get("download_path")
+            if gid is None or not dpath:
+                continue
+            found_creator, _ = _creator_and_gallery_from_location(root, dpath)
+            if str(found_creator or "").strip().lower() == creator_key:
+                try:
+                    gallery_ids.add(int(gid))
+                except Exception:
+                    continue
+
+    if not gallery_ids:
+        return {"languages": [], "tags": []}
+
+    scraperapi.DB.init_db()
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_name_map = {
+            int(tag_id): str(name)
+            for tag_id, name in cursor.fetchall()
+            if tag_id is not None and name
+        }
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_name_map = {
+            int(language_id): str(name)
+            for language_id, name in cursor.fetchall()
+            if language_id is not None and name
+        }
+
+        placeholders = ",".join("?" for _ in gallery_ids)
+        cursor.execute(
+            f"SELECT tag_ids, language_ids FROM Galleries WHERE id IN ({placeholders})",
+            tuple(sorted(gallery_ids)),
+        )
+
+        tag_ids = set()
+        language_ids = set()
+        for tag_ids_json, language_ids_json in cursor.fetchall():
+            tag_ids.update(_parse_json_int_list(tag_ids_json))
+            language_ids.update(_parse_json_int_list(language_ids_json))
+
+    languages = sorted(
+        [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
+        key=str.lower,
+    )
+    tags = sorted(
+        [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
+        key=str.lower,
+    )
+    return {"languages": languages, "tags": tags}
+
+
 def _prefer_gallery_item(existing: dict | None, candidate: dict) -> dict:
     if not existing:
         return candidate
@@ -318,6 +478,89 @@ def _prefer_gallery_item(existing: dict | None, candidate: dict) -> dict:
         return candidate
 
     return existing
+
+
+def _merge_gallery_filter_options(primary: dict, fallback: dict) -> dict:
+    merged = dict(primary or {})
+    primary_languages = list(merged.get("languages") or [])
+    primary_tags = list(merged.get("tags") or [])
+    fallback_languages = list((fallback or {}).get("languages") or [])
+    fallback_tags = list((fallback or {}).get("tags") or [])
+
+    merged["languages"] = sorted(set(primary_languages).union(fallback_languages), key=str.lower)
+    merged["tags"] = sorted(set(primary_tags).union(fallback_tags), key=str.lower)
+    return merged
+
+
+def _gallery_id_from_location(root_path: str, creator: str, gallery: str) -> int | None:
+    root_real = os.path.realpath(str(root_path or ""))
+    if not root_real:
+        return None
+    creator_key = str(creator or "").strip().lower()
+    gallery_key = str(gallery or "").strip().lower()
+
+    for row in scraperapi.DB.list_gallery_locations(root_path=root_path):
+        gid = row.get("gallery_id")
+        dpath = row.get("download_path")
+        if gid is None or not dpath:
+            continue
+        row_creator, row_gallery = _creator_and_gallery_from_location(root_real, dpath)
+        if str(row_creator or "").strip().lower() != creator_key:
+            continue
+        if str(row_gallery or "").strip().lower() != gallery_key:
+            continue
+        try:
+            return int(gid)
+        except Exception:
+            continue
+    return None
+
+
+def _gallery_meta_by_id(gallery_id: int) -> dict:
+    meta = {
+        "gallery_id": int(gallery_id),
+        "title": "",
+        "page_count": 0,
+        "languages": [],
+        "tags": [],
+        "status": "",
+        "favourite": False,
+        "rating": None,
+    }
+
+    scraperapi.DB.init_db()
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_name_map = {int(tag_id): str(name) for tag_id, name in cursor.fetchall() if tag_id is not None and name}
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
+
+        cursor.execute(
+            """
+            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+            FROM Galleries
+            WHERE id = ?
+            """,
+            (int(gallery_id),),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return meta
+
+        tag_ids = _parse_json_int_list(row[3])
+        language_ids = _parse_json_int_list(row[4])
+        meta["title"] = str(row[0] or row[1] or "")
+        meta["page_count"] = int(row[2]) if row[2] is not None else 0
+        meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
+        meta["languages"] = [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map]
+        meta["status"] = str(row[5] or "")
+        meta["favourite"] = bool(row[6])
+        meta["rating"] = float(row[7]) if row[7] is not None else None
+
+    return meta
 
 
 def _build_gallery_lookup_by_creator_and_title(
@@ -831,7 +1074,7 @@ def list_creators():
         root_creators, _ = _load_gallery_browser_root_dataset(base)
         creators.update(root_creators)
         creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
-        return jsonify({"creators": creator_items, "filters": _build_filter_options(creator_items, "creator"), "root_path": base})
+        return jsonify({"creators": creator_items, "filters": _table_filter_options(), "root_path": base})
 
     for item in _available_roots():
         base = item.get("root_path")
@@ -862,7 +1105,7 @@ def list_creators():
             existing["max_page_count"] = max(int(existing.get("max_page_count") or 0), int(creator_item.get("max_page_count") or 0))
 
     creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
-    return jsonify({"creators": creator_items, "filters": _build_filter_options(creator_items, "creator"), "root_path": ""})
+    return jsonify({"creators": creator_items, "filters": _table_filter_options(), "root_path": ""})
 
 
 @gallery_bp.route("/list_galleries/<path:creator>", methods=["GET"])
@@ -876,9 +1119,11 @@ def list_galleries(creator):
             abort(404)
         _, galleries_by_creator = _load_gallery_browser_root_dataset(base)
         galleries = galleries_by_creator.get(creator, [])
+        galleries = _apply_gallery_db_meta(galleries)
         if not galleries:
             abort(404)
-        return jsonify({"creator": creator, "galleries": galleries, "filters": _build_filter_options(galleries, "gallery"), "root_path": base})
+        filters = _table_filter_options()
+        return jsonify({"creator": creator, "galleries": galleries, "filters": filters, "root_path": base})
 
     for item in _available_roots():
         base = item.get("root_path")
@@ -895,7 +1140,9 @@ def list_galleries(creator):
         key = str(item.get("name") or "")
         deduped[key] = _prefer_gallery_item(deduped.get(key), item)
     gallery_items = sorted(deduped.values(), key=lambda item: (-(int(item["gallery_id"]) if item.get("gallery_id") is not None else -1), str(item.get("name") or "").lower()))
-    return jsonify({"creator": creator, "galleries": gallery_items, "filters": _build_filter_options(gallery_items, "gallery"), "root_path": ""})
+    gallery_items = _apply_gallery_db_meta(gallery_items)
+    filters = _table_filter_options()
+    return jsonify({"creator": creator, "galleries": gallery_items, "filters": filters, "root_path": ""})
 
 
 @gallery_bp.route("/list_pages/<path:creator>/<path:gallery>", methods=["GET"])
@@ -918,6 +1165,38 @@ def list_pages(creator, gallery):
         return jsonify({"creator": creator, "gallery": gallery, "pages": pages, "mode": "archive", "root_path": base})
 
     abort(404)
+
+
+@gallery_bp.route("/details/<path:creator>/<path:gallery>", methods=["GET"])
+def gallery_details(creator, gallery):
+    root, gallery_path = _resolve_gallery_path(creator, gallery)
+    if not root or not gallery_path:
+        abort(404)
+
+    gallery_id = _gallery_id_from_location(root, creator, gallery)
+    if gallery_id is not None:
+        meta = _gallery_meta_by_id(gallery_id)
+    else:
+        meta = {
+            "gallery_id": None,
+            "title": gallery,
+            "page_count": _count_pages_on_disk(gallery_path) or 0,
+            "languages": [],
+            "tags": [],
+            "status": "",
+            "favourite": False,
+            "rating": None,
+        }
+
+    if not meta.get("title"):
+        meta["title"] = gallery
+
+    return jsonify({
+        "creator": creator,
+        "gallery": gallery,
+        "root_path": root,
+        **meta,
+    })
 
 
 @gallery_bp.route("/view/<path:creator>/<path:gallery>/<path:filename>", methods=["GET"])

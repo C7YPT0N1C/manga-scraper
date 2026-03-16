@@ -103,6 +103,7 @@ let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
 let _detailGallery = null;
+let _currentRootPath = '';
 
 const reader = {
 	pages: [],
@@ -134,6 +135,12 @@ function normaliseList(values) {
 
 function itemLabel(item) {
 	return typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
+}
+
+function _withRoot(url) {
+	if (!_currentRootPath) return url;
+	const sep = url.includes('?') ? '&' : '?';
+	return `${url}${sep}root=${encodeURIComponent(_currentRootPath)}`;
 }
 
 function createFilterField(labelText, inputElement) {
@@ -341,10 +348,36 @@ function _renderGalleryDetail(gallery) {
 	favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
 }
 
-function openGalleryDetail(gallery) {
-	_detailGallery = gallery;
-	_renderGalleryDetail(gallery);
+async function openGalleryDetail(gallery) {
+	_detailGallery = { ...gallery };
+	_renderGalleryDetail(_detailGallery);
 	document.getElementById('galleryDetailModal').style.display = '';
+
+	if (!_currentCreator) return;
+	try {
+		const creatorName = encodeURIComponent(_currentCreator);
+		const galleryName = encodeURIComponent(itemLabel(gallery));
+		const data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
+		_detailGallery.gallery_id = data.gallery_id;
+		_detailGallery.page_count = Number(data.page_count || _detailGallery.page_count || 0);
+		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
+		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
+		_detailGallery.favourite = Boolean(data.favourite);
+
+		for (const item of _allGalleries) {
+			if (itemLabel(item) === itemLabel(_detailGallery)) {
+				item.gallery_id = _detailGallery.gallery_id;
+				item.languages = _detailGallery.languages;
+				item.tags = _detailGallery.tags;
+				item.tag_count = _detailGallery.tags.length;
+				item.favourite = _detailGallery.favourite;
+				item.page_count = _detailGallery.page_count;
+			}
+		}
+		_renderGalleryDetail(_detailGallery);
+	} catch (err) {
+		document.getElementById('refreshStatus').textContent = `Could not load gallery metadata: ${err.message}`;
+	}
 }
 
 function closeGalleryDetail() {
@@ -487,6 +520,7 @@ async function loadCreators() {
 		const data = await apiFetch('/api/gallery/list_creators');
 		_allCreators = data.creators || [];
 		_availableFilters = data.filters || {};
+		_currentRootPath = String(data.root_path || '');
 		setupFiltersForCreators(_availableFilters);
 		refreshDisplay();
 	} catch (err) {
@@ -515,9 +549,10 @@ async function loadGalleries(creator) {
 	document.getElementById('localList').textContent = 'Loading galleries...';
 	document.getElementById('localList').className = '';
 	try {
-		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creatorName)}`);
+		const data = await apiFetch(_withRoot(`/api/gallery/list_galleries/${encodeURIComponent(creatorName)}`));
 		_allGalleries = Array.isArray(data.galleries) ? data.galleries : [];
 		_availableFilters = data.filters || {};
+		_currentRootPath = String(data.root_path || _currentRootPath || '');
 		setupFiltersForGalleries(_availableFilters);
 		refreshDisplay();
 	} catch (err) {
@@ -535,9 +570,9 @@ async function loadPages(creator, gallery) {
 		{ label: galleryName }
 	]);
 	try {
-		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`);
+		const data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`));
 		const pages = (data.pages || []).map(
-			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`
+			f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`)
 		);
 		if (!pages.length) {
 			document.getElementById('localList').textContent = 'Gallery is empty.';

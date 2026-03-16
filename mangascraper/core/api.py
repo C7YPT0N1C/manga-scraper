@@ -65,6 +65,9 @@ DOWNLOAD_ROOT_MARKER_WARNING = (
     "If you remove this file while this folder still contains galleries, it could break things.\n"
 )
 
+####################################################################################################################
+# HELPERS
+####################################################################################################################
 
 class _RuntimeProgressRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
