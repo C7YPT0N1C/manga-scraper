@@ -590,12 +590,21 @@ function closeGalleryDetail() {
 // ── Global status bar ─────────────────────────────────────────────────────────
 
 function setGlobalStatus(msg) {
+  if (window.setGlobalStatusBadge) {
+    window.setGlobalStatusBadge(msg, { state: 'busy', durationMs: 12000 });
+    return;
+  }
   const bar = document.getElementById('globalStatus');
   if (bar) bar.textContent = msg;
 }
 
 function clearGlobalStatus() {
-  setGlobalStatus('');
+  if (window.clearGlobalStatusBadge) {
+    window.clearGlobalStatusBadge();
+    return;
+  }
+  const bar = document.getElementById('globalStatus');
+  if (bar) bar.textContent = '';
 }
 
 // ── Search field visibility ───────────────────────────────────────────────────

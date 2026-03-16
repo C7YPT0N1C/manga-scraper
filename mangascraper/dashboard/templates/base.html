@@ -32,6 +32,8 @@
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   <script>
     window.__dynamicBarStatusOverride = '';
+    window.__globalStatusOverride = '';
+    window.__globalStatusOverrideUntil = 0;
 
     function _formatHudDuration(seconds) {
       const total = Number(seconds || 0);
@@ -66,6 +68,30 @@
       window.__dynamicBarStatusOverride = String(statusText || '').trim();
     };
 
+    function _setTopStatusChip(text, state) {
+      const chip = document.getElementById('globalStatus');
+      if (!chip) return;
+      chip.textContent = String(text || '').trim();
+      chip.classList.remove('status-chip-running', 'status-chip-stopped', 'status-chip-busy', 'status-chip-offline');
+      if (state) {
+        chip.classList.add(`status-chip-${state}`);
+      }
+    }
+
+    window.setGlobalStatusBadge = function(text, options = {}) {
+      const durationMs = Number(options.durationMs || 0);
+      const state = String(options.state || 'busy').trim().toLowerCase();
+      const value = String(text || '').trim();
+      window.__globalStatusOverride = value;
+      window.__globalStatusOverrideUntil = durationMs > 0 ? Date.now() + durationMs : 0;
+      _setTopStatusChip(value, state || 'busy');
+    };
+
+    window.clearGlobalStatusBadge = function() {
+      window.__globalStatusOverride = '';
+      window.__globalStatusOverrideUntil = 0;
+    };
+
     async function _updateDynamicBarGlobal() {
       const dock = document.getElementById('dynamicBar');
       const content = document.getElementById('dynamicBarContent');
@@ -85,6 +111,7 @@
         const pagesTotal = Number(p.total_pages ?? 0);
         const pagesProcessed = Number(p.pages_processed ?? 0);
         const pagesPerSecond = Number(p.pages_per_second ?? 0);
+        const rawStatus = String(data.status || 'unknown').trim().toLowerCase();
 
         const parts = [
           `Status: ${dynamicStatus}`,
@@ -105,8 +132,30 @@
         const line = parts.join(' | ');
         content.textContent = line;
         dock.style.display = '';
+
+        if (window.__globalStatusOverride) {
+          const hasExpiry = window.__globalStatusOverrideUntil > 0;
+          if (!hasExpiry || Date.now() < window.__globalStatusOverrideUntil) {
+            _setTopStatusChip(window.__globalStatusOverride, 'busy');
+            return;
+          }
+          window.clearGlobalStatusBadge();
+        }
+
+        if (rawStatus === 'running') {
+          _setTopStatusChip(`Scraper: Running${data.pid ? ` (PID ${data.pid})` : ''}`, 'running');
+        } else if (rawStatus === 'completed') {
+          _setTopStatusChip('Scraper: Completed', 'stopped');
+        } else {
+          _setTopStatusChip('Scraper: Stopped', 'stopped');
+        }
       } catch (err) {
         content.textContent = 'Status unavailable.';
+        if (window.__globalStatusOverride) {
+          _setTopStatusChip(window.__globalStatusOverride, 'busy');
+        } else {
+          _setTopStatusChip('Scraper: Status unavailable', 'offline');
+        }
       }
     }
 

@@ -129,6 +129,30 @@ h2 {
   text-overflow: ellipsis;
 }
 
+.status-chip-running {
+  color: #d7ffee;
+  border-color: #237f5f;
+  background: rgba(43, 158, 117, 0.26);
+}
+
+.status-chip-stopped {
+  color: #ffe3ea;
+  border-color: #6b263b;
+  background: rgba(199, 47, 86, 0.2);
+}
+
+.status-chip-busy {
+  color: #fff4d2;
+  border-color: #8d6a1c;
+  background: rgba(214, 164, 47, 0.24);
+}
+
+.status-chip-offline {
+  color: #e3e9f8;
+  border-color: #4b556f;
+  background: rgba(82, 98, 128, 0.24);
+}
+
 main {
   padding: 1.05rem;
   padding-bottom: 92px;
