@@ -641,6 +641,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         "gallery_id": int(gallery_id),
         "title": "",
         "page_count": 0,
+        "creators": [],
         "languages": [],
         "tags": [],
         "status": "",
@@ -660,7 +661,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
 
         cursor.execute(
             """
-            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating, creator_ids
             FROM Galleries
             WHERE id = ?
             """,
@@ -672,8 +673,20 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
 
         tag_ids = _parse_json_int_list(row[3])
         language_ids = _parse_json_int_list(row[4])
+        creator_ids = _parse_json_int_list(row[8])
+
+        cursor.execute("SELECT id, name, display_name FROM Creators")
+        creator_name_map = {}
+        for creator_id, name, display_name in cursor.fetchall():
+            if creator_id is None:
+                continue
+            label = str(display_name or name or "").strip()
+            if label:
+                creator_name_map[int(creator_id)] = label
+
         meta["title"] = str(row[0] or row[1] or "")
         meta["page_count"] = int(row[2]) if row[2] is not None else 0
+        meta["creators"] = [creator_name_map[cid] for cid in creator_ids if cid in creator_name_map]
         meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
         meta["languages"] = [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map]
         meta["status"] = str(row[5] or "")
@@ -1450,6 +1463,38 @@ def list_pages(creator, gallery):
     abort(404)
 
 
+@gallery_bp.route("/list_pages_by_id/<int:gallery_id>", methods=["GET"])
+def list_pages_by_id(gallery_id):
+    """Return sorted list of image filenames for a gallery identified by ID."""
+    locations = scraperapi.DB.list_gallery_locations(gallery_id=int(gallery_id))
+    if not locations:
+        abort(404)
+
+    requested_root = _requested_root()
+    for row in locations:
+        root = str(row.get("root_path") or "")
+        if requested_root and root != requested_root:
+            continue
+
+        gallery_path = str(row.get("download_path") or "")
+        if not gallery_path:
+            continue
+
+        if os.path.isdir(gallery_path):
+            image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+            pages = sorted(
+                name for name in os.listdir(gallery_path)
+                if os.path.splitext(name)[1].lower() in image_exts
+            )
+            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": root})
+
+        if _is_archive(gallery_path):
+            pages = _archive_pages(gallery_path)
+            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root})
+
+    abort(404)
+
+
 @gallery_bp.route("/details/<path:creator>/<path:gallery>", methods=["GET"])
 def gallery_details(creator, gallery):
     root, gallery_path = _resolve_gallery_path(creator, gallery)
@@ -1523,6 +1568,53 @@ def view_image(creator, gallery, filename):
             ".avif": "image/avif",
         }
         return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"), download_name=os.path.basename(normalised))
+
+    abort(404)
+
+
+@gallery_bp.route("/view_by_id/<int:gallery_id>/<path:filename>", methods=["GET"])
+def view_image_by_id(gallery_id, filename):
+    """Serve a gallery image by gallery ID, using GalleryLocations download path."""
+    locations = scraperapi.DB.list_gallery_locations(gallery_id=int(gallery_id))
+    if not locations:
+        abort(404)
+
+    requested_root = _requested_root()
+    for row in locations:
+        root = str(row.get("root_path") or "")
+        if requested_root and root != requested_root:
+            continue
+
+        gallery_path = str(row.get("download_path") or "")
+        if not gallery_path:
+            continue
+
+        if os.path.isdir(gallery_path):
+            file_path = _safe_path(gallery_path, filename)
+            if not file_path or not os.path.isfile(file_path):
+                continue
+            rel_name = os.path.relpath(file_path, gallery_path)
+            return send_from_directory(gallery_path, rel_name)
+
+        if _is_archive(gallery_path):
+            normalised = posixpath.normpath(filename)
+            if normalised.startswith("../") or normalised.startswith("/"):
+                continue
+            with zipfile.ZipFile(gallery_path, "r") as zf:
+                try:
+                    payload = zf.read(normalised)
+                except KeyError:
+                    continue
+            ext = os.path.splitext(normalised)[1].lower()
+            mime_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".avif": "image/avif",
+            }
+            return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"), download_name=os.path.basename(normalised))
 
     abort(404)
 

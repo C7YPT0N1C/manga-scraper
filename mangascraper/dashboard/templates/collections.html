@@ -65,6 +65,47 @@
   <div id="collectionItems"></div>
   <p id="editorMsg"></p>
 </div>
+
+<div id="readerOverlay" style="display:none">
+  <div id="readerHeader">
+    <button id="readerClose">&#x2715; Close</button>
+    <span id="readerTitle"></span>
+    <span id="readerCounter"></span>
+  </div>
+  <div id="readerBody">
+    <button id="prevBtn" class="navBtn">&#8592;</button>
+    <div id="readerImgWrap">
+      <img id="readerImg" src="" alt="manga page">
+    </div>
+    <button id="nextBtn" class="navBtn">&#8594;</button>
+  </div>
+</div>
+
+<div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
+  <div id="galleryDetailPanel" class="detail-modal-panel">
+    <div class="detail-modal-header">
+      <strong id="galleryDetailTitle">Gallery</strong>
+      <button id="galleryDetailClose" type="button">&#x2715; Close</button>
+    </div>
+    <div class="detail-modal-body">
+      <div class="detail-modal-layout">
+        <div class="detail-modal-side">
+          <div id="galleryDetailCover" class="detail-modal-cover" role="img" aria-label="Gallery cover"></div>
+          <div class="detail-modal-actions-inline">
+            <button id="galleryDetailReadBtn" type="button">Read Gallery</button>
+            <button id="galleryDetailFavBtn" type="button" class="fav-btn">☆ Favourite</button>
+          </div>
+        </div>
+        <div class="detail-modal-main">
+          <p><strong>Creators:</strong> <span id="galleryDetailCreators">Unknown</span></p>
+          <p><strong>Tags:</strong> <span id="galleryDetailTags">None</span></p>
+          <p><strong>Languages:</strong> <span id="galleryDetailLanguages">Unknown</span></p>
+          <p><strong>Pages:</strong> <span id="galleryDetailPages">0</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -72,6 +113,13 @@
 'use strict';
 
 let selectedCollectionId = null;
+let _detailGallery = null;
+
+const reader = {
+  pages: [],
+  index: 0,
+  title: '',
+};
 
 function parseCommaSeparatedIds(value) {
   return String(value || '')
@@ -79,6 +127,10 @@ function parseCommaSeparatedIds(value) {
     .map(part => Number(part.trim()))
     .filter(n => Number.isFinite(n) && n > 0)
     .map(n => Math.trunc(n));
+}
+
+function normaliseList(values) {
+  return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
 }
 
 async function api(url, options = {}) {
@@ -92,6 +144,129 @@ async function api(url, options = {}) {
     throw err;
   }
   return payload;
+}
+
+function showPage() {
+  const img = document.getElementById('readerImg');
+  const counter = document.getElementById('readerCounter');
+  img.src = reader.pages[reader.index];
+  counter.textContent = `${reader.index + 1} / ${reader.pages.length}`;
+  document.getElementById('prevBtn').disabled = reader.index === 0;
+  document.getElementById('nextBtn').disabled = reader.index === reader.pages.length - 1;
+}
+
+function openReader(pages, title) {
+  reader.pages = pages;
+  reader.index = 0;
+  reader.title = title;
+  document.getElementById('readerTitle').textContent = title;
+  document.getElementById('readerOverlay').style.display = '';
+  showPage();
+}
+
+function closeReader() {
+  document.getElementById('readerOverlay').style.display = 'none';
+}
+
+function renderGalleryDetail(gallery) {
+  const title = String(gallery.title || gallery.name || `Gallery ${gallery.gallery_id || ''}`).trim();
+  const creators = normaliseList(gallery.creators);
+  const tags = normaliseList(gallery.tags);
+  const languages = normaliseList(gallery.languages);
+  const pageCount = Number(gallery.page_count || 0);
+  const galleryId = Number(gallery.gallery_id || 0);
+
+  document.getElementById('galleryDetailTitle').textContent = title;
+  document.getElementById('galleryDetailCreators').textContent = creators.length ? creators.join(', ') : 'Unknown';
+  document.getElementById('galleryDetailTags').textContent = tags.length ? tags.join(', ') : 'None';
+  document.getElementById('galleryDetailLanguages').textContent = languages.length ? languages.join(', ') : 'Unknown';
+  document.getElementById('galleryDetailPages').textContent = String(pageCount);
+
+  const coverEl = document.getElementById('galleryDetailCover');
+  coverEl.style.backgroundImage = galleryId > 0 ? `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')` : '';
+
+  const favBtn = document.getElementById('galleryDetailFavBtn');
+  favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
+  favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+}
+
+async function toggleGalleryFavourite(galleryId, targetValue) {
+  const title = String(_detailGallery?.title || `Gallery ${galleryId}`);
+  const data = await api(`/api/gallery/favourite/gallery/${encodeURIComponent(galleryId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ favourite: targetValue }),
+  });
+  const isFav = Boolean(data.favourite);
+
+  const cards = document.querySelectorAll('#collectionItems .remove-item-btn');
+  cards.forEach(btn => {
+    if (Number(btn.dataset.galleryId) !== Number(galleryId)) return;
+    const card = btn.closest('.gallery-square');
+    if (card) {
+      card.dataset.favourite = isFav ? '1' : '0';
+    }
+  });
+
+  document.getElementById('editorMsg').textContent = `${title} ${isFav ? 'favourited' : 'unfavourited'}.`;
+  return isFav;
+}
+
+async function readGalleryById(galleryId, title) {
+  const data = await api(`/api/gallery/list_pages_by_id/${encodeURIComponent(galleryId)}`);
+  const root = String(data.root_path || '');
+  const pages = (data.pages || []).map(name => {
+    const base = `/api/gallery/view_by_id/${encodeURIComponent(galleryId)}/${encodeURIComponent(name)}`;
+    return root ? `${base}?root=${encodeURIComponent(root)}` : base;
+  });
+  if (!pages.length) {
+    throw new Error('Gallery is empty.');
+  }
+  openReader(pages, title);
+}
+
+async function openGalleryDetail(item) {
+  const galleryId = Number(item.gallery_id || 0);
+  _detailGallery = {
+    gallery_id: galleryId,
+    title: String(item.title || `Gallery ${galleryId}`),
+    page_count: Number(item.page_count || 0),
+    status: String(item.status || ''),
+    favourite: Boolean(item.favourite),
+    creators: normaliseList(item.creators),
+    tags: normaliseList(item.tags),
+    languages: normaliseList(item.languages),
+  };
+
+  renderGalleryDetail(_detailGallery);
+  document.getElementById('galleryDetailModal').style.display = '';
+
+  if (!galleryId) {
+    return;
+  }
+
+  try {
+    const data = await api(`/api/gallery/details_by_id/${encodeURIComponent(galleryId)}`);
+    _detailGallery = {
+      ..._detailGallery,
+      ...data,
+      gallery_id: Number(data.gallery_id || galleryId),
+      title: String(data.title || _detailGallery.title || `Gallery ${galleryId}`),
+      creators: normaliseList(data.creators || _detailGallery.creators),
+      tags: normaliseList(data.tags || _detailGallery.tags),
+      languages: normaliseList(data.languages || _detailGallery.languages),
+      page_count: Number(data.page_count || _detailGallery.page_count || 0),
+      favourite: Boolean(data.favourite),
+    };
+    renderGalleryDetail(_detailGallery);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = `Could not load gallery metadata: ${err.message}`;
+  }
+}
+
+function closeGalleryDetail() {
+  _detailGallery = null;
+  document.getElementById('galleryDetailModal').style.display = 'none';
 }
 
 function filterRowHtml(index, row = {}) {
@@ -151,6 +326,8 @@ function renderItems(items) {
 
     const card = document.createElement('div');
     card.className = 'gallery-square';
+    card.dataset.galleryId = String(galleryId);
+    card.dataset.favourite = item.favourite ? '1' : '0';
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'gallery-square-image';
@@ -196,11 +373,16 @@ function renderItems(items) {
     card.appendChild(titleDiv);
     card.appendChild(metaDiv);
     card.appendChild(controlsDiv);
+    card.addEventListener('click', () => {
+      openGalleryDetail(item);
+    });
     host.appendChild(card);
   });
 
   host.querySelectorAll('.remove-item-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
       if (!selectedCollectionId) return;
       const galleryId = Number(btn.dataset.galleryId);
       try {
@@ -450,6 +632,63 @@ document.getElementById('addFilterRowBtn').addEventListener('click', () => {
   host.querySelectorAll('.remove-filter-btn').forEach(btn => {
     btn.onclick = () => btn.closest('.filter-row').remove();
   });
+});
+
+document.getElementById('galleryDetailClose').addEventListener('click', closeGalleryDetail);
+document.getElementById('galleryDetailModal').addEventListener('click', event => {
+  if (event.target.id === 'galleryDetailModal') {
+    closeGalleryDetail();
+  }
+});
+
+document.getElementById('galleryDetailReadBtn').addEventListener('click', async () => {
+  if (!_detailGallery || !_detailGallery.gallery_id) return;
+  try {
+    await readGalleryById(_detailGallery.gallery_id, _detailGallery.title || `Gallery ${_detailGallery.gallery_id}`);
+    closeGalleryDetail();
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+});
+
+document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
+  if (!_detailGallery || !_detailGallery.gallery_id) return;
+  try {
+    const target = !Boolean(_detailGallery.favourite);
+    const value = await toggleGalleryFavourite(_detailGallery.gallery_id, target);
+    _detailGallery.favourite = value;
+    renderGalleryDetail(_detailGallery);
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
+});
+
+document.getElementById('readerClose').addEventListener('click', closeReader);
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (reader.index > 0) {
+    reader.index -= 1;
+    showPage();
+  }
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (reader.index < reader.pages.length - 1) {
+    reader.index += 1;
+    showPage();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (document.getElementById('readerOverlay').style.display === 'none') return;
+  if (event.key === 'ArrowLeft' && reader.index > 0) {
+    reader.index -= 1;
+    showPage();
+  }
+  if (event.key === 'ArrowRight' && reader.index < reader.pages.length - 1) {
+    reader.index += 1;
+    showPage();
+  }
+  if (event.key === 'Escape') {
+    closeReader();
+  }
 });
 
 loadCollections();
