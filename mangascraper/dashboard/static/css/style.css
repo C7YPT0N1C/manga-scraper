@@ -1,14 +1,14 @@
 :root {
-  --bg-0: #0f0f13;
-  --bg-1: #151821;
-  --bg-2: #1b202b;
-  --bg-3: #232a38;
+  --bg-0: #050507;
+  --bg-1: #0a0a0f;
+  --bg-2: #101118;
+  --bg-3: #171923;
   --ink-0: #f3f5fa;
-  --ink-1: #d3d9e8;
-  --ink-2: #a3acc2;
-  --line: #343d52;
-  --accent: #ff4d91;
-  --accent-2: #ff6ea8;
+  --ink-1: #d2d7e3;
+  --ink-2: #9aa3b8;
+  --line: #2c2f3c;
+  --accent: #c72f56;
+  --accent-2: #d64968;
   --ok: #4de0aa;
   --warn: #ffd166;
   --shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
@@ -28,9 +28,9 @@ body {
   font-family: "Barlow", "Segoe UI", "Trebuchet MS", sans-serif;
   color: var(--ink-1);
   background:
-    radial-gradient(1200px 400px at 78% -10%, rgba(255, 77, 145, 0.16), transparent 60%),
-    radial-gradient(900px 500px at -10% 0%, rgba(115, 149, 255, 0.14), transparent 60%),
-    linear-gradient(180deg, var(--bg-0) 0%, #10141c 45%, #0e1218 100%);
+    radial-gradient(1200px 420px at 78% -10%, rgba(199, 47, 86, 0.22), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(120, 30, 56, 0.12), transparent 60%),
+    linear-gradient(180deg, var(--bg-0) 0%, #06070b 50%, #050508 100%);
   min-height: 100vh;
 }
 
@@ -63,7 +63,7 @@ h2 {
   position: sticky;
   top: 0;
   z-index: 1200;
-  background: linear-gradient(180deg, rgba(20, 24, 33, 0.96), rgba(16, 20, 29, 0.95));
+  background: linear-gradient(180deg, rgba(10, 10, 14, 0.97), rgba(7, 7, 11, 0.96));
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow);
@@ -82,7 +82,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(90deg, #ff3f83, #ff71ad);
+  background: linear-gradient(90deg, #b32649, #d03c5f);
   color: #fff;
   border-radius: 999px;
   padding: 0.22rem 0.58rem;
@@ -122,11 +122,11 @@ h2 {
   width: fit-content;
   max-width: 100%;
   font-size: 0.84rem;
-  color: #ffe5f0;
+  color: #ffe3ea;
   padding: 0.13rem 0.56rem;
   border-radius: 999px;
-  border: 1px solid #6f2f4d;
-  background: rgba(255, 77, 145, 0.14);
+  border: 1px solid #6b263b;
+  background: rgba(199, 47, 86, 0.2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -142,7 +142,7 @@ section,
 #localPane,
 #streamPane,
 #filterPanel {
-  background: linear-gradient(180deg, rgba(35, 42, 56, 0.9), rgba(25, 31, 43, 0.9));
+  background: linear-gradient(180deg, rgba(22, 24, 33, 0.92), rgba(14, 16, 23, 0.92));
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: var(--shadow);
@@ -181,7 +181,7 @@ section:nth-of-type(4) {
   padding: 0.52rem 0.54rem;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(16, 21, 30, 0.52);
+  background: rgba(10, 12, 18, 0.68);
   color: var(--ink-1);
   font-size: 0.92rem;
 }
@@ -197,10 +197,10 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid #47536d;
+  border: 1px solid #3a3e4d;
   border-radius: 10px;
   padding: 0.45rem 0.58rem;
-  background: #121826;
+  background: #090b11;
   color: var(--ink-0);
   font-family: "Barlow", sans-serif;
   font-size: 0.94rem;
@@ -211,17 +211,17 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 77, 145, 0.2);
+  box-shadow: 0 0 0 3px rgba(199, 47, 86, 0.22);
 }
 
 button {
-  border: 1px solid #7a3554;
+  border: 1px solid #6f273d;
   border-radius: 10px;
   padding: 0.5rem 0.78rem;
   margin-right: 0.45rem;
   margin-bottom: 0.45rem;
   color: #fff;
-  background: linear-gradient(180deg, #ff4f92, #d63a74);
+  background: linear-gradient(180deg, #c63558, #952841);
   font-family: "Space Grotesk", sans-serif;
   font-size: 0.88rem;
   font-weight: 600;
@@ -249,27 +249,27 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 0.72rem;
-  background: rgba(16, 20, 28, 0.7);
+  background: rgba(9, 11, 16, 0.78);
   border-radius: 10px;
   overflow: hidden;
 }
 
 table th,
 table td {
-  border: 1px solid #2f3b50;
+  border: 1px solid #2a2e3b;
   padding: 0.5rem 0.6rem;
   text-align: left;
   font-size: 0.9rem;
 }
 
 table th {
-  background: linear-gradient(180deg, #2e3850, #273248);
+  background: linear-gradient(180deg, #232734, #1d212e);
   color: #f6f8ff;
   font-weight: 600;
 }
 
 table tr:nth-child(even) {
-  background: rgba(41, 50, 69, 0.35);
+  background: rgba(30, 34, 45, 0.38);
 }
 
 #historyTable,
@@ -312,7 +312,7 @@ table tr:nth-child(even) {
 
 .modeTab.active {
   border-color: var(--accent-2);
-  background: linear-gradient(180deg, #ff4e93, #de3d79);
+  background: linear-gradient(180deg, #c33458, #972942);
 }
 
 #localNav {
@@ -321,7 +321,7 @@ table tr:nth-child(even) {
 }
 
 #localNav a {
-  color: #ff8ebb;
+  color: #e96888;
   text-decoration: none;
 }
 
@@ -332,16 +332,16 @@ table tr:nth-child(even) {
 .listItem {
   margin: 0.3rem 0;
   padding: 0.52rem 0.66rem;
-  border: 1px solid #354258;
+  border: 1px solid #303546;
   border-radius: 10px;
-  background: rgba(20, 25, 36, 0.7);
+  background: rgba(12, 15, 22, 0.78);
   transition: transform 0.14s ease, border-color 0.14s ease;
   cursor: pointer;
 }
 
 .listItem:hover {
   transform: translateX(2px);
-  border-color: #ff74ab;
+  border-color: #cb4a66;
 }
 
 #streamControls {
@@ -352,7 +352,7 @@ table tr:nth-child(even) {
 }
 
 #streamPathInfo {
-  color: #ffc6de;
+  color: #f0a6bc;
   font-size: 0.86rem;
 }
 
@@ -370,8 +370,8 @@ table tr:nth-child(even) {
   align-items: center;
   gap: 0.65rem;
   padding: 0.56rem 0.9rem;
-  background: linear-gradient(180deg, #1a2130, #141a26);
-  border-bottom: 1px solid #354055;
+  background: linear-gradient(180deg, #131722, #0f121b);
+  border-bottom: 1px solid #2f3442;
 }
 
 #readerTitle {
@@ -384,7 +384,7 @@ table tr:nth-child(even) {
 }
 
 #readerCounter {
-  color: #b8c4db;
+  color: #afb7c8;
   font-size: 0.9rem;
 }
 
@@ -416,7 +416,7 @@ table tr:nth-child(even) {
   border-radius: 0;
   border: none;
   margin: 0;
-  background: linear-gradient(180deg, rgba(255, 77, 145, 0.26), rgba(121, 40, 73, 0.32));
+  background: linear-gradient(180deg, rgba(199, 47, 86, 0.3), rgba(92, 29, 49, 0.36));
 }
 
 .detail-modal-bg {
@@ -434,8 +434,8 @@ table tr:nth-child(even) {
   max-height: 84vh;
   overflow-y: auto;
   border-radius: 14px;
-  border: 1px solid #3f4a63;
-  background: linear-gradient(180deg, #242d3d, #1a2230);
+  border: 1px solid #34384a;
+  background: linear-gradient(180deg, #1b1f2b, #131824);
   box-shadow: var(--shadow);
 }
 
@@ -445,7 +445,7 @@ table tr:nth-child(even) {
   justify-content: space-between;
   gap: 0.4rem;
   padding: 0.72rem 0.9rem;
-  border-bottom: 1px solid #3f4a63;
+  border-bottom: 1px solid #34384a;
 }
 
 .detail-modal-body {
@@ -460,8 +460,8 @@ table tr:nth-child(even) {
   bottom: 10px;
   z-index: 1800;
   border-radius: 12px;
-  border: 1px solid #8b3f5f;
-  background: linear-gradient(90deg, #451e34 0%, #5e2b45 50%, #3f1d31 100%);
+  border: 1px solid #70293f;
+  background: linear-gradient(90deg, #2f141f 0%, #47202e 50%, #2a111c 100%);
   color: #fff2f8;
   box-shadow: var(--shadow);
   padding: 0.5rem 0.76rem;
