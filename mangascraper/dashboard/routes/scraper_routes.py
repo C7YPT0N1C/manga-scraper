@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/scraper_routes.py
 
-import os, time, sys, threading, subprocess, socket, secrets, shlex
+import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile
 from flask import Blueprint, jsonify, request
 
 from mangascraper.core.api import api as scraperapi
@@ -615,7 +615,15 @@ def queue_start():
     if not ids:
         return jsonify({"message": "Queue is empty."}), 400
 
-    cli_args = ["--ids", ",".join(str(i) for i in ids)]
+    # The CLI caps --ids at 25 entries. Use a temporary file so large queue
+    # runs (e.g. cache-key batches) start reliably.
+    temp_root = getattr(orchestrator, "TEMP_DIR", None) or tempfile.gettempdir()
+    os.makedirs(temp_root, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="ms_queue_ids_", dir=temp_root, delete=False) as handle:
+        handle.write("\n".join(str(i) for i in ids))
+        queue_file = handle.name
+
+    cli_args = ["--file", queue_file]
     ok, err = _start_process(cli_args)
     if err:
         return jsonify(err[0]), err[1]
