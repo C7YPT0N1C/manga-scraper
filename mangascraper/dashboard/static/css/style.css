@@ -27,10 +27,7 @@ body {
 body {
   font-family: "Barlow", "Segoe UI", "Trebuchet MS", sans-serif;
   color: var(--ink-1);
-  background:
-    radial-gradient(1200px 420px at 78% -10%, rgba(199, 47, 86, 0.22), transparent 60%),
-    radial-gradient(900px 500px at -10% 0%, rgba(120, 30, 56, 0.12), transparent 60%),
-    linear-gradient(180deg, var(--bg-0) 0%, #06070b 50%, #050508 100%);
+  background: #000;
   min-height: 100vh;
 }
 
@@ -342,6 +339,53 @@ table tr:nth-child(even) {
 .listItem:hover {
   transform: translateX(2px);
   border-color: #cb4a66;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.gallery-square {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: transform 0.16s ease;
+}
+
+.gallery-square:hover {
+  transform: scale(1.05);
+}
+
+.gallery-square-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #2a2f3c, #1a1f2e);
+  background-size: cover;
+  background-position: center;
+  border-radius: 10px;
+  border: 1px solid #3a3e4d;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.gallery-square:hover .gallery-square-image {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(199, 47, 86, 0.3);
+}
+
+.gallery-square-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.4rem;
 }
 
 #streamControls {

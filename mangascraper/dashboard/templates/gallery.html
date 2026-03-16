@@ -13,7 +13,7 @@
 	<div id="localNav">
 		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
 	</div>
-	<div id="localList"></div>
+	<div id="localList" class="gallery-grid"></div>
 </div>
 
 <!-- ===== STREAM MODE ===== -->
@@ -52,6 +52,7 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let _activeStreamId = null;
 let _readerFromStream = false;
+let _currentCreator = null;
 
 const reader = {
 	pages: [],    // array of URL strings
@@ -78,17 +79,45 @@ document.querySelectorAll('.modeTab').forEach(btn => {
 	});
 });
 
-// ── Local gallery browser ──────────────────────────────────────────────────
-function setLocalList(items, onClick, emptyMsg) {
+// ── Gallery grid builder ───────────────────────────────────────────────────
+function createGalleryGrid(items, itemType, onClick) {
 	const el = document.getElementById('localList');
 	el.innerHTML = '';
-	if (!items.length) { el.textContent = emptyMsg || 'Nothing here.'; return; }
+	el.className = 'gallery-grid';
+	
+	if (!items.length) { 
+		el.textContent = 'Nothing here.';
+		el.className = '';
+		return; 
+	}
+	
 	items.forEach(item => {
-		const div = document.createElement('div');
-		div.className = 'listItem';
-		div.textContent = typeof item === 'string' ? item : (item.label || item.root_path || item.name || 'Unknown');
-		div.addEventListener('click', () => onClick(item));
-		el.appendChild(div);
+		const square = document.createElement('div');
+		square.className = 'gallery-square';
+		
+		const imageDiv = document.createElement('div');
+		imageDiv.className = 'gallery-square-image';
+		
+		const label = typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
+		
+		if (itemType === 'creator') {
+			const coverUrl = `/api/gallery/cover/${encodeURIComponent(label)}`;
+			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
+		} else if (itemType === 'gallery') {
+			const creator = _currentCreator || '';
+			const coverUrl = `/api/gallery/cover/${encodeURIComponent(creator)}/${encodeURIComponent(label)}`;
+			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
+		}
+		
+		const titleDiv = document.createElement('div');
+		titleDiv.className = 'gallery-square-title';
+		titleDiv.textContent = label;
+		
+		square.appendChild(imageDiv);
+		square.appendChild(titleDiv);
+		
+		square.addEventListener('click', () => onClick(item));
+		el.appendChild(square);
 	});
 }
 
@@ -106,32 +135,33 @@ function setBreadcrumb(parts) {
 	});
 }
 
-function buildLocalUrl(path) {
-	return path;
-}
-
+// ── Local gallery browser ──────────────────────────────────────────────────
 async function loadCreators() {
 	setBreadcrumb([{ label: 'Creators' }]);
-	setLocalList([], () => {}, 'Loading...');
+	_currentCreator = null;
+	createGalleryGrid([], 'creator', () => {}, 'Loading...');
 	try {
 		const data = await apiFetch('/api/gallery/list_creators');
-		setLocalList(data.creators || [], loadGalleries, 'No local creators found.');
+		createGalleryGrid(data.creators || [], 'creator', loadGalleries, 'No local creators found.');
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
+		document.getElementById('localList').className = '';
 	}
 }
 
 async function loadGalleries(creator) {
+	_currentCreator = creator;
 	setBreadcrumb([
 		{ label: 'Creators', onClick: loadCreators },
 		{ label: creator }
 	]);
-	setLocalList([], () => {}, 'Loading...');
+	createGalleryGrid([], 'gallery', () => {}, 'Loading...');
 	try {
-		const data = await apiFetch(buildLocalUrl(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`));
-		setLocalList(data.galleries || [], gallery => loadPages(creator, gallery), 'No galleries found.');
+		const data = await apiFetch(`/api/gallery/list_galleries/${encodeURIComponent(creator)}`);
+		createGalleryGrid(data.galleries || [], 'gallery', gallery => loadPages(creator, gallery), 'No galleries found.');
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
+		document.getElementById('localList').className = '';
 	}
 }
 
@@ -141,14 +171,17 @@ async function loadPages(creator, gallery) {
 		{ label: creator, onClick: () => loadGalleries(creator) },
 		{ label: gallery }
 	]);
-	setLocalList([], () => {}, 'Loading...');
 	try {
-		const data = await apiFetch(buildLocalUrl(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`));
+		const data = await apiFetch(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}`);
 		const mode = data.mode || 'directory';
 		const pages = (data.pages || []).map(
-			f => buildLocalUrl(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`)
+			f => `/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(gallery)}/${encodeURIComponent(f)}`
 		);
-		if (!pages.length) { document.getElementById('localList').textContent = 'Gallery is empty.'; return; }
+		if (!pages.length) { 
+			document.getElementById('localList').textContent = 'Gallery is empty.';
+			document.getElementById('localList').className = '';
+			return; 
+		}
 		const title = mode === 'archive' ? `${gallery} (archive)` : gallery;
 		_readerFromStream = false;
 		openReader(pages, title, () => {
@@ -157,6 +190,7 @@ async function loadPages(creator, gallery) {
 		});
 	} catch (err) {
 		document.getElementById('localList').textContent = 'Error: ' + err.message;
+		document.getElementById('localList').className = '';
 	}
 }
 

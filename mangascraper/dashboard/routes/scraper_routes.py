@@ -673,3 +673,26 @@ def stop_scraper():
         _progress_token = None
 
     return jsonify({"message": "Scraper stopped."})
+
+@scraper_bp.route("/database/cleanup", methods=["POST"])
+def database_cleanup():
+    """Trigger comprehensive database cleanup and maintenance."""
+    try:
+        stats = scraperapi.DB.database_cleanup()
+        message = (
+            f"Database cleanup complete: "
+            f"{stats['removed_galleries']} orphaned galleries removed, "
+            f"{stats['pruned_roots']} unmanaged locations pruned, "
+            f"{stats['covers_repaired']} covers repaired."
+        )
+        return jsonify({
+            "message": message,
+            "success": True,
+            "stats": stats,
+        })
+    except Exception as e:
+        return jsonify({
+            "message": f"Database cleanup failed: {e}",
+            "success": False,
+            "error": str(e),
+        }), 500

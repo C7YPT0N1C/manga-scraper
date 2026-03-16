@@ -476,7 +476,126 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
 
 # Hook for cleaning after downloads
+def maintain_gallery_covers():
+    """
+    Maintain cover images for galleries.
+    
+    Structure:
+    - CreatorFolder/cover.ext → symlink to latest gallery cover
+    - CreatorFolder/.covers/(GalleryID) GalleryTitle.ext → cover images
+    """
+    if not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        return
+    
+    try:
+        for creator_name in os.listdir(DEDICATED_DOWNLOAD_PATH):
+            if creator_name.startswith("."):
+                continue
+            
+            creator_path = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            if not os.path.isdir(creator_path):
+                continue
+            
+            # Create .covers subfolder
+            covers_folder = os.path.join(creator_path, ".covers")
+            os.makedirs(covers_folder, exist_ok=True)
+            
+            latest_gallery_id = None
+            latest_gallery_name = None
+            
+            # Process all galleries in the creator folder
+            for entry_name in os.listdir(creator_path):
+                if entry_name.startswith("."):
+                    continue
+                
+                entry_path = os.path.join(creator_path, entry_name)
+                
+                # Extract gallery ID and title
+                match = re.search(r"\((\d+)\)", entry_name)
+                if not match:
+                    continue
+                
+                try:
+                    gallery_id = int(match.group(1))
+                except ValueError:
+                    continue
+                
+                # Track the latest gallery
+                if latest_gallery_id is None or gallery_id > latest_gallery_id:
+                    latest_gallery_id = gallery_id
+                    latest_gallery_name = entry_name
+                
+                # Get the base name without extension for directories
+                if os.path.isdir(entry_path):
+                    gallery_base = entry_name
+                    # Look for first image page
+                    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+                    pages = sorted(f for f in os.listdir(entry_path) 
+                                 if os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+                    if pages:
+                        first_page = os.path.join(entry_path, pages[0])
+                        _, ext = os.path.splitext(first_page)
+                        cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
+                        # Copy first page as cover if it doesn't exist
+                        if not os.path.exists(cover_dest):
+                            try:
+                                shutil.copy2(first_page, cover_dest)
+                                logger.debug(f"[COVERS] Created cover for {creator_name}/{gallery_base}")
+                            except Exception as e:
+                                logger.debug(f"[COVERS] Failed to copy cover for {gallery_base}: {e}")
+                
+                # Handle archive files (.cbz, .zip)
+                elif entry_path.endswith((".cbz", ".zip")) and os.path.isfile(entry_path):
+                    gallery_base = os.path.splitext(entry_name)[0]
+                    # Try to extract first image from archive
+                    try:
+                        with zipfile.ZipFile(entry_path, "r") as zf:
+                            IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+                            pages = sorted(f for f in zf.namelist()
+                                         if not f.endswith("/") and 
+                                         os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+                            if pages:
+                                first_page_data = zf.read(pages[0])
+                                _, ext = os.path.splitext(pages[0])
+                                cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
+                                if not os.path.exists(cover_dest):
+                                    with open(cover_dest, "wb") as f:
+                                        f.write(first_page_data)
+                                    logger.debug(f"[COVERS] Created cover from archive {creator_name}/{gallery_base}")
+                    except Exception as e:
+                        logger.debug(f"[COVERS] Failed to extract cover from {entry_name}: {e}")
+            
+            # Create/update creator cover (symlink to latest gallery cover)
+            if latest_gallery_name:
+                gallery_base = os.path.splitext(latest_gallery_name)[0] if latest_gallery_name.endswith((".cbz", ".zip")) else latest_gallery_name
+                
+                # Find the cover file for the latest gallery
+                for ext in ("jpg", "jpeg", "png", "gif", "webp"):
+                    cover_source = os.path.join(covers_folder, f"{gallery_base}.{ext}")
+                    if os.path.exists(cover_source):
+                        # Remove old cover links
+                        for old_ext in ("jpg", "jpeg", "png", "gif", "webp"):
+                            old_cover = os.path.join(creator_path, f"cover.{old_ext}")
+                            if os.path.islink(old_cover) or os.path.isfile(old_cover):
+                                try:
+                                    os.unlink(old_cover)
+                                except Exception:
+                                    pass
+                        
+                        # Create new symlink
+                        cover_link = os.path.join(creator_path, f"cover.{ext}")
+                        try:
+                            os.symlink(cover_source, cover_link)
+                            logger.debug(f"[COVERS] Updated cover link for {creator_name}")
+                        except Exception as e:
+                            logger.debug(f"[COVERS] Failed to create cover link for {creator_name}: {e}")
+                        break
+    
+    except Exception as e:
+        logger.debug(f"[COVERS] Error in maintain_gallery_covers: {e}")
+
 def cleanup_hook():
+    maintain_gallery_covers()
     repair_covers_hook(DEDICATED_DOWNLOAD_PATH, referrer=EXTENSION_REFERRER)
     cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
 

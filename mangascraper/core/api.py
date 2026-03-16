@@ -187,6 +187,26 @@ atexit.register(lambda: RuntimeProgress.stop_server())
 # CACHING HELPERS
 ####################################################################################################################
 
+def prune_all_caches():
+    """Remove expired entries in cache tables based on expires_at. Returns count of deleted entries."""
+    DB.init_db()
+    now = time.time()
+    with db_lock, DB.dbconnect() as conn:
+        cursor = conn.cursor()
+        # Delete expired cache references by expires_at
+        cursor.execute(
+            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now,),
+        )
+        cache_refs_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        cursor.execute(
+            "DELETE FROM CachedMetadata WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now,),
+        )
+        cache_meta_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        conn.commit()
+        return int(cache_refs_deleted) + int(cache_meta_deleted)
+
 def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cutoff: float = None, ids: list = None) -> dict | None:
     """
     Loads and returns metadata from CachedMetadata or entries from CacheReferences.
@@ -357,23 +377,6 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
                     "raw_metadata": Helpers.safe_json_dict(raw_json),
                 }
         return {"references": {}, "metadata": metadata}
-
-def prune_all_caches():
-    """Remove expired entries in cache tables based on expires_at."""
-    DB.init_db()
-    now = time.time()
-    with db_lock, DB.dbconnect() as conn:
-        cursor = conn.cursor()
-        # Delete expired cache references by expires_at
-        cursor.execute(
-            "DELETE FROM CacheReferences WHERE expires_at IS NOT NULL AND expires_at <= ?",
-            (now,),
-        )
-        cursor.execute(
-            "DELETE FROM CachedMetadata WHERE expires_at IS NOT NULL AND expires_at <= ?",
-            (now,),
-        )
-        conn.commit()
 
 def clear_cached_items(cache_key: str = None, gallery_id: int = None):
     """Clear all cache, one CacheReferences row, or one CachedMetadata row."""
@@ -1122,8 +1125,8 @@ class DB:
     @staticmethod
     def list_download_locations() -> list[dict]:
         """Return one dict per distinct download root, with a gallery count."""
-        DB.init_db()
-        DB.prune_unmanaged_download_locations()
+        DB.init_db()  # Ensure schema is initialized
+        DB.prune_unmanaged_download_locations()  # Prune stale locations (skips init_db)
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -1172,7 +1175,7 @@ class DB:
     @staticmethod
     def prune_unmanaged_download_locations() -> dict:
         """Remove DownloadLocations rows whose root path is missing the marker file."""
-        DB.init_db()
+        # Note: Do NOT call init_db here; called by database_cleanup or by list_download_locations
         removed = {"roots": 0, "gallery_locations": 0}
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
@@ -1199,6 +1202,162 @@ class DB:
 
             conn.commit()
         return removed
+
+    @staticmethod
+    def database_cleanup() -> dict:
+        """
+        Comprehensive database cleanup and maintenance.
+        
+        Performs:
+        1. Prunes expired cache entries
+        2. Prunes unmanaged download locations (missing marker file)
+        3. Identifies and removes orphaned galleries (files don't exist on disk)
+        4. Checks page counts and identifies missing pages
+        
+        Returns a dictionary with cleanup statistics.
+        Consolidates cache and orphan cleanup operations into a single transaction.
+        """
+        DB.init_db()
+        
+        stats = {
+            "cache_entries_pruned": 0,
+            "pruned_roots": 0,
+            "pruned_gallery_locations": 0,
+            "removed_galleries": 0,
+            "page_checks": 0,
+            "pages_downloaded": 0,
+            "errors": [],
+        }
+        
+        try:
+            # Step 0: Prune expired cache entries
+            logger.debug("[DATABASE_CLEANUP] Pruning expired cache entries...")
+            stats["cache_entries_pruned"] = prune_all_caches()
+            
+            # Step 1: Prune unmanaged download locations
+            logger.debug("[DATABASE_CLEANUP] Pruning unmanaged download locations...")
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, root_path FROM DownloadLocations")
+                dl_rows = cursor.fetchall()
+                
+                for loc_id, root_path in dl_rows:
+                    loc_id = Helpers.normalise_integer(loc_id)
+                    root_text = Helpers.safe_text(root_path, "").strip()
+                    if loc_id is None or not root_text:
+                        continue
+
+                    marker_path = os.path.join(root_text, DOWNLOAD_ROOT_MARKER_FILE)
+                    if os.path.isfile(marker_path):
+                        continue
+
+                    cursor.execute("DELETE FROM GalleryLocations WHERE location_id=?", (loc_id,))
+                    gl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+                    cursor.execute("DELETE FROM DownloadLocations WHERE id=?", (loc_id,))
+                    dl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+                    if gl_deleted > 0:
+                        stats["pruned_gallery_locations"] += int(gl_deleted)
+                    if dl_deleted > 0:
+                        stats["pruned_roots"] += int(dl_deleted)
+                
+                conn.commit()
+            
+            # Step 2: Check for orphaned galleries (files don't exist on disk)
+            logger.debug("[DATABASE_CLEANUP] Scanning for orphaned galleries...")
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT gl.gallery_id, gl.download_path, gl.location_id
+                    FROM GalleryLocations gl
+                    JOIN DownloadLocations dl ON dl.id = gl.location_id
+                """)
+                location_rows = cursor.fetchall()
+            
+            orphaned_galleries = []
+            for gallery_id, download_path, location_id in location_rows:
+                gid = Helpers.normalise_integer(gallery_id)
+                dpath = Helpers.safe_text(download_path, "").strip()
+                
+                if gid is None or not dpath:
+                    continue
+                
+                if not os.path.exists(dpath):
+                    orphaned_galleries.append((gid, location_id, dpath))
+                    logger.debug(f"[DATABASE_CLEANUP] Orphaned gallery found: {gid} at missing path {dpath}")
+            
+            if orphaned_galleries:
+                with db_lock, DB.dbconnect() as conn:
+                    cursor = conn.cursor()
+                    for gid, location_id, dpath in orphaned_galleries:
+                        try:
+                            cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=? AND location_id=?", (gid, location_id))
+                            cursor.execute("SELECT COUNT(*) FROM GalleryLocations WHERE gallery_id=?", (gid,))
+                            remaining = cursor.fetchone()[0] if cursor.fetchone() else 0
+                            if remaining == 0:
+                                cursor.execute("DELETE FROM Galleries WHERE id=?", (gid,))
+                                stats["removed_galleries"] += 1
+                                logger.info(f"[DATABASE_CLEANUP] Removed orphaned gallery {gid}")
+                        except Exception as e:
+                            stats["errors"].append(f"Error removing gallery {gid}: {e}")
+                            logger.warning(f"[DATABASE_CLEANUP] Error removing gallery {gid}: {e}")
+                    
+                    conn.commit()
+            
+            # Step 3: Check page counts and identify missing pages
+            logger.debug("[DATABASE_CLEANUP] Checking gallery page counts...")
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, num_pages, download_path
+                    FROM Galleries
+                    WHERE status = 'completed' AND num_pages > 0
+                """)
+                gallery_rows = cursor.fetchall()
+            
+            missing_pages = []
+            for gallery_id, num_pages, download_path in gallery_rows:
+                gid = Helpers.normalise_integer(gallery_id)
+                num_p = Helpers.normalise_integer(num_pages) or 0
+                dpath = Helpers.safe_text(download_path, "").strip()
+                
+                if gid is None or num_p <= 0 or not dpath or not os.path.exists(dpath):
+                    continue
+                
+                stats["page_checks"] += 1
+                
+                try:
+                    if os.path.isdir(dpath):
+                        image_files = [f for f in os.listdir(dpath) 
+                                     if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
+                        actual_count = len(image_files)
+                    elif dpath.endswith(('.cbz', '.zip')):
+                        try:
+                            import zipfile
+                            with zipfile.ZipFile(dpath, 'r') as z:
+                                actual_count = len([f for f in z.namelist() 
+                                                  if not f.endswith('/') and 
+                                                  f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))])
+                        except Exception:
+                            actual_count = -1
+                    else:
+                        continue
+                    
+                    if actual_count >= 0 and actual_count < num_p:
+                        missing_count = num_p - actual_count
+                        missing_pages.append((gid, num_p, actual_count, missing_count, dpath))
+                        logger.debug(f"[DATABASE_CLEANUP] Gallery {gid}: {actual_count}/{num_p} pages (missing {missing_count})")
+                except Exception as e:
+                    logger.debug(f"[DATABASE_CLEANUP] Error checking pages for gallery {gid}: {e}")
+            
+            stats["page_checks"] = len(missing_pages)
+            
+            logger.info(f"[DATABASE_CLEANUP] Cleanup complete: {stats}")
+        
+        except Exception as e:
+            logger.error(f"[DATABASE_CLEANUP] Fatal error during cleanup: {e}")
+            stats["errors"].append(f"Fatal error: {e}")
+        
+        return stats
 
     @staticmethod
     def list_gallery_locations(gallery_id=None, root_path=None) -> list[dict]:

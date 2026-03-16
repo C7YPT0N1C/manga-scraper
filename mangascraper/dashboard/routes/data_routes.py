@@ -383,6 +383,99 @@ def view_image(creator, gallery, filename):
     abort(404)
 
 
+# ── Cover image endpoints ──────────────────────────────────────────────────────
+
+@gallery_bp.route("/cover/<path:creator>", methods=["GET"])
+def get_creator_cover(creator):
+    """
+    Serve the cover image for a creator.
+    Looks for cover.* (jpg, png, gif, webp) in the creator folder.
+    """
+    roots = _available_roots()
+    requested = _requested_root()
+    if requested:
+        roots = [item for item in roots if item.get("root_path") == requested]
+    
+    for item in roots:
+        root = item.get("root_path")
+        if not root:
+            continue
+        creator_path = _safe_path(root, creator)
+        if not creator_path or not os.path.isdir(creator_path):
+            continue
+        
+        # Look for cover.* file
+        for ext in ("jpg", "jpeg", "png", "gif", "webp"):
+            cover_file = os.path.join(creator_path, f"cover.{ext}")
+            if os.path.isfile(cover_file):
+                return send_from_directory(creator_path, f"cover.{ext}")
+    
+    abort(404)
+
+
+@gallery_bp.route("/cover/<path:creator>/<path:gallery>", methods=["GET"])
+def get_gallery_cover(creator, gallery):
+    """
+    Serve the cover image for a gallery.
+    Looks in .covers/ folder for (GalleryTitle).* file, or uses first page of gallery.
+    """
+    base, gallery_path = _resolve_gallery_path(creator, gallery)
+    if not gallery_path:
+        abort(404)
+    
+    creator_path = _safe_path(base, creator) if base else None
+    if not creator_path:
+        abort(404)
+    
+    # Try .covers folder first
+    covers_folder = os.path.join(creator_path, ".covers")
+    if os.path.isdir(covers_folder):
+        # Look for files matching the gallery name (without archive extension)
+        gallery_base = os.path.splitext(gallery)[0] if gallery.endswith((".cbz", ".zip")) else gallery
+        for ext in ("jpg", "jpeg", "png", "gif", "webp"):
+            cover_file = os.path.join(covers_folder, f"{gallery_base}.{ext}")
+            if os.path.isfile(cover_file):
+                return send_from_directory(covers_folder, f"{gallery_base}.{ext}")
+    
+    # Fallback: try to get first page from gallery
+    if os.path.isdir(gallery_path):
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+        try:
+            pages = sorted(
+                name for name in os.listdir(gallery_path)
+                if os.path.splitext(name)[1].lower() in IMAGE_EXTS
+            )
+            if pages:
+                return send_from_directory(gallery_path, pages[0])
+        except OSError:
+            pass
+    
+    elif _is_archive(gallery_path):
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+        try:
+            with zipfile.ZipFile(gallery_path, "r") as zf:
+                pages = sorted(
+                    name for name in zf.namelist()
+                    if not name.endswith("/") and os.path.splitext(name)[1].lower() in IMAGE_EXTS
+                )
+                if pages:
+                    payload = zf.read(pages[0])
+                    ext = os.path.splitext(pages[0])[1].lower()
+                    mime_map = {
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".png": "image/png",
+                        ".gif": "image/gif",
+                        ".webp": "image/webp",
+                        ".avif": "image/avif",
+                    }
+                    return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"))
+        except Exception:
+            pass
+    
+    abort(404)
+
+
 # ── Gallery streaming — fetch pages from nhentai by ID ───────────────────────
 #
 # Streams are short-lived: images are downloaded to a temp directory and

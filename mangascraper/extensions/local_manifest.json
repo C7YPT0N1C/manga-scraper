@@ -2,7 +2,7 @@
   "extensions": [
     {
       "name": "skeleton",
-      "version": "7.2.1",
+      "version": "7.3.0",
       "description": "Skeleton extension with dummy hooks",
       "repo_url": "https://github.com/C7YPT0N1C/manga-scraper-extensions.git",
       "installed": true,
@@ -11,7 +11,7 @@
     },
     {
       "name": "suwayomi",
-      "version": "7.2.1",
+      "version": "7.3.0",
       "description": "Suwayomi extension",
       "repo_url": "https://github.com/C7YPT0N1C/manga-scraper-extensions.git",
       "installed": true,
