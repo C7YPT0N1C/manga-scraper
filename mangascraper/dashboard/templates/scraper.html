@@ -15,13 +15,6 @@
   <h3>Configuration</h3>
   <div id="configGrid">
 
-    <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
-      Extension
-      <select id="cfg_extension">
-        <option value="">— none (built-in) —</option>
-      </select>
-    </label>
-
     <label title="Comma-separated list of image mirror URLs to try when downloading images. The first reachable mirror is used.">
       Mirrors
       <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net">
@@ -108,6 +101,28 @@
   <button id="loadConfigBtn">Load Config</button>
   <button id="saveConfigBtn">Save Config</button>
   <p id="configMsg"></p>
+</section>
+
+<!-- ===== EXTENSIONS ===== -->
+<section>
+  <h3>Extensions</h3>
+  <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
+    Active Extension
+    <select id="cfg_extension">
+      <option value="">— none (built-in) —</option>
+    </select>
+  </label>
+  <div style="margin-top:8px;display:grid;gap:6px;max-width:460px">
+    <select id="extManageSelect" title="Manage extension installation and updates.">
+      <option value="">— extension management —</option>
+    </select>
+    <div>
+      <button id="extInstallBtn" type="button">Install</button>
+      <button id="extUninstallBtn" type="button">Uninstall</button>
+      <button id="extUpdateBtn" type="button">Update</button>
+    </div>
+    <small id="extManageMsg"></small>
+  </div>
 </section>
 
 <!-- ===== SEARCH HISTORY ===== -->
@@ -320,6 +335,7 @@ let currentResults = [];
 let previousResults = [];
 let queueIds = new Set();
 let extensionOutputFolders = {};
+let extensionRecordsByName = {};
 let _resultsById = {};
 let filteredResultsRows = null;
 let activeResultsPage = 1;
@@ -610,17 +626,34 @@ async function loadExtensions() {
     const res = await fetch('/api/scraper/extensions');
     const data = await res.json();
     const sel = document.getElementById('cfg_extension');
+    const manageSel = document.getElementById('extManageSelect');
     extensionOutputFolders = {};
+    extensionRecordsByName = {};
     // Clear all except the first "none" option
     while (sel.options.length > 1) sel.remove(1);
+    manageSel.innerHTML = '<option value="">— extension management —</option>';
     (data.extensions || []).forEach(ext => {
+      extensionRecordsByName[ext.name] = ext;
       const opt = document.createElement('option');
       opt.value = ext.name;
       const vStr = ext.version ? ` v${ext.version}` : '';
-      const upStr = ext.update_available ? ` ⬆ (${ext.remote_version} available)` : '';
-      opt.textContent = (ext.label || ext.name) + vStr + upStr;
+      const installStr = ext.installed ? ' (local - installed)' : ' (local - not installed)';
+      opt.textContent = (ext.label || ext.name) + vStr + installStr;
       if (ext.update_available) opt.title = `Update available: v${ext.remote_version}`;
       sel.appendChild(opt);
+
+      const localManageOpt = document.createElement('option');
+      localManageOpt.value = ext.name;
+      localManageOpt.textContent = `${ext.name} v${ext.version || '0'} (local - ${ext.installed ? 'installed' : 'not installed'})`;
+      manageSel.appendChild(localManageOpt);
+
+      if (ext.update_available) {
+        const remoteManageOpt = document.createElement('option');
+        remoteManageOpt.value = ext.name;
+        remoteManageOpt.textContent = `${ext.name} v${ext.remote_version || ext.version || '0'} (remote - update available)`;
+        manageSel.appendChild(remoteManageOpt);
+      }
+
       if (ext.name && ext.default_output_folder) {
         extensionOutputFolders[ext.name] = ext.default_output_folder;
       }
@@ -707,6 +740,42 @@ document.getElementById('cfg_extension').addEventListener('change', function () 
   const extDefaultFolder = extensionOutputFolders[ext] || '';
   setupOutputFolderDropdown(extDefaultFolder);
 });
+
+function selectedManagedExtensionName() {
+  const fromManage = (document.getElementById('extManageSelect').value || '').trim();
+  if (fromManage) return fromManage;
+  return (document.getElementById('cfg_extension').value || '').trim();
+}
+
+async function manageExtension(action) {
+  const msg = document.getElementById('extManageMsg');
+  const name = selectedManagedExtensionName();
+  if (!name) {
+    msg.textContent = 'Select an extension first.';
+    return;
+  }
+
+  const record = extensionRecordsByName[name] || {};
+  if (action === 'update' && !record.update_available) {
+    msg.textContent = `No update available for '${name}'.`;
+    return;
+  }
+
+  msg.textContent = `${action[0].toUpperCase() + action.slice(1)} '${name}'...`;
+  try {
+    const res = await fetch(`/api/scraper/extensions/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    msg.textContent = data.message || `${action} completed.`;
+    await loadExtensions();
+    await loadConfig();
+  } catch (err) {
+    msg.textContent = `${action} failed: ${err.message}`;
+  }
+}
 
 // ── Runtime status ────────────────────────────────────────────────────────────
 
@@ -1059,6 +1128,9 @@ document.getElementById('stopBtn').onclick = async () => {
 
 document.getElementById('loadConfigBtn').onclick = loadConfig;
 document.getElementById('saveConfigBtn').onclick = saveConfig;
+document.getElementById('extInstallBtn').onclick = async () => manageExtension('install');
+document.getElementById('extUninstallBtn').onclick = async () => manageExtension('uninstall');
+document.getElementById('extUpdateBtn').onclick = async () => manageExtension('update');
 document.getElementById('searchBtn').onclick = runSearch;
 document.getElementById('refreshHistoryBtn').onclick = refreshSearchHistory;
 document.getElementById('clearCacheBtn').onclick = clearEntireCache;

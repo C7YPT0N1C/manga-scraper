@@ -212,7 +212,16 @@ def _start_process(cli_args: list[str]):
         if _is_running():
             return None, ({"message": "Scraper is already running.", "pid": _scraper_process.pid}, 409)
 
-        cmd = [sys.executable, "-m", "mangascraper.cli", *cli_args]
+        # Dashboard launches should always be non-interactive and verbose for diagnostics.
+        normalised_args = [str(arg) for arg in (cli_args or [])]
+        if "--unattended" not in normalised_args:
+            normalised_args.append("--unattended")
+        if "--debug" not in normalised_args:
+            normalised_args.append("--debug")
+        # Avoid conflicting logging mode when debug is enforced.
+        normalised_args = [arg for arg in normalised_args if arg != "--calm"]
+
+        cmd = [sys.executable, "-m", "mangascraper.cli", *normalised_args]
         _clear_runtime_progress()
         _scraper_process = subprocess.Popen(
             cmd,
@@ -220,7 +229,7 @@ def _start_process(cli_args: list[str]):
             stderr=subprocess.DEVNULL,
         )
         _started_at = time.time()
-        _last_args = cli_args
+        _last_args = normalised_args
 
     return {"message": "Scraper started.", "args": cli_args}, None
 
@@ -274,6 +283,73 @@ def list_extensions():
     except Exception:
         extensions = []
     return jsonify({"extensions": extensions})
+
+
+@scraper_bp.route("/extensions/install", methods=["POST"])
+def extension_install():
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get("name") or "").strip().lower()
+    if not name:
+        return jsonify({"message": "Extension name is required."}), 400
+
+    try:
+        from mangascraper.extensions.extension_manager import install_selected_extension
+        install_selected_extension(name, reinstall=False, prompt_for_update=False)
+        return jsonify({"message": f"Install requested for extension '{name}'."})
+    except Exception as e:
+        return jsonify({"message": f"Failed to install extension '{name}': {e}"}), 500
+
+
+@scraper_bp.route("/extensions/uninstall", methods=["POST"])
+def extension_uninstall():
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get("name") or "").strip().lower()
+    if not name:
+        return jsonify({"message": "Extension name is required."}), 400
+
+    try:
+        from mangascraper.extensions.extension_manager import uninstall_selected_extension
+        uninstall_selected_extension(name)
+        return jsonify({"message": f"Uninstall requested for extension '{name}'."})
+    except Exception as e:
+        return jsonify({"message": f"Failed to uninstall extension '{name}': {e}"}), 500
+
+
+@scraper_bp.route("/extensions/update", methods=["POST"])
+def extension_update():
+    payload = request.get_json(silent=True) or {}
+    name = str(payload.get("name") or "").strip().lower()
+    if not name:
+        return jsonify({"message": "Extension name is required."}), 400
+
+    try:
+        from mangascraper.extensions.extension_manager import install_selected_extension
+        install_selected_extension(name, reinstall=True, prompt_for_update=False)
+        return jsonify({"message": f"Update requested for extension '{name}'."})
+    except Exception as e:
+        return jsonify({"message": f"Failed to update extension '{name}': {e}"}), 500
+
+
+@scraper_bp.route("/self-test", methods=["POST"])
+def run_self_test():
+    """Run core self-tests in a separate process and return a concise result."""
+    try:
+        cmd = [sys.executable, "-m", "mangascraper.cli", "--self-test", "--unattended", "--debug"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        output = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
+        lines = [line for line in output.splitlines() if line.strip()]
+        tail = "\n".join(lines[-30:]) if lines else "(no output)"
+        status = "passed" if result.returncode == 0 else "failed"
+        return jsonify({
+            "message": f"Self-test {status} (exit code {result.returncode}).",
+            "status": status,
+            "exit_code": result.returncode,
+            "output_tail": tail,
+        }), (200 if result.returncode == 0 else 500)
+    except subprocess.TimeoutExpired:
+        return jsonify({"message": "Self-test timed out."}), 504
+    except Exception as e:
+        return jsonify({"message": f"Self-test failed to start: {e}"}), 500
 
 
 @scraper_bp.route("/config", methods=["GET"])

@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Logs</h2>
+<h2>Diagnostics</h2>
+
+<section>
+  <h3>Self-Test</h3>
+  <button id="runSelfTestBtn">Run Self-Test</button>
+  <p id="selfTestMsg">Run the automated self-test suite from the dashboard.</p>
+  <pre id="selfTestOutput" style="white-space:pre-wrap;max-height:35vh;overflow:auto;background:#121212;border:1px solid #333;padding:10px;border-radius:8px"></pre>
+</section>
 
 <section>
   <h3>Log Browser</h3>
@@ -21,6 +28,22 @@
 {% block scripts %}
 <script>
 let currentLogName = '';
+
+async function runSelfTest() {
+  const msg = document.getElementById('selfTestMsg');
+  const output = document.getElementById('selfTestOutput');
+  msg.textContent = 'Running self-test... this may take a while.';
+  output.textContent = '';
+  try {
+    const res = await fetch('/api/scraper/self-test', { method: 'POST' });
+    const data = await res.json();
+    msg.textContent = data.message || `Self-test finished with HTTP ${res.status}.`;
+    output.textContent = data.output_tail || '(no output)';
+    await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
+  } catch (err) {
+    msg.textContent = `Self-test request failed: ${err.message}`;
+  }
+}
 
 async function fetchLogsList(options = {}) {
   const preserveSelection = options.preserveSelection !== false;
@@ -89,6 +112,7 @@ async function loadLogFile() {
 document.getElementById('refreshLogsBtn').addEventListener('click', async () => {
   await fetchLogsList({ preserveSelection: true, reloadCurrent: true });
 });
+document.getElementById('runSelfTestBtn').addEventListener('click', runSelfTest);
 document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
 document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
 

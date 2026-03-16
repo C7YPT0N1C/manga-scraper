@@ -294,7 +294,6 @@ class Helpers:
             return ""
         normalised = os.path.normpath(safe_path)
         try:
-            DB.init_db()
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT root_path FROM DownloadLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
@@ -309,7 +308,7 @@ class Helpers:
             if matches:
                 # Most specific root wins.
                 return max(matches, key=len)
-        except Exception:
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, Exception):
             # Best-effort inference only; continue to legacy fallback.
             pass
         parent = os.path.dirname(normalised)

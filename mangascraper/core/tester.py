@@ -43,6 +43,10 @@ TEST_CACHE_KEYS = {
     "test:clear_ck_test",
     "search:ass_big",
 }
+TEST_DOWNLOAD_ROOTS = {
+    f"{TEST_RUNTIME_ROOT}root-a",
+    f"{TEST_RUNTIME_ROOT}root-a/downloads",
+}
 
 
 @contextmanager
@@ -125,6 +129,14 @@ def main() -> bool:
                 cursor.execute(
                     f"DELETE FROM CacheReferences WHERE cache_key IN ({placeholders})",
                     cache_keys,
+                )
+
+            if TEST_DOWNLOAD_ROOTS:
+                dl_roots = sorted(TEST_DOWNLOAD_ROOTS)
+                placeholders = ",".join("?" for _ in dl_roots)
+                cursor.execute(
+                    f"DELETE FROM DownloadLocations WHERE root_path IN ({placeholders})",
+                    dl_roots,
                 )
 
             if gallery_ids:
@@ -957,6 +969,49 @@ def main() -> bool:
                 _report("_format_bytes(1 MiB) → '1.00 MB'", ok, f"result={repr(result)}")
             except Exception as e:
                 _report("_format_bytes(1 MiB) → '1.00 MB'", False, f"exception={e}")
+
+            # ======================================================================
+            # N) infer_location_root regression + root priority
+            # ======================================================================
+
+            # N.1) infer_location_root must not call DB.init_db (prevents recursion during init)
+            try:
+                original_init_db = scraperapi.DB.init_db
+
+                def _sentinel_init_db():
+                    raise RuntimeError("sentinel: DB.init_db should not be called by infer_location_root")
+
+                scraperapi.DB.init_db = _sentinel_init_db
+                root = scraperapi.Helpers.infer_location_root(f"{TEST_RUNTIME_ROOT}alpha/beta/gamma")
+                ok = isinstance(root, str) and root != ""
+                _report("infer_location_root avoids DB.init_db recursion path", ok, f"root={root}")
+            except Exception as e:
+                _report("infer_location_root avoids DB.init_db recursion path", False, f"exception={e}")
+            finally:
+                scraperapi.DB.init_db = original_init_db
+
+            # N.2) infer_location_root picks the most specific known root
+            try:
+                root_a = f"{TEST_RUNTIME_ROOT}root-a"
+                root_b = f"{TEST_RUNTIME_ROOT}root-a/downloads"
+                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
+                        (root_a, "other"),
+                    )
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
+                        (root_b, "skeleton"),
+                    )
+                    conn.commit()
+
+                probe = f"{root_b}/creator/gallery"
+                inferred = scraperapi.Helpers.infer_location_root(probe)
+                ok = inferred == root_b
+                _report("infer_location_root prefers most specific DownloadLocations root", ok, f"inferred={inferred}")
+            except Exception as e:
+                _report("infer_location_root prefers most specific DownloadLocations root", False, f"exception={e}")
 
         finally:
             try:
