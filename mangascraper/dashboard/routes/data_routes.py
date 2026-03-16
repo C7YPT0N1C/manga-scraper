@@ -11,6 +11,7 @@ import time
 import io
 import zipfile
 import posixpath
+import json
 
 import requests
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
@@ -203,6 +204,268 @@ def _archive_pages(archive_path: str) -> list[str]:
     return sorted(pages)
 
 
+def _parse_json_int_list(value) -> list[int]:
+    try:
+        data = json.loads(value) if value else []
+    except Exception:
+        data = []
+    if not isinstance(data, list):
+        return []
+
+    items = []
+    for item in data:
+        try:
+            items.append(int(item))
+        except Exception:
+            continue
+    return items
+
+
+def _count_pages_on_disk(path: str) -> int | None:
+    if not path:
+        return None
+    try:
+        if os.path.isdir(path):
+            image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+            return len(
+                [
+                    name for name in os.listdir(path)
+                    if os.path.splitext(name)[1].lower() in image_exts
+                ]
+            )
+        if _is_archive(path):
+            return len(_archive_pages(path))
+    except Exception:
+        return None
+    return None
+
+
+def _build_filter_options(items: list[dict], item_type: str) -> dict:
+    languages = set()
+    tags = set()
+    statuses = set()
+    page_values = []
+    tag_counts = []
+    gallery_counts = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for language in item.get("languages") or []:
+            if language:
+                languages.add(str(language))
+        for tag in item.get("tags") or []:
+            if tag:
+                tags.add(str(tag))
+
+        page_count = item.get("page_count")
+        if isinstance(page_count, (int, float)):
+            page_values.append(int(page_count))
+
+        tag_count = item.get("tag_count")
+        if isinstance(tag_count, (int, float)):
+            tag_counts.append(int(tag_count))
+
+        if item_type == "gallery":
+            status = str(item.get("status") or "").strip()
+            if status:
+                statuses.add(status)
+        else:
+            gallery_count = item.get("gallery_count")
+            if isinstance(gallery_count, (int, float)):
+                gallery_counts.append(int(gallery_count))
+
+    result = {
+        "languages": sorted(languages, key=str.lower),
+        "tags": sorted(tags, key=str.lower),
+        "page_count": {
+            "min": min(page_values) if page_values else 0,
+            "max": max(page_values) if page_values else 0,
+        },
+        "tag_count": {
+            "min": min(tag_counts) if tag_counts else 0,
+            "max": max(tag_counts) if tag_counts else 0,
+        },
+    }
+    if item_type == "gallery":
+        result["statuses"] = sorted(statuses, key=str.lower)
+    else:
+        result["gallery_count"] = {
+            "min": min(gallery_counts) if gallery_counts else 0,
+            "max": max(gallery_counts) if gallery_counts else 0,
+        }
+    return result
+
+
+def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+    creators: dict[str, dict] = {}
+    galleries_by_creator: dict[str, list[dict]] = {}
+
+    scraperapi.DB.init_db()
+    location_rows = scraperapi.DB.list_gallery_locations(root_path=root_path)
+    valid_rows = []
+    gallery_ids = set()
+
+    for row in location_rows:
+        download_path = row.get("download_path", "")
+        if not (os.path.isdir(download_path) or _is_archive(download_path)):
+            continue
+        creator_name, gallery_name = _creator_and_gallery_from_location(root_path, download_path)
+        if not creator_name or not gallery_name:
+            continue
+        row = dict(row)
+        row["creator_name"] = creator_name
+        row["gallery_name"] = gallery_name
+        valid_rows.append(row)
+        if row.get("gallery_id") is not None:
+            gallery_ids.add(int(row["gallery_id"]))
+
+    gallery_meta = {}
+    tag_name_map = {}
+    language_name_map = {}
+
+    with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
+
+        cursor.execute("SELECT id, name FROM Languages")
+        language_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
+
+        if gallery_ids:
+            placeholders = ",".join("?" for _ in gallery_ids)
+            cursor.execute(
+                f"""
+                SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+                FROM Galleries
+                WHERE id IN ({placeholders})
+                """,
+                tuple(sorted(gallery_ids)),
+            )
+            for row in cursor.fetchall():
+                gallery_id = int(row[0])
+                tag_ids = _parse_json_int_list(row[4])
+                language_ids = _parse_json_int_list(row[5])
+                gallery_meta[gallery_id] = {
+                    "clean_title": str(row[1] or ""),
+                    "raw_title": str(row[2] or ""),
+                    "num_pages": int(row[3]) if row[3] is not None else None,
+                    "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
+                    "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
+                    "status": str(row[6] or ""),
+                    "favourite": bool(row[7]),
+                    "rating": float(row[8]) if row[8] is not None else None,
+                }
+
+    for row in valid_rows:
+        creator_name = row["creator_name"]
+        gallery_name = row["gallery_name"]
+        gallery_id = row.get("gallery_id")
+        meta = gallery_meta.get(int(gallery_id)) if gallery_id is not None else {}
+        page_count = meta.get("num_pages") if meta else None
+        if page_count is None:
+            page_count = _count_pages_on_disk(row.get("download_path", ""))
+
+        gallery_item = {
+            "label": gallery_name,
+            "name": gallery_name,
+            "gallery_id": gallery_id,
+            "page_count": page_count,
+            "languages": list(meta.get("languages") or []),
+            "tags": list(meta.get("tags") or []),
+            "tag_count": len(meta.get("tags") or []),
+            "status": str(meta.get("status") or ""),
+            "favourite": bool(meta.get("favourite")),
+            "rating": meta.get("rating"),
+        }
+
+        galleries_by_creator.setdefault(creator_name, []).append(gallery_item)
+
+        creator_item = creators.setdefault(
+            creator_name,
+            {
+                "label": creator_name,
+                "name": creator_name,
+                "gallery_count": 0,
+                "languages": set(),
+                "tags": set(),
+                "tag_count": 0,
+                "min_page_count": None,
+                "max_page_count": None,
+            },
+        )
+        creator_item["gallery_count"] += 1
+        creator_item["languages"].update(gallery_item["languages"])
+        creator_item["tags"].update(gallery_item["tags"])
+        creator_item["tag_count"] = len(creator_item["tags"])
+        if isinstance(page_count, int):
+            if creator_item["min_page_count"] is None or page_count < creator_item["min_page_count"]:
+                creator_item["min_page_count"] = page_count
+            if creator_item["max_page_count"] is None or page_count > creator_item["max_page_count"]:
+                creator_item["max_page_count"] = page_count
+
+    filesystem_creators = _scan_creators_from_filesystem(root_path)
+    for creator_name in filesystem_creators:
+        creators.setdefault(
+            creator_name,
+            {
+                "label": creator_name,
+                "name": creator_name,
+                "gallery_count": 0,
+                "languages": set(),
+                "tags": set(),
+                "tag_count": 0,
+                "min_page_count": None,
+                "max_page_count": None,
+            },
+        )
+        existing_names = {item.get("name") for item in galleries_by_creator.get(creator_name, [])}
+        for gallery_name in _scan_galleries_from_filesystem(root_path, creator_name):
+            if gallery_name in existing_names:
+                continue
+            gallery_path = _safe_path(root_path, creator_name, gallery_name)
+            page_count = _count_pages_on_disk(gallery_path or "")
+            gallery_item = {
+                "label": gallery_name,
+                "name": gallery_name,
+                "gallery_id": None,
+                "page_count": page_count,
+                "languages": [],
+                "tags": [],
+                "tag_count": 0,
+                "status": "",
+                "favourite": False,
+                "rating": None,
+            }
+            galleries_by_creator.setdefault(creator_name, []).append(gallery_item)
+            creators[creator_name]["gallery_count"] += 1
+            if isinstance(page_count, int):
+                current_min = creators[creator_name]["min_page_count"]
+                current_max = creators[creator_name]["max_page_count"]
+                if current_min is None or page_count < current_min:
+                    creators[creator_name]["min_page_count"] = page_count
+                if current_max is None or page_count > current_max:
+                    creators[creator_name]["max_page_count"] = page_count
+
+    for creator_name, creator_item in creators.items():
+        creator_item["languages"] = sorted(creator_item["languages"], key=str.lower)
+        creator_item["tags"] = sorted(creator_item["tags"], key=str.lower)
+        creator_item["tag_count"] = len(creator_item["tags"])
+        creator_item["min_page_count"] = creator_item["min_page_count"] or 0
+        creator_item["max_page_count"] = creator_item["max_page_count"] or 0
+
+    for creator_name, gallery_items in galleries_by_creator.items():
+        gallery_items.sort(
+            key=lambda item: (
+                -(int(item["gallery_id"]) if item.get("gallery_id") is not None else -1),
+                str(item.get("name") or "").lower(),
+            )
+        )
+
+    return creators, galleries_by_creator
+
+
 # ── DB routes — /api/db/... ───────────────────────────────────────────────────
 
 @db_bp.route("/list", methods=["GET"])
@@ -251,77 +514,78 @@ def list_locations():
 @gallery_bp.route("/list_creators", methods=["GET"])
 def list_creators():
     requested = _requested_root()
-    creators = set()
+    creators: dict[str, dict] = {}
 
     if requested:
         base = _resolve_root_path()
         if not base:
-            return jsonify({"creators": [], "root_path": ""})
-        for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            download_path = row.get("download_path", "")
-            # Ignore stale DB rows whose gallery path no longer exists on disk.
-            if not (os.path.isdir(download_path) or _is_archive(download_path)):
-                continue
-            creator, _gallery = _creator_and_gallery_from_location(base, download_path)
-            if creator:
-                creators.add(creator)
-        creators.update(_scan_creators_from_filesystem(base))
-        return jsonify({"creators": sorted(creators), "root_path": base})
+            return jsonify({"creators": [], "filters": _build_filter_options([], "creator"), "root_path": ""})
+        root_creators, _ = _load_gallery_browser_root_dataset(base)
+        creators.update(root_creators)
+        creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
+        return jsonify({"creators": creator_items, "filters": _build_filter_options(creator_items, "creator"), "root_path": base})
 
     for item in _available_roots():
         base = item.get("root_path")
         if not base:
             continue
-        for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            download_path = row.get("download_path", "")
-            # Ignore stale DB rows whose gallery path no longer exists on disk.
-            if not (os.path.isdir(download_path) or _is_archive(download_path)):
+        root_creators, _ = _load_gallery_browser_root_dataset(base)
+        for creator_name, creator_item in root_creators.items():
+            existing = creators.get(creator_name)
+            if not existing:
+                creators[creator_name] = dict(creator_item)
+                creators[creator_name]["languages"] = list(creator_item.get("languages") or [])
+                creators[creator_name]["tags"] = list(creator_item.get("tags") or [])
                 continue
-            creator, _gallery = _creator_and_gallery_from_location(base, download_path)
-            if creator:
-                creators.add(creator)
-        creators.update(_scan_creators_from_filesystem(base))
-    return jsonify({"creators": sorted(creators), "root_path": ""})
+
+            existing["gallery_count"] = int(existing.get("gallery_count") or 0) + int(creator_item.get("gallery_count") or 0)
+            existing_languages = set(existing.get("languages") or [])
+            existing_languages.update(creator_item.get("languages") or [])
+            existing["languages"] = sorted(existing_languages, key=str.lower)
+            existing_tags = set(existing.get("tags") or [])
+            existing_tags.update(creator_item.get("tags") or [])
+            existing["tags"] = sorted(existing_tags, key=str.lower)
+            existing["tag_count"] = len(existing["tags"])
+
+            min_pages = int(existing.get("min_page_count") or 0)
+            other_min = int(creator_item.get("min_page_count") or 0)
+            existing["min_page_count"] = min(value for value in [min_pages, other_min] if value > 0) if any(value > 0 for value in [min_pages, other_min]) else 0
+            existing["max_page_count"] = max(int(existing.get("max_page_count") or 0), int(creator_item.get("max_page_count") or 0))
+
+    creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
+    return jsonify({"creators": creator_items, "filters": _build_filter_options(creator_items, "creator"), "root_path": ""})
 
 
 @gallery_bp.route("/list_galleries/<path:creator>", methods=["GET"])
 def list_galleries(creator):
     requested = _requested_root()
-    galleries = set()
+    galleries: list[dict] = []
 
     if requested:
         base = _resolve_root_path()
         if not base:
             abort(404)
-        for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            download_path = row.get("download_path", "")
-            # Ignore stale DB rows whose gallery path no longer exists on disk.
-            if not (os.path.isdir(download_path) or _is_archive(download_path)):
-                continue
-            creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
-            if creator_name == creator and gallery:
-                galleries.add(gallery)
-        galleries.update(_scan_galleries_from_filesystem(base, creator))
+        _, galleries_by_creator = _load_gallery_browser_root_dataset(base)
+        galleries = galleries_by_creator.get(creator, [])
         if not galleries:
             abort(404)
-        return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": base})
+        return jsonify({"creator": creator, "galleries": galleries, "filters": _build_filter_options(galleries, "gallery"), "root_path": base})
 
     for item in _available_roots():
         base = item.get("root_path")
         if not base:
             continue
-        for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            download_path = row.get("download_path", "")
-            # Ignore stale DB rows whose gallery path no longer exists on disk.
-            if not (os.path.isdir(download_path) or _is_archive(download_path)):
-                continue
-            creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
-            if creator_name == creator and gallery:
-                galleries.add(gallery)
-        galleries.update(_scan_galleries_from_filesystem(base, creator))
+        _, galleries_by_creator = _load_gallery_browser_root_dataset(base)
+        galleries.extend(galleries_by_creator.get(creator, []))
+
     if not galleries:
         abort(404)
-    return jsonify({"creator": creator, "galleries": sorted(galleries), "root_path": ""})
+
+    deduped = {}
+    for item in galleries:
+        deduped[str(item.get("name") or "")] = item
+    gallery_items = sorted(deduped.values(), key=lambda item: (-(int(item["gallery_id"]) if item.get("gallery_id") is not None else -1), str(item.get("name") or "").lower()))
+    return jsonify({"creator": creator, "galleries": gallery_items, "filters": _build_filter_options(gallery_items, "gallery"), "root_path": ""})
 
 
 @gallery_bp.route("/list_pages/<path:creator>/<path:gallery>", methods=["GET"])
@@ -587,7 +851,6 @@ def stream_page(gallery_id, page):
     # Try each mirror URL
     img_data = None
     content_type = "image/jpeg"
-    ext_used = "jpg"
     for url in urls:
         try:
             resp = requests.get(url, timeout=30, stream=True)

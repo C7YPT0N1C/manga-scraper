@@ -11,6 +11,20 @@ from mangascraper.dashboard.routes.scraper_routes import scraper_bp
 from mangascraper.dashboard.routes.data_routes import db_bp, gallery_bp
 
 
+DASHBOARD_HOST = "0.0.0.0"
+DASHBOARD_PORT = 6969
+DASHBOARD_DEBUG = True
+DASHBOARD_USE_RELOADER = True
+
+GALLERY_VIEWER_CONFIG = {
+    "creatorPageSize": 25,
+    "galleryPageSize": 25,
+    "tileMinWidthPx": 120,
+    "tileAspectRatio": "2 / 3",
+    "searchPlaceholder": "Search creators or galleries...",
+}
+
+
 def _dashboard_asset_paths() -> tuple[str, str]:
     """Resolve template/static folders whether this file lives in mangascraper/ or mangascraper/dashboard/."""
     base_dir = os.path.dirname(__file__)
@@ -43,7 +57,7 @@ def create_app():
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
-        return render_template("gallery.html")
+        return render_template("gallery.html", gallery_viewer_config=GALLERY_VIEWER_CONFIG)
 
     @app.route("/scraper")
     def scraper_page():
@@ -62,4 +76,9 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=6969, debug=True, use_reloader=True)
+    app.run(
+        host=DASHBOARD_HOST,
+        port=DASHBOARD_PORT,
+        debug=DASHBOARD_DEBUG,
+        use_reloader=DASHBOARD_USE_RELOADER,
+    )
