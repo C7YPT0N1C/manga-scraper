@@ -97,6 +97,12 @@
 <!-- ===== EXTENSIONS ===== -->
 <section>
   <h3>Extensions</h3>
+  <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
+    Active Extension
+    <select id="cfg_extension">
+      <option value="">— none (built-in) —</option>
+    </select>
+  </label>
   <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
     Output Folder
     <select id="cfg_output_folder_select">
@@ -104,12 +110,6 @@
       <option value="__custom__">Custom...</option>
     </select>
     <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
-  </label>
-  <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
-    Active Extension
-    <select id="cfg_extension">
-      <option value="">— none (built-in) —</option>
-    </select>
   </label>
   <div style="margin-top:8px;display:grid;gap:6px;max-width:460px">
     <select id="extManageSelect" title="Manage extension installation and updates.">
@@ -505,6 +505,12 @@ function renderSearchTables() {
     otherResultsNextPageBtn.disabled = otherResultsPage >= otherTotalPages;
   }
 
+  const addAllBtn = document.getElementById('addAllBtn');
+  const addSelectedBtn = document.getElementById('addSelectedBtn');
+  const hasRenderedResults = (activePageRows.length + otherPageRows.length) > 0;
+  if (addAllBtn) addAllBtn.style.display = hasRenderedResults ? '' : 'none';
+  if (addSelectedBtn) addSelectedBtn.style.display = hasRenderedResults ? '' : 'none';
+
   document.getElementById('filterPanel').style.display = activeRows.length || otherRows.length ? '' : 'none';
 }
 
@@ -809,23 +815,29 @@ async function refreshStatus() {
   const progress = data.progress || {};
 
   const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+  const runTotal = Number(progress.total_galleries ?? data.queue_total ?? 0);
+  const completedCount = Number(counts.completed ?? progress.completed ?? 0);
+  const failedCount = Number(counts.failed ?? progress.failed ?? 0);
+  const skippedCount = Number(counts.skipped ?? progress.skipped ?? 0);
+  const pagesTotal = Number(progress.total_pages ?? 0);
+  const pagesProcessed = Number(progress.pages_processed ?? 0);
+  const pagesPerSecond = Number(progress.pages_per_second ?? 0);
+
   const parts = [
     `Status: ${dynamicStatus}`,
     `PID: ${asText(data.pid, 'N/A')}`,
-    `Uptime: ${formatHudDuration(data.uptime_seconds ?? 0)}`,
-    `Queue: ${asText(data.queue_total, 0)}`,
-    `Completed: ${asText(counts.completed, 0)}`,
-    `Failed: ${asText(counts.failed, 0)}`,
-    `Skipped: ${asText(counts.skipped, 0)}`,
+    `Queued Galleries: ${asText(runTotal, 0)}`,
+    `Completed: ${asText(completedCount, 0)}/${asText(runTotal, 0)}`,
+    `Failed: ${asText(failedCount, 0)}/${asText(runTotal, 0)}`,
+    `Skipped: ${asText(skippedCount, 0)}/${asText(runTotal, 0)}`,
   ];
-  if ((progress.total_galleries ?? 0) > 0) {
-    parts.push(`Run: ${asText(progress.current_gallery_number, 0)}/${asText(progress.total_galleries, 0)} galleries`);
+  if (pagesTotal > 0) {
+    parts.push(`Pages: ${asText(pagesProcessed, 0)}/${asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
   }
-  if ((progress.total_pages ?? 0) > 0) {
-    parts.push(`Pages: ${asText(progress.pages_processed, 0)}/${asText(progress.total_pages, 0)}`);
-    parts.push(`Pages/s: ${Number(progress.pages_per_second ?? 0).toFixed(2)}`);
+  parts.push(`Speed: ${formatHudBytesPerSecond(progress.download_speed_bytes ?? 0)}`);
+  parts.push(`Uptime: ${formatHudDuration(data.uptime_seconds ?? 0)}`);
+  if (pagesTotal > 0) {
     parts.push(`ETA: ${formatHudDuration(progress.eta_seconds ?? 0)}`);
-    parts.push(`Speed: ${formatHudBytesPerSecond(progress.download_speed_bytes ?? 0)}`);
   }
   const pretty = parts.join(' | ');
 
