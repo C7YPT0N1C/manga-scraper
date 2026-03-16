@@ -24,6 +24,43 @@ skipped_galleries_lock = threading.Lock()
 failed_galleries = {}
 failed_galleries_lock = threading.Lock()
 
+
+def _ensure_managed_download_root(root_path: str, extension_name: str = ""):
+    """Ensure marker file and DownloadLocations entry for a managed download root."""
+    safe_root = str(root_path or "").strip()
+    if not safe_root:
+        return
+
+    marker_path = os.path.join(safe_root, scraperapi.DOWNLOAD_ROOT_MARKER_FILE)
+    marker_text = scraperapi.DOWNLOAD_ROOT_MARKER_WARNING
+    extension_label = str(extension_name or "").strip()
+
+    if orchestrator.dry_run:
+        logger.info(f"[DRY RUN] Would ensure managed download marker at: {marker_path}")
+        return
+
+    os.makedirs(safe_root, exist_ok=True)
+    try:
+        write_marker = True
+        if os.path.isfile(marker_path):
+            try:
+                with open(marker_path, "r", encoding="utf-8", errors="replace") as f:
+                    existing = f.read()
+                write_marker = (existing != marker_text)
+            except Exception:
+                write_marker = True
+
+        if write_marker:
+            with open(marker_path, "w", encoding="utf-8") as f:
+                f.write(marker_text)
+    except Exception as e:
+        logger.warning(f"Downloader: Could not write marker file at '{marker_path}': {e}")
+
+    try:
+        scraperapi.DB.upsert_download_location(safe_root, extension_used=extension_label)
+    except Exception as e:
+        logger.warning(f"Downloader: Could not upsert download location '{safe_root}': {e}")
+
 ####################################################################################################
 # Select extension (skeleton fallback)
 ####################################################################################################
@@ -38,6 +75,7 @@ def load_extension(suppess_pre_run_hook: bool = False):
     
     # Prefer extension-specific download path, fallback to config/global default
     download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
+    extension_name = getattr(active_extension, "__name__", "")
     
     if suppess_pre_run_hook==False:
         logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
@@ -49,6 +87,8 @@ def load_extension(suppess_pre_run_hook: bool = False):
     else:
         if suppess_pre_run_hook==False:
             logger.info(f"[DRY RUN] Would Download Galleries To: {download_location}")
+
+    _ensure_managed_download_root(download_location, extension_name=extension_name)
 
 ####################################################################################################
 # UTILITIES

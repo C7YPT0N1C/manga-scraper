@@ -59,6 +59,12 @@ _runtime_progress_server = None
 _runtime_progress_server_thread = None
 _runtime_progress_token = ""
 
+DOWNLOAD_ROOT_MARKER_FILE = ".manga-scraper.dir"
+DOWNLOAD_ROOT_MARKER_WARNING = (
+    "This folder is managed by manga-scraper.\n"
+    "If you remove this file while this folder still contains galleries, it could break things.\n"
+)
+
 
 class _RuntimeProgressRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -1117,6 +1123,7 @@ class DB:
     def list_download_locations() -> list[dict]:
         """Return one dict per distinct download root, with a gallery count."""
         DB.init_db()
+        DB.prune_unmanaged_download_locations()
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -1135,6 +1142,63 @@ class DB:
                 }
                 for row in cursor.fetchall()
             ]
+
+    @staticmethod
+    def upsert_download_location(root_path: str, extension_used: str = ""):
+        """Ensure a managed download root exists in DownloadLocations."""
+        DB.init_db()
+        root_path = Helpers.safe_text(root_path, "").strip()
+        if not root_path:
+            return
+        root_path = os.path.normpath(root_path)
+        extension_used = Helpers.safe_text(extension_used, "").strip()
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO DownloadLocations (root_path, extension_used)
+                VALUES (?, ?)
+                ON CONFLICT(root_path) DO UPDATE SET
+                    extension_used = CASE
+                        WHEN excluded.extension_used IS NOT NULL AND TRIM(excluded.extension_used) != ''
+                        THEN excluded.extension_used
+                        ELSE DownloadLocations.extension_used
+                    END
+                """,
+                (root_path, extension_used),
+            )
+            conn.commit()
+
+    @staticmethod
+    def prune_unmanaged_download_locations() -> dict:
+        """Remove DownloadLocations rows whose root path is missing the marker file."""
+        DB.init_db()
+        removed = {"roots": 0, "gallery_locations": 0}
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, root_path FROM DownloadLocations")
+            rows = cursor.fetchall()
+            for loc_id, root_path in rows:
+                loc_id = Helpers.normalise_integer(loc_id)
+                root_text = Helpers.safe_text(root_path, "").strip()
+                if loc_id is None or not root_text:
+                    continue
+
+                marker_path = os.path.join(root_text, DOWNLOAD_ROOT_MARKER_FILE)
+                if os.path.isfile(marker_path):
+                    continue
+
+                cursor.execute("DELETE FROM GalleryLocations WHERE location_id=?", (loc_id,))
+                gl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+                cursor.execute("DELETE FROM DownloadLocations WHERE id=?", (loc_id,))
+                dl_deleted = cursor.rowcount if cursor.rowcount is not None else 0
+                if gl_deleted > 0:
+                    removed["gallery_locations"] += int(gl_deleted)
+                if dl_deleted > 0:
+                    removed["roots"] += int(dl_deleted)
+
+            conn.commit()
+        return removed
 
     @staticmethod
     def list_gallery_locations(gallery_id=None, root_path=None) -> list[dict]:
@@ -1768,7 +1832,7 @@ class Build:
             if len(terms) > 1:
                 terms = sorted(terms, key=lambda x: (x.isdigit(), x))
             sorted_value = "_".join(terms)
-            safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_')).lower()
+            safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_', '+')).lower()
             logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{safe_value}'")
             return f"{search_type}:{safe_value}"
         return search_type
@@ -2053,11 +2117,97 @@ class Fetch:
         Fetches Gallery IDs. Tries cache key(s) first, then falls back to API if needed.
         Returns a tuple (cache_key, list of IDs).
         """
-        
+
         cache_target = query_value
         if query_type == "homepage":
             cache_target = sort_value or DEFAULT_PAGE_SORT
+
+        sort_token_map = {
+            "date": "date",
+            "popular-week": "week",
+            "popular-month": "month",
+            "popular": "popular",
+            "popular-today": "today",
+        }
+        sort_token = sort_token_map.get(
+            Helpers.safe_text(sort_value).strip().lower(),
+            Helpers.safe_text(sort_value).strip().lower().replace("-", "_") or "date",
+        )
+
+        key_start_page = Helpers.normalise_integer(start_page)
+        if key_start_page is None or key_start_page < 1:
+            key_start_page = DEFAULT_PAGE_RANGE_START
+
+        key_end_page_num = None if end_page is None else max(key_start_page, Helpers.normalise_integer(end_page) or key_start_page)
+        key_end_page = "all" if key_end_page_num is None else str(key_end_page_num)
+        cache_modifier = f"{sort_token}_{key_start_page}-{key_end_page}"
+
+        if Helpers.safe_text(cache_target, ""):
+            cache_target = f"{cache_target}+{cache_modifier}"
+        else:
+            cache_target = cache_modifier
+
         cache_key = Cache.cache_keys(query_type, cache_target)
+
+        # Support superset page-range cache hits (e.g. request 1-5 can reuse cached 1-10).
+        def _normalise_target_text(value) -> str:
+            return Helpers.safe_text(value, "").strip().lower()
+
+        def _normalise_sort_token(value: str) -> str:
+            raw = Helpers.safe_text(value, "").strip().lower()
+            aliases = {
+                "d": "date",
+                "date": "date",
+                "p": "popular",
+                "popular": "popular",
+                "pw": "week",
+                "week": "week",
+                "popular_week": "week",
+                "popular-week": "week",
+                "pm": "month",
+                "month": "month",
+                "popular_month": "month",
+                "popular-month": "month",
+                "pt": "today",
+                "today": "today",
+                "popular_today": "today",
+                "popular-today": "today",
+            }
+            return aliases.get(raw, raw)
+
+        def _parse_cache_target(value: str) -> tuple[str, str, int, int | None] | None:
+            text = Helpers.safe_text(value, "").strip()
+            if not text:
+                return None
+
+            base = ""
+            modifier = text
+            if "+" in text:
+                left, right = text.rsplit("+", 1)
+                base = left
+                modifier = right
+
+            match = re.match(r"^(?P<sort>[a-z0-9_-]+)_(?P<start>\d+)-(?P<end>\d+|all)$", modifier.strip().lower())
+            if not match:
+                return None
+
+            start_val = Helpers.normalise_integer(match.group("start"))
+            if start_val is None or start_val < 1:
+                return None
+
+            end_raw = match.group("end")
+            end_val = None if end_raw == "all" else Helpers.normalise_integer(end_raw)
+            if end_val is not None and end_val < start_val:
+                return None
+
+            return (
+                _normalise_target_text(base),
+                _normalise_sort_token(match.group("sort")),
+                start_val,
+                end_val,
+            )
+
+        requested_range = _parse_cache_target(cache_target)
         
         # 1. Try cache first
         if cache_key:
@@ -2076,6 +2226,58 @@ class Fetch:
                     logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
             else:
                 logger.debug(f"No valid cache entry for {cache_key}. Will fetch from API.")
+
+            # If no exact match, try to reuse a superset cached range for the same query kind/target/sort.
+            if requested_range:
+                requested_type = Helpers.safe_text(query_type, "").strip().lower()
+                requested_base, requested_sort, requested_start, requested_end = requested_range
+                best_key = None
+                best_ids = []
+                best_rank = None
+
+                for candidate_key, candidate_entry in (references or {}).items():
+                    if Helpers.safe_text(candidate_key, "") == Helpers.safe_text(cache_key, ""):
+                        continue
+
+                    candidate_type = Helpers.safe_text(candidate_entry.get("cache_type"), "").strip().lower()
+                    if candidate_type != requested_type:
+                        continue
+
+                    candidate_target = Helpers.safe_text(candidate_entry.get("cache_target"), "")
+                    parsed_candidate = _parse_cache_target(candidate_target)
+                    if not parsed_candidate:
+                        continue
+
+                    candidate_base, candidate_sort, candidate_start, candidate_end = parsed_candidate
+                    if candidate_base != requested_base or candidate_sort != requested_sort or candidate_start != requested_start:
+                        continue
+
+                    covers_requested = False
+                    if requested_end is None:
+                        covers_requested = candidate_end is None
+                    elif candidate_end is None:
+                        covers_requested = True
+                    elif candidate_end >= requested_end:
+                        covers_requested = True
+
+                    if not covers_requested:
+                        continue
+
+                    candidate_ids = Helpers.normalise_integer_list(candidate_entry.get("ids", []))
+                    if not candidate_ids:
+                        continue
+
+                    candidate_rank = (float("inf") if candidate_end is None else candidate_end)
+                    if best_rank is None or candidate_rank < best_rank:
+                        best_rank = candidate_rank
+                        best_key = candidate_key
+                        best_ids = candidate_ids
+
+                if best_key:
+                    logger.debug(
+                        f"[DATABASE] Using superset cached Gallery IDs for key '{best_key}' to satisfy '{cache_key}' (count: {len(best_ids)})"
+                    )
+                    return (best_key, best_ids)
         else:
             logger.debug(f"No valid cache entry for {cache_key}. Will fetch from API.")
 

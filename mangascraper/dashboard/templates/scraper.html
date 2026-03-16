@@ -365,6 +365,16 @@ function dedupeRows(rows) {
   return unique;
 }
 
+function sortRowsByIdDesc(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aId = Number(a?.id ?? a?.gallery_id);
+    const bId = Number(b?.id ?? b?.gallery_id);
+    const aVal = Number.isFinite(aId) ? aId : -Infinity;
+    const bVal = Number.isFinite(bId) ? bId : -Infinity;
+    return bVal - aVal;
+  });
+}
+
 function snapshotSelection(tableSelector) {
   const tracked = selectedRows[tableSelector] || new Set();
   document.querySelectorAll(`${tableSelector} tbody input[type="checkbox"]`).forEach(cb => {
@@ -458,8 +468,8 @@ function previousSearchRows() {
 }
 
 function renderSearchTables() {
-  const activeRows = activeSearchRows();
-  const otherRows = previousSearchRows();
+  const activeRows = sortRowsByIdDesc(activeSearchRows());
+  const otherRows = sortRowsByIdDesc(previousSearchRows());
 
   const activeTotalPages = Math.max(1, Math.ceil(activeRows.length / RESULTS_PAGE_SIZE));
   const otherTotalPages = Math.max(1, Math.ceil(otherRows.length / RESULTS_PAGE_SIZE));
@@ -1090,7 +1100,7 @@ async function refreshQueue() {
   snapshotSelection('#queueTable');
   const res = await fetch('/api/scraper/queue');
   const data = await res.json();
-  const rows = data.queue || [];
+  const rows = sortRowsByIdDesc(data.queue || []);
   queueIds = new Set((data.ids || []).map(Number).filter(Number.isFinite));
   renderRows('#queueTable', rows);
   renderSearchTables();

@@ -206,7 +206,11 @@ def list_creators():
         if not base:
             return jsonify({"creators": [], "root_path": ""})
         for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            creator, _gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            download_path = row.get("download_path", "")
+            # Ignore stale DB rows whose gallery path no longer exists on disk.
+            if not (os.path.isdir(download_path) or _is_archive(download_path)):
+                continue
+            creator, _gallery = _creator_and_gallery_from_location(base, download_path)
             if creator:
                 creators.add(creator)
         return jsonify({"creators": sorted(creators), "root_path": base})
@@ -216,7 +220,11 @@ def list_creators():
         if not base:
             continue
         for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            creator, _gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            download_path = row.get("download_path", "")
+            # Ignore stale DB rows whose gallery path no longer exists on disk.
+            if not (os.path.isdir(download_path) or _is_archive(download_path)):
+                continue
+            creator, _gallery = _creator_and_gallery_from_location(base, download_path)
             if creator:
                 creators.add(creator)
     return jsonify({"creators": sorted(creators), "root_path": ""})
@@ -232,7 +240,11 @@ def list_galleries(creator):
         if not base:
             abort(404)
         for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            creator_name, gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            download_path = row.get("download_path", "")
+            # Ignore stale DB rows whose gallery path no longer exists on disk.
+            if not (os.path.isdir(download_path) or _is_archive(download_path)):
+                continue
+            creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
             if creator_name == creator and gallery:
                 galleries.add(gallery)
         if not galleries:
@@ -244,7 +256,11 @@ def list_galleries(creator):
         if not base:
             continue
         for row in scraperapi.DB.list_gallery_locations(root_path=base):
-            creator_name, gallery = _creator_and_gallery_from_location(base, row.get("download_path", ""))
+            download_path = row.get("download_path", "")
+            # Ignore stale DB rows whose gallery path no longer exists on disk.
+            if not (os.path.isdir(download_path) or _is_archive(download_path)):
+                continue
+            creator_name, gallery = _creator_and_gallery_from_location(base, download_path)
             if creator_name == creator and gallery:
                 galleries.add(gallery)
     if not galleries:

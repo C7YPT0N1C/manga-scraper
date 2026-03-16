@@ -23,6 +23,8 @@ _started_at = None
 _last_args = []
 _progress_port = None
 _progress_token = None
+_last_run_status = "stopped"
+_last_exit_code = None
 
 _SEARCH_TYPES = {
     "homepage",
@@ -202,7 +204,7 @@ def _read_runtime_progress() -> dict:
 
 
 def _start_process(cli_args: list[str]):
-    global _scraper_process, _started_at, _last_args, _progress_port, _progress_token
+    global _scraper_process, _started_at, _last_args, _progress_port, _progress_token, _last_run_status, _last_exit_code
 
     with _process_lock:
         if _is_running():
@@ -231,6 +233,8 @@ def _start_process(cli_args: list[str]):
         )
         _started_at = time.time()
         _last_args = normalised_args
+        _last_run_status = "running"
+        _last_exit_code = None
 
     return {"message": "Scraper started.", "args": cli_args}, None
 
@@ -593,9 +597,21 @@ def queue_start():
 @scraper_bp.route("/status", methods=["GET"])
 def status():
     """Return current scraper status."""
-    global _progress_port, _progress_token
+    global _progress_port, _progress_token, _scraper_process, _started_at, _last_run_status, _last_exit_code
 
     with _process_lock:
+        running = _is_running()
+        if not running and _scraper_process is not None:
+            polled_code = _scraper_process.poll()
+            if polled_code is not None:
+                _last_exit_code = int(polled_code)
+                if _last_run_status != "stopped":
+                    _last_run_status = "completed" if _last_exit_code == 0 else "stopped"
+                _scraper_process = None
+                _started_at = None
+                _progress_port = None
+                _progress_token = None
+
         running = _is_running()
         pid = _scraper_process.pid if running else None
         started_at = _started_at
@@ -608,8 +624,9 @@ def status():
     counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
 
     return jsonify({
-        "status": "running" if running else "stopped",
+        "status": "running" if running else _last_run_status,
         "pid": pid,
+        "exit_code": _last_exit_code,
         "started_at": started_at,
         "uptime_seconds": int(time.time() - started_at) if running and started_at else 0,
         "args": args,
@@ -631,7 +648,7 @@ def start_scraper():
 @scraper_bp.route("/stop", methods=["POST"])
 def stop_scraper():
     """Stop scraper gracefully."""
-    global _scraper_process, _started_at, _progress_port, _progress_token
+    global _scraper_process, _started_at, _progress_port, _progress_token, _last_run_status, _last_exit_code
 
     with _process_lock:
         if not _is_running():
@@ -646,6 +663,9 @@ def stop_scraper():
             _scraper_process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             _scraper_process.kill()
+
+        _last_exit_code = _scraper_process.poll()
+        _last_run_status = "stopped"
 
         _scraper_process = None
         _started_at = None
