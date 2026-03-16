@@ -18,7 +18,6 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 LOG_DIR = f"{TEMP_DIR}/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
-RUNTIME_PROGRESS_FILE = os.path.join(TEMP_DIR, "runtime-progress.json")
 
 # Runtime log file used by this process.
 RUNTIME_LOG_FILE = os.path.join(

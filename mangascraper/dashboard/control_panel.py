@@ -3,7 +3,7 @@
 
 import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect
 from flask_cors import CORS
 
 from mangascraper.core import api as scraperapi
@@ -43,7 +43,7 @@ def create_app():
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
-        return render_template("dashboard.html")
+        return render_template("gallery.html")
 
     @app.route("/scraper")
     def scraper_page():
@@ -59,7 +59,7 @@ def create_app():
 
     @app.route("/gallery")
     def gallery_page():
-        return render_template("gallery.html")
+        return redirect("/")
 
     return app
 

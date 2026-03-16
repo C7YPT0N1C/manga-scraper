@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # mangascraper/core/tester.py
 
+import os
 import time
+import uuid
 from contextlib import contextmanager
 
 from mangascraper.core import orchestrator
@@ -47,6 +49,31 @@ TEST_DOWNLOAD_ROOTS = {
     f"{TEST_RUNTIME_ROOT}root-a",
     f"{TEST_RUNTIME_ROOT}root-a/downloads",
 }
+TEST_DB_STALE_SECONDS = 24 * 60 * 60
+
+
+def _cleanup_stale_test_databases(test_data_dir: str):
+    """
+    Remove stale self-test DB files left behind by previous crashed runs.
+    """
+    now = time.time()
+    try:
+        if not os.path.isdir(test_data_dir):
+            return
+        for entry in os.scandir(test_data_dir):
+            if not entry.is_file():
+                continue
+            name = entry.name
+            if not (name.startswith("mangascraper-selftest-") and name.endswith(".db")):
+                continue
+            try:
+                age_seconds = now - entry.stat().st_mtime
+                if age_seconds >= TEST_DB_STALE_SECONDS:
+                    os.remove(entry.path)
+            except Exception:
+                continue
+    except Exception:
+        pass
 
 
 @contextmanager
@@ -72,6 +99,38 @@ def _temporary_test_runtime_paths():
         # Restore runtime values directly as a final guard.
         orchestrator.download_path = prev_runtime_download
         orchestrator.extension_download_path = prev_runtime_ext_download
+
+
+@contextmanager
+def _temporary_test_database():
+    """
+    Temporarily redirect API DB globals to an isolated test database file.
+    """
+
+    prev_data_dir = scraperapi.DATA_DIR
+    prev_db_path = scraperapi.DB_PATH
+    test_data_dir = os.path.join(orchestrator.TEMP_DIR, "selftest-db")
+    test_db_path = os.path.join(test_data_dir, f"mangascraper-selftest-{uuid.uuid4().hex}.db")
+
+    try:
+        os.makedirs(test_data_dir, exist_ok=True)
+        _cleanup_stale_test_databases(test_data_dir)
+        # Close any existing connection bound to the normal DB before switching.
+        scraperapi.DB.close_connection()
+        scraperapi.DATA_DIR = test_data_dir
+        scraperapi.DB_PATH = test_db_path
+        yield
+    finally:
+        # Ensure the temporary connection is closed before restoring globals.
+        scraperapi.DB.close_connection()
+        scraperapi.DATA_DIR = prev_data_dir
+        scraperapi.DB_PATH = prev_db_path
+        # Best-effort cleanup; if a crash occurs this file remains isolated in TEMP.
+        try:
+            if os.path.exists(test_db_path):
+                os.remove(test_db_path)
+        except Exception:
+            pass
 
 ####################################################################################################################
 # MAIN
@@ -196,7 +255,7 @@ def main() -> bool:
 
             conn.commit()
 
-    with _temporary_test_runtime_paths():
+    with _temporary_test_database(), _temporary_test_runtime_paths():
         scraperapi.DB.init_db()
         try:
             # 0) Runtime path safety assertion

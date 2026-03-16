@@ -195,12 +195,18 @@ def _parse_semver_tuple(version_text: str) -> tuple[int, int, int]:
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
 
-def _resolve_extension_version_dir(tmp_root: str, extension_name: str, preferred_version: str | None = None) -> str | None:
+def _resolve_extension_version_dir(
+    tmp_root: str,
+    extension_branch: str,
+    extension_name: str,
+    preferred_version: str | None = None,
+) -> str | None:
     """
     Resolve extension source directory using new layout:
-    /<repo>/<extension>/<version>
+    /<repo>/<branch>/<extension>/<version>
     """
-    extension_root = os.path.join(tmp_root, extension_name)
+    branch = str(extension_branch or "main").strip() or "main"
+    extension_root = os.path.join(tmp_root, branch, extension_name)
     if not os.path.isdir(extension_root):
         return None
 
@@ -248,18 +254,24 @@ def _ensure_remote_repo_tmp(url: str):
         log("Tmp repo is up to date; reusing existing clone.", "debug")
 
 
-def sync_remote_extensions_repo(url: str, extension_name: str | None = None, extension_version: str | None = None):
+def sync_remote_extensions_repo(
+    url: str,
+    extension_name: str | None = None,
+    extension_version: str | None = None,
+    extension_branch: str = "main",
+):
     _ensure_remote_repo_tmp(url)
 
     if extension_name:
         source_dir = _resolve_extension_version_dir(
             REMOTE_EXTENSIONS_TMP,
+            extension_branch,
             extension_name,
             preferred_version=extension_version,
         )
         if not source_dir or not os.path.isdir(source_dir):
             raise FileNotFoundError(
-                f"Remote extension folder missing for '{extension_name}'"
+                f"Remote extension folder missing for '{extension_name}' on branch '{extension_branch}'"
                 f" (preferred version: {extension_version or 'latest'})."
             )
         target_dir = os.path.join(EXTENSIONS_DIR, extension_name)
@@ -533,10 +545,12 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
 
     try:
         log(f"Syncing remote extensions from {repo_url}...", "debug")
+        target_branch = str(ext_entry.get("branch") or "main").strip() or "main"
         sync_remote_extensions_repo(
             repo_url,
             extension_name=extension_name,
             extension_version=remote_version or ext_entry.get("version"),
+            extension_branch=target_branch,
         )
     except Exception as e:
         logger.warning(f"Failed to sync from primary repo: {e}")
@@ -548,6 +562,7 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
                     backup_url,
                     extension_name=extension_name,
                     extension_version=remote_version or ext_entry.get("version"),
+                    extension_branch=target_branch,
                 )
             except Exception as e2:
                 logger.error(f"Failed to sync from backup repo: {e2}")

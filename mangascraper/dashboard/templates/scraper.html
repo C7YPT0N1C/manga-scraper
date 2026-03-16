@@ -39,15 +39,6 @@
       <input id="cfg_excluded_tags" type="text" placeholder="e.g. guro,snuff">
     </label>
 
-    <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
-      Output Folder
-      <select id="cfg_output_folder_select">
-        <option value="">— select a folder —</option>
-        <option value="__custom__">Custom...</option>
-      </select>
-      <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
-    </label>
-
     <label title="How galleries are stored on disk: as a plain folder of images, a .zip archive, or a .cbz comic archive.">
       Format
       <select id="cfg_format">
@@ -106,6 +97,14 @@
 <!-- ===== EXTENSIONS ===== -->
 <section>
   <h3>Extensions</h3>
+  <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
+    Output Folder
+    <select id="cfg_output_folder_select">
+      <option value="">— select a folder —</option>
+      <option value="__custom__">Custom...</option>
+    </select>
+    <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
+  </label>
   <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
     Active Extension
     <select id="cfg_extension">
@@ -819,6 +818,9 @@ async function refreshStatus() {
     `Failed: ${asText(counts.failed, 0)}`,
     `Skipped: ${asText(counts.skipped, 0)}`,
   ];
+  if ((progress.total_galleries ?? 0) > 0) {
+    parts.push(`Run: ${asText(progress.current_gallery_number, 0)}/${asText(progress.total_galleries, 0)} galleries`);
+  }
   if ((progress.total_pages ?? 0) > 0) {
     parts.push(`Pages: ${asText(progress.pages_processed, 0)}/${asText(progress.total_pages, 0)}`);
     parts.push(`Pages/s: ${Number(progress.pages_per_second ?? 0).toFixed(2)}`);

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/scraper_routes.py
 
-import json
 import shlex
 import subprocess
 import sys
 import threading
 import time
 import os
+import secrets
+import socket
 
 from flask import Blueprint, jsonify, request
 
@@ -20,6 +21,8 @@ _process_lock = threading.Lock()
 _scraper_process = None
 _started_at = None
 _last_args = []
+_progress_port = None
+_progress_token = None
 
 _SEARCH_TYPES = {
     "homepage",
@@ -182,31 +185,24 @@ def _queue_total() -> int:
         return 0
 
 
-def _clear_runtime_progress() -> None:
-    progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
-    if not progress_file:
-        return
-    try:
-        if os.path.isfile(progress_file):
-            os.remove(progress_file)
-    except Exception:
-        pass
+def _allocate_localhost_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _read_runtime_progress() -> dict:
-    progress_file = getattr(orchestrator, "RUNTIME_PROGRESS_FILE", None)
-    if not progress_file or not os.path.isfile(progress_file):
-        return {}
-    try:
-        with open(progress_file, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    global _progress_port, _progress_token
+
+    with _process_lock:
+        port = _progress_port
+        token = _progress_token
+
+    return scraperapi.RuntimeProgress.fetch(port=port, token=token, timeout_seconds=0.35)
 
 
 def _start_process(cli_args: list[str]):
-    global _scraper_process, _started_at, _last_args
+    global _scraper_process, _started_at, _last_args, _progress_port, _progress_token
 
     with _process_lock:
         if _is_running():
@@ -222,11 +218,16 @@ def _start_process(cli_args: list[str]):
         normalised_args = [arg for arg in normalised_args if arg != "--calm"]
 
         cmd = [sys.executable, "-m", "mangascraper.cli", *normalised_args]
-        _clear_runtime_progress()
+        child_env = os.environ.copy()
+        _progress_port = _allocate_localhost_port()
+        _progress_token = secrets.token_urlsafe(24)
+        child_env["MANGASCRAPER_PROGRESS_PORT"] = str(_progress_port)
+        child_env["MANGASCRAPER_PROGRESS_TOKEN"] = _progress_token
         _scraper_process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=child_env,
         )
         _started_at = time.time()
         _last_args = normalised_args
@@ -592,16 +593,19 @@ def queue_start():
 @scraper_bp.route("/status", methods=["GET"])
 def status():
     """Return current scraper status."""
+    global _progress_port, _progress_token
+
     with _process_lock:
         running = _is_running()
         pid = _scraper_process.pid if running else None
         started_at = _started_at
         args = list(_last_args)
+        if not running:
+            _progress_port = None
+            _progress_token = None
 
     progress = _read_runtime_progress() if running else {}
     counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
-    if not running:
-        _clear_runtime_progress()
 
     return jsonify({
         "status": "running" if running else "stopped",
@@ -627,13 +631,14 @@ def start_scraper():
 @scraper_bp.route("/stop", methods=["POST"])
 def stop_scraper():
     """Stop scraper gracefully."""
-    global _scraper_process, _started_at
+    global _scraper_process, _started_at, _progress_port, _progress_token
 
     with _process_lock:
         if not _is_running():
             _scraper_process = None
             _started_at = None
-            _clear_runtime_progress()
+            _progress_port = None
+            _progress_token = None
             return jsonify({"message": "Scraper is not running."}), 409
 
         _scraper_process.terminate()
@@ -644,6 +649,7 @@ def stop_scraper():
 
         _scraper_process = None
         _started_at = None
-        _clear_runtime_progress()
+        _progress_port = None
+        _progress_token = None
 
     return jsonify({"message": "Scraper stopped."})
