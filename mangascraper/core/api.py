@@ -1582,7 +1582,7 @@ class DB:
                 return bool(cursor.rowcount)
 
         @staticmethod
-        def set_filters(collection_id: int, filters: list[dict]) -> dict | None:
+        def set_filters(collection_id: int, filters: "list[dict]") -> dict | None:
             DB.init_db()
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
@@ -1653,7 +1653,7 @@ class DB:
             return DB.Collection.get(int(collection_id))
 
         @staticmethod
-        def add_galleries(collection_id: int, gallery_ids: list[int], manual: bool = True) -> dict:
+        def add_galleries(collection_id: int, gallery_ids: "list[int]", manual: bool = True) -> dict:
             DB.init_db()
             ids = sorted({int(gid) for gid in Helpers.normalise_integer_list(gallery_ids)})
             if not ids:
@@ -1841,7 +1841,7 @@ class DB:
             return {"refreshed": refreshed, "matched": total_matches, "errors": errors}
 
         @staticmethod
-        def items(collection_id: int) -> list[dict]:
+        def items(collection_id: int) -> "list[dict]":
             DB.init_db()
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()

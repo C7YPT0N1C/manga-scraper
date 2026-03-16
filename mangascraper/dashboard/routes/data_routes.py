@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/data_routes.py
 
-import os
-import tempfile
-import threading
-import time
-import io
-import zipfile
-import posixpath
-import json
-import re
-
-import requests
+import os, time, threading, io, requests, json, re, zipfile, tempfile, posixpath
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
 from mangascraper.core import api as scraperapi

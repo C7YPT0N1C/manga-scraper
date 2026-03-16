@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/scraper_routes.py
 
-import shlex
-import subprocess
-import sys
-import threading
-import time
-import os
-import secrets
-import socket
-
+import os, time, sys, threading, subprocess, socket, secrets, shlex
 from flask import Blueprint, jsonify, request
 
 from mangascraper.core import api as scraperapi

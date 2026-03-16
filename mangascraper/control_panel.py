@@ -2,7 +2,6 @@
 # mangascraper/control_panel.py
 
 import os
-
 from flask import Flask, render_template
 from flask_cors import CORS
 
