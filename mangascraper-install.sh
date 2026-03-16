@@ -18,7 +18,7 @@ fi
 SCRAPER_DIR="/opt/manga-scraper"
 FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
-ENV_FILE="$SCRAPER_DIR/manga-scraper.env"
+ENV_FILE="$SCRAPER_DIR/mangascraper/core/manga-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9"
 DEFAULT_BRANCH="main"
 SCRAPER_PRIMARY_REPO="https://github.com/C7YPT0N1C/manga-scraper.git"
@@ -170,6 +170,7 @@ create_env_file() {
     # Update defaults in Config.py
     echo -e "\nUpdating environment variables..."
     echo "Creating environment file..."
+    mkdir -p "$(dirname "$ENV_FILE")"
     sudo tee "$ENV_FILE" > /dev/null <<EOF
 # Manga Scraper Configuration
 

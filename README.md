@@ -168,7 +168,7 @@ manga-scraper --id-range 500000 500100
 - Downloads go to `/opt/manga-scraper/downloads` unless your extension overrides the path.
 
 ### Configuration
-- The config file is `/opt/manga-scraper/manga-scraper.env`.
+- The config file is `/opt/manga-scraper/mangascraper/core/manga-scraper.env`.
 - CLI flags override config values for that run and update the env file.
 - Common keys: `EXTENSION`, `NHENTAI_MIRRORS`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
 

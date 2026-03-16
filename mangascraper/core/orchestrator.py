@@ -9,8 +9,10 @@ from dotenv import load_dotenv, set_key
 # DIRECTORIES
 ##########################################################################################
 SCRAPER_DIR = "/opt/manga-scraper"
+CORE_DIR = os.path.join(SCRAPER_DIR, "mangascraper", "core")
 TEMP_DIR = "/tmp/manga-scraper"
 os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(CORE_DIR, exist_ok=True)
 
 ##########################################################################################
 # LOGGER
@@ -174,7 +176,7 @@ def with_env_lock(func, *args, **kwargs):
 # ------------------------------------------------------------
 # Env
 # ------------------------------------------------------------
-ENV_FILE = os.path.join(SCRAPER_DIR, "manga-scraper.env")
+ENV_FILE = os.path.join(CORE_DIR, "manga-scraper.env")
 
 # Ensure NHentai directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
