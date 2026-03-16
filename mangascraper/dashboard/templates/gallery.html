@@ -146,6 +146,21 @@ function itemLabel(item) {
 	return typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
 }
 
+function itemPathName(item) {
+	return typeof item === 'string' ? item : (item.path_name || item.name || item.label || '');
+}
+
+function parseSearchQuery(raw) {
+	const text = String(raw || '').trim();
+	if (!text) return { field: '', term: '' };
+	const match = text.match(/^([a-z_]+)\s*:\s*(.+)$/i);
+	if (!match) return { field: '', term: text.toLowerCase() };
+	return {
+		field: String(match[1] || '').toLowerCase(),
+		term: String(match[2] || '').trim().toLowerCase(),
+	};
+}
+
 function parseGalleryId(value) {
 	const text = String(value || '').trim();
 	const match = text.match(/^\((\d+)\)/);
@@ -200,7 +215,7 @@ function createSelectFilter(key, labelText, options, allLabel) {
 
 function setupSearchAndFilters() {
 	document.getElementById('searchInput').addEventListener('input', (e) => {
-		_searchTerm = e.target.value.toLowerCase();
+		_searchTerm = String(e.target.value || '');
 		_currentPage = 1;
 		refreshDisplay();
 	});
@@ -210,7 +225,12 @@ function getFilteredItems() {
 	let items = _currentItemType === 'creators' ? _allCreators : _allGalleries;
 
 	if (_searchTerm) {
+		const parsed = parseSearchQuery(_searchTerm);
 		items = items.filter(item => {
+			const languages = normaliseList(item.languages).map(normaliseText);
+			const tags = normaliseList(item.tags).map(normaliseText);
+			const creators = normaliseList(item.creators).map(normaliseText);
+			const label = itemLabel(item).toLowerCase();
 			const searchableParts = [itemLabel(item)];
 			if (typeof item !== 'string') {
 				searchableParts.push(...normaliseList(item.languages));
@@ -218,7 +238,19 @@ function getFilteredItems() {
 				const status = String(item.status || '').trim();
 				if (status) searchableParts.push(status);
 			}
-			return searchableParts.join(' ').toLowerCase().includes(_searchTerm);
+			if (!parsed.term) {
+				return true;
+			}
+			if (parsed.field === 'artist' || parsed.field === 'group' || parsed.field === 'creator') {
+				return label.includes(parsed.term) || creators.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'tag' || parsed.field === 'character' || parsed.field === 'parody') {
+				return tags.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'language' || parsed.field === 'lang') {
+				return languages.some(value => value.includes(parsed.term));
+			}
+			return searchableParts.join(' ').toLowerCase().includes(parsed.term);
 		});
 	}
 
@@ -388,7 +420,7 @@ async function openGalleryDetail(gallery) {
 			data = await apiFetch(`/api/gallery/details_by_id/${encodeURIComponent(_detailGallery.gallery_id)}`);
 		} else {
 			const creatorName = encodeURIComponent(_currentCreator);
-			const galleryName = encodeURIComponent(itemLabel(gallery));
+			const galleryName = encodeURIComponent(itemPathName(gallery));
 			data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
 		}
 
@@ -455,7 +487,7 @@ function createGalleryGrid(items, itemType, onClick) {
 			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
 		} else if (itemType === 'gallery') {
 			const creator = _currentCreator || '';
-			const coverUrl = `/api/gallery/cover/${encodeURIComponent(creator)}/${encodeURIComponent(label)}`;
+			const coverUrl = `/api/gallery/cover/${encodeURIComponent(creator)}/${encodeURIComponent(itemPathName(item))}`;
 			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
 		}
 
@@ -607,17 +639,18 @@ async function loadGalleries(creator) {
 }
 
 async function loadPages(creator, gallery) {
-	const galleryName = typeof gallery === 'string' ? gallery : (gallery.label || gallery.name || '');
+	const galleryDisplayName = itemLabel(gallery);
+	const galleryPathName = itemPathName(gallery);
 	
 	setBreadcrumb([
 		{ label: 'Creators', onClick: loadCreators },
 		{ label: creator, onClick: () => loadGalleries(creator) },
-		{ label: galleryName }
+		{ label: galleryDisplayName }
 	]);
 	try {
-		const data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}`));
+		const data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}`));
 		const pages = (data.pages || []).map(
-			f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryName)}/${encodeURIComponent(f)}`)
+			f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}/${encodeURIComponent(f)}`)
 		);
 		if (!pages.length) {
 			document.getElementById('localList').textContent = 'Gallery is empty.';
@@ -625,7 +658,7 @@ async function loadPages(creator, gallery) {
 			return;
 		}
 		_readerFromStream = false;
-		openReader(pages, galleryName, () => {
+		openReader(pages, galleryDisplayName, () => {
 			document.getElementById('localPane').style.display = '';
 			loadGalleries(creator);
 		});

@@ -126,6 +126,16 @@ def _is_archive(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in {".cbz", ".zip"}
 
 
+def _display_gallery_name(name: str) -> str:
+    text = str(name or "").strip()
+    if not text:
+        return ""
+    stem, ext = os.path.splitext(text)
+    if ext.lower() in {".cbz", ".zip"} and stem:
+        return stem
+    return text
+
+
 def _gallery_ids_for_deleted_path(root_path: str, relative_parts: list[str]) -> list[int]:
     """Resolve gallery IDs affected by a filesystem delete path."""
     if not root_path or not relative_parts:
@@ -684,7 +694,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
             if label:
                 creator_name_map[int(creator_id)] = label
 
-        meta["title"] = str(row[0] or row[1] or "")
+        meta["title"] = _display_gallery_name(str(row[0] or row[1] or ""))
         meta["page_count"] = int(row[2]) if row[2] is not None else 0
         meta["creators"] = [creator_name_map[cid] for cid in creator_ids if cid in creator_name_map]
         meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
@@ -740,6 +750,10 @@ def _build_gallery_lookup_by_creator_and_title(
             for text in (clean_title, raw_title)
             if text
         }
+        for text in (clean_title, raw_title):
+            display_text = _display_gallery_name(text)
+            if display_text:
+                title_candidates.add(display_text.lower())
         if not title_candidates:
             continue
 
@@ -850,10 +864,13 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
     for row in valid_rows:
         creator_name = row["creator_name"]
         gallery_name = row["gallery_name"]
+        gallery_display_name = _display_gallery_name(gallery_name)
         gallery_id = row.get("gallery_id")
         meta = gallery_meta.get(int(gallery_id)) if gallery_id is not None else {}
         if not meta:
             meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_name or "").strip().lower()), {})
+            if not meta:
+                meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_display_name or "").strip().lower()), {})
             if meta and gallery_id is None:
                 gallery_id = meta.get("gallery_id")
         page_count = meta.get("num_pages") if meta else None
@@ -861,8 +878,9 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
             page_count = _count_pages_on_disk(row.get("download_path", ""))
 
         gallery_item = {
-            "label": gallery_name,
-            "name": gallery_name,
+            "label": gallery_display_name,
+            "name": gallery_display_name,
+            "path_name": gallery_name,
             "gallery_id": gallery_id,
             "page_count": page_count,
             "languages": list(meta.get("languages") or []),
@@ -920,17 +938,21 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
         )
         existing_names = {item.get("name") for item in galleries_by_creator.get(creator_name, [])}
         for gallery_name in _scan_galleries_from_filesystem(root_path, creator_name):
-            if gallery_name in existing_names:
+            gallery_display_name = _display_gallery_name(gallery_name)
+            if gallery_display_name in existing_names:
                 continue
             gallery_path = _safe_path(root_path, creator_name, gallery_name)
             meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_name or "").strip().lower()), {})
+            if not meta:
+                meta = gallery_lookup.get((str(creator_name or "").strip().lower(), str(gallery_display_name or "").strip().lower()), {})
             gallery_id = meta.get("gallery_id") or _gallery_id_from_name(gallery_name)
             page_count = meta.get("num_pages") if meta else None
             if page_count is None:
                 page_count = _count_pages_on_disk(gallery_path or "")
             gallery_item = {
-                "label": gallery_name,
-                "name": gallery_name,
+                "label": gallery_display_name,
+                "name": gallery_display_name,
+                "path_name": gallery_name,
                 "gallery_id": gallery_id,
                 "page_count": page_count,
                 "languages": list(meta.get("languages") or []),

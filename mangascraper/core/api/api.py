@@ -759,8 +759,9 @@ class DB:
         conn = getattr(_thread_local, "connection", None)
         if conn is None:
             os.makedirs(DATA_DIR, exist_ok=True)
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=120.0)
             conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA busy_timeout = 120000")
             _thread_local.connection = conn
         return conn
 
@@ -777,6 +778,13 @@ class DB:
             c.executescript(f"""
             CREATE TABLE IF NOT EXISTS GalleriesQueue (
                 id INTEGER PRIMARY KEY
+            );
+            CREATE TABLE IF NOT EXISTS DownloadQueue (
+                download_no INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                ids_json TEXT NOT NULL,
+                created_at TEXT,
+                updated_at TEXT
             );
             CREATE TABLE IF NOT EXISTS Creators (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -899,6 +907,7 @@ class DB:
             c.execute("CREATE INDEX IF NOT EXISTS idx_collectionfilters_key ON CollectionFilters(filter_key)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_collection_id ON CollectionItems(collection_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_gallery_id ON CollectionItems(gallery_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_downloadqueue_status_no ON DownloadQueue(status, download_no)")
 
             c.execute("PRAGMA table_info(CacheReferences)")
             cache_ref_columns = [row[1] for row in c.fetchall()]
@@ -1114,6 +1123,126 @@ class DB:
                 except Exception:
                     continue
             conn.commit()
+
+    class DownloadQueue:
+        @staticmethod
+        def _row_to_dict(row) -> dict | None:
+            if not row:
+                return None
+            try:
+                ids = json.loads(row[2]) if row[2] else []
+            except Exception:
+                ids = []
+            return {
+                "download_no": Helpers.normalise_integer(row[0]),
+                "status": Helpers.safe_text(row[1], "queued"),
+                "ids": Helpers.normalise_integer_list(ids),
+                "created_at": Helpers.safe_text(row[3], ""),
+                "updated_at": Helpers.safe_text(row[4], ""),
+            }
+
+        @staticmethod
+        def enqueue(ids: list[int]) -> dict | None:
+            DB.init_db()
+            normalised_ids = sorted(set(Helpers.normalise_integer_list(ids)))
+            if not normalised_ids:
+                return None
+            now = datetime.now(timezone.utc).isoformat()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO DownloadQueue (status, ids_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    ("queued", json.dumps(normalised_ids), now, now),
+                )
+                download_no = Helpers.normalise_integer(cursor.lastrowid)
+                conn.commit()
+                return {
+                    "download_no": download_no,
+                    "status": "queued",
+                    "ids": normalised_ids,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+
+        @staticmethod
+        def list() -> list[dict]:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT download_no, status, ids_json, created_at, updated_at
+                    FROM DownloadQueue
+                    ORDER BY download_no ASC
+                    """
+                )
+                rows = []
+                for row in cursor.fetchall():
+                    parsed = DB.DownloadQueue._row_to_dict(row)
+                    if parsed and parsed.get("download_no") is not None:
+                        rows.append(parsed)
+                return rows
+
+        @staticmethod
+        def next_queued() -> dict | None:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT download_no, status, ids_json, created_at, updated_at
+                    FROM DownloadQueue
+                    WHERE LOWER(COALESCE(status, ''))='queued'
+                    ORDER BY download_no ASC
+                    LIMIT 1
+                    """
+                )
+                return DB.DownloadQueue._row_to_dict(cursor.fetchone())
+
+        @staticmethod
+        def set_status(download_no: int, status: str) -> bool:
+            DB.init_db()
+            job_no = Helpers.normalise_integer(download_no)
+            safe_status = Helpers.safe_text(status, "").strip().lower()
+            if job_no is None or safe_status not in {"queued", "running"}:
+                return False
+            now = datetime.now(timezone.utc).isoformat()
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE DownloadQueue SET status=?, updated_at=? WHERE download_no=?",
+                    (safe_status, now, int(job_no)),
+                )
+                conn.commit()
+                return bool(cursor.rowcount)
+
+        @staticmethod
+        def remove(download_no: int) -> bool:
+            DB.init_db()
+            job_no = Helpers.normalise_integer(download_no)
+            if job_no is None:
+                return False
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM DownloadQueue WHERE download_no=?", (int(job_no),))
+                conn.commit()
+                return bool(cursor.rowcount)
+
+        @staticmethod
+        def remove_by_status(status: str) -> int:
+            DB.init_db()
+            safe_status = Helpers.safe_text(status, "").strip().lower()
+            if not safe_status:
+                return 0
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM DownloadQueue WHERE LOWER(COALESCE(status, ''))=?", (safe_status,))
+                deleted = cursor.rowcount if cursor.rowcount is not None else 0
+                conn.commit()
+                return int(deleted)
 
     @staticmethod
     def list_galleries(status=None):

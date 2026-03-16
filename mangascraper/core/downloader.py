@@ -184,6 +184,29 @@ def _shutdown_all_executors(wait=True):
             logger.warning(f"Error shutting down executor: {e}")
     _active_executors.clear()
 
+
+def _is_db_locked_error(error: Exception) -> bool:
+    text = str(error or "").strip().lower()
+    return "database is locked" in text or "database table is locked" in text
+
+
+def _wait_for_db_unlock(context: str = "database") -> None:
+    orchestrator.refresh_globals()
+    wait_seconds = max(1.0, float(getattr(orchestrator, "min_retry_sleep", 1) or 1))
+    logger.warning(f"Downloader: {context} is locked. Waiting {wait_seconds:.1f}s before retrying...")
+    time.sleep(wait_seconds)
+
+
+def _call_db_with_lock_wait(func, *args, context: str = "database", **kwargs):
+    while True:
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            if _is_db_locked_error(exc):
+                _wait_for_db_unlock(context=context)
+                continue
+            raise
+
 def _signal_handler(signum, frame):
     """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
     logger.warning(f"\nReceived signal {signum}, shutting down gracefully...")
@@ -717,7 +740,13 @@ def process_galleries(batch_ids):
     for gallery_id in batch_ids:
         extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
-            scraperapi.DB.Gallery.start(gallery_id, download_location, extension_name)
+            _call_db_with_lock_wait(
+                scraperapi.DB.Gallery.start,
+                gallery_id,
+                download_location,
+                extension_name,
+                context=f"Gallery {gallery_id} start",
+            )
         else:
             log_clarification()
             logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
@@ -769,7 +798,11 @@ def process_galleries(batch_ids):
 
                 if skip_gallery:
                     if not orchestrator.dry_run:
-                        scraperapi.DB.Gallery.skip(gallery_id)
+                        _call_db_with_lock_wait(
+                            scraperapi.DB.Gallery.skip,
+                            gallery_id,
+                            context=f"Gallery {gallery_id} skip",
+                        )
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
@@ -871,7 +904,11 @@ def process_galleries(batch_ids):
                         logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
-                    scraperapi.DB.Gallery.complete(gallery_id)
+                    _call_db_with_lock_wait(
+                        scraperapi.DB.Gallery.complete,
+                        gallery_id,
+                        context=f"Gallery {gallery_id} complete",
+                    )
                     active_extension.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
@@ -898,10 +935,18 @@ def process_galleries(batch_ids):
                 break  # exit retry loop on success
 
             except Exception as e:
+                if _is_db_locked_error(e):
+                    _wait_for_db_unlock(context=f"Gallery {gallery_id} database")
+                    gallery_attempts = max(gallery_attempts - 1, 0)
+                    continue
                 logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
                     update_failed_galleries(False, gallery_id=gallery_id, meta=meta, Reason=str(e))
-                    scraperapi.DB.Gallery.fail(gallery_id)
+                    _call_db_with_lock_wait(
+                        scraperapi.DB.Gallery.fail,
+                        gallery_id,
+                        context=f"Gallery {gallery_id} fail",
+                    )
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None, overall_start_index: int = 0, overall_total_galleries: int | None = None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.

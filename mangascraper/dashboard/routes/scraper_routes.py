@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/scraper_routes.py
 
-import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile
+import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile, re
 from flask import Blueprint, jsonify, request
 
 from mangascraper.core.api import api as scraperapi
@@ -63,6 +63,20 @@ def _normalise_ids(value) -> list[int]:
         if parsed is not None:
             ids.append(parsed)
     return list(dict.fromkeys(ids))
+
+
+def _parse_prefixed_query(value: str) -> tuple[str, str] | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.match(r"^(artist|group|tag|character|parody|search)\s*:\s*(.+)$", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    query_type = str(match.group(1) or "").strip().lower()
+    query_value = str(match.group(2) or "").strip()
+    if not query_value:
+        return None
+    return query_type, query_value
 
 
 def _queue_rows(ids: list[int], metadata: dict | None = None) -> list[dict]:
@@ -370,6 +384,9 @@ def search_galleries():
         return jsonify({"message": f"Unsupported query_type '{query_type}'."}), 400
 
     query_value = str(payload.get("query_value") or "").strip()
+    parsed_prefixed = _parse_prefixed_query(query_value)
+    if parsed_prefixed and query_type in {"search", "artist", "group", "tag", "character", "parody"}:
+        query_type, query_value = parsed_prefixed
     sort_value = str(payload.get("sort") or orchestrator.DEFAULT_PAGE_SORT).strip()
     sort_value = orchestrator.get_valid_sort_value(sort_value)
     start_page = _safe_int(payload.get("start_page"), orchestrator.DEFAULT_PAGE_RANGE_START)
