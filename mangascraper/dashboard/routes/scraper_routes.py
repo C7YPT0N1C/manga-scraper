@@ -17,6 +17,8 @@ _progress_port = None
 _progress_token = None
 _last_run_status = "stopped"
 _last_exit_code = None
+_active_download_no = None
+_active_queue_file = None
 
 _SEARCH_TYPES = {
     "homepage",
@@ -191,6 +193,82 @@ def _queue_total() -> int:
         return len(scraperapi.Cache.Load.queued_galleries() or [])
     except Exception:
         return 0
+
+
+def _write_queue_ids_file(ids: list[int]) -> str:
+    # The CLI caps --ids at 25 entries. Use a temporary file for reliable large batches.
+    temp_root = getattr(orchestrator, "TEMP_DIR", None) or tempfile.gettempdir()
+    os.makedirs(temp_root, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="ms_queue_ids_", dir=temp_root, delete=False) as handle:
+        handle.write("\n".join(str(i) for i in ids))
+        return handle.name
+
+
+def _finalise_completed_download_job() -> int | None:
+    global _active_download_no, _active_queue_file
+
+    with _process_lock:
+        if _is_running() or _active_download_no is None:
+            return None
+        completed_no = _active_download_no
+        queue_file = _active_queue_file
+        _active_download_no = None
+        _active_queue_file = None
+
+    try:
+        scraperapi.DB.DownloadQueue.remove(completed_no)
+    except Exception:
+        pass
+
+    if queue_file:
+        try:
+            if os.path.isfile(queue_file):
+                os.remove(queue_file)
+        except Exception:
+            pass
+
+    return completed_no
+
+
+def _start_next_queued_download() -> dict | None:
+    global _active_download_no, _active_queue_file
+
+    with _process_lock:
+        if _is_running() or _active_download_no is not None:
+            return None
+
+    job = scraperapi.DB.DownloadQueue.next_queued()
+    if not job:
+        return None
+
+    download_no = _safe_int(job.get("download_no"), None)
+    ids = _normalise_ids(job.get("ids") or [])
+    if download_no is None or not ids:
+        if download_no is not None:
+            scraperapi.DB.DownloadQueue.remove(download_no)
+        return None
+
+    queue_file = _write_queue_ids_file(ids)
+    scraperapi.DB.DownloadQueue.set_status(download_no, "running")
+    ok, err = _start_process(["--file", queue_file])
+    if err:
+        scraperapi.DB.DownloadQueue.set_status(download_no, "queued")
+        try:
+            if os.path.isfile(queue_file):
+                os.remove(queue_file)
+        except Exception:
+            pass
+        return None
+
+    with _process_lock:
+        _active_download_no = int(download_no)
+        _active_queue_file = queue_file
+
+    return {
+        "download_no": int(download_no),
+        "status": "running",
+        "ids": ids,
+    }
 
 
 def _allocate_localhost_port() -> int:
@@ -594,7 +672,8 @@ def queue_get():
     metadata = scraperapi.Cache.Load.id_metadata(ids) if ids else {}
     rows = _queue_rows(ids, metadata)
     summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
-    return jsonify({"ids": ids, "summary": summary, "queue": rows})
+    downloads = scraperapi.DB.DownloadQueue.list()
+    return jsonify({"ids": ids, "summary": summary, "queue": rows, "downloads": downloads})
 
 
 @scraper_bp.route("/queue/add", methods=["POST"])
@@ -629,27 +708,39 @@ def queue_clear():
 @scraper_bp.route("/queue/start", methods=["POST"])
 def queue_start():
     ids = scraperapi.Cache.Load.queued_galleries()
-    if not ids:
+    enqueued_job = None
+    if ids:
+        enqueued_job = scraperapi.DB.DownloadQueue.enqueue(ids)
+        scraperapi.Cache.Save.queued_galleries([])
+
+    started_job = _start_next_queued_download()
+    all_jobs = scraperapi.DB.DownloadQueue.list()
+    with _process_lock:
+        running_now = _is_running()
+
+    if not all_jobs and not running_now and not enqueued_job and not started_job:
         return jsonify({"message": "Queue is empty."}), 400
 
-    # The CLI caps --ids at 25 entries. Use a temporary file so large queue
-    # runs (e.g. cache-key batches) start reliably.
-    temp_root = getattr(orchestrator, "TEMP_DIR", None) or tempfile.gettempdir()
-    os.makedirs(temp_root, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", prefix="ms_queue_ids_", dir=temp_root, delete=False) as handle:
-        handle.write("\n".join(str(i) for i in ids))
-        queue_file = handle.name
+    if enqueued_job and started_job and started_job.get("download_no") == enqueued_job.get("download_no"):
+        message = f"Download #{enqueued_job.get('download_no')} started."
+    elif enqueued_job:
+        message = f"Download #{enqueued_job.get('download_no')} queued."
+    elif started_job:
+        message = f"Download #{started_job.get('download_no')} started."
+    else:
+        message = "Download already running."
 
-    cli_args = ["--file", queue_file]
-    ok, err = _start_process(cli_args)
-    if err:
-        return jsonify(err[0]), err[1]
-    return jsonify(ok)
+    return jsonify({
+        "message": message,
+        "enqueued": enqueued_job,
+        "started": started_job,
+        "downloads": all_jobs,
+    })
 
 @scraper_bp.route("/status", methods=["GET"])
 def status():
     """Return current scraper status."""
-    global _progress_port, _progress_token, _scraper_process, _started_at, _last_run_status, _last_exit_code
+    global _progress_port, _progress_token, _scraper_process, _started_at, _last_run_status, _last_exit_code, _active_download_no
 
     with _process_lock:
         running = _is_running()
@@ -664,6 +755,16 @@ def status():
                 _progress_port = None
                 _progress_token = None
 
+        if not _is_running() and _active_download_no is None:
+            try:
+                scraperapi.DB.DownloadQueue.remove_by_status("running")
+            except Exception:
+                pass
+
+    _finalise_completed_download_job()
+    _start_next_queued_download()
+
+    with _process_lock:
         running = _is_running()
         pid = _scraper_process.pid if running else None
         started_at = _started_at

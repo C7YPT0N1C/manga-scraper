@@ -308,6 +308,17 @@
   <button id="clearQueueBtn">Clear Queue</button>
   <p id="queueMsg"></p>
 
+  <table id="downloadQueueTable">
+    <thead>
+      <tr>
+        <th>DownloadNo</th>
+        <th>Status</th>
+        <th>IDs</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
   <table id="queueTable">
     <thead>
       <tr>
@@ -442,6 +453,22 @@ function renderRows(tableSelector, rows, options = {}) {
   }
 
   selectedRows[tableSelector] = tracked;
+}
+
+function renderDownloadQueueRows(rows) {
+  const tbody = document.querySelector('#downloadQueueTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  (rows || []).forEach(row => {
+    const tr = document.createElement('tr');
+    const ids = Array.isArray(row.ids) ? row.ids.map(v => Number(v)).filter(Number.isFinite) : [];
+    tr.innerHTML = `
+      <td>${asText(row.download_no, '-')}</td>
+      <td>${asText((row.status || '').toUpperCase(), '-')}</td>
+      <td>${ids.length ? ids.join(', ') : '-'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 function currentSearchRows() {
@@ -1097,10 +1124,12 @@ async function refreshQueue() {
   const res = await fetch('/api/scraper/queue');
   const data = await res.json();
   const rows = sortRowsByIdDesc(data.queue || []);
+  const downloads = Array.isArray(data.downloads) ? data.downloads : [];
   queueIds = new Set((data.ids || []).map(Number).filter(Number.isFinite));
+  renderDownloadQueueRows(downloads);
   renderRows('#queueTable', rows);
   renderSearchTables();
-  document.getElementById('queueMsg').textContent = `${rows.length} Galleries Queued.`;
+  document.getElementById('queueMsg').textContent = `${rows.length} Galleries Queued | ${downloads.length} Download Entries.`;
   await refreshStatus();
 }
 
@@ -1134,7 +1163,12 @@ document.getElementById('refreshAllBtn').onclick = async () => {
 
 document.getElementById('startBtn').onclick = async () => {
   setGlobalStatus('Starting scraper from selected queue...');
-  await fetch('/api/scraper/queue/start', { method: 'POST' });
+  const res = await fetch('/api/scraper/queue/start', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (data.message) {
+    document.getElementById('queueMsg').textContent = data.message;
+  }
+  await refreshQueue();
   await refreshStatus();
   clearGlobalStatus();
 };
