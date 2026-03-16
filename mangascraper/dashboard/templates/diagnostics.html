@@ -93,7 +93,6 @@
 <script>
 let currentLogName = '';
 let _dbCurrentTable = '';
-let _dbAutoRefreshTimer = null;
 let _fileRoots = [];
 let _fileCurrentRoot = '';
 let _fileCurrentPath = '';
@@ -207,13 +206,6 @@ async function loadDbTable(tableName, search) {
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
   }
-}
-
-function startDbAutoRefresh() {
-  if (_dbAutoRefreshTimer) clearInterval(_dbAutoRefreshTimer);
-  _dbAutoRefreshTimer = setInterval(() => {
-    if (_dbCurrentTable) loadDbTable(_dbCurrentTable);
-  }, 20000);
 }
 
 async function loadFileRoots() {
@@ -567,7 +559,6 @@ activateDiagTab('selftest');
 fetchLogsList();
 setInterval(fetchLogsList, 20000);
 loadDbTables();
-startDbAutoRefresh();
 loadFileRoots();
 </script>
 {% endblock %}
