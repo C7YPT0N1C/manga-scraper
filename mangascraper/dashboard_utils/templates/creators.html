@@ -22,7 +22,6 @@
 
 <div id="localPane" class="modePane">
 	<div id="localNav">
-		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
 	</div>
 
 	<div id="searchFilterBar">
@@ -651,7 +650,7 @@ function refreshDisplay() {
 
 async function loadCreators(options = {}) {
 	const pushUrl = options.pushUrl !== false;
-	setBreadcrumb([{ label: 'TestCreators' }]);
+	setBreadcrumb([{ label: 'Creators' }]);
 	_currentCreator = null;
 	_currentItemType = 'creators';
 	_currentPage = 1;
