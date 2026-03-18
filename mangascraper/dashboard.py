@@ -74,15 +74,15 @@ def create_app():
 
     @app.route("/scraper")
     def scraper_page():
-        return render_template("scraper.html")
+        return render_template("scraper.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
 
     @app.route("/database")
     def database_page():
-        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_CONFIG)
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
 
     @app.route("/diagnostics")
     def logs_page():
-        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_CONFIG)
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
 
     @app.route("/collections")
     def collections_index_redirect():
@@ -101,7 +101,7 @@ def create_app():
     def collection_page(collection_id):
         return render_template(
             "collections.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
             initial_collection_id=int(collection_id),
             initial_gallery_id="",
         )
@@ -110,7 +110,7 @@ def create_app():
     def collection_gallery_page(collection_id, gallery_id):
         return render_template(
             "collections.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
             initial_collection_id=int(collection_id),
             initial_gallery_id=int(gallery_id),
         )

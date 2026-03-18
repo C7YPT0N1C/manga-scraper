@@ -142,11 +142,14 @@ function normalisePageSize(value, fallback) {
   return fallback;
 }
 
+document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 960)}px`);
+document.documentElement.style.setProperty('--gallery-tile-aspect-ratio', String(VIEWER_CONFIG.tileAspectRatio || '2 / 3'));
+
 let selectedCollectionId = null;
 let _detailGallery = null;
 let _allCollectionItems = [];
 let _collectionPage = 1;
-let _collectionItemsPerPage = normalisePageSize(VIEWER_CONFIG.collectionPageSize, 20);
+let _collectionItemsPerPage = normalisePageSize(VIEWER_CONFIG.collectionPageSize, PAGE_SIZE_OPTIONS[0]);
 
 const reader = {
   pages: [],

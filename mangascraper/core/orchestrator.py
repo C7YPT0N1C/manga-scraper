@@ -209,13 +209,13 @@ DASHBOARD_GALLERY_VIEW_CONFIG = {
 }
 
 DASHBOARD_COLLECTION_VIEW_CONFIG = {
-    "tileMinWidthPx": 960,
+    "tileMinWidthPx": 480,
     "tileAspectRatio": "2 / 3",
     "collectionPageSize": 20,
     "galleryTilesPerPage": [13, 26, 39, 52, 65],
 }
 
-DASHBOARD_OTHER_CONFIG = {
+DASHBOARD_OTHER_VIEWS_CONFIG = {
     "databasePageSize": 25,
 }
 
