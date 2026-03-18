@@ -67,6 +67,9 @@
       <select id="fileRootSelect" title="Choose root folder"></select>
       <input id="fileUploadInput" type="file" multiple style="display:none">
     </div>
+    <p id="fileRootWarning" style="display:none; margin:0.45rem 0; padding:0.5rem 0.65rem; border:1px solid #a66b00; background:#322208; color:#ffd58a; border-radius:6px;">
+      Warning: You are browsing a system root. File operations here can affect your whole machine.
+    </p>
     <div id="fileBreadcrumb" class="file-breadcrumb"></div>
     <p id="fileStatusMsg">Choose a root folder to begin.</p>
     <div id="fileListPanel" style="overflow-x:auto;max-height:60vh;overflow-y:auto">
@@ -338,6 +341,7 @@ async function loadFileRoots() {
       select.selectedIndex = 1;
       _fileCurrentRoot = select.value;
     }
+    _updateFileRootWarning();
     _fileCurrentPath = '';
     _fileEntries = [];
     _setFileSelectedPaths([], -1);
@@ -358,6 +362,17 @@ function _pathDirname(path) {
 function _pathBasename(path) {
   const parts = String(path || '').split('/').filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
+}
+
+function _isSystemFileRoot(rootPath) {
+  const root = String(rootPath || '');
+  if (!root) return false;
+  return _fileRoots.some(item => String(item.root_path || '') === root && String(item.extension_used || '').toLowerCase() === 'system');
+}
+
+function _updateFileRootWarning() {
+  const warning = document.getElementById('fileRootWarning');
+  warning.style.display = _isSystemFileRoot(_fileCurrentRoot) ? '' : 'none';
 }
 
 function _fileCanOpenInline(entry) {
@@ -967,6 +982,7 @@ document.getElementById('fileUploadInput').addEventListener('change', event => {
 });
 document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileCurrentRoot = e.target.value;
+  _updateFileRootWarning();
   _fileCurrentPath = '';
   _fileEntries = [];
   _setFileSelectedPaths([], -1);

@@ -150,6 +150,13 @@ def _resolve_file_browser_root(requested_root: str | None = None) -> str:
         if os.path.isabs(candidate) and os.path.isdir(candidate):
             return candidate
 
+    # Default to DB-managed download roots first (ordered with skeleton priority).
+    managed_roots = _available_roots()
+    if managed_roots:
+        preferred = os.path.realpath(str(managed_roots[0].get("root_path") or "").strip())
+        if preferred and os.path.isdir(preferred):
+            return preferred
+
     roots = _file_browser_roots()
     if roots:
         fallback = str(roots[0].get("root_path") or os.sep)
