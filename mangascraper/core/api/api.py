@@ -1111,20 +1111,39 @@ class DB:
             cursor.execute(f"PRAGMA table_info({table_name})")  # table name already validated above
             columns = [row[1] for row in cursor.fetchall()]
 
+            safe_limit = max(1, int(limit or 500))
+            safe_offset = max(0, int(offset or 0))
+            total_rows = 0
+
             if search and search.strip():
                 like = f"%{search.strip()}%"
                 conditions = " OR ".join(f"CAST({col} AS TEXT) LIKE ?" for col in columns)
-                params = [like] * len(columns) + [limit, offset]
+                count_params = [like] * len(columns)
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {table_name} WHERE {conditions}",
+                    count_params,
+                )
+                total_rows = int((cursor.fetchone() or [0])[0] or 0)
+
+                params = [like] * len(columns) + [safe_limit, safe_offset]
                 cursor.execute(
                     f"SELECT * FROM {table_name} WHERE {conditions} LIMIT ? OFFSET ?",
                     params,
                 )
             else:
-                cursor.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (limit, offset))
+                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                total_rows = int((cursor.fetchone() or [0])[0] or 0)
+                cursor.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (safe_limit, safe_offset))
 
             rows = [list(row) for row in cursor.fetchall()]
 
-        return {"columns": columns, "rows": rows}
+        return {
+            "columns": columns,
+            "rows": rows,
+            "total_rows": total_rows,
+            "limit": safe_limit,
+            "offset": safe_offset,
+        }
 
     @staticmethod
     def set_queued_galleries(ids):

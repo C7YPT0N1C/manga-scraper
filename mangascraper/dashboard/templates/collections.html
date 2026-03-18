@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Collections</h2>
+<div id="galleryViewerConfig" data-config='{{ (gallery_viewer_config or {}) | tojson }}' hidden></div>
 
 <div class="panel">
   <h3>Create Collection</h3>
@@ -63,6 +64,15 @@
 
   <h4>Items</h4>
   <div id="collectionItems"></div>
+  <div class="pagination-controls" id="collectionPaginationControls" style="display:none">
+    <button id="collectionPrevPageBtn" type="button">← Previous</button>
+    <span class="pagination-info">Page <span id="collectionPageNum">1</span> of <span id="collectionTotalPages">1</span></span>
+    <div class="filter-field filter-inline-field">
+      <label for="collectionItemsPerPageSelect">Items Per Page</label>
+      <select id="collectionItemsPerPageSelect" class="filter-select"></select>
+    </div>
+    <button id="collectionNextPageBtn" type="button">Next →</button>
+  </div>
   <p id="editorMsg"></p>
 </div>
 
@@ -112,8 +122,22 @@
 <script>
 'use strict';
 
+const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
+
+function normalisePageSize(value, fallback) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
+    return numeric;
+  }
+  return fallback;
+}
+
 let selectedCollectionId = null;
 let _detailGallery = null;
+let _allCollectionItems = [];
+let _collectionPage = 1;
+let _collectionItemsPerPage = normalisePageSize(VIEWER_CONFIG.collectionPageSize, 20);
 
 const reader = {
   pages: [],
@@ -307,17 +331,66 @@ function readFilterRows() {
   return rows;
 }
 
+function refreshCollectionItemsPerPageSelect() {
+  const select = document.getElementById('collectionItemsPerPageSelect');
+  if (!select.options.length) {
+    PAGE_SIZE_OPTIONS.forEach(size => {
+      const option = document.createElement('option');
+      option.value = String(size);
+      option.textContent = String(size);
+      select.appendChild(option);
+    });
+  }
+  select.value = String(_collectionItemsPerPage);
+}
+
+function getCollectionPaginatedItems(items) {
+  const filteredCount = Array.isArray(items) ? items.length : 0;
+  const itemsPerPage = _collectionItemsPerPage;
+  const totalPages = Math.ceil(filteredCount / itemsPerPage) || 1;
+  const startIdx = (_collectionPage - 1) * itemsPerPage;
+  const endIdx = startIdx + itemsPerPage;
+  const paginatedItems = (items || []).slice(startIdx, endIdx);
+  return { items: paginatedItems, totalPages, filteredCount };
+}
+
+function updateCollectionPaginationControls(totalPages, filteredCount) {
+  const controls = document.getElementById('collectionPaginationControls');
+  const pageNumEl = document.getElementById('collectionPageNum');
+  const totalPagesEl = document.getElementById('collectionTotalPages');
+
+  if (_collectionPage > totalPages) {
+    _collectionPage = totalPages;
+  }
+
+  refreshCollectionItemsPerPageSelect();
+
+  if (filteredCount <= 0) {
+    controls.style.display = 'none';
+  } else {
+    controls.style.display = 'flex';
+    pageNumEl.textContent = _collectionPage;
+    totalPagesEl.textContent = totalPages;
+    document.getElementById('collectionPrevPageBtn').disabled = _collectionPage === 1;
+    document.getElementById('collectionNextPageBtn').disabled = _collectionPage === totalPages;
+  }
+}
+
 function renderItems(items) {
   const host = document.getElementById('collectionItems');
-  if (!Array.isArray(items) || !items.length) {
+  _allCollectionItems = Array.isArray(items) ? items : [];
+  const { items: pageItems, totalPages, filteredCount } = getCollectionPaginatedItems(_allCollectionItems);
+
+  if (!pageItems.length) {
     host.className = '';
     host.innerHTML = '<p>No items in this collection.</p>';
+    updateCollectionPaginationControls(totalPages, filteredCount);
     return;
   }
   host.innerHTML = '';
   host.className = 'gallery-grid';
 
-  items.forEach(item => {
+  pageItems.forEach(item => {
     const galleryId = Number(item.gallery_id || 0);
     const title = String(item.title || `Gallery ${galleryId}`).trim();
     const pageCount = Number(item.page_count || 0);
@@ -397,6 +470,8 @@ function renderItems(items) {
       }
     });
   });
+
+  updateCollectionPaginationControls(totalPages, filteredCount);
 }
 
 async function loadCollections() {
@@ -426,6 +501,7 @@ async function loadCollections() {
 
 async function loadCollection(collectionId) {
   selectedCollectionId = Number(collectionId);
+  _collectionPage = 1;
   const data = await api(`/api/collections/${selectedCollectionId}`);
   const itemData = await api(`/api/collections/${selectedCollectionId}/items`);
 
@@ -664,6 +740,24 @@ document.getElementById('galleryDetailFavBtn').addEventListener('click', async (
 });
 
 document.getElementById('readerClose').addEventListener('click', closeReader);
+document.getElementById('collectionPrevPageBtn').addEventListener('click', () => {
+  if (_collectionPage > 1) {
+    _collectionPage -= 1;
+    renderItems(_allCollectionItems);
+  }
+});
+document.getElementById('collectionNextPageBtn').addEventListener('click', () => {
+  const totalPages = Math.ceil((_allCollectionItems.length || 0) / _collectionItemsPerPage) || 1;
+  if (_collectionPage < totalPages) {
+    _collectionPage += 1;
+    renderItems(_allCollectionItems);
+  }
+});
+document.getElementById('collectionItemsPerPageSelect').addEventListener('change', event => {
+  _collectionItemsPerPage = normalisePageSize(event.target.value, _collectionItemsPerPage);
+  _collectionPage = 1;
+  renderItems(_allCollectionItems);
+});
 document.getElementById('prevBtn').addEventListener('click', () => {
   if (reader.index > 0) {
     reader.index -= 1;
@@ -692,5 +786,6 @@ document.addEventListener('keydown', event => {
 });
 
 loadCollections();
+refreshCollectionItemsPerPageSelect();
 </script>
 {% endblock %}

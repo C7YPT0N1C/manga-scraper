@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Diagnostics</h2>
+<div id="galleryViewerConfig" data-config='{{ (gallery_viewer_config or {}) | tojson }}' hidden></div>
 
 <section>
   <div id="diagTabs" style="display:flex; gap:0.45rem; margin-bottom:0.8rem; flex-wrap:wrap;">
@@ -40,6 +41,11 @@
         <thead><tr id="dbTableHead"></tr></thead>
         <tbody id="dbTableBody"></tbody>
       </table>
+    </div>
+    <div class="pagination-controls" id="dbPaginationControls" style="display:none; margin-top:0.75rem;">
+      <button id="dbPrevPageBtn" type="button">← Previous</button>
+      <span class="pagination-info">Page <span id="dbPageNum">1</span> of <span id="dbTotalPages">1</span></span>
+      <button id="dbNextPageBtn" type="button">Next →</button>
     </div>
   </div>
 
@@ -91,8 +97,14 @@
 
 {% block scripts %}
 <script>
+const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
+const DB_PAGE_SIZE = Math.max(1, Number(VIEWER_CONFIG.databasePageSize || 25));
+
 let currentLogName = '';
 let _dbCurrentTable = '';
+let _dbCurrentPage = 1;
+let _dbTotalPages = 1;
+let _dbLastSearch = '';
 let _fileRoots = [];
 let _fileCurrentRoot = '';
 let _fileCurrentPath = '';
@@ -150,7 +162,9 @@ async function loadDbTables() {
     });
     _dbCurrentTable = sel.value;
     if (_dbCurrentTable) {
-      await loadDbTable(_dbCurrentTable, '');
+      _dbCurrentPage = 1;
+      _dbLastSearch = '';
+      await loadDbTable(_dbCurrentTable, '', 1);
     } else {
       status.textContent = 'No tables found.';
     }
@@ -159,20 +173,31 @@ async function loadDbTables() {
   }
 }
 
-async function loadDbTable(tableName, search) {
+async function loadDbTable(tableName, search, page) {
   if (!tableName) return;
   _dbCurrentTable = tableName;
   const status = document.getElementById('dbStatusMsg');
   const head = document.getElementById('dbTableHead');
   const body = document.getElementById('dbTableBody');
-  const searchVal = search !== undefined ? search : document.getElementById('dbSearchBox').value.trim();
+  const pageNumEl = document.getElementById('dbPageNum');
+  const totalPagesEl = document.getElementById('dbTotalPages');
+  const paginationControls = document.getElementById('dbPaginationControls');
+  const prevBtn = document.getElementById('dbPrevPageBtn');
+  const nextBtn = document.getElementById('dbNextPageBtn');
+
+  const requestedPageRaw = Number(page !== undefined ? page : (_dbCurrentPage || 1));
+  const requestedPage = Number.isFinite(requestedPageRaw) && requestedPageRaw > 0 ? Math.floor(requestedPageRaw) : 1;
+  const searchVal = search !== undefined ? String(search || '').trim() : document.getElementById('dbSearchBox').value.trim();
+  _dbLastSearch = searchVal;
 
   status.textContent = `Loading ${tableName}...`;
   head.innerHTML = '';
   body.innerHTML = '';
+  paginationControls.style.display = 'none';
 
   try {
-    const params = new URLSearchParams({ limit: 1000 });
+    const offset = (requestedPage - 1) * DB_PAGE_SIZE;
+    const params = new URLSearchParams({ limit: String(DB_PAGE_SIZE), offset: String(offset) });
     if (searchVal) params.set('search', searchVal);
     const res = await fetch(`/api/db/table/${encodeURIComponent(tableName)}?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -202,7 +227,22 @@ async function loadDbTable(tableName, search) {
       body.appendChild(tr);
     });
 
-    status.textContent = `${(data.rows || []).length} rows in ${tableName}${searchVal ? ' (filtered)' : ''}.`;
+    const totalRows = Number(data.total_rows || 0);
+    _dbTotalPages = Math.max(1, Math.ceil(totalRows / DB_PAGE_SIZE));
+    _dbCurrentPage = Math.min(requestedPage, _dbTotalPages);
+
+    pageNumEl.textContent = String(_dbCurrentPage);
+    totalPagesEl.textContent = String(_dbTotalPages);
+    prevBtn.disabled = _dbCurrentPage <= 1;
+    nextBtn.disabled = _dbCurrentPage >= _dbTotalPages;
+
+    if (totalRows > 0) {
+      paginationControls.style.display = 'flex';
+    }
+
+    const startRow = totalRows > 0 ? ((_dbCurrentPage - 1) * DB_PAGE_SIZE) + 1 : 0;
+    const endRow = Math.min(_dbCurrentPage * DB_PAGE_SIZE, totalRows);
+    status.textContent = `${totalRows} rows in ${tableName}${searchVal ? ' (filtered)' : ''}. Showing ${startRow}-${endRow}.`;
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
   }
@@ -524,12 +564,27 @@ document.getElementById('runSelfTestBtn').addEventListener('click', runSelfTest)
 document.getElementById('loadLogBtn').addEventListener('click', loadLogFile);
 document.getElementById('logFileSelect').addEventListener('change', loadLogFile);
 
-document.getElementById('dbRefreshBtn').addEventListener('click', () => loadDbTable(_dbCurrentTable));
+document.getElementById('dbRefreshBtn').addEventListener('click', () => loadDbTable(_dbCurrentTable, _dbLastSearch, _dbCurrentPage));
 document.getElementById('dbTableSelect').addEventListener('change', e => {
   document.getElementById('dbSearchBox').value = '';
-  loadDbTable(e.target.value, '');
+  _dbCurrentPage = 1;
+  _dbLastSearch = '';
+  loadDbTable(e.target.value, '', 1);
 });
-document.getElementById('dbSearchBox').addEventListener('input', e => loadDbTable(_dbCurrentTable, e.target.value));
+document.getElementById('dbSearchBox').addEventListener('input', e => {
+  _dbCurrentPage = 1;
+  loadDbTable(_dbCurrentTable, e.target.value, 1);
+});
+document.getElementById('dbPrevPageBtn').addEventListener('click', () => {
+  if (_dbCurrentPage > 1) {
+    loadDbTable(_dbCurrentTable, _dbLastSearch, _dbCurrentPage - 1);
+  }
+});
+document.getElementById('dbNextPageBtn').addEventListener('click', () => {
+  if (_dbCurrentPage < _dbTotalPages) {
+    loadDbTable(_dbCurrentTable, _dbLastSearch, _dbCurrentPage + 1);
+  }
+});
 
 document.getElementById('fileRefreshBtn').addEventListener('click', () => loadFileEntries(_fileCurrentPath));
 document.getElementById('fileRootSelect').addEventListener('change', e => {

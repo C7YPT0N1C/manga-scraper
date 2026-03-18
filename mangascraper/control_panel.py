@@ -44,7 +44,7 @@ def create_app():
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
-        return render_template("gallery.html", gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEWER_CONFIG)
+        return render_template("gallery.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
     @app.route("/scraper")
     def scraper_page():
@@ -52,15 +52,15 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        return render_template("diagnostics.html")
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
     @app.route("/logs")
     def logs_page():
-        return render_template("diagnostics.html")
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
     @app.route("/collections")
     def collections_page():
-        return render_template("collections.html")
+        return render_template("collections.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
     return app
 

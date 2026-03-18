@@ -32,6 +32,10 @@
 	<div class="pagination-controls" id="paginationControls" style="display:none">
 		<button id="prevPageBtn">← Previous</button>
 		<span class="pagination-info">Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
+		<div class="filter-field filter-inline-field">
+			<label for="itemsPerPageSelect">Items Per Page</label>
+			<select id="itemsPerPageSelect" class="filter-select"></select>
+		</div>
 		<button id="nextPageBtn">Next →</button>
 	</div>
 </div>
@@ -95,8 +99,15 @@
 'use strict';
 
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
-const CREATOR_PAGE_SIZE = Number(VIEWER_CONFIG.creatorPageSize || 25);
-const GALLERY_PAGE_SIZE = Number(VIEWER_CONFIG.galleryPageSize || 25);
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
+
+function normalisePageSize(value, fallback) {
+	const numeric = Number(value);
+	if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
+		return numeric;
+	}
+	return fallback;
+}
 
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 120)}px`);
 document.documentElement.style.setProperty('--gallery-tile-aspect-ratio', String(VIEWER_CONFIG.tileAspectRatio || '2 / 3'));
@@ -111,6 +122,10 @@ let _currentPage = 1;
 let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
+let _pageSizeByType = {
+	creators: normalisePageSize(VIEWER_CONFIG.creatorPageSize, 20),
+	galleries: normalisePageSize(VIEWER_CONFIG.galleryPageSize, 20),
+};
 let _detailGallery = null;
 let _currentRootPath = '';
 
@@ -131,7 +146,25 @@ async function apiFetch(url) {
 }
 
 function getItemsPerPage() {
-	return _currentItemType === 'galleries' ? GALLERY_PAGE_SIZE : CREATOR_PAGE_SIZE;
+	if (_currentItemType === 'galleries') {
+		return _pageSizeByType.galleries;
+	}
+	return _pageSizeByType.creators;
+}
+
+function refreshItemsPerPageSelect() {
+	const select = document.getElementById('itemsPerPageSelect');
+	if (!select) return;
+	if (!select.options.length) {
+		PAGE_SIZE_OPTIONS.forEach(size => {
+			const option = document.createElement('option');
+			option.value = String(size);
+			option.textContent = String(size);
+			select.appendChild(option);
+		});
+	}
+	const current = getItemsPerPage();
+	select.value = String(current);
 }
 
 function normaliseText(value) {
@@ -281,7 +314,7 @@ function getPaginatedItems(items) {
 	return { items: paginatedItems, totalPages, filteredCount };
 }
 
-function updatePaginationControls(totalPages) {
+function updatePaginationControls(totalPages, filteredCount) {
 	const controls = document.getElementById('paginationControls');
 	const pageNumEl = document.getElementById('pageNum');
 	const totalPagesEl = document.getElementById('totalPages');
@@ -290,7 +323,9 @@ function updatePaginationControls(totalPages) {
 		_currentPage = totalPages;
 	}
 
-	if (totalPages <= 1) {
+	refreshItemsPerPageSelect();
+
+	if (filteredCount <= 0) {
 		controls.style.display = 'none';
 	} else {
 		controls.style.display = 'flex';
@@ -568,7 +603,7 @@ function setBreadcrumb(parts) {
 
 function refreshDisplay() {
 	const filteredItems = getFilteredItems();
-	const { items, totalPages } = getPaginatedItems(filteredItems);
+	const { items, totalPages, filteredCount } = getPaginatedItems(filteredItems);
 
 	if (_currentItemType === 'creators') {
 		createGalleryGrid(items, 'creator', loadGalleries);
@@ -576,7 +611,7 @@ function refreshDisplay() {
 		createGalleryGrid(items, 'gallery', item => loadPages(_currentCreator, item));
 	}
 
-	updatePaginationControls(totalPages);
+	updatePaginationControls(totalPages, filteredCount);
 }
 
 async function loadCreators() {
@@ -682,6 +717,17 @@ document.getElementById('nextPageBtn').addEventListener('click', () => {
 		_currentPage++;
 		refreshDisplay();
 	}
+});
+
+document.getElementById('itemsPerPageSelect').addEventListener('change', event => {
+	const selected = normalisePageSize(event.target.value, getItemsPerPage());
+	if (_currentItemType === 'galleries') {
+		_pageSizeByType.galleries = selected;
+	} else {
+		_pageSizeByType.creators = selected;
+	}
+	_currentPage = 1;
+	refreshDisplay();
 });
 
 document.getElementById('streamStartBtn').addEventListener('click', startStream);
@@ -840,6 +886,7 @@ document.getElementById('galleryDetailFavBtn').addEventListener('click', async (
 });
 
 setupSearchAndFilters();
+refreshItemsPerPageSelect();
 loadCreators();
 </script>
 {% endblock %}

@@ -198,9 +198,11 @@ DASHBOARD_PORT = DEFAULT_DASHBOARD_PORT
 DASHBOARD_DEBUG = DEFAULT_DASHBOARD_DEBUG
 DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 
-DASHBOARD_GALLERY_VIEWER_CONFIG = {
-    "creatorPageSize": 21,
-    "galleryPageSize": 21,
+DASHBOARD_VIEW_CONFIG = {
+    "creatorPageSize": 20,
+    "galleryPageSize": 20,
+    "collectionPageSize": 20,
+    "databasePageSize": 25,
     "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",
     "searchPlaceholder": "Search creators or galleries...",
