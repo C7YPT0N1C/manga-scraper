@@ -253,17 +253,14 @@ function renderGalleryDetail(gallery) {
   favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
   favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
 
-  // Add handler for Read Gallery button
+  // Add handler for Read Gallery button — navigate to reader page
   const readBtn = document.getElementById('galleryDetailReadBtn');
-  readBtn.onclick = async () => {
+  readBtn.onclick = () => {
     const galleryId = Number(gallery.gallery_id || 0);
-    const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
-    try {
-      await readGalleryById(galleryId, title);
-      closeGalleryDetail();
-    } catch (err) {
-      document.getElementById('editorMsg').textContent = err.message;
-    }
+    const cid = Number(selectedCollectionId || 0);
+    if (!galleryId || !cid) return;
+    const url = `/reader/collections/${cid}/${galleryId}/`;
+    window.location.href = url;
   };
 }
 
@@ -511,7 +508,7 @@ function renderItems(items) {
         const collectionId = selectedCollectionId;
         const galleryId = Number(item.gallery_id || 0);
         if (collectionId && galleryId) {
-          window.open(`/collections/${collectionId}/${galleryId}/`, '_blank');
+          window.open(`/reader/collections/${collectionId}/${galleryId}/`, '_blank');
         }
       }
     });
@@ -791,14 +788,13 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
   }
 });
 
-document.getElementById('galleryDetailReadBtn').addEventListener('click', async () => {
-  if (!_detailGallery || !_detailGallery.gallery_id) return;
-  try {
-    await readGalleryById(_detailGallery.gallery_id, _detailGallery.title || `Gallery ${_detailGallery.gallery_id}`);
-    closeGalleryDetail();
-  } catch (err) {
-    document.getElementById('editorMsg').textContent = err.message;
-  }
+document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
+  if (!_detailGallery) return;
+  const galleryId = Number(_detailGallery.gallery_id || 0);
+  const cid = Number(selectedCollectionId || 0);
+  if (!galleryId || !cid) return;
+  const url = `/reader/collections/${cid}/${galleryId}/`;
+  window.location.href = url;
 });
 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {

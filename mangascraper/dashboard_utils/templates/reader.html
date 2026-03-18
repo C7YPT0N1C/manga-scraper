@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="readerContext" data-config='{{ ({'viewer': gallery_viewer_config, 'context': reader_context} ) | tojson }}' hidden></div>
+
+<div class="panel">
+  <div style="display:flex; align-items:center; gap:1rem;">
+    <button id="readerBack" type="button">← Back</button>
+    <h2 id="readerTitle">Reader</h2>
+  </div>
+  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem;">
+    <button id="prevBtn" class="navBtn">←</button>
+    <div id="readerImgWrap" style="max-width:80vw; max-height:75vh; display:flex; align-items:center; justify-content:center;">
+      <img id="readerImg" src="" alt="page" style="max-width:100%; max-height:100%; object-fit:contain;" />
+    </div>
+    <button id="nextBtn" class="navBtn">→</button>
+  </div>
+  <p id="readerCounter" style="margin-top:0.5rem"></p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+"use strict";
+const RAW = JSON.parse(document.getElementById('readerContext').dataset.config || '{}');
+const VIEWER_CONFIG = RAW.viewer || {};
+const CTX = RAW.context || {};
+const GALLERY_ID = Number(CTX.gallery_id || 0);
+const PAGES = [];
+let INDEX = 0;
+
+function setCounter() {
+  document.getElementById('readerCounter').textContent = `${INDEX+1} / ${PAGES.length}`;
+}
+
+function showPage() {
+  const img = document.getElementById('readerImg');
+  img.src = PAGES[INDEX] || '';
+  setCounter();
+  document.getElementById('prevBtn').disabled = INDEX === 0;
+  document.getElementById('nextBtn').disabled = INDEX >= PAGES.length - 1;
+}
+
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (INDEX > 0) { INDEX -= 1; showPage(); }
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (INDEX < PAGES.length - 1) { INDEX += 1; showPage(); }
+});
+
+document.getElementById('readerBack').addEventListener('click', () => {
+  // Prefer history.back, but fallback to parent listing
+  if (history.length > 1) { history.back(); return; }
+  if (CTX.type === 'creators') {
+    window.location.href = `/creators/${encodeURIComponent(CTX.creator || '')}/`;
+  } else if (CTX.type === 'collections') {
+    window.location.href = `/collections/${encodeURIComponent(CTX.collection_id || '')}/`;
+  } else {
+    window.location.href = '/';
+  }
+});
+
+async function loadPages() {
+  if (!GALLERY_ID) { document.getElementById('readerTitle').textContent = 'Missing gallery id'; return; }
+  try {
+    const res = await fetch(`/api/gallery/list_pages_by_id/${encodeURIComponent(GALLERY_ID)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const root = String(data.root_path || '');
+    const pages = (data.pages || []).map(name => {
+      const base = `/api/gallery/view_by_id/${encodeURIComponent(GALLERY_ID)}/${encodeURIComponent(name)}`;
+      return root ? `${base}?root=${encodeURIComponent(root)}` : base;
+    });
+    if (!pages.length) throw new Error('Gallery is empty');
+    PAGES.push(...pages);
+    document.getElementById('readerTitle').textContent = String(data.title || `Gallery ${GALLERY_ID}`);
+    INDEX = 0;
+    showPage();
+  } catch (err) {
+    document.getElementById('readerTitle').textContent = `Could not load gallery: ${err.message}`;
+  }
+}
+
+loadPages();
+</script>
+{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<h2>Gallery Reader</h2>
+<div id="readerOverlay">
+  <div id="readerHeader">
+    <button id="readerClose">&#x2715; Close</button>
+    <span id="readerTitle">{{ gallery.title }}</span>
+    <span id="readerCounter">Page <span id="pageNum">1</span> / {{ pages|length }}</span>
+    <button id="streamDownloadBtn" type="button">Download This Gallery</button>
+  </div>
+  <div id="readerBody">
+    <button id="prevBtn" class="navBtn">&#8592;</button>
+    <div id="readerImgWrap">
+      {% if pages|length > 0 %}
+        <img id="readerImg" src="{{ url_for('static', filename='gallery/' ~ gallery.gallery_id ~ '/' ~ pages[0]) }}" alt="manga page">
+      {% else %}
+        <div>No pages found.</div>
+      {% endif %}
+    </div>
+    <button id="nextBtn" class="navBtn">&#8594;</button>
+  </div>
+  <div style="display:none">
+    <ul id="pageList">
+      {% for page in pages %}
+        <li data-page="{{ loop.index }}" data-src="{{ url_for('static', filename='gallery/' ~ gallery.gallery_id ~ '/' ~ page) }}">{{ page }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  let currentPage = 1;
+  const totalPages = parseInt(document.getElementById('readerCounter').textContent.split('/')[1]);
+  const pageList = Array.from(document.querySelectorAll('#pageList li')).map(li => li.getAttribute('data-src'));
+  const readerImg = document.getElementById('readerImg');
+  const pageNum = document.getElementById('pageNum');
+  document.getElementById('prevBtn').onclick = function() {
+    if (currentPage > 1) {
+      currentPage--;
+      readerImg.src = pageList[currentPage-1];
+      pageNum.textContent = currentPage;
+    }
+  };
+  document.getElementById('nextBtn').onclick = function() {
+    if (currentPage < totalPages) {
+      currentPage++;
+      readerImg.src = pageList[currentPage-1];
+      pageNum.textContent = currentPage;
+    }
+  };
+});
+</script>
+{% endblock %}

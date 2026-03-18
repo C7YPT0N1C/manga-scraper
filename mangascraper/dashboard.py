@@ -115,6 +115,39 @@ def create_app():
             initial_gallery_id=int(gallery_id),
         )
 
+    # Reader routes (new separate reader pages)
+    @app.route('/reader/creators/<path:creator_slug>/<int:gallery_id>/')
+    def reader_creator_page(creator_slug, gallery_id):
+        return render_template(
+            'reader.html',
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
+            reader_context={
+                'type': 'creators',
+                'creator': str(creator_slug),
+                'gallery_id': int(gallery_id),
+            },
+        )
+
+    @app.route('/reader/creators/<path:creator_slug>/')
+    def reader_creator_redirect(creator_slug):
+        return redirect(f'/creators/{creator_slug}/')
+
+    @app.route('/reader/collections/<int:collection_id>/<int:gallery_id>/')
+    def reader_collection_page(collection_id, gallery_id):
+        return render_template(
+            'reader.html',
+            gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
+            reader_context={
+                'type': 'collections',
+                'collection_id': int(collection_id),
+                'gallery_id': int(gallery_id),
+            },
+        )
+
+    @app.route('/reader/collections/<int:collection_id>/')
+    def reader_collection_redirect(collection_id):
+        return redirect(f'/collections/{collection_id}/')
+
     return app
 
 if __name__ == "__main__":
