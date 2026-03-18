@@ -88,6 +88,17 @@
         <tbody id="fileTableBody"></tbody>
       </table>
     </div>
+    <div id="fileContextMenu" class="file-modal-box" style="display:none; position:fixed; z-index:1700; min-width:200px; padding:0.5rem;">
+      <div style="display:flex; flex-direction:column; gap:0.35rem;">
+        <button id="fileCtxOpenBtn" type="button">Open</button>
+        <button id="fileCtxDownloadBtn" type="button">Download</button>
+        <button id="fileCtxRenameBtn" type="button">Rename</button>
+        <button id="fileCtxDeleteBtn" type="button" class="danger">Delete</button>
+        <button id="fileCtxUploadBtn" type="button">Upload</button>
+        <button id="fileCtxNewFolderBtn" type="button">New Folder</button>
+        <button id="fileCtxRefreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
   </div>
 
   <div id="diagPaneSelfTest" style="display:none;">
@@ -115,7 +126,9 @@ let _fileRoots = [];
 let _fileCurrentRoot = '';
 let _fileCurrentPath = '';
 let _fileEntries = [];
-let _fileSelectedPath = '';
+let _fileSelectedPaths = new Set();
+let _fileLastAnchorIndex = -1;
+let _fileRenderedEntries = [];
 let _fileSortKey = 'name';
 let _fileSortDir = 'asc';
 let _fileHistory = [];
@@ -333,7 +346,7 @@ async function loadFileRoots() {
     }
     _fileCurrentPath = '';
     _fileEntries = [];
-    _fileSelectedPath = '';
+    _setFileSelectedPaths([], -1);
     _fileHistory = [''];
     _fileHistoryIndex = 0;
     await loadFileEntries('', { pushHistory: false });
@@ -421,26 +434,112 @@ function _updateFileHeaderSortIndicators() {
   });
 }
 
-function _setFileSelectedPath(path) {
-  _fileSelectedPath = String(path || '');
+function _applyFileSelectionStyles() {
   const rows = document.querySelectorAll('#fileTableBody tr.file-row[data-rel-path]');
   rows.forEach(row => {
-    const active = row.dataset.relPath === _fileSelectedPath;
+    const active = _fileSelectedPaths.has(String(row.dataset.relPath || ''));
     row.classList.toggle('selected', active);
     row.style.background = active ? 'rgba(199, 47, 86, 0.22)' : '';
   });
 }
 
+function _setFileSelectedPaths(paths, anchorIndex = -1) {
+  _fileSelectedPaths = new Set((paths || []).map(p => String(p || '')).filter(Boolean));
+  _fileLastAnchorIndex = anchorIndex;
+  _applyFileSelectionStyles();
+}
+
+function _primarySelectedPath() {
+  for (const item of _fileRenderedEntries) {
+    if (_fileSelectedPaths.has(item.relPath)) {
+      return item.relPath;
+    }
+  }
+  return '';
+}
+
+function _selectedFileEntries() {
+  const selected = [];
+  for (const item of _fileRenderedEntries) {
+    if (_fileSelectedPaths.has(item.relPath)) {
+      selected.push(item);
+    }
+  }
+  return selected;
+}
+
+function _handleFileRowClick(event, relPath, rowIndex) {
+  const useCtrl = !!(event.ctrlKey || event.metaKey);
+  const useShift = !!event.shiftKey;
+
+  if (useShift && _fileLastAnchorIndex >= 0 && _fileRenderedEntries.length) {
+    const start = Math.min(_fileLastAnchorIndex, rowIndex);
+    const end = Math.max(_fileLastAnchorIndex, rowIndex);
+    const next = useCtrl ? new Set(_fileSelectedPaths) : new Set();
+    for (let idx = start; idx <= end; idx += 1) {
+      next.add(_fileRenderedEntries[idx].relPath);
+    }
+    _fileSelectedPaths = next;
+    _applyFileSelectionStyles();
+    return;
+  }
+
+  if (useCtrl) {
+    if (_fileSelectedPaths.has(relPath)) {
+      _fileSelectedPaths.delete(relPath);
+    } else {
+      _fileSelectedPaths.add(relPath);
+    }
+    _fileLastAnchorIndex = rowIndex;
+    _applyFileSelectionStyles();
+    return;
+  }
+
+  _setFileSelectedPaths([relPath], rowIndex);
+}
+
+function _showFileContextMenu(event, relPath, rowIndex) {
+  event.preventDefault();
+  if (!_fileSelectedPaths.has(relPath)) {
+    _setFileSelectedPaths([relPath], rowIndex);
+  }
+  const menu = document.getElementById('fileContextMenu');
+  menu.style.display = 'block';
+  menu.style.left = `${event.clientX}px`;
+  menu.style.top = `${event.clientY}px`;
+}
+
+function _hideFileContextMenu() {
+  document.getElementById('fileContextMenu').style.display = 'none';
+}
+
+function _selectAllFileRows() {
+  const allPaths = _fileRenderedEntries.map(item => item.relPath);
+  _setFileSelectedPaths(allPaths, _fileRenderedEntries.length ? 0 : -1);
+}
+
+function _moveFileSelectionBy(delta) {
+  if (!_fileRenderedEntries.length) return;
+  const primary = _primarySelectedPath();
+  let index = _fileRenderedEntries.findIndex(item => item.relPath === primary);
+  if (index < 0) index = 0;
+  const next = Math.max(0, Math.min(_fileRenderedEntries.length - 1, index + delta));
+  _setFileSelectedPaths([_fileRenderedEntries[next].relPath], next);
+}
+
 function _renderFileRows() {
+  _hideFileContextMenu();
   const status = document.getElementById('fileStatusMsg');
   const tbody = document.getElementById('fileTableBody');
   tbody.innerHTML = '';
 
   const sorted = _sortFileEntries(_fileEntries);
-  sorted.forEach(item => {
+  _fileRenderedEntries = [];
+  sorted.forEach((item, rowIndex) => {
     const name = String(item.name || '');
     if (!name) return;
     const relPath = _fileCurrentPath ? `${_fileCurrentPath}/${name}` : name;
+    _fileRenderedEntries.push({ ...item, relPath });
 
     const tr = document.createElement('tr');
     tr.className = 'file-row';
@@ -471,18 +570,27 @@ function _renderFileRows() {
     tr.appendChild(tdSize);
     tr.appendChild(tdModified);
 
-    tr.addEventListener('click', () => _setFileSelectedPath(relPath));
+    tr.addEventListener('click', event => _handleFileRowClick(event, relPath, rowIndex));
     tr.addEventListener('dblclick', () => _openFileEntry(item, relPath));
+    tr.addEventListener('contextmenu', event => _showFileContextMenu(event, relPath, rowIndex));
     tbody.appendChild(tr);
   });
 
   _updateFileHeaderSortIndicators();
-  if (_fileSelectedPath) {
-    _setFileSelectedPath(_fileSelectedPath);
+  if (_fileSelectedPaths.size) {
+    const visible = new Set();
+    for (const item of _fileRenderedEntries) {
+      if (_fileSelectedPaths.has(item.relPath)) {
+        visible.add(item.relPath);
+      }
+    }
+    _fileSelectedPaths = visible;
   }
+  _applyFileSelectionStyles();
 
   const loc = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
-  status.textContent = `${sorted.length} item${sorted.length !== 1 ? 's' : ''} in ${loc}`;
+  const selectedCount = _fileSelectedPaths.size;
+  status.textContent = `${sorted.length} item${sorted.length !== 1 ? 's' : ''} in ${loc}${selectedCount ? ` • ${selectedCount} selected` : ''}`;
 }
 
 async function loadFileEntries(path, options = {}) {
@@ -508,7 +616,7 @@ async function loadFileEntries(path, options = {}) {
     _renderBreadcrumb(parts);
 
     _fileEntries = Array.isArray(data.entries) ? data.entries : [];
-    _fileSelectedPath = '';
+    _setFileSelectedPaths([], -1);
 
     if (pushHistory) {
       if (_fileHistoryIndex < _fileHistory.length - 1) {
@@ -561,12 +669,6 @@ function _fileNavigateUp() {
   loadFileEntries(_pathDirname(_fileCurrentPath));
 }
 
-function _selectedFileEntry() {
-  if (!_fileSelectedPath) return null;
-  const name = _pathBasename(_fileSelectedPath);
-  return _fileEntries.find(entry => String(entry.name || '') === name) || null;
-}
-
 async function _openFileEntry(entry, relPath) {
   if (entry.is_dir) {
     await loadFileEntries(relPath);
@@ -578,22 +680,37 @@ async function _openFileEntry(entry, relPath) {
 }
 
 async function _openSelectedFile() {
-  const entry = _selectedFileEntry();
-  if (!entry) return;
-  await _openFileEntry(entry, _fileSelectedPath);
+  const selected = _selectedFileEntries();
+  if (!selected.length) return;
+  if (selected.length === 1) {
+    await _openFileEntry(selected[0], selected[0].relPath);
+    return;
+  }
+  for (const entry of selected) {
+    if (entry.is_dir) {
+      await loadFileEntries(entry.relPath);
+      return;
+    }
+  }
+  for (const entry of selected) {
+    await _openFileEntry(entry, entry.relPath);
+  }
 }
 
 async function _downloadSelectedFile() {
-  const entry = _selectedFileEntry();
-  if (!entry || entry.is_dir) return;
-  const params = new URLSearchParams({ root: _fileCurrentRoot, path: _fileSelectedPath });
-  window.open(`/api/gallery/files/download?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  const selected = _selectedFileEntries().filter(entry => !entry.is_dir);
+  if (!selected.length) return;
+  for (const entry of selected) {
+    const params = new URLSearchParams({ root: _fileCurrentRoot, path: entry.relPath });
+    window.open(`/api/gallery/files/download?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  }
 }
 
 async function _renameSelectedFile() {
-  const entry = _selectedFileEntry();
-  if (!entry) return;
-  const currentName = _pathBasename(_fileSelectedPath);
+  const selected = _selectedFileEntries();
+  if (selected.length !== 1) return;
+  const entry = selected[0];
+  const currentName = _pathBasename(entry.relPath);
   const newName = window.prompt('Rename to:', currentName);
   if (!newName || String(newName).trim() === currentName) return;
   const status = document.getElementById('fileStatusMsg');
@@ -601,11 +718,11 @@ async function _renameSelectedFile() {
     const res = await fetch('/api/gallery/files/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileSelectedPath, new_name: String(newName).trim() }),
+      body: JSON.stringify({ root: _fileCurrentRoot, path: entry.relPath, new_name: String(newName).trim() }),
     });
     const data = await res.json();
     if (!res.ok) { status.textContent = `Rename failed: ${data.error || res.status}`; return; }
-    _fileSelectedPath = '';
+    _setFileSelectedPaths([], -1);
     await loadFileEntries(_fileCurrentPath, { pushHistory: false });
   } catch (err) {
     status.textContent = `Rename error: ${err.message}`;
@@ -613,27 +730,26 @@ async function _renameSelectedFile() {
 }
 
 async function _deleteSelectedFile() {
-  const entry = _selectedFileEntry();
-  if (!entry) return;
-  const relPath = _fileSelectedPath;
-  const name = _pathBasename(relPath);
-  const isDir = !!entry.is_dir;
-  const kind = isDir ? 'folder' : 'file';
-  if (!confirm(`Delete ${kind} "${name}"?${isDir ? ' This will delete everything inside it.' : ''}`)) return;
+  const selected = _selectedFileEntries();
+  if (!selected.length) return;
+  if (!confirm(`Delete ${selected.length} item${selected.length !== 1 ? 's' : ''}?`)) return;
   const status = document.getElementById('fileStatusMsg');
-  try {
-    const res = await fetch('/api/gallery/files/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ root: _fileCurrentRoot, path: relPath }),
-    });
-    const data = await res.json();
-    if (!res.ok) { status.textContent = `Delete failed: ${data.error || res.status}`; return; }
-    _fileSelectedPath = '';
-    await loadFileEntries(_fileCurrentPath, { pushHistory: false });
-  } catch (err) {
-    status.textContent = `Delete error: ${err.message}`;
+  for (const entry of selected) {
+    try {
+      const res = await fetch('/api/gallery/files/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: _fileCurrentRoot, path: entry.relPath }),
+      });
+      const data = await res.json();
+      if (!res.ok) { status.textContent = `Delete failed (${entry.name}): ${data.error || res.status}`; return; }
+    } catch (err) {
+      status.textContent = `Delete error (${entry.name}): ${err.message}`;
+      return;
+    }
   }
+  _setFileSelectedPaths([], -1);
+  await loadFileEntries(_fileCurrentPath, { pushHistory: false });
 }
 
 async function _createFolder() {
@@ -791,6 +907,55 @@ document.getElementById('dbValueModal').addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.getElementById('dbValueModal').style.display !== 'none') {
     closeDbValueModal();
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    _hideFileContextMenu();
+  }
+
+  const filesPaneVisible = document.getElementById('diagPaneFiles').style.display !== 'none';
+  if (!filesPaneVisible) return;
+
+  if ((event.ctrlKey || event.metaKey) && String(event.key || '').toLowerCase() === 'a') {
+    event.preventDefault();
+    _selectAllFileRows();
+    return;
+  }
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    _moveFileSelectionBy(1);
+    return;
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    _moveFileSelectionBy(-1);
+    return;
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    _openSelectedFile();
+    return;
+  }
+
+  if (event.key === 'Backspace') {
+    event.preventDefault();
+    _fileNavigateUp();
+    return;
+  }
+
+  if (event.key === 'F2') {
+    event.preventDefault();
+    _renameSelectedFile();
+    return;
+  }
+
+  if (event.key === 'Delete') {
+    event.preventDefault();
+    _deleteSelectedFile();
   }
 });
 
@@ -819,12 +984,58 @@ document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileCurrentRoot = e.target.value;
   _fileCurrentPath = '';
   _fileEntries = [];
-  _fileSelectedPath = '';
+  _setFileSelectedPaths([], -1);
   _fileHistory = [''];
   _fileHistoryIndex = 0;
   loadFileEntries('', { pushHistory: false });
 });
 document.getElementById('fileNewFolderBtn').addEventListener('click', _createFolder);
+document.getElementById('fileCtxOpenBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  _openSelectedFile();
+});
+document.getElementById('fileCtxDownloadBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  _downloadSelectedFile();
+});
+document.getElementById('fileCtxRenameBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  _renameSelectedFile();
+});
+document.getElementById('fileCtxDeleteBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  _deleteSelectedFile();
+});
+document.getElementById('fileCtxUploadBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  const input = document.getElementById('fileUploadInput');
+  input.value = '';
+  input.click();
+});
+document.getElementById('fileCtxNewFolderBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  _createFolder();
+});
+document.getElementById('fileCtxRefreshBtn').addEventListener('click', () => {
+  _hideFileContextMenu();
+  loadFileEntries(_fileCurrentPath);
+});
+document.addEventListener('click', event => {
+  const menu = document.getElementById('fileContextMenu');
+  if (!menu.contains(event.target)) {
+    _hideFileContextMenu();
+  }
+});
+document.getElementById('fileListPanel').addEventListener('contextmenu', event => {
+  if (event.target === event.currentTarget) {
+    event.preventDefault();
+    _setFileSelectedPaths([], -1);
+    const menu = document.getElementById('fileContextMenu');
+    menu.style.display = 'block';
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+  }
+});
 document.querySelectorAll('#fileTable thead th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
     const key = String(th.dataset.sort || 'name');

@@ -22,14 +22,11 @@ def _safe_path(base: str, *parts: str) -> str | None:
     """
     joined = os.path.realpath(os.path.join(base, *parts))
     base_real = os.path.realpath(base)
+    if base_real == os.sep:
+        return joined
     if not joined.startswith(base_real + os.sep) and joined != base_real:
         return None
     return joined
-
-
-def _download_path() -> str:
-    orchestrator.refresh_globals()
-    return orchestrator.download_path or orchestrator.DEFAULT_DOWNLOAD_PATH
 
 
 def _requested_root() -> str:
@@ -68,9 +65,6 @@ def _available_roots() -> list[dict]:
     roots = scraperapi.DB.list_download_locations()
     if roots:
         return _prioritise_roots(roots)
-    fallback = _download_path()
-    if fallback:
-        return [{"root_path": fallback, "extension_used": "", "count": 0}]
     return []
 
 
@@ -99,7 +93,68 @@ def _resolve_root_path() -> str:
         for item in roots:
             if item["root_path"] == requested:
                 return requested
-    return roots[0]["root_path"] if roots else _download_path()
+    return roots[0]["root_path"] if roots else ""
+
+
+def _file_browser_roots() -> list[dict]:
+    """Return roots shown in file browser, including full filesystem roots."""
+    roots: list[dict] = []
+    seen: set[str] = set()
+
+    if os.name == "nt":
+        try:
+            import ctypes
+            mask = int(ctypes.windll.kernel32.GetLogicalDrives())
+            for letter_ord in range(ord("A"), ord("Z") + 1):
+                bit = 1 << (letter_ord - ord("A"))
+                if not (mask & bit):
+                    continue
+                drive = f"{chr(letter_ord)}:{os.sep}"
+                drive_real = os.path.realpath(drive)
+                if drive_real in seen:
+                    continue
+                seen.add(drive_real)
+                roots.append({"root_path": drive_real, "extension_used": "system", "count": 0})
+        except Exception:
+            pass
+    else:
+        root_real = os.path.realpath(os.sep)
+        seen.add(root_real)
+        roots.append({"root_path": root_real, "extension_used": "system", "count": 0})
+
+    if not roots:
+        root_real = os.path.realpath(os.sep)
+        seen.add(root_real)
+        roots.append({"root_path": root_real, "extension_used": "system", "count": 0})
+
+    for item in _available_roots():
+        root_path = os.path.realpath(str(item.get("root_path") or "").strip())
+        if not root_path or root_path in seen:
+            continue
+        seen.add(root_path)
+        roots.append(
+            {
+                "root_path": root_path,
+                "extension_used": str(item.get("extension_used") or ""),
+                "count": int(item.get("count") or 0),
+            }
+        )
+    return roots
+
+
+def _resolve_file_browser_root(requested_root: str | None = None) -> str:
+    """Resolve a browsable root; accepts any absolute existing directory."""
+    requested = str(requested_root or "").strip()
+    if requested:
+        candidate = os.path.realpath(requested)
+        if os.path.isabs(candidate) and os.path.isdir(candidate):
+            return candidate
+
+    roots = _file_browser_roots()
+    if roots:
+        fallback = str(roots[0].get("root_path") or os.sep)
+        return os.path.realpath(fallback)
+    return os.path.realpath(os.sep)
 
 
 def _creator_and_gallery_from_location(root_path: str, download_path: str) -> tuple[str, str] | tuple[None, None]:
@@ -1040,22 +1095,16 @@ def query_table(table_name):
 
 @gallery_bp.route("/list_locations", methods=["GET"])
 def list_locations():
-    roots = _available_roots()
-    return jsonify({"locations": roots, "selected_root": _resolve_root_path()})
+    roots = _file_browser_roots()
+    requested_root = str(request.args.get("root") or "").strip()
+    selected_root = _resolve_file_browser_root(requested_root)
+    return jsonify({"locations": roots, "selected_root": selected_root})
 
 
 @gallery_bp.route("/files", methods=["GET"])
 def list_files():
     requested_root = str(request.args.get("root") or "").strip()
-    roots = _available_roots()
-    root = None
-    if requested_root:
-        for item in roots:
-            if item["root_path"] == requested_root:
-                root = requested_root
-                break
-    if not root:
-        root = roots[0]["root_path"] if roots else _download_path()
+    root = _resolve_file_browser_root(requested_root)
     if not root or not os.path.isdir(root):
         return jsonify({"error": "Root path not found.", "root_path": root or "", "current_path": "", "entries": []}), 404
 
@@ -1072,7 +1121,7 @@ def list_files():
         return jsonify({"error": f"Failed to read directory: {exc}", "root_path": root, "current_path": "/".join(path_parts), "entries": []}), 500
 
     for name in names:
-        if not name or name.startswith("."):
+        if not name:
             continue
         entry_abs = _safe_path(current_abs, name)
         if not entry_abs:
@@ -1125,13 +1174,8 @@ def rename_file():
     new_name = str(payload.get("new_name") or "").strip()
     if not new_name or "/" in new_name or "\\" in new_name or new_name in (".", ".."):
         return jsonify({"error": "Invalid name."}), 400
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
     parts = [p for p in rel_path.split("/") if p and p != "."]
     target = _safe_path(root, *parts)
@@ -1156,13 +1200,8 @@ def download_file_entry():
     if not rel_path or rel_path in {".", "/"}:
         return jsonify({"error": "Invalid file path."}), 400
 
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
 
     parts = [p for p in rel_path.split("/") if p and p != "."]
@@ -1189,13 +1228,8 @@ def read_file_entry():
     if not rel_path or rel_path in {".", "/"}:
         return jsonify({"error": "Invalid file path."}), 400
 
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
 
     parts = [p for p in rel_path.split("/") if p and p != "."]
@@ -1250,13 +1284,8 @@ def upload_file_entry():
     if "/" in file_name or "\\" in file_name:
         return jsonify({"error": "Invalid filename."}), 400
 
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
 
     parts = [p for p in rel_path.split("/") if p and p != "."]
@@ -1286,13 +1315,8 @@ def delete_file():
     rel_path = str(payload.get("path") or "").strip().replace("\\", "/")
     if not rel_path or rel_path in (".", "/"):
         return jsonify({"error": "Cannot delete root."}), 400
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
     parts = [p for p in rel_path.split("/") if p and p != "."]
     if not parts:
@@ -1477,13 +1501,8 @@ def make_directory():
     name = str(payload.get("name") or "").strip()
     if not name or "/" in name or "\\" in name or name in (".", ".."):
         return jsonify({"error": "Invalid folder name."}), 400
-    roots = _available_roots()
-    root = None
-    for item in roots:
-        if item["root_path"] == requested_root:
-            root = requested_root
-            break
-    if not root:
+    root = _resolve_file_browser_root(requested_root)
+    if not root or not os.path.isdir(root):
         return jsonify({"error": "Invalid root."}), 400
     parts = [p for p in rel_path.split("/") if p and p != "."]
     parent = _safe_path(root, *parts) if parts else root

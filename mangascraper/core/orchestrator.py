@@ -8,6 +8,7 @@ from dotenv import load_dotenv, set_key
 ##########################################################################################
 # DIRECTORIES
 ##########################################################################################
+
 SCRAPER_DIR = "/opt/manga-scraper"
 CORE_DIR = os.path.join(SCRAPER_DIR, "mangascraper", "core")
 TEMP_DIR = "/tmp/manga-scraper"
