@@ -42,6 +42,15 @@
         <tbody id="dbTableBody"></tbody>
       </table>
     </div>
+    <div id="dbValueModal" class="file-modal" style="display:none; z-index:1600">
+      <div class="file-modal-box" style="min-width:min(90vw, 900px); max-width:90vw; max-height:85vh; overflow:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">
+          <p style="margin:0;">Field value</p>
+          <button id="dbValueModalCloseBtn" type="button">Close</button>
+        </div>
+        <pre id="dbValueModalContent" style="white-space:pre-wrap; word-break:break-word; margin:0; background:#0f121a; border:1px solid #2f3544; border-radius:8px; padding:0.75rem;"></pre>
+      </div>
+    </div>
     <div class="pagination-controls" id="dbPaginationControls" style="display:none; margin-top:0.75rem;">
       <button id="dbPrevPageBtn" type="button">← Previous</button>
       <span class="pagination-info">Page <span id="dbPageNum">1</span> of <span id="dbTotalPages">1</span></span>
@@ -105,9 +114,37 @@ let _dbCurrentTable = '';
 let _dbCurrentPage = 1;
 let _dbTotalPages = 1;
 let _dbLastSearch = '';
+let _dbSortBy = '';
+let _dbSortDir = 'asc';
 let _fileRoots = [];
 let _fileCurrentRoot = '';
 let _fileCurrentPath = '';
+
+function openDbValueModal(rawText) {
+  const modal = document.getElementById('dbValueModal');
+  const content = document.getElementById('dbValueModalContent');
+  const text = String(rawText ?? '');
+  let display = text;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed !== null && (typeof parsed === 'object' || Array.isArray(parsed))) {
+      display = JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // Keep plain text representation when value is not JSON.
+  }
+  content.textContent = display;
+  modal.style.display = 'flex';
+}
+
+function closeDbValueModal() {
+  document.getElementById('dbValueModal').style.display = 'none';
+}
+
+function dbSortIndicator(colName) {
+  if (_dbSortBy !== colName) return '';
+  return _dbSortDir === 'desc' ? ' ↓' : ' ↑';
+}
 
 function activateDiagTab(tab) {
   const panes = {
@@ -164,6 +201,8 @@ async function loadDbTables() {
     if (_dbCurrentTable) {
       _dbCurrentPage = 1;
       _dbLastSearch = '';
+      _dbSortBy = '';
+      _dbSortDir = 'asc';
       await loadDbTable(_dbCurrentTable, '', 1);
     } else {
       status.textContent = 'No tables found.';
@@ -199,6 +238,10 @@ async function loadDbTable(tableName, search, page) {
     const offset = (requestedPage - 1) * DB_PAGE_SIZE;
     const params = new URLSearchParams({ limit: String(DB_PAGE_SIZE), offset: String(offset) });
     if (searchVal) params.set('search', searchVal);
+    if (_dbSortBy) {
+      params.set('sort_by', _dbSortBy);
+      params.set('sort_dir', _dbSortDir);
+    }
     const res = await fetch(`/api/db/table/${encodeURIComponent(tableName)}?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -209,7 +252,19 @@ async function loadDbTable(tableName, search, page) {
 
     (data.columns || []).forEach(col => {
       const th = document.createElement('th');
-      th.textContent = col;
+      th.style.cursor = 'pointer';
+      th.title = `Sort by ${col}`;
+      th.textContent = `${col}${dbSortIndicator(col)}`;
+      th.addEventListener('click', () => {
+        if (_dbSortBy === col) {
+          _dbSortDir = _dbSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _dbSortBy = col;
+          _dbSortDir = 'asc';
+        }
+        _dbCurrentPage = 1;
+        loadDbTable(_dbCurrentTable, _dbLastSearch, 1);
+      });
       head.appendChild(th);
     });
 
@@ -217,11 +272,14 @@ async function loadDbTable(tableName, search, page) {
       const tr = document.createElement('tr');
       row.forEach(cell => {
         const td = document.createElement('td');
-        td.textContent = cell === null ? '' : String(cell);
-        if (td.textContent.length > 120) {
-          td.title = td.textContent;
-          td.textContent = `${td.textContent.slice(0, 117)}...`;
+        const fullValue = cell === null ? '' : String(cell);
+        td.textContent = fullValue;
+        if (fullValue.length > 120) {
+          td.title = fullValue;
+          td.textContent = `${fullValue.slice(0, 117)}...`;
         }
+        td.style.cursor = 'zoom-in';
+        td.addEventListener('click', () => openDbValueModal(fullValue));
         tr.appendChild(td);
       });
       body.appendChild(tr);
@@ -569,6 +627,8 @@ document.getElementById('dbTableSelect').addEventListener('change', e => {
   document.getElementById('dbSearchBox').value = '';
   _dbCurrentPage = 1;
   _dbLastSearch = '';
+  _dbSortBy = '';
+  _dbSortDir = 'asc';
   loadDbTable(e.target.value, '', 1);
 });
 document.getElementById('dbSearchBox').addEventListener('input', e => {
@@ -583,6 +643,17 @@ document.getElementById('dbPrevPageBtn').addEventListener('click', () => {
 document.getElementById('dbNextPageBtn').addEventListener('click', () => {
   if (_dbCurrentPage < _dbTotalPages) {
     loadDbTable(_dbCurrentTable, _dbLastSearch, _dbCurrentPage + 1);
+  }
+});
+document.getElementById('dbValueModalCloseBtn').addEventListener('click', closeDbValueModal);
+document.getElementById('dbValueModal').addEventListener('click', event => {
+  if (event.target.id === 'dbValueModal') {
+    closeDbValueModal();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.getElementById('dbValueModal').style.display !== 'none') {
+    closeDbValueModal();
   }
 });
 

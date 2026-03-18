@@ -1016,12 +1016,21 @@ def list_tables():
 def query_table(table_name):
     """
     Return paginated rows for any named table.
-    Query params: search, limit (default 500), offset (default 0).
+    Query params: search, limit (default 500), offset (default 0), sort_by, sort_dir.
     """
     search = request.args.get("search", "").strip()
     limit = min(int(request.args.get("limit", 500)), 2000)
     offset = int(request.args.get("offset", 0))
-    result = scraperapi.DB.query_table(table_name, search=search or None, limit=limit, offset=offset)
+    sort_by = request.args.get("sort_by", "").strip() or None
+    sort_dir = request.args.get("sort_dir", "asc").strip().lower()
+    result = scraperapi.DB.query_table(
+        table_name,
+        search=search or None,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     if result.get("error"):
         return jsonify(result), 404
     return jsonify(result)

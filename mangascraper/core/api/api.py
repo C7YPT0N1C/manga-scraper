@@ -1095,7 +1095,14 @@ class DB:
             return [row[0] for row in cursor.fetchall()]
 
     @staticmethod
-    def query_table(table_name: str, search: str = None, limit: int = 500, offset: int = 0) -> dict:
+    def query_table(
+        table_name: str,
+        search: str = None,
+        limit: int = 500,
+        offset: int = 0,
+        sort_by: str | None = None,
+        sort_dir: str = "asc",
+    ) -> dict:
         """
         Return rows and column names for any table in the database.
         table_name is validated against the live table list to prevent injection.
@@ -1113,6 +1120,14 @@ class DB:
 
             safe_limit = max(1, int(limit or 500))
             safe_offset = max(0, int(offset or 0))
+            safe_sort_dir = "desc" if str(sort_dir or "").strip().lower() == "desc" else "asc"
+            safe_sort_by = str(sort_by or "").strip()
+            has_sort = safe_sort_by in columns
+            order_clause = ""
+            if has_sort:
+                # Column name is validated against PRAGMA table_info result above.
+                quoted_col = '"' + safe_sort_by.replace('"', '""') + '"'
+                order_clause = f" ORDER BY CAST({quoted_col} AS TEXT) COLLATE NOCASE {safe_sort_dir.upper()}"
             total_rows = 0
 
             if search and search.strip():
@@ -1127,13 +1142,13 @@ class DB:
 
                 params = [like] * len(columns) + [safe_limit, safe_offset]
                 cursor.execute(
-                    f"SELECT * FROM {table_name} WHERE {conditions} LIMIT ? OFFSET ?",
+                    f"SELECT * FROM {table_name} WHERE {conditions}{order_clause} LIMIT ? OFFSET ?",
                     params,
                 )
             else:
                 cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
                 total_rows = int((cursor.fetchone() or [0])[0] or 0)
-                cursor.execute(f"SELECT * FROM {table_name} LIMIT ? OFFSET ?", (safe_limit, safe_offset))
+                cursor.execute(f"SELECT * FROM {table_name}{order_clause} LIMIT ? OFFSET ?", (safe_limit, safe_offset))
 
             rows = [list(row) for row in cursor.fetchall()]
 
@@ -1143,6 +1158,8 @@ class DB:
             "total_rows": total_rows,
             "limit": safe_limit,
             "offset": safe_offset,
+            "sort_by": safe_sort_by if has_sort else "",
+            "sort_dir": safe_sort_dir,
         }
 
     @staticmethod
