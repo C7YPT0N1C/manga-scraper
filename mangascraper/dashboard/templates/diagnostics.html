@@ -61,37 +61,32 @@
   <div id="diagPaneFiles" style="display:none;">
     <h3>File Browser</h3>
     <div id="fileControls">
+      <button id="fileBackBtn" type="button">Back</button>
+      <button id="fileUpBtn" type="button">Up</button>
       <button id="fileRefreshBtn" type="button">Refresh</button>
       <select id="fileRootSelect" title="Choose root folder"></select>
+      <button id="fileOpenBtn" type="button">Open</button>
+      <button id="fileDownloadBtn" type="button">Download</button>
+      <button id="fileUploadBtn" type="button">Upload</button>
+      <input id="fileUploadInput" type="file" multiple style="display:none">
+      <button id="fileRenameBtn" type="button">Rename</button>
+      <button id="fileDeleteBtn" type="button" class="danger">Delete</button>
       <button id="fileNewFolderBtn" type="button">New Folder</button>
     </div>
     <div id="fileBreadcrumb" class="file-breadcrumb"></div>
     <p id="fileStatusMsg">Choose a root folder to begin.</p>
     <div id="fileListPanel" style="overflow-x:auto;max-height:60vh;overflow-y:auto">
       <table id="fileTable" class="file-table">
-        <thead><tr><th>Name</th><th>Size</th><th>Actions</th></tr></thead>
+        <thead>
+          <tr>
+            <th data-sort="name" style="cursor:pointer">Name</th>
+            <th data-sort="type" style="cursor:pointer">Type</th>
+            <th data-sort="size" style="cursor:pointer">Size</th>
+            <th data-sort="modified" style="cursor:pointer">Modified</th>
+          </tr>
+        </thead>
         <tbody id="fileTableBody"></tbody>
       </table>
-    </div>
-    <div id="fileRenameModal" class="file-modal" style="display:none">
-      <div class="file-modal-box">
-        <p>Rename to:</p>
-        <input id="fileRenameInput" type="text" autocomplete="off">
-        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
-          <button id="fileRenameConfirmBtn" type="button">Rename</button>
-          <button id="fileRenameCancelBtn" type="button">Cancel</button>
-        </div>
-      </div>
-    </div>
-    <div id="fileMkdirModal" class="file-modal" style="display:none">
-      <div class="file-modal-box">
-        <p>New folder name:</p>
-        <input id="fileMkdirInput" type="text" autocomplete="off">
-        <div style="display:flex;gap:0.5rem;margin-top:0.6rem">
-          <button id="fileMkdirConfirmBtn" type="button">Create</button>
-          <button id="fileMkdirCancelBtn" type="button">Cancel</button>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -119,6 +114,12 @@ let _dbSortDir = 'asc';
 let _fileRoots = [];
 let _fileCurrentRoot = '';
 let _fileCurrentPath = '';
+let _fileEntries = [];
+let _fileSelectedPath = '';
+let _fileSortKey = 'name';
+let _fileSortDir = 'asc';
+let _fileHistory = [];
+let _fileHistoryIndex = -1;
 
 function openDbValueModal(rawText) {
   const modal = document.getElementById('dbValueModal');
@@ -331,17 +332,163 @@ async function loadFileRoots() {
       _fileCurrentRoot = select.value;
     }
     _fileCurrentPath = '';
-    await loadFileEntries('');
+    _fileEntries = [];
+    _fileSelectedPath = '';
+    _fileHistory = [''];
+    _fileHistoryIndex = 0;
+    await loadFileEntries('', { pushHistory: false });
   } catch (err) {
     status.textContent = `Failed to load roots: ${err.message}`;
   }
 }
 
-async function loadFileEntries(path) {
-  const filePath = path !== undefined ? String(path || '') : _fileCurrentPath;
+function _pathDirname(path) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  parts.pop();
+  return parts.join('/');
+}
+
+function _pathBasename(path) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : '';
+}
+
+function _fileCanOpenInline(entry) {
+  if (!entry || !entry.is_file) return false;
+  const name = String(entry.name || '').toLowerCase();
+  const ext = name.includes('.') ? name.split('.').pop() : '';
+  return ['txt', 'md', 'json', 'xml', 'csv', 'log', 'py', 'js', 'css', 'html', 'yml', 'yaml', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf'].includes(ext);
+}
+
+function _formatModified(ts) {
+  if (ts === null || ts === undefined || Number.isNaN(Number(ts))) return '';
+  try {
+    return new Date(Number(ts) * 1000).toLocaleString();
+  } catch {
+    return '';
+  }
+}
+
+function _entryType(entry) {
+  if (!entry) return '';
+  if (entry.is_dir) return 'Folder';
+  const name = String(entry.name || '');
+  const idx = name.lastIndexOf('.');
+  if (idx <= 0 || idx === name.length - 1) return 'File';
+  return `${name.slice(idx + 1).toUpperCase()} File`;
+}
+
+function _sortFileEntries(entries) {
+  const direction = _fileSortDir === 'desc' ? -1 : 1;
+  const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+  return [...entries].sort((a, b) => {
+    if (!!a.is_dir !== !!b.is_dir) {
+      return a.is_dir ? -1 : 1;
+    }
+    if (_fileSortKey === 'size') {
+      const as = Number(a.size || 0);
+      const bs = Number(b.size || 0);
+      if (as !== bs) return (as - bs) * direction;
+      return byName(a, b) * direction;
+    }
+    if (_fileSortKey === 'modified') {
+      const at = Number(a.modified_at || 0);
+      const bt = Number(b.modified_at || 0);
+      if (at !== bt) return (at - bt) * direction;
+      return byName(a, b) * direction;
+    }
+    if (_fileSortKey === 'type') {
+      const at = _entryType(a);
+      const bt = _entryType(b);
+      const cmp = at.localeCompare(bt, undefined, { sensitivity: 'base' });
+      if (cmp !== 0) return cmp * direction;
+      return byName(a, b) * direction;
+    }
+    return byName(a, b) * direction;
+  });
+}
+
+function _updateFileHeaderSortIndicators() {
+  const head = document.querySelectorAll('#fileTable thead th[data-sort]');
+  head.forEach(th => {
+    const key = String(th.dataset.sort || '');
+    const base = th.textContent.replace(/\s[↑↓]$/, '');
+    if (key === _fileSortKey) {
+      th.textContent = `${base} ${_fileSortDir === 'desc' ? '↓' : '↑'}`;
+    } else {
+      th.textContent = base;
+    }
+  });
+}
+
+function _setFileSelectedPath(path) {
+  _fileSelectedPath = String(path || '');
+  const rows = document.querySelectorAll('#fileTableBody tr.file-row[data-rel-path]');
+  rows.forEach(row => {
+    const active = row.dataset.relPath === _fileSelectedPath;
+    row.classList.toggle('selected', active);
+    row.style.background = active ? 'rgba(199, 47, 86, 0.22)' : '';
+  });
+}
+
+function _renderFileRows() {
   const status = document.getElementById('fileStatusMsg');
   const tbody = document.getElementById('fileTableBody');
   tbody.innerHTML = '';
+
+  const sorted = _sortFileEntries(_fileEntries);
+  sorted.forEach(item => {
+    const name = String(item.name || '');
+    if (!name) return;
+    const relPath = _fileCurrentPath ? `${_fileCurrentPath}/${name}` : name;
+
+    const tr = document.createElement('tr');
+    tr.className = 'file-row';
+    tr.dataset.relPath = relPath;
+
+    const tdName = document.createElement('td');
+    const icon = document.createElement('span');
+    icon.className = 'file-icon';
+    icon.textContent = item.is_dir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+    tdName.appendChild(icon);
+    tdName.append(' ');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = name;
+    tdName.appendChild(nameSpan);
+
+    const tdType = document.createElement('td');
+    tdType.textContent = _entryType(item);
+
+    const tdSize = document.createElement('td');
+    tdSize.className = 'file-size';
+    tdSize.textContent = item.is_dir ? '' : _formatFileSize(Number(item.size || 0));
+
+    const tdModified = document.createElement('td');
+    tdModified.textContent = _formatModified(item.modified_at);
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdType);
+    tr.appendChild(tdSize);
+    tr.appendChild(tdModified);
+
+    tr.addEventListener('click', () => _setFileSelectedPath(relPath));
+    tr.addEventListener('dblclick', () => _openFileEntry(item, relPath));
+    tbody.appendChild(tr);
+  });
+
+  _updateFileHeaderSortIndicators();
+  if (_fileSelectedPath) {
+    _setFileSelectedPath(_fileSelectedPath);
+  }
+
+  const loc = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
+  status.textContent = `${sorted.length} item${sorted.length !== 1 ? 's' : ''} in ${loc}`;
+}
+
+async function loadFileEntries(path, options = {}) {
+  const filePath = path !== undefined ? String(path || '') : _fileCurrentPath;
+  const pushHistory = options.pushHistory !== false;
+  const status = document.getElementById('fileStatusMsg');
 
   if (!_fileCurrentRoot) {
     status.textContent = 'Choose a root folder first.';
@@ -360,79 +507,21 @@ async function loadFileEntries(path) {
     const parts = _fileCurrentPath ? _fileCurrentPath.split('/').filter(Boolean) : [];
     _renderBreadcrumb(parts);
 
-    const entries = Array.isArray(data.entries) ? data.entries : [];
+    _fileEntries = Array.isArray(data.entries) ? data.entries : [];
+    _fileSelectedPath = '';
 
-    // Up row if not at root
-    if (_fileCurrentPath) {
-      const tr = document.createElement('tr');
-      tr.className = 'file-row file-row-up';
-      tr.innerHTML = `<td colspan="3"><span class="file-icon">&#x21A9;</span> <a class="file-link" href="#">..</a></td>`;
-      tr.querySelector('.file-link').addEventListener('click', e => { e.preventDefault(); _fileNavigateUp(); });
-      tbody.appendChild(tr);
+    if (pushHistory) {
+      if (_fileHistoryIndex < _fileHistory.length - 1) {
+        _fileHistory = _fileHistory.slice(0, _fileHistoryIndex + 1);
+      }
+      const last = _fileHistory.length ? _fileHistory[_fileHistory.length - 1] : null;
+      if (last !== _fileCurrentPath) {
+        _fileHistory.push(_fileCurrentPath);
+      }
+      _fileHistoryIndex = _fileHistory.length - 1;
     }
 
-    entries.forEach(item => {
-      const name = String(item.name || '');
-      if (!name) return;
-      const isDir = !!item.is_dir;
-      const relPath = _fileCurrentPath ? `${_fileCurrentPath}/${name}` : name;
-
-      const tr = document.createElement('tr');
-      tr.className = 'file-row';
-
-      // Name cell
-      const tdName = document.createElement('td');
-      const icon = document.createElement('span');
-      icon.className = 'file-icon';
-      icon.textContent = isDir ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
-      tdName.appendChild(icon);
-      tdName.append(' ');
-      if (isDir) {
-        const a = document.createElement('a');
-        a.className = 'file-link';
-        a.href = '#';
-        a.textContent = name;
-        a.addEventListener('click', e => { e.preventDefault(); loadFileEntries(relPath); });
-        tdName.appendChild(a);
-      } else {
-        const span = document.createElement('span');
-        span.textContent = name;
-        tdName.appendChild(span);
-      }
-
-      // Size cell
-      const tdSize = document.createElement('td');
-      tdSize.className = 'file-size';
-      if (!isDir && item.size !== null && item.size !== undefined) {
-        tdSize.textContent = _formatFileSize(item.size);
-      } else if (isDir) {
-        tdSize.textContent = '';
-      }
-
-      // Actions cell
-      const tdActions = document.createElement('td');
-      tdActions.className = 'file-actions';
-      const renameBtn = document.createElement('button');
-      renameBtn.type = 'button';
-      renameBtn.className = 'file-action-btn';
-      renameBtn.textContent = 'Rename';
-      renameBtn.addEventListener('click', () => _showRenameModal(relPath, name));
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'file-action-btn file-action-delete';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', () => _confirmDelete(relPath, name, isDir));
-      tdActions.appendChild(renameBtn);
-      tdActions.appendChild(deleteBtn);
-
-      tr.appendChild(tdName);
-      tr.appendChild(tdSize);
-      tr.appendChild(tdActions);
-      tbody.appendChild(tr);
-    });
-
-    const loc = _fileCurrentPath ? `/${_fileCurrentPath}` : '/';
-    status.textContent = `${entries.length} item${entries.length !== 1 ? 's' : ''} in ${loc}`;
+    _renderFileRows();
   } catch (err) {
     status.textContent = `Failed to load folder: ${err.message}`;
   }
@@ -469,41 +558,66 @@ function _formatFileSize(bytes) {
 
 function _fileNavigateUp() {
   if (!_fileCurrentPath) return;
-  const parts = _fileCurrentPath.split('/').filter(Boolean);
-  parts.pop();
-  loadFileEntries(parts.join('/'));
+  loadFileEntries(_pathDirname(_fileCurrentPath));
 }
 
-let _renameTargetPath = '';
-function _showRenameModal(relPath, currentName) {
-  _renameTargetPath = relPath;
-  const input = document.getElementById('fileRenameInput');
-  input.value = currentName;
-  document.getElementById('fileRenameModal').style.display = 'flex';
-  input.focus();
-  input.select();
+function _selectedFileEntry() {
+  if (!_fileSelectedPath) return null;
+  const name = _pathBasename(_fileSelectedPath);
+  return _fileEntries.find(entry => String(entry.name || '') === name) || null;
 }
 
-async function _doRename() {
-  const newName = document.getElementById('fileRenameInput').value.trim();
+async function _openFileEntry(entry, relPath) {
+  if (entry.is_dir) {
+    await loadFileEntries(relPath);
+    return;
+  }
+  const params = new URLSearchParams({ root: _fileCurrentRoot, path: relPath, inline: '1' });
+  const url = `/api/gallery/files/download?${params.toString()}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function _openSelectedFile() {
+  const entry = _selectedFileEntry();
+  if (!entry) return;
+  await _openFileEntry(entry, _fileSelectedPath);
+}
+
+async function _downloadSelectedFile() {
+  const entry = _selectedFileEntry();
+  if (!entry || entry.is_dir) return;
+  const params = new URLSearchParams({ root: _fileCurrentRoot, path: _fileSelectedPath });
+  window.open(`/api/gallery/files/download?${params.toString()}`, '_blank', 'noopener,noreferrer');
+}
+
+async function _renameSelectedFile() {
+  const entry = _selectedFileEntry();
+  if (!entry) return;
+  const currentName = _pathBasename(_fileSelectedPath);
+  const newName = window.prompt('Rename to:', currentName);
+  if (!newName || String(newName).trim() === currentName) return;
   const status = document.getElementById('fileStatusMsg');
-  document.getElementById('fileRenameModal').style.display = 'none';
-  if (!newName) return;
   try {
     const res = await fetch('/api/gallery/files/rename', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ root: _fileCurrentRoot, path: _renameTargetPath, new_name: newName }),
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileSelectedPath, new_name: String(newName).trim() }),
     });
     const data = await res.json();
     if (!res.ok) { status.textContent = `Rename failed: ${data.error || res.status}`; return; }
-    await loadFileEntries(_fileCurrentPath);
+    _fileSelectedPath = '';
+    await loadFileEntries(_fileCurrentPath, { pushHistory: false });
   } catch (err) {
     status.textContent = `Rename error: ${err.message}`;
   }
 }
 
-async function _confirmDelete(relPath, name, isDir) {
+async function _deleteSelectedFile() {
+  const entry = _selectedFileEntry();
+  if (!entry) return;
+  const relPath = _fileSelectedPath;
+  const name = _pathBasename(relPath);
+  const isDir = !!entry.is_dir;
   const kind = isDir ? 'folder' : 'file';
   if (!confirm(`Delete ${kind} "${name}"?${isDir ? ' This will delete everything inside it.' : ''}`)) return;
   const status = document.getElementById('fileStatusMsg');
@@ -515,36 +629,59 @@ async function _confirmDelete(relPath, name, isDir) {
     });
     const data = await res.json();
     if (!res.ok) { status.textContent = `Delete failed: ${data.error || res.status}`; return; }
-    await loadFileEntries(_fileCurrentPath);
+    _fileSelectedPath = '';
+    await loadFileEntries(_fileCurrentPath, { pushHistory: false });
   } catch (err) {
     status.textContent = `Delete error: ${err.message}`;
   }
 }
 
-function _showMkdirModal() {
-  const input = document.getElementById('fileMkdirInput');
-  input.value = '';
-  document.getElementById('fileMkdirModal').style.display = 'flex';
-  input.focus();
-}
-
-async function _doMkdir() {
-  const name = document.getElementById('fileMkdirInput').value.trim();
+async function _createFolder() {
+  const name = window.prompt('New folder name:', '');
+  if (!name || !String(name).trim()) return;
   const status = document.getElementById('fileStatusMsg');
-  document.getElementById('fileMkdirModal').style.display = 'none';
-  if (!name) return;
   try {
     const res = await fetch('/api/gallery/files/mkdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileCurrentPath, name }),
+      body: JSON.stringify({ root: _fileCurrentRoot, path: _fileCurrentPath, name: String(name).trim() }),
     });
     const data = await res.json();
     if (!res.ok) { status.textContent = `Create folder failed: ${data.error || res.status}`; return; }
-    await loadFileEntries(_fileCurrentPath);
+    await loadFileEntries(_fileCurrentPath, { pushHistory: false });
   } catch (err) {
     status.textContent = `Create folder error: ${err.message}`;
   }
+}
+
+async function _uploadSelectedFiles(fileList) {
+  const status = document.getElementById('fileStatusMsg');
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  let uploaded = 0;
+  for (const file of files) {
+    const form = new FormData();
+    form.append('root', _fileCurrentRoot);
+    form.append('path', _fileCurrentPath);
+    form.append('file', file, file.name);
+    try {
+      const res = await fetch('/api/gallery/files/upload', {
+        method: 'POST',
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        status.textContent = `Upload failed (${file.name}): ${data.error || res.status}`;
+        return;
+      }
+      uploaded += 1;
+    } catch (err) {
+      status.textContent = `Upload error (${file.name}): ${err.message}`;
+      return;
+    }
+  }
+  status.textContent = `Uploaded ${uploaded} file${uploaded !== 1 ? 's' : ''}.`;
+  await loadFileEntries(_fileCurrentPath, { pushHistory: false });
 }
 
 async function fetchLogsList(options = {}) {
@@ -658,27 +795,47 @@ document.addEventListener('keydown', event => {
 });
 
 document.getElementById('fileRefreshBtn').addEventListener('click', () => loadFileEntries(_fileCurrentPath));
+document.getElementById('fileBackBtn').addEventListener('click', () => {
+  if (_fileHistoryIndex > 0) {
+    _fileHistoryIndex -= 1;
+    const previous = _fileHistory[_fileHistoryIndex] || '';
+    loadFileEntries(previous, { pushHistory: false });
+  }
+});
+document.getElementById('fileUpBtn').addEventListener('click', _fileNavigateUp);
+document.getElementById('fileOpenBtn').addEventListener('click', _openSelectedFile);
+document.getElementById('fileDownloadBtn').addEventListener('click', _downloadSelectedFile);
+document.getElementById('fileRenameBtn').addEventListener('click', _renameSelectedFile);
+document.getElementById('fileDeleteBtn').addEventListener('click', _deleteSelectedFile);
+document.getElementById('fileUploadBtn').addEventListener('click', () => {
+  const input = document.getElementById('fileUploadInput');
+  input.value = '';
+  input.click();
+});
+document.getElementById('fileUploadInput').addEventListener('change', event => {
+  _uploadSelectedFiles(event.target.files || []);
+});
 document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileCurrentRoot = e.target.value;
   _fileCurrentPath = '';
-  loadFileEntries('');
+  _fileEntries = [];
+  _fileSelectedPath = '';
+  _fileHistory = [''];
+  _fileHistoryIndex = 0;
+  loadFileEntries('', { pushHistory: false });
 });
-document.getElementById('fileNewFolderBtn').addEventListener('click', _showMkdirModal);
-document.getElementById('fileRenameConfirmBtn').addEventListener('click', _doRename);
-document.getElementById('fileRenameCancelBtn').addEventListener('click', () => {
-  document.getElementById('fileRenameModal').style.display = 'none';
-});
-document.getElementById('fileRenameInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') _doRename();
-  if (e.key === 'Escape') document.getElementById('fileRenameModal').style.display = 'none';
-});
-document.getElementById('fileMkdirConfirmBtn').addEventListener('click', _doMkdir);
-document.getElementById('fileMkdirCancelBtn').addEventListener('click', () => {
-  document.getElementById('fileMkdirModal').style.display = 'none';
-});
-document.getElementById('fileMkdirInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') _doMkdir();
-  if (e.key === 'Escape') document.getElementById('fileMkdirModal').style.display = 'none';
+document.getElementById('fileNewFolderBtn').addEventListener('click', _createFolder);
+document.querySelectorAll('#fileTable thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = String(th.dataset.sort || 'name');
+    if (_fileSortKey === key) {
+      _fileSortDir = _fileSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _fileSortKey = key;
+      _fileSortDir = 'asc';
+    }
+    _renderFileRows();
+  });
 });
 
 activateDiagTab('selftest');

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/data_routes.py
 
-import os, time, threading, io, requests, json, re, zipfile, tempfile, posixpath
+import os, time, threading, io, requests, json, re, zipfile, tempfile, posixpath, mimetypes
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
 from mangascraper.core.api import api as scraperapi
@@ -1084,11 +1084,16 @@ def list_files():
             continue
 
         size = None
+        modified_at = None
         if is_file:
             try:
                 size = int(os.path.getsize(entry_abs))
             except OSError:
                 size = None
+        try:
+            modified_at = float(os.path.getmtime(entry_abs))
+        except OSError:
+            modified_at = None
 
         entries.append(
             {
@@ -1096,6 +1101,7 @@ def list_files():
                 "is_dir": is_dir,
                 "is_file": is_file,
                 "size": size,
+                "modified_at": modified_at,
             }
         )
 
@@ -1139,6 +1145,137 @@ def rename_file():
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"ok": True})
+
+
+@gallery_bp.route("/files/download", methods=["GET"])
+def download_file_entry():
+    requested_root = str(request.args.get("root") or "").strip()
+    rel_path = str(request.args.get("path") or "").strip().replace("\\", "/")
+    inline = str(request.args.get("inline") or "").strip().lower() in {"1", "true", "yes"}
+
+    if not rel_path or rel_path in {".", "/"}:
+        return jsonify({"error": "Invalid file path."}), 400
+
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    target = _safe_path(root, *parts)
+    if not target or not os.path.isfile(target):
+        return jsonify({"error": "File not found."}), 404
+
+    guessed_type, _ = mimetypes.guess_type(target)
+    return send_file(
+        target,
+        mimetype=guessed_type or "application/octet-stream",
+        as_attachment=not inline,
+        download_name=os.path.basename(target),
+    )
+
+
+@gallery_bp.route("/files/read", methods=["GET"])
+def read_file_entry():
+    requested_root = str(request.args.get("root") or "").strip()
+    rel_path = str(request.args.get("path") or "").strip().replace("\\", "/")
+    max_bytes = int(request.args.get("max_bytes", 200000) or 200000)
+    max_bytes = max(1024, min(max_bytes, 2_000_000))
+
+    if not rel_path or rel_path in {".", "/"}:
+        return jsonify({"error": "Invalid file path."}), 400
+
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    target = _safe_path(root, *parts)
+    if not target or not os.path.isfile(target):
+        return jsonify({"error": "File not found."}), 404
+
+    guessed_type, _ = mimetypes.guess_type(target)
+    text_like = bool(guessed_type and (
+        guessed_type.startswith("text/")
+        or guessed_type in {"application/json", "application/xml", "application/javascript", "application/x-javascript"}
+    ))
+
+    try:
+        with open(target, "rb") as f:
+            payload = f.read(max_bytes + 1)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    truncated = len(payload) > max_bytes
+    if truncated:
+        payload = payload[:max_bytes]
+
+    # If not recognised as text MIME, do a simple binary heuristic.
+    if not text_like and b"\x00" in payload:
+        return jsonify({"error": "Binary file cannot be previewed as text."}), 400
+
+    content = payload.decode("utf-8", errors="replace")
+    return jsonify(
+        {
+            "path": rel_path,
+            "content": content,
+            "truncated": truncated,
+            "max_bytes": max_bytes,
+            "mime_type": guessed_type or "application/octet-stream",
+        }
+    )
+
+
+@gallery_bp.route("/files/upload", methods=["POST"])
+def upload_file_entry():
+    requested_root = str(request.form.get("root") or "").strip()
+    rel_path = str(request.form.get("path") or "").strip().replace("\\", "/")
+    upload = request.files.get("file")
+
+    if upload is None:
+        return jsonify({"error": "No file uploaded."}), 400
+
+    file_name = os.path.basename(str(upload.filename or "").strip())
+    if not file_name or file_name in {".", ".."}:
+        return jsonify({"error": "Invalid filename."}), 400
+    if "/" in file_name or "\\" in file_name:
+        return jsonify({"error": "Invalid filename."}), 400
+
+    roots = _available_roots()
+    root = None
+    for item in roots:
+        if item["root_path"] == requested_root:
+            root = requested_root
+            break
+    if not root:
+        return jsonify({"error": "Invalid root."}), 400
+
+    parts = [p for p in rel_path.split("/") if p and p != "."]
+    parent = _safe_path(root, *parts) if parts else root
+    if not parent or not os.path.isdir(parent):
+        return jsonify({"error": "Destination folder not found."}), 404
+
+    target = _safe_path(parent, file_name)
+    if not target:
+        return jsonify({"error": "Invalid destination."}), 400
+    if os.path.exists(target):
+        return jsonify({"error": "A file with that name already exists."}), 409
+
+    try:
+        upload.save(target)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"ok": True, "name": file_name})
 
 
 @gallery_bp.route("/files/delete", methods=["POST"])
