@@ -25,7 +25,7 @@
 	<div id="searchFilterBar">
 		<div class="filter-field">
 			<label for="searchInput">Search Galleries</label>
-			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}'>
+			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}">
 		</div>
 		<div class="filter-group" id="filterGroup"></div>
 	</div>
@@ -634,47 +634,17 @@ function setBreadcrumb(parts) {
 }
 
 function refreshDisplay() {
-	const filteredItems = getFilteredItems();
-	const { items, totalPages, filteredCount } = getPaginatedItems(filteredItems);
-
-	if (_currentItemType === 'creators') {
-		createGalleryGrid(items, 'creator', loadGalleries);
-	} else if (_currentItemType === 'galleries') {
-		createGalleryGrid(items, 'gallery', item => loadPages(_currentCreator, item));
-	}
-
+	const items = getFilteredItems();
+	const { items: pageItems, totalPages, filteredCount } = getPaginatedItems(items);
 	updatePaginationControls(totalPages, filteredCount);
+	createGalleryGrid(pageItems, _currentItemType, openGalleryDetail);
 }
 
-async function loadCreators(options = {}) {
-	const pushUrl = options.pushUrl !== false;
-	setBreadcrumb([{ label: 'Creators' }]);
-	_currentCreator = null;
-	_currentItemType = 'creators';
-	_currentPage = 1;
-	_searchTerm = '';
-	_activeFilters = {};
-	_availableFilters = {};
-
-	document.getElementById('searchInput').value = '';
-	setupFiltersForCreators({});
-	if (pushUrl) {
-		_setCreatorsUrl();
-	}
-
-	document.getElementById('localList').textContent = 'Loading creators...';
-	document.getElementById('localList').className = '';
-	try {
-		const data = await apiFetch('/api/gallery/list_creators');
-		_allCreators = data.creators || [];
-		_availableFilters = data.filters || {};
-		_currentRootPath = String(data.root_path || '');
-		setupFiltersForCreators(_availableFilters);
-		refreshDisplay();
-	} catch (err) {
-		document.getElementById('localList').textContent = 'Error: ' + err.message;
-		document.getElementById('localList').className = '';
-	}
+async function loadCreators() {
+  const data = await apiFetch('/api/gallery/list_creators');
+  _allCreators = Array.isArray(data.creators) ? data.creators : [];
+  _currentItemType = 'creators';
+  refreshDisplay();
 }
 
 async function loadGalleries(creator, options = {}) {
