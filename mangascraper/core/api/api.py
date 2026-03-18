@@ -874,38 +874,14 @@ class DB:
                 description TEXT,
                 collection_type TEXT NOT NULL DEFAULT 'normal',
                 sort_mode TEXT NOT NULL DEFAULT 'id_desc',
+                expressions TEXT,
                 smart_expression TEXT,
+                items TEXT,
                 created_at TEXT,
                 updated_at TEXT,
                 last_refreshed_at TEXT
             );
-
-            CREATE TABLE IF NOT EXISTS CollectionFilters (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collection_id INTEGER NOT NULL,
-                filter_key TEXT NOT NULL,
-                filter_type TEXT NOT NULL,
-                filter_value TEXT NOT NULL,
-                FOREIGN KEY (collection_id) REFERENCES Collections(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS CollectionItems (
-                collection_id INTEGER NOT NULL,
-                gallery_id INTEGER NOT NULL,
-                is_manual INTEGER DEFAULT 0,
-                is_rule INTEGER DEFAULT 0,
-                manual_order INTEGER DEFAULT 0,
-                added_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY (collection_id, gallery_id),
-                FOREIGN KEY (collection_id) REFERENCES Collections(id) ON DELETE CASCADE
-            );
             """)
-
-            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionfilters_collection_id ON CollectionFilters(collection_id)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionfilters_key ON CollectionFilters(filter_key)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_collection_id ON CollectionItems(collection_id)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_collectionitems_gallery_id ON CollectionItems(gallery_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_downloadqueue_status_no ON DownloadQueue(status, download_no)")
 
             # Migrate legacy GalleriesQueue rows into a single selected DownloadQueue entry.
@@ -935,10 +911,88 @@ class DB:
             if "expires_at" not in cached_meta_columns:
                 c.execute("ALTER TABLE CachedMetadata ADD COLUMN expires_at REAL")
 
+            c.execute("PRAGMA table_info(Collections)")
+            collection_columns = [row[1] for row in c.fetchall()]
+            if "expressions" not in collection_columns:
+                c.execute("ALTER TABLE Collections ADD COLUMN expressions TEXT")
+            if "items" not in collection_columns:
+                c.execute("ALTER TABLE Collections ADD COLUMN items TEXT")
+
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionFilters'")
+            has_collection_filters = c.fetchone() is not None
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionItems'")
+            has_collection_items = c.fetchone() is not None
+
+            if has_collection_filters or has_collection_items:
+                c.execute("SELECT id FROM Collections")
+                collection_ids = [int(row[0]) for row in c.fetchall() if row and row[0] is not None]
+
+                for collection_id in collection_ids:
+                    expressions_payload = []
+                    if has_collection_filters:
+                        c.execute(
+                            """
+                            SELECT filter_key, filter_type, filter_value
+                            FROM CollectionFilters
+                            WHERE collection_id=?
+                            ORDER BY id
+                            """,
+                            (int(collection_id),),
+                        )
+                        for fkey, ftype, fvalue in c.fetchall():
+                            key_text = Helpers.safe_text(fkey, "").strip().upper()
+                            type_text = Helpers.safe_text(ftype, "").strip().lower()
+                            value_text = Helpers.safe_text(fvalue, "").strip()
+                            if not key_text or not type_text or not value_text:
+                                continue
+                            expressions_payload.append(
+                                {
+                                    "filter_key": key_text,
+                                    "filter_type": type_text,
+                                    "filter_value": value_text,
+                                }
+                            )
+
+                    items_payload = []
+                    if has_collection_items:
+                        c.execute(
+                            """
+                            SELECT gallery_id
+                            FROM CollectionItems
+                            WHERE collection_id=?
+                            ORDER BY manual_order ASC, gallery_id DESC
+                            """,
+                            (int(collection_id),),
+                        )
+                        seen_gallery_ids = set()
+                        for (gallery_id,) in c.fetchall():
+                            gid = Helpers.normalise_integer(gallery_id)
+                            if gid is None or gid in seen_gallery_ids:
+                                continue
+                            seen_gallery_ids.add(int(gid))
+                            items_payload.append(int(gid))
+
+                    c.execute(
+                        "UPDATE Collections SET expressions=?, items=? WHERE id=?",
+                        (
+                            json.dumps(expressions_payload, ensure_ascii=True),
+                            json.dumps(items_payload, ensure_ascii=True),
+                            int(collection_id),
+                        ),
+                    )
+
+                if has_collection_filters:
+                    c.execute("DROP TABLE CollectionFilters")
+                if has_collection_items:
+                    c.execute("DROP TABLE CollectionItems")
+
             c.execute("PRAGMA table_info(Creators)")
             creators_columns = [row[1] for row in c.fetchall()]
             if "favourite" not in creators_columns:
                 c.execute("ALTER TABLE Creators ADD COLUMN favourite INTEGER DEFAULT 0")
+
+            c.execute("UPDATE Collections SET expressions='[]' WHERE expressions IS NULL")
+            c.execute("UPDATE Collections SET items='[]' WHERE items IS NULL")
 
             now = time.time()
             c.execute(
@@ -1403,11 +1457,51 @@ class DB:
         return [int(v) for v in Helpers.normalise_integer_list(parsed)]
 
     @staticmethod
+    def _parse_collection_expressions(value) -> list[dict]:
+        if value is None:
+            return []
+        parsed = value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            try:
+                parsed = json.loads(text)
+            except Exception:
+                return []
+        if not isinstance(parsed, list):
+            return []
+
+        expressions = []
+        seen_keys = set()
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            key_text = Helpers.safe_text(entry.get("filter_key", entry.get("key", "")), "").strip().upper()
+            type_text = DB._normalise_collection_filter_type(entry.get("filter_type", entry.get("type", "")))
+            value_text = Helpers.safe_text(entry.get("filter_value", entry.get("value", "")), "").strip()
+            if not key_text or not re.fullmatch(r"F\d+", key_text):
+                continue
+            if key_text in seen_keys:
+                continue
+            if not type_text or not value_text:
+                continue
+            seen_keys.add(key_text)
+            expressions.append(
+                {
+                    "filter_key": key_text,
+                    "filter_type": type_text,
+                    "filter_value": value_text,
+                }
+            )
+        return expressions
+
+    @staticmethod
     def _read_collection_row(cursor, collection_id: int):
         cursor.execute(
             """
-            SELECT id, name, description, collection_type, sort_mode, smart_expression,
-                   created_at, updated_at, last_refreshed_at
+            SELECT id, name, description, collection_type, sort_mode, expressions,
+                   smart_expression, items, created_at, updated_at, last_refreshed_at
             FROM Collections
             WHERE id=?
             """,
@@ -1416,16 +1510,28 @@ class DB:
         row = cursor.fetchone()
         if not row:
             return None
+        expressions = DB._parse_collection_expressions(row[5])
+        item_ids = DB._parse_json_int_list(row[7])
         return {
             "id": int(row[0]),
             "name": Helpers.safe_text(row[1], ""),
             "description": Helpers.safe_text(row[2], ""),
             "collection_type": Helpers.safe_text(row[3], "normal"),
             "sort_mode": Helpers.safe_text(row[4], "id_desc"),
-            "smart_expression": Helpers.safe_text(row[5], ""),
-            "created_at": Helpers.safe_text(row[6], ""),
-            "updated_at": Helpers.safe_text(row[7], ""),
-            "last_refreshed_at": Helpers.safe_text(row[8], ""),
+            "expressions": expressions,
+            "filters": [
+                {
+                    "key": expr["filter_key"],
+                    "type": expr["filter_type"],
+                    "value": expr["filter_value"],
+                }
+                for expr in expressions
+            ],
+            "smart_expression": Helpers.safe_text(row[6], ""),
+            "items": item_ids,
+            "created_at": Helpers.safe_text(row[8], ""),
+            "updated_at": Helpers.safe_text(row[9], ""),
+            "last_refreshed_at": Helpers.safe_text(row[10], ""),
         }
 
     @staticmethod
@@ -1572,33 +1678,36 @@ class DB:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT c.id, c.name, c.description, c.collection_type, c.sort_mode,
-                           c.smart_expression, c.created_at, c.updated_at, c.last_refreshed_at,
-                           SUM(CASE WHEN ci.is_manual=1 THEN 1 ELSE 0 END) AS manual_count,
-                           SUM(CASE WHEN ci.is_rule=1 THEN 1 ELSE 0 END) AS rule_count,
-                           COUNT(ci.gallery_id) AS total_count
-                    FROM Collections c
-                    LEFT JOIN CollectionItems ci ON ci.collection_id = c.id
-                    GROUP BY c.id
-                    ORDER BY LOWER(c.name)
+                    SELECT id, name, description, collection_type, sort_mode,
+                           expressions, smart_expression, items, created_at, updated_at, last_refreshed_at
+                    FROM Collections
+                          ORDER BY LOWER(name)
                     """
                 )
                 rows = []
                 for row in cursor.fetchall():
+                    expressions = DB._parse_collection_expressions(row[5])
+                    item_ids = DB._parse_json_int_list(row[7])
+                    ctype = DB._normalise_collection_type(row[3])
+                    total_count = len(item_ids)
+                    manual_count = total_count if ctype == "normal" else 0
+                    rule_count = total_count if ctype == "smart" else 0
                     rows.append(
                         {
                             "id": int(row[0]),
                             "name": Helpers.safe_text(row[1], ""),
                             "description": Helpers.safe_text(row[2], ""),
-                            "collection_type": Helpers.safe_text(row[3], "normal"),
+                            "collection_type": ctype,
                             "sort_mode": Helpers.safe_text(row[4], "id_desc"),
-                            "smart_expression": Helpers.safe_text(row[5], ""),
-                            "created_at": Helpers.safe_text(row[6], ""),
-                            "updated_at": Helpers.safe_text(row[7], ""),
-                            "last_refreshed_at": Helpers.safe_text(row[8], ""),
-                            "manual_count": int(row[9] or 0),
-                            "rule_count": int(row[10] or 0),
-                            "total_count": int(row[11] or 0),
+                            "expressions": expressions,
+                            "smart_expression": Helpers.safe_text(row[6], ""),
+                            "items": item_ids,
+                            "created_at": Helpers.safe_text(row[8], ""),
+                            "updated_at": Helpers.safe_text(row[9], ""),
+                            "last_refreshed_at": Helpers.safe_text(row[10], ""),
+                            "manual_count": int(manual_count),
+                            "rule_count": int(rule_count),
+                            "total_count": int(total_count),
                         }
                     )
                 return rows
@@ -1609,20 +1718,6 @@ class DB:
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
-                if not collection:
-                    return None
-                cursor.execute(
-                    "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
-                    (int(collection_id),),
-                )
-                collection["filters"] = [
-                    {
-                        "key": Helpers.safe_text(row[0], ""),
-                        "type": Helpers.safe_text(row[1], ""),
-                        "value": Helpers.safe_text(row[2], ""),
-                    }
-                    for row in cursor.fetchall()
-                ]
                 return collection
 
         @staticmethod
@@ -1635,10 +1730,21 @@ class DB:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    INSERT INTO Collections (name, description, collection_type, sort_mode, smart_expression, created_at, updated_at, last_refreshed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO Collections (name, description, collection_type, sort_mode, expressions, smart_expression, items, created_at, updated_at, last_refreshed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (Helpers.safe_text(name, "").strip(), Helpers.safe_text(description, ""), ctype, smode, "", now, now, ""),
+                    (
+                        Helpers.safe_text(name, "").strip(),
+                        Helpers.safe_text(description, ""),
+                        ctype,
+                        smode,
+                        "[]",
+                        "",
+                        "[]",
+                        now,
+                        now,
+                        "",
+                    ),
                 )
                 conn.commit()
                 collection_id = int(cursor.lastrowid)
@@ -1687,9 +1793,9 @@ class DB:
                 for entry in (filters or []):
                     if not isinstance(entry, dict):
                         continue
-                    key = Helpers.safe_text(entry.get("key"), "").strip().upper()
-                    ftype = DB._normalise_collection_filter_type(entry.get("type"))
-                    fvalue = Helpers.safe_text(entry.get("value"), "").strip()
+                    key = Helpers.safe_text(entry.get("filter_key", entry.get("key", "")), "").strip().upper()
+                    ftype = DB._normalise_collection_filter_type(entry.get("filter_type", entry.get("type", "")))
+                    fvalue = Helpers.safe_text(entry.get("filter_value", entry.get("value", "")), "").strip()
                     if not key or not re.fullmatch(r"F\d+", key):
                         continue
                     if key in seen:
@@ -1697,16 +1803,18 @@ class DB:
                     if not ftype or not fvalue:
                         raise ValueError(f"Filter '{key}' requires a valid type and value.")
                     seen.add(key)
-                    cleaned.append((key, ftype, fvalue))
-
-                cursor.execute("DELETE FROM CollectionFilters WHERE collection_id=?", (int(collection_id),))
-                for key, ftype, fvalue in cleaned:
-                    cursor.execute(
-                        "INSERT INTO CollectionFilters (collection_id, filter_key, filter_type, filter_value) VALUES (?, ?, ?, ?)",
-                        (int(collection_id), key, ftype, fvalue),
+                    cleaned.append(
+                        {
+                            "filter_key": key,
+                            "filter_type": ftype,
+                            "filter_value": fvalue,
+                        }
                     )
 
-                cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                cursor.execute(
+                    "UPDATE Collections SET expressions=?, updated_at=? WHERE id=?",
+                    (json.dumps(cleaned, ensure_ascii=True), datetime.now(timezone.utc).isoformat(), int(collection_id)),
+                )
                 conn.commit()
             return DB.Collection.get(int(collection_id))
 
@@ -1725,8 +1833,8 @@ class DB:
                 if not rpn:
                     raise ValueError("Smart expression cannot be empty.")
 
-                cursor.execute("SELECT filter_key FROM CollectionFilters WHERE collection_id=?", (int(collection_id),))
-                known_filters = {Helpers.safe_text(row[0], "").strip().upper() for row in cursor.fetchall()}
+                expressions = DB._parse_collection_expressions(collection.get("expressions"))
+                known_filters = {Helpers.safe_text(entry.get("filter_key"), "").strip().upper() for entry in expressions}
                 used_filters = {token for token in rpn if re.fullmatch(r"F\d+", token)}
                 missing = sorted(filter_key for filter_key in used_filters if filter_key not in known_filters)
                 if missing:
@@ -1738,7 +1846,7 @@ class DB:
                     (Helpers.safe_text(expression, "").strip(), now, int(collection_id)),
                 )
                 if clear_existing_items:
-                    cursor.execute("DELETE FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
+                    cursor.execute("UPDATE Collections SET items='[]' WHERE id=?", (int(collection_id),))
                 conn.commit()
 
             DB.Collection.refresh_smart(int(collection_id))
@@ -1755,41 +1863,27 @@ class DB:
             added = 0
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id FROM Collections WHERE id=?", (int(collection_id),))
-                if not cursor.fetchone():
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
                     return {"added": 0, "ids": []}
 
-                cursor.execute("SELECT COALESCE(MAX(manual_order), 0) FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
-                next_order = int((cursor.fetchone() or [0])[0] or 0)
+                existing_ids = DB._parse_json_int_list(collection.get("items"))
+                existing_set = set(existing_ids)
 
                 for gid in ids:
                     cursor.execute("SELECT id FROM Galleries WHERE id=?", (int(gid),))
                     if not cursor.fetchone():
                         continue
-                    next_order += 1
-                    cursor.execute(
-                        """
-                        INSERT INTO CollectionItems (collection_id, gallery_id, is_manual, is_rule, manual_order, added_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(collection_id, gallery_id) DO UPDATE SET
-                            is_manual = CASE WHEN excluded.is_manual=1 THEN 1 ELSE CollectionItems.is_manual END,
-                            is_rule = CASE WHEN excluded.is_rule=1 THEN 1 ELSE CollectionItems.is_rule END,
-                            manual_order = CASE WHEN excluded.is_manual=1 THEN excluded.manual_order ELSE CollectionItems.manual_order END,
-                            updated_at = excluded.updated_at
-                        """,
-                        (
-                            int(collection_id),
-                            int(gid),
-                            1 if manual else 0,
-                            0 if manual else 1,
-                            next_order,
-                            now,
-                            now,
-                        ),
-                    )
+                    if int(gid) in existing_set:
+                        continue
+                    existing_ids.append(int(gid))
+                    existing_set.add(int(gid))
                     added += 1
 
-                cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (now, int(collection_id)))
+                cursor.execute(
+                    "UPDATE Collections SET items=?, updated_at=? WHERE id=?",
+                    (json.dumps(existing_ids, ensure_ascii=True), now, int(collection_id)),
+                )
                 conn.commit()
             return {"added": added, "ids": ids}
 
@@ -1814,10 +1908,17 @@ class DB:
                 return False
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND gallery_id=?", (int(collection_id), int(gid)))
-                changed = bool(cursor.rowcount)
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return False
+                existing_ids = DB._parse_json_int_list(collection.get("items"))
+                next_ids = [int(item_id) for item_id in existing_ids if int(item_id) != int(gid)]
+                changed = len(next_ids) != len(existing_ids)
                 if changed:
-                    cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                    cursor.execute(
+                        "UPDATE Collections SET items=?, updated_at=? WHERE id=?",
+                        (json.dumps(next_ids, ensure_ascii=True), datetime.now(timezone.utc).isoformat(), int(collection_id)),
+                    )
                 conn.commit()
                 return changed
 
@@ -1826,10 +1927,15 @@ class DB:
             DB.init_db()
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
-                changed = bool(cursor.rowcount)
+                collection = DB._read_collection_row(cursor, int(collection_id))
+                if not collection:
+                    return False
+                changed = bool(DB._parse_json_int_list(collection.get("items")))
                 if changed:
-                    cursor.execute("UPDATE Collections SET updated_at=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), int(collection_id)))
+                    cursor.execute(
+                        "UPDATE Collections SET items='[]', updated_at=? WHERE id=?",
+                        (datetime.now(timezone.utc).isoformat(), int(collection_id)),
+                    )
                 conn.commit()
                 return changed
 
@@ -1848,28 +1954,23 @@ class DB:
 
                 expression = Helpers.safe_text(collection.get("smart_expression"), "").strip()
                 if not expression:
-                    cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND is_rule=1", (int(collection_id),))
                     cursor.execute(
-                        "UPDATE Collections SET last_refreshed_at=?, updated_at=? WHERE id=?",
+                        "UPDATE Collections SET items='[]', last_refreshed_at=?, updated_at=? WHERE id=?",
                         (now, now, int(collection_id)),
                     )
                     conn.commit()
                     return {"updated": True, "matched": 0}
 
                 rpn = smart_expression_to_rpn(expression)
-                cursor.execute(
-                    "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
-                    (int(collection_id),),
-                )
-                filters = [
-                    {
-                        "key": Helpers.safe_text(row[0], "").strip().upper(),
-                        "type": Helpers.safe_text(row[1], "").strip().lower(),
-                        "value": Helpers.safe_text(row[2], "").strip(),
+                expressions = DB._parse_collection_expressions(collection.get("expressions"))
+                filter_map = {
+                    Helpers.safe_text(expr.get("filter_key"), "").strip().upper(): {
+                        "type": Helpers.safe_text(expr.get("filter_type"), "").strip().lower(),
+                        "value": Helpers.safe_text(expr.get("filter_value"), "").strip(),
                     }
-                    for row in cursor.fetchall()
-                ]
-                filter_map = {row["key"]: row for row in filters if row.get("key")}
+                    for expr in expressions
+                    if Helpers.safe_text(expr.get("filter_key"), "").strip()
+                }
 
                 referenced_keys = {token for token in rpn if re.fullmatch(r"F\d+", token)}
                 missing = sorted([key for key in referenced_keys if key not in filter_map])
@@ -1886,30 +1987,14 @@ class DB:
                     if evaluate_smart_rpn(rpn, result_map):
                         matched_gallery_ids.append(int(gallery_row["id"]))
 
-                cursor.execute("DELETE FROM CollectionItems WHERE collection_id=? AND is_rule=1", (int(collection_id),))
-
-                cursor.execute("SELECT COALESCE(MAX(manual_order), 0) FROM CollectionItems WHERE collection_id=?", (int(collection_id),))
-                next_order = int((cursor.fetchone() or [0])[0] or 0)
-
-                for gid in sorted(set(matched_gallery_ids)):
-                    next_order += 1
-                    cursor.execute(
-                        """
-                        INSERT INTO CollectionItems (collection_id, gallery_id, is_manual, is_rule, manual_order, added_at, updated_at)
-                        VALUES (?, ?, 0, 1, ?, ?, ?)
-                        ON CONFLICT(collection_id, gallery_id) DO UPDATE SET
-                            is_rule = 1,
-                            updated_at = excluded.updated_at
-                        """,
-                        (int(collection_id), int(gid), next_order, now, now),
-                    )
+                matched_ids = sorted(set(int(gid) for gid in matched_gallery_ids))
 
                 cursor.execute(
-                    "UPDATE Collections SET last_refreshed_at=?, updated_at=? WHERE id=?",
-                    (now, now, int(collection_id)),
+                    "UPDATE Collections SET items=?, last_refreshed_at=?, updated_at=? WHERE id=?",
+                    (json.dumps(matched_ids, ensure_ascii=True), now, now, int(collection_id)),
                 )
                 conn.commit()
-                return {"updated": True, "matched": len(set(matched_gallery_ids))}
+                return {"updated": True, "matched": len(matched_ids)}
 
         @staticmethod
         def refresh_all_smart() -> dict:
@@ -1941,43 +2026,50 @@ class DB:
                 if not collection:
                     return []
 
-                sort_mode = DB._normalise_sort_mode(collection.get("sort_mode", "id_desc"), DB._normalise_collection_type(collection.get("collection_type", "normal")))
-                order_clause = "g.id DESC"
-                if sort_mode == "id_asc":
-                    order_clause = "g.id ASC"
-                elif sort_mode == "title_asc":
-                    order_clause = "LOWER(COALESCE(g.clean_title, g.raw_title, '')) ASC"
-                elif sort_mode == "title_desc":
-                    order_clause = "LOWER(COALESCE(g.clean_title, g.raw_title, '')) DESC"
-                elif sort_mode == "manual":
-                    order_clause = "ci.manual_order ASC, g.id DESC"
+                item_ids = DB._parse_json_int_list(collection.get("items"))
+                if not item_ids:
+                    return []
 
+                sort_mode = DB._normalise_sort_mode(collection.get("sort_mode", "id_desc"), DB._normalise_collection_type(collection.get("collection_type", "normal")))
+                placeholders = ",".join("?" for _ in item_ids)
                 cursor.execute(
-                    f"""
-                    SELECT ci.gallery_id, ci.is_manual, ci.is_rule, ci.manual_order,
-                           g.clean_title, g.raw_title, g.num_pages, g.status, g.favourite, g.rating
-                    FROM CollectionItems ci
-                    JOIN Galleries g ON g.id = ci.gallery_id
-                    WHERE ci.collection_id=?
-                    ORDER BY {order_clause}
-                    """,
-                    (int(collection_id),),
+                    """
+                    SELECT g.id, g.clean_title, g.raw_title, g.num_pages, g.status, g.favourite, g.rating
+                    FROM Galleries g
+                    WHERE g.id IN (""" + placeholders + ")",
+                    tuple(int(gid) for gid in item_ids),
                 )
-                rows = []
+                by_id = {}
                 for row in cursor.fetchall():
-                    rows.append(
-                        {
-                            "gallery_id": int(row[0]),
-                            "is_manual": bool(row[1]),
-                            "is_rule": bool(row[2]),
-                            "manual_order": int(row[3] or 0),
-                            "title": Helpers.safe_text(row[4] or row[5], ""),
-                            "page_count": Helpers.normalise_integer(row[6]) or 0,
-                            "status": Helpers.safe_text(row[7], ""),
-                            "favourite": bool(row[8]),
-                            "rating": Helpers.safe_float(row[9], 0.0) if row[9] is not None else None,
-                        }
-                    )
+                    gid = Helpers.normalise_integer(row[0])
+                    if gid is None:
+                        continue
+                    by_id[int(gid)] = {
+                        "gallery_id": int(gid),
+                        "title": Helpers.safe_text(row[1] or row[2], ""),
+                        "page_count": Helpers.normalise_integer(row[3]) or 0,
+                        "status": Helpers.safe_text(row[4], ""),
+                        "favourite": bool(row[5]),
+                        "rating": Helpers.safe_float(row[6], 0.0) if row[6] is not None else None,
+                    }
+
+                row_items = [by_id[int(gid)] for gid in item_ids if int(gid) in by_id]
+                if sort_mode == "id_desc":
+                    row_items.sort(key=lambda item: int(item.get("gallery_id") or 0), reverse=True)
+                elif sort_mode == "id_asc":
+                    row_items.sort(key=lambda item: int(item.get("gallery_id") or 0))
+                elif sort_mode == "title_asc":
+                    row_items.sort(key=lambda item: Helpers.safe_text(item.get("title"), "").lower())
+                elif sort_mode == "title_desc":
+                    row_items.sort(key=lambda item: Helpers.safe_text(item.get("title"), "").lower(), reverse=True)
+
+                ctype = DB._normalise_collection_type(collection.get("collection_type", "normal"))
+                for index, item in enumerate(row_items, start=1):
+                    item["is_manual"] = ctype != "smart"
+                    item["is_rule"] = ctype == "smart"
+                    item["manual_order"] = index
+
+                rows = row_items
                 return rows
 
     @staticmethod
@@ -1990,7 +2082,20 @@ class DB:
         removed = False
         with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM CollectionItems WHERE gallery_id=?", (int(gid),))
+            cursor.execute("SELECT id, items FROM Collections")
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for row in cursor.fetchall():
+                collection_id = Helpers.normalise_integer(row[0])
+                if collection_id is None:
+                    continue
+                existing_ids = DB._parse_json_int_list(row[1])
+                next_ids = [int(item_id) for item_id in existing_ids if int(item_id) != int(gid)]
+                if len(next_ids) == len(existing_ids):
+                    continue
+                cursor.execute(
+                    "UPDATE Collections SET items=?, updated_at=? WHERE id=?",
+                    (json.dumps(next_ids, ensure_ascii=True), now_iso, int(collection_id)),
+                )
             cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM GalleryLanguages WHERE gallery_id=?", (int(gid),))
