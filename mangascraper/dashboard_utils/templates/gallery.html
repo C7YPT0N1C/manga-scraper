@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Gallery Viewer</h2>
 <div
 	id="galleryViewerConfig"
 	data-config='{{ (gallery_viewer_config or {}) | tojson }}'
@@ -21,14 +20,12 @@
 </div>
 
 <div id="localPane" class="modePane">
-	<div id="localNav">
-		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
-	</div>
+	<div id="localNav"></div>
 
 	<div id="searchFilterBar">
 		<div class="filter-field">
 			<label for="searchInput">Search Galleries</label>
-			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}">
+			<input type="text" id="searchInput" placeholder="{{ gallery_viewer_config.searchPlaceholder if gallery_viewer_config else 'Search creators or galleries...' }}'>
 		</div>
 		<div class="filter-group" id="filterGroup"></div>
 	</div>
@@ -36,7 +33,7 @@
 	<div id="localList" class="gallery-grid"></div>
 
 	<div class="pagination-controls" id="paginationControls" style="display:none">
-		<button id="prevPageBtn">← Previous</button>
+		<button id="prevPageBtn"> Previous</button>
 		<span class="pagination-info">Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
 		<div class="filter-field filter-inline-field">
 			<label for="itemsPerPageSelect">Items Per Page</label>

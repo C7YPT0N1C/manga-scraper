@@ -1,3 +1,7 @@
+/* Prevent visited collection links from turning purple */
+#collectionList a:visited {
+  color: var(--ink-1) !important;
+}
 :root {
   --bg-0: #050507;
   --bg-1: #0a0a0f;

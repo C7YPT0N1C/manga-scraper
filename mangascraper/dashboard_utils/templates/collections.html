@@ -249,6 +249,15 @@ function renderGalleryDetail(gallery) {
   const favBtn = document.getElementById('galleryDetailFavBtn');
   favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
   favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+
+  const readBtn = document.getElementById('galleryDetailReadBtn');
+  readBtn.onclick = () => {
+    const collectionId = selectedCollectionId;
+    const galleryId = Number(gallery.gallery_id || 0);
+    if (collectionId && galleryId) {
+      window.location.href = `/collections/${collectionId}/${galleryId}/`;
+    }
+  };
 }
 
 async function toggleGalleryFavourite(galleryId, targetValue) {
@@ -483,13 +492,21 @@ function renderItems(items) {
     card.appendChild(titleDiv);
     card.appendChild(metaDiv);
     card.appendChild(controlsDiv);
-    card.addEventListener('click', () => {
-      const targetGalleryId = Number(item.gallery_id || 0);
-      if (selectedCollectionId && targetGalleryId) {
-        window.location.href = `/collections/${selectedCollectionId}/${targetGalleryId}/`;
-        return;
+    card.addEventListener('click', (event) => {
+      // Left click: open detail modal
+      if (event.button === 0) {
+        openGalleryDetail(item);
       }
-      openGalleryDetail(item);
+    });
+    card.addEventListener('mousedown', (event) => {
+      // Middle click: open reader route in new tab
+      if (event.button === 1) {
+        const collectionId = selectedCollectionId;
+        const galleryId = Number(item.gallery_id || 0);
+        if (collectionId && galleryId) {
+          window.open(`/collections/${collectionId}/${galleryId}/`, '_blank');
+        }
+      }
     });
     host.appendChild(card);
   });
