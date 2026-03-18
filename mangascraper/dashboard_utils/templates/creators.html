@@ -132,8 +132,8 @@ let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
 let _pageSizeByType = {
-	creators: normalisePageSize(VIEWER_CONFIG.creatorPageSize, PAGE_SIZE_OPTIONS[0]),
-	galleries: normalisePageSize(VIEWER_CONFIG.galleryPageSize, PAGE_SIZE_OPTIONS[0]),
+	creators: normalisePageSize(VIEWER_CONFIG.creatorPageSize, PAGE_SIZE_OPTIONS[1]),
+	galleries: normalisePageSize(VIEWER_CONFIG.galleryPageSize, PAGE_SIZE_OPTIONS[1]),
 };
 let _detailGallery = null;
 let _currentRootPath = '';
@@ -551,6 +551,7 @@ function createGalleryGrid(items, itemType, onClick) {
 		imageDiv.className = 'gallery-square-image';
 
 		const label = itemLabel(item);
+		const displayLabel = (itemType === 'gallery') ? String(item.title || label || '').trim() : label;
 
 		if (itemType === 'creator') {
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(label)}`;
@@ -563,7 +564,7 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = label;
+		titleDiv.textContent = displayLabel;
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
