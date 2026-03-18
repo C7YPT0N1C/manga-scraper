@@ -65,13 +65,7 @@
       <button id="fileUpBtn" type="button">Up</button>
       <button id="fileRefreshBtn" type="button">Refresh</button>
       <select id="fileRootSelect" title="Choose root folder"></select>
-      <button id="fileOpenBtn" type="button">Open</button>
-      <button id="fileDownloadBtn" type="button">Download</button>
-      <button id="fileUploadBtn" type="button">Upload</button>
       <input id="fileUploadInput" type="file" multiple style="display:none">
-      <button id="fileRenameBtn" type="button">Rename</button>
-      <button id="fileDeleteBtn" type="button" class="danger">Delete</button>
-      <button id="fileNewFolderBtn" type="button">New Folder</button>
     </div>
     <div id="fileBreadcrumb" class="file-breadcrumb"></div>
     <p id="fileStatusMsg">Choose a root folder to begin.</p>
@@ -91,11 +85,11 @@
     <div id="fileContextMenu" class="file-modal-box" style="display:none; position:fixed; z-index:1700; min-width:200px; padding:0.5rem;">
       <div style="display:flex; flex-direction:column; gap:0.35rem;">
         <button id="fileCtxOpenBtn" type="button">Open</button>
-        <button id="fileCtxDownloadBtn" type="button">Download</button>
         <button id="fileCtxRenameBtn" type="button">Rename</button>
-        <button id="fileCtxDeleteBtn" type="button" class="danger">Delete</button>
-        <button id="fileCtxUploadBtn" type="button">Upload</button>
         <button id="fileCtxNewFolderBtn" type="button">New Folder</button>
+        <button id="fileCtxUploadBtn" type="button">Upload</button>
+        <button id="fileCtxDownloadBtn" type="button">Download</button>
+        <button id="fileCtxDeleteBtn" type="button" class="danger">Delete</button>
         <button id="fileCtxRefreshBtn" type="button">Refresh</button>
       </div>
     </div>
@@ -968,15 +962,6 @@ document.getElementById('fileBackBtn').addEventListener('click', () => {
   }
 });
 document.getElementById('fileUpBtn').addEventListener('click', _fileNavigateUp);
-document.getElementById('fileOpenBtn').addEventListener('click', _openSelectedFile);
-document.getElementById('fileDownloadBtn').addEventListener('click', _downloadSelectedFile);
-document.getElementById('fileRenameBtn').addEventListener('click', _renameSelectedFile);
-document.getElementById('fileDeleteBtn').addEventListener('click', _deleteSelectedFile);
-document.getElementById('fileUploadBtn').addEventListener('click', () => {
-  const input = document.getElementById('fileUploadInput');
-  input.value = '';
-  input.click();
-});
 document.getElementById('fileUploadInput').addEventListener('change', event => {
   _uploadSelectedFiles(event.target.files || []);
 });
@@ -989,7 +974,6 @@ document.getElementById('fileRootSelect').addEventListener('change', e => {
   _fileHistoryIndex = 0;
   loadFileEntries('', { pushHistory: false });
 });
-document.getElementById('fileNewFolderBtn').addEventListener('click', _createFolder);
 document.getElementById('fileCtxOpenBtn').addEventListener('click', () => {
   _hideFileContextMenu();
   _openSelectedFile();
