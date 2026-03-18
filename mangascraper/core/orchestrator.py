@@ -201,7 +201,7 @@ DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 
 DASHBOARD_GALLERY_VIEW_CONFIG = {
     "searchPlaceholder": "Search creators or galleries...",
-    "tileMinWidthPx": 240,
+    "tileMinWidthPx": 960,
     "tileAspectRatio": "2 / 3",
     "creatorPageSize": 20,
     "galleryPageSize": 20,
