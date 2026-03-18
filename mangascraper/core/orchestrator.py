@@ -202,7 +202,7 @@ DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 DASHBOARD_VIEW_CONFIG = {
     "creatorPageSize": 20,
     "galleryPageSize": 20,
-    "collectionPageSize": 20,
+    "collectionPageSize": 40,
     "databasePageSize": 25,
     "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",

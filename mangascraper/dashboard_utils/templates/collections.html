@@ -132,7 +132,7 @@
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
 const INITIAL_COLLECTION_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialCollectionId || 0);
 const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
-const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
+const PAGE_SIZE_OPTIONS = Array.isArray(VIEWER_CONFIG.itemsPerPageOptions) ? VIEWER_CONFIG.itemsPerPageOptions : [5, 10, 15, 20, 25];
 
 function normalisePageSize(value, fallback) {
   const numeric = Number(value);
