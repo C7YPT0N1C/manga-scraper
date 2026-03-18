@@ -10,22 +10,10 @@ from mangascraper.core import orchestrator
 from mangascraper.dashboard_utils.routes.scraper_routes import scraper_bp
 from mangascraper.dashboard_utils.routes.data_routes import db_bp, gallery_bp, collections_bp
 
-
-def _dashboard_asset_paths() -> tuple[str, str]:
-    """Resolve template/static folders whether this file lives in mangascraper/ or mangascraper/dashboard/."""
-    base_dir = os.path.dirname(__file__)
-
-    direct_templates = os.path.join(base_dir, "templates")
-    direct_static = os.path.join(base_dir, "static")
-    if os.path.isdir(direct_templates) and os.path.isdir(direct_static):
-        return direct_templates, direct_static
-
-    nested_templates = os.path.join(base_dir, "dashboard", "templates")
-    nested_static = os.path.join(base_dir, "dashboard", "static")
-    return nested_templates, nested_static
-
 def create_app():
-    template_folder, static_folder = _dashboard_asset_paths()
+    base_dir = os.path.dirname(__file__)
+    template_folder = os.path.join(base_dir, "dashboard_utils", "templates")
+    static_folder = os.path.join(base_dir, "dashboard_utils", "static")
     app = Flask(
         __name__,
         template_folder=template_folder,
