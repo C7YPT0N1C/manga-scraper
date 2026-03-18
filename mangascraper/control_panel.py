@@ -54,7 +54,7 @@ def create_app():
     def database_page():
         return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
-    @app.route("/logs")
+    @app.route("/diagnostics")
     def logs_page():
         return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 

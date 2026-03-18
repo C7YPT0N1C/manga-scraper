@@ -572,7 +572,7 @@ def cache_clear():
     return jsonify({"message": "Cache cleared.", "cleared": cleared})
 
 
-@scraper_bp.route("/logs", methods=["GET"])
+@scraper_bp.route("/diagnostics", methods=["GET"])
 def logs_list():
     log_dir = getattr(orchestrator, "LOG_DIR", None)
     if not log_dir or not os.path.isdir(log_dir):
@@ -596,7 +596,7 @@ def logs_list():
     return jsonify({"files": files})
 
 
-@scraper_bp.route("/logs/<path:filename>", methods=["GET"])
+@scraper_bp.route("/diagnostics/<path:filename>", methods=["GET"])
 def logs_read(filename):
     log_dir = getattr(orchestrator, "LOG_DIR", None)
     if not log_dir or not os.path.isdir(log_dir):

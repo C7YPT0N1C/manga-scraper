@@ -496,7 +496,7 @@ async function fetchLogsList(options = {}) {
   const msg = document.getElementById('logsMsg');
   const previous = preserveSelection ? (currentLogName || select.value || '') : '';
   try {
-    const res = await fetch('/api/scraper/logs');
+    const res = await fetch('/api/scraper/diagnostics');
     const data = await res.json();
     select.innerHTML = '<option value="">-- select log file --</option>';
     (data.files || []).forEach(file => {
@@ -538,7 +538,7 @@ async function loadLogFile() {
 
   try {
     msg.textContent = `Loading ${name}...`;
-    const res = await fetch(`/api/scraper/logs/${encodeURIComponent(name)}?lines=${encodeURIComponent(lines)}`);
+    const res = await fetch(`/api/scraper/diagnostics/${encodeURIComponent(name)}?lines=${encodeURIComponent(lines)}`);
     const data = await res.json();
     if (!res.ok) {
       msg.textContent = data.message || `Failed to load log: HTTP ${res.status}`;
