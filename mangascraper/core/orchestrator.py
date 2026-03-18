@@ -201,7 +201,7 @@ DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 
 DASHBOARD_GALLERY_VIEW_CONFIG = {
     "searchPlaceholder": "Search creators or galleries...",
-    "tileMinWidthPx": 960,
+    "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",
     "creatorPageSize": 20,
     "galleryPageSize": 20,
@@ -211,7 +211,8 @@ DASHBOARD_GALLERY_VIEW_CONFIG = {
 DASHBOARD_COLLECTION_VIEW_CONFIG = {
     "tileMinWidthPx": 960,
     "tileAspectRatio": "2 / 3",
-    "galleryTilesPerCollectionPage": [14, 21, 28, 35],
+    "collectionPageSize": 20,
+    "galleryTilesPerPage": [13, 26, 39, 52, 65],
 }
 
 DASHBOARD_OTHER_CONFIG = {
