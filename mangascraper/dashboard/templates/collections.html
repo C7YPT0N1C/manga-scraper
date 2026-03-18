@@ -107,6 +107,7 @@
           </div>
         </div>
         <div class="detail-modal-main">
+          <p><strong>ID:</strong> <span id="galleryDetailId">Unknown</span></p>
           <p><strong>Creators:</strong> <span id="galleryDetailCreators">Unknown</span></p>
           <p><strong>Tags:</strong> <span id="galleryDetailTags">None</span></p>
           <p><strong>Languages:</strong> <span id="galleryDetailLanguages">Unknown</span></p>
@@ -201,6 +202,7 @@ function renderGalleryDetail(gallery) {
   const galleryId = Number(gallery.gallery_id || 0);
 
   document.getElementById('galleryDetailTitle').textContent = title;
+  document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
   document.getElementById('galleryDetailCreators').textContent = creators.length ? creators.join(', ') : 'Unknown';
   document.getElementById('galleryDetailTags').textContent = tags.length ? tags.join(', ') : 'None';
   document.getElementById('galleryDetailLanguages').textContent = languages.length ? languages.join(', ') : 'Unknown';
@@ -408,7 +410,7 @@ function renderItems(items) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';
-    titleDiv.textContent = `#${galleryId} ${title}`;
+    titleDiv.textContent = title;
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'gallery-square-meta';
