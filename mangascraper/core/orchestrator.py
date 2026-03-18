@@ -212,7 +212,7 @@ DASHBOARD_COLLECTION_VIEW_CONFIG = {
     "tileMinWidthPx": 360,
     "tileAspectRatio": "2 / 3",
     "collectionPageSize": 20,
-    "galleryTilesPerPage": [13, 26, 39, 52, 65],
+    "galleryTilesPerPage": [14, 28, 42, 56, 70],
 }
 
 DASHBOARD_OTHER_VIEWS_CONFIG = {
