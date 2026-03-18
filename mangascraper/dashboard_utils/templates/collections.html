@@ -253,8 +253,12 @@ function renderGalleryDetail(gallery) {
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
   readBtn.onclick = async () => {
+    const collectionId = selectedCollectionId;
     const galleryId = Number(gallery.gallery_id || 0);
     const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
+    if (collectionId && galleryId) {
+      window.history.pushState({}, '', `/collections/${collectionId}/${galleryId}/`);
+    }
     try {
       await readGalleryById(galleryId, title);
       closeGalleryDetail();
@@ -496,14 +500,17 @@ function renderItems(items) {
     card.appendChild(titleDiv);
     card.appendChild(metaDiv);
     card.appendChild(controlsDiv);
+    // Left click: open detail modal, keep collection URL
     card.addEventListener('click', (event) => {
-      // Left click: open detail modal
       if (event.button === 0) {
+        if (selectedCollectionId) {
+          window.history.pushState({}, '', `/collections/${selectedCollectionId}/`);
+        }
         openGalleryDetail(item);
       }
     });
+    // Middle click: open reader route in new tab with gallery URL
     card.addEventListener('mousedown', (event) => {
-      // Middle click: open reader route in new tab
       if (event.button === 1) {
         const collectionId = selectedCollectionId;
         const galleryId = Number(item.gallery_id || 0);
