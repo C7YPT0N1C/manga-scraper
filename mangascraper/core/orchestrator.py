@@ -210,7 +210,7 @@ DASHBOARD_GALLERY_VIEW_CONFIG = {
 
 DASHBOARD_COLLECTION_VIEW_CONFIG = {
     "searchPlaceholder": "Search galleries...",
-    "tileMinWidthPx": 480,
+    "tileMinWidthPx": 960,
     "tileAspectRatio": "2 / 3",
     "galleryTilesPerCollectionPage": [7, 14, 21, 28, 35],
 }
