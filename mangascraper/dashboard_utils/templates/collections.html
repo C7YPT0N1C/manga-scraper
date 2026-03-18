@@ -132,7 +132,7 @@
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
 const INITIAL_COLLECTION_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialCollectionId || 0);
 const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
-const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.itemsPerPageOptions || [10, 20, 30, 50, 100];
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
 
 function normalisePageSize(value, fallback) {
   const numeric = Number(value);
@@ -253,11 +253,13 @@ function renderGalleryDetail(gallery) {
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
   readBtn.onclick = async () => {
-    if (!_detailGallery || !selectedCollectionId) return;
-    const galleryId = Number(_detailGallery.gallery_id || 0);
-    const collectionId = selectedCollectionId;
-    if (collectionId && galleryId) {
-      window.location.href = `/collections/${collectionId}/reader/${galleryId}/`;
+    const galleryId = Number(gallery.gallery_id || 0);
+    const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
+    try {
+      await readGalleryById(galleryId, title);
+      closeGalleryDetail();
+    } catch (err) {
+      document.getElementById('editorMsg').textContent = err.message;
     }
   };
 }
@@ -494,17 +496,14 @@ function renderItems(items) {
     card.appendChild(titleDiv);
     card.appendChild(metaDiv);
     card.appendChild(controlsDiv);
-    // Left click: open detail modal, keep collection URL
     card.addEventListener('click', (event) => {
+      // Left click: open detail modal
       if (event.button === 0) {
-        if (selectedCollectionId) {
-          window.history.pushState({}, '', `/collections/${selectedCollectionId}/`);
-        }
         openGalleryDetail(item);
       }
     });
-    // Middle click: open reader route in new tab with gallery URL
     card.addEventListener('mousedown', (event) => {
+      // Middle click: open reader route in new tab
       if (event.button === 1) {
         const collectionId = selectedCollectionId;
         const galleryId = Number(item.gallery_id || 0);
@@ -789,12 +788,13 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
   }
 });
 
-document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-  if (!_detailGallery || !selectedCollectionId) return;
-  const galleryId = Number(_detailGallery.gallery_id || 0);
-  const collectionId = selectedCollectionId;
-  if (collectionId && galleryId) {
-    window.location.href = `/collections/${collectionId}/reader/${galleryId}/`;
+document.getElementById('galleryDetailReadBtn').addEventListener('click', async () => {
+  if (!_detailGallery || !_detailGallery.gallery_id) return;
+  try {
+    await readGalleryById(_detailGallery.gallery_id, _detailGallery.title || `Gallery ${_detailGallery.gallery_id}`);
+    closeGalleryDetail();
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
   }
 });
 
