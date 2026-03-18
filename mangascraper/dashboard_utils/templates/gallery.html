@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<h2>Creators</h2>
 <div
 	id="galleryViewerConfig"
 	data-config='{{ (gallery_viewer_config or {}) | tojson }}'
@@ -20,7 +21,9 @@
 </div>
 
 <div id="localPane" class="modePane">
-	<div id="localNav"></div>
+	<div id="localNav">
+		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
+	</div>
 
 	<div id="searchFilterBar">
 		<div class="filter-field">
@@ -33,7 +36,7 @@
 	<div id="localList" class="gallery-grid"></div>
 
 	<div class="pagination-controls" id="paginationControls" style="display:none">
-		<button id="prevPageBtn"> Previous</button>
+		<button id="prevPageBtn">← Previous</button>
 		<span class="pagination-info">Page <span id="pageNum">1</span> of <span id="totalPages">1</span></span>
 		<div class="filter-field filter-inline-field">
 			<label for="itemsPerPageSelect">Items Per Page</label>
@@ -634,17 +637,47 @@ function setBreadcrumb(parts) {
 }
 
 function refreshDisplay() {
-	const items = getFilteredItems();
-	const { items: pageItems, totalPages, filteredCount } = getPaginatedItems(items);
+	const filteredItems = getFilteredItems();
+	const { items, totalPages, filteredCount } = getPaginatedItems(filteredItems);
+
+	if (_currentItemType === 'creators') {
+		createGalleryGrid(items, 'creator', loadGalleries);
+	} else if (_currentItemType === 'galleries') {
+		createGalleryGrid(items, 'gallery', item => loadPages(_currentCreator, item));
+	}
+
 	updatePaginationControls(totalPages, filteredCount);
-	createGalleryGrid(pageItems, _currentItemType, openGalleryDetail);
 }
 
-async function loadCreators() {
-  const data = await apiFetch('/api/gallery/list_creators');
-  _allCreators = Array.isArray(data.creators) ? data.creators : [];
-  _currentItemType = 'creators';
-  refreshDisplay();
+async function loadCreators(options = {}) {
+	const pushUrl = options.pushUrl !== false;
+	setBreadcrumb([{ label: 'Creators' }]);
+	_currentCreator = null;
+	_currentItemType = 'creators';
+	_currentPage = 1;
+	_searchTerm = '';
+	_activeFilters = {};
+	_availableFilters = {};
+
+	document.getElementById('searchInput').value = '';
+	setupFiltersForCreators({});
+	if (pushUrl) {
+		_setCreatorsUrl();
+	}
+
+	document.getElementById('localList').textContent = 'Loading creators...';
+	document.getElementById('localList').className = '';
+	try {
+		const data = await apiFetch('/api/gallery/list_creators');
+		_allCreators = data.creators || [];
+		_availableFilters = data.filters || {};
+		_currentRootPath = String(data.root_path || '');
+		setupFiltersForCreators(_availableFilters);
+		refreshDisplay();
+	} catch (err) {
+		document.getElementById('localList').textContent = 'Error: ' + err.message;
+		document.getElementById('localList').className = '';
+	}
 }
 
 async function loadGalleries(creator, options = {}) {

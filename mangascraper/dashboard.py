@@ -33,7 +33,7 @@ def create_app():
     @app.route("/")
     def index():
         return render_template(
-            "gallery.html",
+            "creators.html",
             gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
             initial_creator_slug="",
             initial_gallery_id="",
@@ -46,7 +46,7 @@ def create_app():
     @app.route("/creators/")
     def creators_page():
         return render_template(
-            "gallery.html",
+            "creators.html",
             gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
             initial_creator_slug="",
             initial_gallery_id="",
@@ -56,7 +56,7 @@ def create_app():
     @app.route("/creators/<path:creator_slug>/")
     def creator_page(creator_slug):
         return render_template(
-            "gallery.html",
+            "creators.html",
             gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
             initial_creator_slug=str(creator_slug or ""),
             initial_gallery_id="",
@@ -66,7 +66,7 @@ def create_app():
     @app.route("/creators/<path:creator_slug>/<int:gallery_id>/")
     def creator_gallery_page(creator_slug, gallery_id):
         return render_template(
-            "gallery.html",
+            "creators.html",
             gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
             initial_creator_slug=str(creator_slug or ""),
             initial_gallery_id=int(gallery_id),
