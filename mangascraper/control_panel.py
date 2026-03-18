@@ -2,7 +2,7 @@
 # mangascraper/control_panel.py
 
 import os
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect
 from flask_cors import CORS
 
 from mangascraper.core.api import api as scraperapi
@@ -44,7 +44,45 @@ def create_app():
     # --- Web dashboard routes ---
     @app.route("/")
     def index():
-        return render_template("gallery.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
+        return render_template(
+            "gallery.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_creator_slug="",
+            initial_gallery_id="",
+        )
+
+    @app.route("/creators")
+    def creators_index_redirect():
+        return redirect("/creators/")
+
+    @app.route("/creators/")
+    def creators_page():
+        return render_template(
+            "gallery.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_creator_slug="",
+            initial_gallery_id="",
+        )
+
+    @app.route("/creators/<path:creator_slug>")
+    @app.route("/creators/<path:creator_slug>/")
+    def creator_page(creator_slug):
+        return render_template(
+            "gallery.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_creator_slug=str(creator_slug or ""),
+            initial_gallery_id="",
+        )
+
+    @app.route("/creators/<path:creator_slug>/<int:gallery_id>")
+    @app.route("/creators/<path:creator_slug>/<int:gallery_id>/")
+    def creator_gallery_page(creator_slug, gallery_id):
+        return render_template(
+            "gallery.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_creator_slug=str(creator_slug or ""),
+            initial_gallery_id=int(gallery_id),
+        )
 
     @app.route("/scraper")
     def scraper_page():
@@ -59,8 +97,35 @@ def create_app():
         return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
 
     @app.route("/collections")
+    def collections_index_redirect():
+        return redirect("/collections/")
+
+    @app.route("/collections/")
     def collections_page():
-        return render_template("collections.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
+        return render_template(
+            "collections.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_collection_id="",
+            initial_gallery_id="",
+        )
+
+    @app.route("/collections/<int:collection_id>/")
+    def collection_page(collection_id):
+        return render_template(
+            "collections.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_collection_id=int(collection_id),
+            initial_gallery_id="",
+        )
+
+    @app.route("/collections/<int:collection_id>/<int:gallery_id>/")
+    def collection_gallery_page(collection_id, gallery_id):
+        return render_template(
+            "collections.html",
+            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            initial_collection_id=int(collection_id),
+            initial_gallery_id=int(gallery_id),
+        )
 
     return app
 

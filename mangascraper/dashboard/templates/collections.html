@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Collections</h2>
-<div id="galleryViewerConfig" data-config='{{ (gallery_viewer_config or {}) | tojson }}' hidden></div>
+<div
+  id="galleryViewerConfig"
+  data-config='{{ (gallery_viewer_config or {}) | tojson }}'
+  data-initial-collection-id='{{ initial_collection_id or "" }}'
+  data-initial-gallery-id='{{ initial_gallery_id or "" }}'
+  hidden
+></div>
 
 <div class="panel">
   <h3>Create Collection</h3>
@@ -124,6 +130,8 @@
 'use strict';
 
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
+const INITIAL_COLLECTION_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialCollectionId || 0);
+const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
 
 function normalisePageSize(value, fallback) {
@@ -145,6 +153,33 @@ const reader = {
   index: 0,
   title: '',
 };
+
+function _setCollectionsUrl() {
+  window.history.pushState({}, '', '/collections/');
+}
+
+function _setCollectionUrl(collectionId) {
+  const cid = Number(collectionId || 0);
+  if (!cid) {
+    _setCollectionsUrl();
+    return;
+  }
+  window.history.pushState({}, '', `/collections/${cid}/`);
+}
+
+function _setCollectionGalleryUrl(collectionId, galleryId) {
+  const cid = Number(collectionId || 0);
+  const gid = Number(galleryId || 0);
+  if (!cid) {
+    _setCollectionsUrl();
+    return;
+  }
+  if (!gid) {
+    _setCollectionUrl(cid);
+    return;
+  }
+  window.history.pushState({}, '', `/collections/${cid}/${gid}/`);
+}
 
 function parseCommaSeparatedIds(value) {
   return String(value || '')
@@ -449,6 +484,11 @@ function renderItems(items) {
     card.appendChild(metaDiv);
     card.appendChild(controlsDiv);
     card.addEventListener('click', () => {
+      const targetGalleryId = Number(item.gallery_id || 0);
+      if (selectedCollectionId && targetGalleryId) {
+        window.location.href = `/collections/${selectedCollectionId}/${targetGalleryId}/`;
+        return;
+      }
       openGalleryDetail(item);
     });
     host.appendChild(card);
@@ -488,24 +528,31 @@ async function loadCollections() {
   host.innerHTML = collections.map(item => {
     return `
       <div class="row-wrap">
-        <button type="button" class="open-collection-btn" data-id="${item.id}">${item.name}</button>
+        <a class="open-collection-btn" href="/collections/${item.id}/" data-id="${item.id}">${item.name}</a>
         <span>${item.collection_type} | ${item.total_count || 0} items</span>
       </div>
     `;
   }).join('');
 
   host.querySelectorAll('.open-collection-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      loadCollection(Number(btn.dataset.id));
+    btn.addEventListener('click', event => {
+      event.preventDefault();
+      const nextId = Number(btn.dataset.id || 0);
+      if (!nextId) return;
+      loadCollection(nextId, { pushUrl: true });
     });
   });
 }
 
-async function loadCollection(collectionId) {
+async function loadCollection(collectionId, options = {}) {
+  const pushUrl = options.pushUrl !== false;
   selectedCollectionId = Number(collectionId);
   _collectionPage = 1;
   const data = await api(`/api/collections/${selectedCollectionId}`);
   const itemData = await api(`/api/collections/${selectedCollectionId}/items`);
+  if (pushUrl) {
+    _setCollectionUrl(selectedCollectionId);
+  }
 
   document.getElementById('collectionEditor').style.display = '';
   document.getElementById('editorTitle').textContent = `${data.name} (${data.collection_type})`;
@@ -689,6 +736,7 @@ async function deleteCollection() {
     await api(`/api/collections/${selectedCollectionId}/delete`, { method: 'POST' });
     selectedCollectionId = null;
     document.getElementById('collectionEditor').style.display = 'none';
+    _setCollectionsUrl();
     await loadCollections();
   } catch (err) {
     document.getElementById('editorMsg').textContent = err.message;
@@ -706,7 +754,7 @@ document.getElementById('addGalleryIdsBtn').addEventListener('click', addGallery
 document.getElementById('addFilterRowBtn').addEventListener('click', () => {
   const host = document.getElementById('filterRows');
   const index = host.querySelectorAll('.filter-row').length;
-  host.insertAdjacentHTML('beforeend', filterRowHtml(index, { key: `F${index + 1}`, type: 'tag', value: '' }));
+  host.insertAdjacentHTML('beforeend', filterRowHtml(index, { filter_key: `F${index + 1}`, filter_type: 'tag', filter_value: '' }));
   host.querySelectorAll('.remove-filter-btn').forEach(btn => {
     btn.onclick = () => btn.closest('.filter-row').remove();
   });
@@ -787,7 +835,28 @@ document.addEventListener('keydown', event => {
   }
 });
 
-loadCollections();
+async function hydrateCollectionsRoute() {
+  await loadCollections();
+
+  if (!Number.isFinite(INITIAL_COLLECTION_ID) || INITIAL_COLLECTION_ID <= 0) {
+    return;
+  }
+
+  await loadCollection(INITIAL_COLLECTION_ID, { pushUrl: false });
+  if (!Number.isFinite(INITIAL_GALLERY_ID) || INITIAL_GALLERY_ID <= 0) {
+    return;
+  }
+
+  const match = _allCollectionItems.find(item => Number(item.gallery_id || 0) === Number(INITIAL_GALLERY_ID));
+  if (!match) {
+    return;
+  }
+
+  await openGalleryDetail(match);
+  _setCollectionGalleryUrl(INITIAL_COLLECTION_ID, INITIAL_GALLERY_ID);
+}
+
+hydrateCollectionsRoute();
 refreshCollectionItemsPerPageSelect();
 </script>
 {% endblock %}

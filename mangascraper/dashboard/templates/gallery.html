@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Gallery Viewer</h2>
-<div id="galleryViewerConfig" data-config='{{ (gallery_viewer_config or {}) | tojson }}' hidden></div>
+<div
+	id="galleryViewerConfig"
+	data-config='{{ (gallery_viewer_config or {}) | tojson }}'
+	data-initial-creator-slug='{{ initial_creator_slug or "" }}'
+	data-initial-gallery-id='{{ initial_gallery_id or "" }}'
+	hidden
+></div>
 
 <div id="refreshToolbar">
 	<button id="refreshGalleriesBtn" type="button">Refresh Galleries</button>
@@ -100,6 +106,8 @@
 'use strict';
 
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
+const INITIAL_CREATOR_SLUG = String(document.getElementById('galleryViewerConfig').dataset.initialCreatorSlug || '').trim().toLowerCase();
+const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
 
 function normalisePageSize(value, fallback) {
@@ -182,6 +190,31 @@ function itemLabel(item) {
 
 function itemPathName(item) {
 	return typeof item === 'string' ? item : (item.path_name || item.name || item.label || '');
+}
+
+function creatorSlug(name) {
+	return encodeURIComponent(String(name || '').trim().toLowerCase());
+}
+
+function creatorMatchesSlug(name, slugText) {
+	return String(name || '').trim().toLowerCase() === String(slugText || '').trim().toLowerCase();
+}
+
+function _setCreatorsUrl() {
+	window.history.pushState({}, '', '/creators/');
+}
+
+function _setCreatorUrl(creatorName) {
+	window.history.pushState({}, '', `/creators/${creatorSlug(creatorName)}`);
+}
+
+function _setCreatorGalleryUrl(creatorName, galleryId) {
+	const gid = Number(galleryId || 0);
+	if (!gid) {
+		_setCreatorUrl(creatorName);
+		return;
+	}
+	window.history.pushState({}, '', `/creators/${creatorSlug(creatorName)}/${gid}`);
 }
 
 function parseSearchQuery(raw) {
@@ -616,7 +649,8 @@ function refreshDisplay() {
 	updatePaginationControls(totalPages, filteredCount);
 }
 
-async function loadCreators() {
+async function loadCreators(options = {}) {
+	const pushUrl = options.pushUrl !== false;
 	setBreadcrumb([{ label: 'Creators' }]);
 	_currentCreator = null;
 	_currentItemType = 'creators';
@@ -627,6 +661,9 @@ async function loadCreators() {
 
 	document.getElementById('searchInput').value = '';
 	setupFiltersForCreators({});
+	if (pushUrl) {
+		_setCreatorsUrl();
+	}
 
 	document.getElementById('localList').textContent = 'Loading creators...';
 	document.getElementById('localList').className = '';
@@ -643,8 +680,9 @@ async function loadCreators() {
 	}
 }
 
-async function loadGalleries(creator) {
+async function loadGalleries(creator, options = {}) {
 	const creatorName = itemLabel(creator);
+	const pushUrl = options.pushUrl !== false;
 	_currentCreator = creatorName;
 	_currentItemType = 'galleries';
 	_currentPage = 1;
@@ -656,6 +694,9 @@ async function loadGalleries(creator) {
 		{ label: 'Creators', onClick: loadCreators },
 		{ label: creatorName }
 	]);
+	if (pushUrl) {
+		_setCreatorUrl(creatorName);
+	}
 
 	document.getElementById('searchInput').value = '';
 	setupFiltersForGalleries({});
@@ -675,9 +716,14 @@ async function loadGalleries(creator) {
 	}
 }
 
-async function loadPages(creator, gallery) {
+async function loadPages(creator, gallery, options = {}) {
+	const pushUrl = options.pushUrl !== false;
 	const galleryDisplayName = itemLabel(gallery);
 	const galleryPathName = itemPathName(gallery);
+	const galleryId = Number((typeof gallery === 'object' && gallery !== null ? gallery.gallery_id : null) || parseGalleryId(galleryDisplayName) || 0);
+	if (pushUrl) {
+		_setCreatorGalleryUrl(creator, galleryId);
+	}
 	
 	setBreadcrumb([
 		{ label: 'Creators', onClick: loadCreators },
@@ -887,8 +933,32 @@ document.getElementById('galleryDetailFavBtn').addEventListener('click', async (
 	_renderGalleryDetail(_detailGallery);
 });
 
+async function hydrateGalleryRoute() {
+	if (!INITIAL_CREATOR_SLUG) {
+		await loadCreators({ pushUrl: false });
+		return;
+	}
+
+	await loadCreators({ pushUrl: false });
+	const creatorMatch = _allCreators.find(item => creatorMatchesSlug(itemLabel(item), INITIAL_CREATOR_SLUG));
+	if (!creatorMatch) {
+		return;
+	}
+
+	await loadGalleries(itemLabel(creatorMatch), { pushUrl: false });
+	if (!Number.isFinite(INITIAL_GALLERY_ID) || INITIAL_GALLERY_ID <= 0) {
+		return;
+	}
+
+	const galleryMatch = _allGalleries.find(item => Number(item.gallery_id || 0) === Number(INITIAL_GALLERY_ID));
+	if (!galleryMatch) {
+		return;
+	}
+	await loadPages(itemLabel(creatorMatch), galleryMatch, { pushUrl: false });
+}
+
 setupSearchAndFilters();
 refreshItemsPerPageSelect();
-loadCreators();
+hydrateGalleryRoute();
 </script>
 {% endblock %}
