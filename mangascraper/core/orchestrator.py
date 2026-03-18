@@ -206,7 +206,7 @@ DASHBOARD_VIEW_CONFIG = {
     "creatorPageSize": 20,
     "galleryPageSize": 20,
     "galleryTilesPerPage": [7, 14, 21, 28, 35],
-    "collectionPageSize": 100,
+    "collectionPageSize": 5,
     "galleryTilesPerCollectionPage": [7, 14, 21, 28, 35],
     "databasePageSize": 25,
 }
