@@ -7,8 +7,8 @@ from flask_cors import CORS
 
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
-from mangascraper.dashboard.routes.scraper_routes import scraper_bp
-from mangascraper.dashboard.routes.data_routes import db_bp, gallery_bp, collections_bp
+from mangascraper.dashboard_utils.routes.scraper_routes import scraper_bp
+from mangascraper.dashboard_utils.routes.data_routes import db_bp, gallery_bp, collections_bp
 
 
 def _dashboard_asset_paths() -> tuple[str, str]:
