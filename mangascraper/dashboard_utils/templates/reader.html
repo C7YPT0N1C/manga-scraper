@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Gallery Reader</h2>
+<div id="readerOverlay">
+  <div id="readerHeader">
+    <button id="readerClose">&#x2715; Close</button>
+    <span id="readerTitle"></span>
+    <span id="readerCounter"></span>
+    <button id="streamDownloadBtn" type="button" style="display:none">Download This Gallery</button>
+  </div>
+  <div id="readerBody">
+    <button id="prevBtn" class="navBtn">&#8592;</button>
+    <div id="readerImgWrap">
+      <img id="readerImg" src="" alt="manga page">
+    </div>
+    <button id="nextBtn" class="navBtn">&#8594;</button>
+  </div>
+</div>
+{% endblock %}

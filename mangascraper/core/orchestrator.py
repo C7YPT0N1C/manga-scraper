@@ -207,6 +207,7 @@ DASHBOARD_VIEW_CONFIG = {
     "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",
     "searchPlaceholder": "Search creators or galleries...",
+    "itemsPerPageOptions": [7, 14, 21, 28, 35],
 }
 
 # ------------------------------------------------------------

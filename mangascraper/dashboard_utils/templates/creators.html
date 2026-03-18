@@ -108,7 +108,7 @@
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
 const INITIAL_CREATOR_SLUG = String(document.getElementById('galleryViewerConfig').dataset.initialCreatorSlug || '').trim().toLowerCase();
 const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
-const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
+const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.itemsPerPageOptions || [10, 20, 30, 50, 100];
 
 function normalisePageSize(value, fallback) {
 	const numeric = Number(value);
@@ -926,9 +926,11 @@ document.getElementById('galleryDetailModal').addEventListener('click', e => {
 });
 document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
 	if (!_detailGallery || !_currentCreator) return;
-	const current = _detailGallery;
-	closeGalleryDetail();
-	loadPages(_currentCreator, current);
+	const galleryId = Number(_detailGallery.gallery_id || 0);
+	const creator = _currentCreator;
+	if (creator && galleryId) {
+		window.location.href = `/creators/${creatorSlug(creator)}/reader/${galleryId}/`;
+	}
 });
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
 	if (!_detailGallery) return;
