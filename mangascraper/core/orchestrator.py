@@ -211,7 +211,7 @@ DASHBOARD_GALLERY_VIEW_CONFIG = {
 DASHBOARD_COLLECTION_VIEW_CONFIG = {
     "tileMinWidthPx": 960,
     "tileAspectRatio": "2 / 3",
-    "galleryTilesPerCollectionPage": [7, 14, 21, 28, 35],
+    "galleryTilesPerCollectionPage": [14, 21, 28, 35],
 }
 
 DASHBOARD_OTHER_CONFIG = {
