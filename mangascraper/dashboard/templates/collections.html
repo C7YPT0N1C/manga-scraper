@@ -294,9 +294,9 @@ function closeGalleryDetail() {
 }
 
 function filterRowHtml(index, row = {}) {
-  const key = row.key || `F${index + 1}`;
-  const type = row.type || 'tag';
-  const value = row.value || '';
+  const key = row.filter_key || `F${index + 1}`;
+  const type = row.filter_type || 'tag';
+  const value = row.filter_value || '';
   return `
     <div class="row-wrap filter-row" data-index="${index}">
       <input class="filter-key" type="text" value="${key}" placeholder="F1">
@@ -321,11 +321,11 @@ function filterRowHtml(index, row = {}) {
 function readFilterRows() {
   const rows = [];
   document.querySelectorAll('#filterRows .filter-row').forEach(row => {
-    const key = row.querySelector('.filter-key').value.trim().toUpperCase();
-    const type = row.querySelector('.filter-type').value;
-    const value = row.querySelector('.filter-value').value.trim();
-    if (key && type && value) {
-      rows.push({ key, type, value });
+    const filterKey = row.querySelector('.filter-key').value.trim().toUpperCase();
+    const filterType = row.querySelector('.filter-type').value;
+    const filterValue = row.querySelector('.filter-value').value.trim();
+    if (filterKey && filterType && filterValue) {
+      rows.push({ filter_key: filterKey, filter_type: filterType, filter_value: filterValue });
     }
   });
   return rows;
@@ -518,7 +518,7 @@ async function loadCollection(collectionId) {
     sortSelect.value = 'id_desc';
   }
 
-  const filterRows = Array.isArray(data.filters) ? data.filters : [];
+  const filterRows = Array.isArray(data.expressions) ? data.expressions : [];
   const filtersHost = document.getElementById('filterRows');
   filtersHost.innerHTML = '';
   filterRows.forEach((row, index) => {
@@ -587,12 +587,12 @@ async function saveCollectionMeta() {
 
 async function saveFilters() {
   if (!selectedCollectionId) return;
-  const filters = readFilterRows();
+  const expressions = readFilterRows();
   try {
     await api(`/api/collections/${selectedCollectionId}/filters`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ expressions }),
     });
     document.getElementById('editorMsg').textContent = 'Filters saved.';
     await loadCollection(selectedCollectionId);

@@ -1408,23 +1408,9 @@ def collections_delete(collection_id):
 @collections_bp.route("/<int:collection_id>/filters", methods=["POST"])
 def collections_set_filters(collection_id):
     payload = request.get_json(silent=True) or {}
-    expressions = payload.get("expressions") if isinstance(payload.get("expressions"), list) else None
-    if expressions is not None:
-        filters = []
-        for entry in expressions:
-            if not isinstance(entry, dict):
-                continue
-            filters.append(
-                {
-                    "key": entry.get("filter_key", entry.get("key", "")),
-                    "type": entry.get("filter_type", entry.get("type", "")),
-                    "value": entry.get("filter_value", entry.get("value", "")),
-                }
-            )
-    else:
-        filters = payload.get("filters") if isinstance(payload.get("filters"), list) else []
+    expressions = payload.get("expressions") if isinstance(payload.get("expressions"), list) else []
     try:
-        item = scraperapi.DB.Collection.set_filters(collection_id, filters)
+        item = scraperapi.DB.Collection.set_filters(collection_id, expressions)
         if not item:
             return jsonify({"error": "Collection not found."}), 404
         return jsonify(item)

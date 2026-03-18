@@ -918,6 +918,66 @@ class DB:
             if "items" not in collection_columns:
                 c.execute("ALTER TABLE Collections ADD COLUMN items TEXT")
 
+            c.execute("PRAGMA table_info(Collections)")
+            collection_columns = [row[1] for row in c.fetchall()]
+            desired_collection_columns = [
+                "id",
+                "name",
+                "description",
+                "collection_type",
+                "sort_mode",
+                "expressions",
+                "smart_expression",
+                "items",
+                "created_at",
+                "updated_at",
+                "last_refreshed_at",
+            ]
+
+            if collection_columns != desired_collection_columns:
+                c.execute("DROP TABLE IF EXISTS Collections__reordered")
+                c.execute(
+                    """
+                    CREATE TABLE Collections__reordered (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE,
+                        description TEXT,
+                        collection_type TEXT NOT NULL DEFAULT 'normal',
+                        sort_mode TEXT NOT NULL DEFAULT 'id_desc',
+                        expressions TEXT,
+                        smart_expression TEXT,
+                        items TEXT,
+                        created_at TEXT,
+                        updated_at TEXT,
+                        last_refreshed_at TEXT
+                    )
+                    """
+                )
+
+                select_parts = []
+                for col in desired_collection_columns:
+                    if col in collection_columns:
+                        if col in {"expressions", "items"}:
+                            select_parts.append(f"COALESCE({col}, '[]') AS {col}")
+                        elif col == "smart_expression":
+                            select_parts.append(f"COALESCE({col}, '') AS {col}")
+                        else:
+                            select_parts.append(col)
+                    else:
+                        if col in {"expressions", "items"}:
+                            select_parts.append(f"'[]' AS {col}")
+                        elif col == "smart_expression":
+                            select_parts.append(f"'' AS {col}")
+                        else:
+                            select_parts.append(f"NULL AS {col}")
+
+                c.execute(
+                    "INSERT INTO Collections__reordered (" + ", ".join(desired_collection_columns) + ") "
+                    "SELECT " + ", ".join(select_parts) + " FROM Collections"
+                )
+                c.execute("DROP TABLE Collections")
+                c.execute("ALTER TABLE Collections__reordered RENAME TO Collections")
+
             c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionFilters'")
             has_collection_filters = c.fetchone() is not None
             c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionItems'")
@@ -1477,9 +1537,9 @@ class DB:
         for entry in parsed:
             if not isinstance(entry, dict):
                 continue
-            key_text = Helpers.safe_text(entry.get("filter_key", entry.get("key", "")), "").strip().upper()
-            type_text = DB._normalise_collection_filter_type(entry.get("filter_type", entry.get("type", "")))
-            value_text = Helpers.safe_text(entry.get("filter_value", entry.get("value", "")), "").strip()
+            key_text = Helpers.safe_text(entry.get("filter_key", ""), "").strip().upper()
+            type_text = DB._normalise_collection_filter_type(entry.get("filter_type", ""))
+            value_text = Helpers.safe_text(entry.get("filter_value", ""), "").strip()
             if not key_text or not re.fullmatch(r"F\d+", key_text):
                 continue
             if key_text in seen_keys:
@@ -1519,14 +1579,6 @@ class DB:
             "collection_type": Helpers.safe_text(row[3], "normal"),
             "sort_mode": Helpers.safe_text(row[4], "id_desc"),
             "expressions": expressions,
-            "filters": [
-                {
-                    "key": expr["filter_key"],
-                    "type": expr["filter_type"],
-                    "value": expr["filter_value"],
-                }
-                for expr in expressions
-            ],
             "smart_expression": Helpers.safe_text(row[6], ""),
             "items": item_ids,
             "created_at": Helpers.safe_text(row[8], ""),
@@ -1793,9 +1845,9 @@ class DB:
                 for entry in (filters or []):
                     if not isinstance(entry, dict):
                         continue
-                    key = Helpers.safe_text(entry.get("filter_key", entry.get("key", "")), "").strip().upper()
-                    ftype = DB._normalise_collection_filter_type(entry.get("filter_type", entry.get("type", "")))
-                    fvalue = Helpers.safe_text(entry.get("filter_value", entry.get("value", "")), "").strip()
+                    key = Helpers.safe_text(entry.get("filter_key", ""), "").strip().upper()
+                    ftype = DB._normalise_collection_filter_type(entry.get("filter_type", ""))
+                    fvalue = Helpers.safe_text(entry.get("filter_value", ""), "").strip()
                     if not key or not re.fullmatch(r"F\d+", key):
                         continue
                     if key in seen:
