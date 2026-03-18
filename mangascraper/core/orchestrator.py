@@ -199,15 +199,23 @@ DASHBOARD_PORT = DEFAULT_DASHBOARD_PORT
 DASHBOARD_DEBUG = DEFAULT_DASHBOARD_DEBUG
 DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 
-DASHBOARD_VIEW_CONFIG = {
+DASHBOARD_GALLERY_VIEW_CONFIG = {
     "searchPlaceholder": "Search creators or galleries...",
     "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",
     "creatorPageSize": 20,
     "galleryPageSize": 20,
     "galleryTilesPerPage": [7, 14, 21, 28, 35],
-    "collectionPageSize": 5,
+}
+
+DASHBOARD_COLLECTION_VIEW_CONFIG = {
+    "searchPlaceholder": "Search galleries...",
+    "tileMinWidthPx": 240,
+    "tileAspectRatio": "2 / 3",
     "galleryTilesPerCollectionPage": [7, 14, 21, 28, 35],
+}
+
+DASHBOARD_OTHER_CONFIG = {
     "databasePageSize": 25,
 }
 

@@ -34,7 +34,7 @@ def create_app():
     def index():
         return render_template(
             "creators.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_creator_slug="",
             initial_gallery_id="",
         )
@@ -47,7 +47,7 @@ def create_app():
     def creators_page():
         return render_template(
             "creators.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_creator_slug="",
             initial_gallery_id="",
         )
@@ -57,7 +57,7 @@ def create_app():
     def creator_page(creator_slug):
         return render_template(
             "creators.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_creator_slug=str(creator_slug or ""),
             initial_gallery_id="",
         )
@@ -67,7 +67,7 @@ def create_app():
     def creator_gallery_page(creator_slug, gallery_id):
         return render_template(
             "creators.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_creator_slug=str(creator_slug or ""),
             initial_gallery_id=int(gallery_id),
         )
@@ -78,11 +78,11 @@ def create_app():
 
     @app.route("/database")
     def database_page():
-        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_CONFIG)
 
     @app.route("/diagnostics")
     def logs_page():
-        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG)
+        return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_CONFIG)
 
     @app.route("/collections")
     def collections_index_redirect():
@@ -92,7 +92,7 @@ def create_app():
     def collections_page():
         return render_template(
             "collections.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
             initial_collection_id="",
             initial_gallery_id="",
         )
@@ -101,7 +101,7 @@ def create_app():
     def collection_page(collection_id):
         return render_template(
             "collections.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_collection_id=int(collection_id),
             initial_gallery_id="",
         )
@@ -110,13 +110,12 @@ def create_app():
     def collection_gallery_page(collection_id, gallery_id):
         return render_template(
             "collections.html",
-            gallery_viewer_config=orchestrator.DASHBOARD_VIEW_CONFIG,
+            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
             initial_collection_id=int(collection_id),
             initial_gallery_id=int(gallery_id),
         )
 
     return app
-
 
 if __name__ == "__main__":
     app = create_app()
