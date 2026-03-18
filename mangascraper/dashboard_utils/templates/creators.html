@@ -612,6 +612,16 @@ function createGalleryGrid(items, itemType, onClick) {
 		square.appendChild(metaDiv);
 		square.appendChild(controlsDiv);
 
+		square.addEventListener('mousedown', (event) => {
+			if (itemType === 'gallery' && event.button === 1) {
+				// Middle click: open reader in new tab
+				const creator = _currentCreator;
+				const galleryId = typeof item === 'object' && item.gallery_id ? item.gallery_id : parseGalleryId(itemLabel(item));
+				if (creator && galleryId) {
+					window.open(`/creators/${creatorSlug(creator)}/${galleryId}`, '_blank');
+				}
+			}
+		});
 		square.addEventListener('click', () => {
 			if (itemType === 'creator') {
 				onClick(itemLabel(item));
@@ -651,7 +661,7 @@ function refreshDisplay() {
 
 async function loadCreators(options = {}) {
 	const pushUrl = options.pushUrl !== false;
-	setBreadcrumb([{ label: '' }]);
+	setBreadcrumb([{ label: '' }]); // Label formerly "Creators"
 	_currentCreator = null;
 	_currentItemType = 'creators';
 	_currentPage = 1;

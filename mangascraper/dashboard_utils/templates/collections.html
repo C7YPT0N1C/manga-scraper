@@ -253,17 +253,13 @@ function renderGalleryDetail(gallery) {
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
   readBtn.onclick = async () => {
-    const collectionId = selectedCollectionId;
     const galleryId = Number(gallery.gallery_id || 0);
-    if (collectionId && galleryId) {
-      // Load reader overlay/modal for this gallery
-      try {
-        await readGalleryById(galleryId, gallery.title || gallery.name || `Gallery ${galleryId}`);
-        // Optionally update URL
-        _setCollectionGalleryUrl(collectionId, galleryId);
-      } catch (err) {
-        document.getElementById('editorMsg').textContent = err.message;
-      }
+    const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
+    try {
+      await readGalleryById(galleryId, title);
+      closeGalleryDetail();
+    } catch (err) {
+      document.getElementById('editorMsg').textContent = err.message;
     }
   };
 }
