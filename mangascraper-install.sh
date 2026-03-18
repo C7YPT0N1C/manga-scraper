@@ -256,7 +256,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$SCRAPER_DIR
-ExecStart=$SCRAPER_DIR/venv/bin/python3 -m mangascraper.control_panel
+ExecStart=$SCRAPER_DIR/venv/bin/python3 -m mangascraper.dashboard
 Restart=always
 RestartSec=3
 EnvironmentFile=$ENV_FILE

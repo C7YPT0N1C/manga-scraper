@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/control_panel.py
+# mangascraper/dashboard.py
 
 import os
 from flask import Flask, render_template, redirect
