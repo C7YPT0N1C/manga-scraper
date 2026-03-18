@@ -102,6 +102,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
 <script>
 'use strict';
 
@@ -111,11 +112,7 @@ const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig')
 const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.galleryTilesPerPage || [7, 14, 21, 28, 35];
 
 function normalisePageSize(value, fallback) {
-	const numeric = Number(value);
-	if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
-		return numeric;
-	}
-	return fallback;
+	return Pagination.normalisePageSize(value, PAGE_SIZE_OPTIONS, fallback);
 }
 
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 120)}px`);
@@ -164,16 +161,7 @@ function getItemsPerPage() {
 function refreshItemsPerPageSelect() {
 	const select = document.getElementById('itemsPerPageSelect');
 	if (!select) return;
-	if (!select.options.length) {
-		PAGE_SIZE_OPTIONS.forEach(size => {
-			const option = document.createElement('option');
-			option.value = String(size);
-			option.textContent = String(size);
-			select.appendChild(option);
-		});
-	}
-	const current = getItemsPerPage();
-	select.value = String(current);
+	Pagination.populateItemsPerPageSelect(select, PAGE_SIZE_OPTIONS, getItemsPerPage());
 }
 
 function normaliseText(value) {
@@ -338,13 +326,7 @@ function getFilteredItems() {
 }
 
 function getPaginatedItems(items) {
-	const filteredCount = items.length;
-	const itemsPerPage = getItemsPerPage();
-	const totalPages = Math.ceil(filteredCount / itemsPerPage) || 1;
-	const startIdx = (_currentPage - 1) * itemsPerPage;
-	const endIdx = startIdx + itemsPerPage;
-	const paginatedItems = items.slice(startIdx, endIdx);
-
+	const { items: paginatedItems, totalPages, filteredCount } = Pagination.getPaginatedSlice(items, _currentPage, getItemsPerPage());
 	return { items: paginatedItems, totalPages, filteredCount };
 }
 
@@ -551,7 +533,8 @@ function createGalleryGrid(items, itemType, onClick) {
 		imageDiv.className = 'gallery-square-image';
 
 		const label = itemLabel(item);
-		const displayLabel = (itemType === 'gallery') ? String(item.title || label || '').trim() : label;
+		const rawTitle = String(item.title || label || '').trim();
+		const displayLabel = (itemType === 'gallery') ? rawTitle.replace(/^\(\d+\)\s*/, '') : label;
 
 		if (itemType === 'creator') {
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(label)}`;

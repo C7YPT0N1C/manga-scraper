@@ -126,6 +126,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
 <script>
 'use strict';
 
@@ -135,11 +136,7 @@ const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig')
 const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.galleryTilesPerPage || [14, 28, 42, 56, 70];
 
 function normalisePageSize(value, fallback) {
-  const numeric = Number(value);
-  if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
-    return numeric;
-  }
-  return fallback;
+  return Pagination.normalisePageSize(value, PAGE_SIZE_OPTIONS, fallback);
 }
 
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 960)}px`);
@@ -383,24 +380,11 @@ function readFilterRows() {
 
 function refreshCollectionItemsPerPageSelect() {
   const select = document.getElementById('collectionItemsPerPageSelect');
-  if (!select.options.length) {
-    PAGE_SIZE_OPTIONS.forEach(size => {
-      const option = document.createElement('option');
-      option.value = String(size);
-      option.textContent = String(size);
-      select.appendChild(option);
-    });
-  }
-  select.value = String(_collectionItemsPerPage);
+  Pagination.populateItemsPerPageSelect(select, PAGE_SIZE_OPTIONS, _collectionItemsPerPage);
 }
 
 function getCollectionPaginatedItems(items) {
-  const filteredCount = Array.isArray(items) ? items.length : 0;
-  const itemsPerPage = _collectionItemsPerPage;
-  const totalPages = Math.ceil(filteredCount / itemsPerPage) || 1;
-  const startIdx = (_collectionPage - 1) * itemsPerPage;
-  const endIdx = startIdx + itemsPerPage;
-  const paginatedItems = (items || []).slice(startIdx, endIdx);
+  const { items: paginatedItems, totalPages, filteredCount } = Pagination.getPaginatedSlice(items, _collectionPage, _collectionItemsPerPage);
   return { items: paginatedItems, totalPages, filteredCount };
 }
 
