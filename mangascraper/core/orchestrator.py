@@ -200,14 +200,15 @@ DASHBOARD_DEBUG = DEFAULT_DASHBOARD_DEBUG
 DASHBOARD_USE_RELOADER = DEFAULT_DASHBOARD_USE_RELOADER
 
 DASHBOARD_VIEW_CONFIG = {
-    "creatorPageSize": 20,
-    "galleryPageSize": 20,
-    "collectionPageSize": 40,
-    "databasePageSize": 25,
+    "searchPlaceholder": "Search creators or galleries...",
     "tileMinWidthPx": 240,
     "tileAspectRatio": "2 / 3",
-    "searchPlaceholder": "Search creators or galleries...",
-    "itemsPerPageOptions": [7, 14, 21, 28, 35],
+    "creatorPageSize": 20,
+    "galleryPageSize": 20,
+    "galleryTilesPerPage": [7, 14, 21, 28, 35],
+    "collectionPageSize": 40,
+    "galleryTilesPerCollectionPage": [14, 21, 28, 35, 42],
+    "databasePageSize": 25,
 }
 
 # ------------------------------------------------------------
