@@ -205,7 +205,7 @@ DASHBOARD_GALLERY_VIEW_CONFIG = {
     "tileAspectRatio": "2 / 3",
     "creatorPageSize": 20,
     "galleryPageSize": 20,
-    "galleryTilesPerPage": [7, 14, 28, 56, 70],
+    "galleryTilesPerPage": [7, 14, 21, 28, 35],
 }
 
 DASHBOARD_COLLECTION_VIEW_CONFIG = {
