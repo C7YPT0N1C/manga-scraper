@@ -13,6 +13,8 @@
     </div>
     <button id="nextBtn" class="navBtn">→</button>
   </div>
+  <div class="reader-overlay-nav left" aria-hidden="true"><button id="overlayPrev" tabindex="-1"></button></div>
+  <div class="reader-overlay-nav right" aria-hidden="true"><button id="overlayNext" tabindex="-1"></button></div>
   <p id="readerCounter" style="margin-top:0.5rem"></p>
 </div>
 
@@ -79,6 +81,41 @@ main { padding: 0.6rem 0 !important; }
   min-width: 44px;
   font-size: 1.25rem;
   align-self: center;
+}
+
+/* Mobile / touch improvements */
+@media (max-width: 560px) {
+  #readerImgWrap {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding: 0 0.25rem;
+    max-height: calc(100vh - 100px);
+  }
+
+  /* Larger, more tappable nav buttons without making them visually huge */
+  #readerWrapper .navBtn {
+    min-width: 64px;
+    padding: 0.8rem 0.8rem;
+    font-size: 1.5rem;
+    background: rgba(0,0,0,0.32);
+    color: var(--ink-0);
+    border-radius: 8px;
+    opacity: 0.95;
+  }
+
+  /* Invisible large edge hit areas so users can tap near edges to navigate */
+  .reader-overlay-nav {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 18%;
+    z-index: 1200;
+    display: block;
+    pointer-events: auto;
+  }
+  .reader-overlay-nav.left { left: 0; }
+  .reader-overlay-nav.right { right: 0; }
+  .reader-overlay-nav button { width:100%; height:100%; background:transparent; border:none; }
 }
 </style>
 
@@ -181,6 +218,17 @@ document.getElementById('prevBtn').addEventListener('click', () => {
 document.getElementById('nextBtn').addEventListener('click', () => {
   if (reader.index < reader.pages.length - 1) { reader.index += 1; showPage(); }
 });
+// Overlay nav handlers (mobile touch targets)
+if (document.getElementById('overlayPrev')) {
+  document.getElementById('overlayPrev').addEventListener('click', () => {
+    if (reader.index > 0) { reader.index -= 1; showPage(); }
+  });
+}
+if (document.getElementById('overlayNext')) {
+  document.getElementById('overlayNext').addEventListener('click', () => {
+    if (reader.index < reader.pages.length - 1) { reader.index += 1; showPage(); }
+  });
+}
 document.addEventListener('keydown', e => {
   if (document.getElementById('readerImg').src === '') return;
   if (e.key === 'ArrowLeft' && reader.index > 0) { reader.index--; showPage(); }
