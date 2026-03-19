@@ -28,7 +28,6 @@ RUNTIME_LOG_FILE = os.path.join(
     f"runtime-{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
 )
 
-
 def _cleanup_empty_runtime_logs():
     """Delete zero-byte files in the runtime log directory left behind by short-lived processes/reloads."""
     try:

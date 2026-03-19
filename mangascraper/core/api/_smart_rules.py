@@ -2,7 +2,6 @@
 
 import re
 
-
 def tokenise_smart_expression(expression: str) -> list[str]:
     text = str(expression or "").strip()
     if not text:
@@ -15,7 +14,6 @@ def tokenise_smart_expression(expression: str) -> list[str]:
     if compact_source != compact_tokens:
         raise ValueError("Expression contains unsupported tokens. Use only F#, AND, OR, NOT, and brackets.")
     return normalised
-
 
 def smart_expression_to_rpn(expression: str) -> list[str]:
     tokens = tokenise_smart_expression(expression)
@@ -105,7 +103,6 @@ def smart_expression_to_rpn(expression: str) -> list[str]:
         output.append(top)
 
     return output
-
 
 def evaluate_smart_rpn(rpn_tokens: list[str], filter_result_map: dict[str, bool]) -> bool:
     stack = []
