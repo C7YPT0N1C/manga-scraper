@@ -144,11 +144,38 @@ class Build:
             search_value = str(search_value)
 
         if search_value:
-            terms = [t for t in search_value.lower().split() if t]
-            if len(terms) > 1:
-                terms = sorted(terms, key=lambda x: (x.isdigit(), x))
-            sorted_value = "_".join(terms)
-            safe_value = "".join(c for c in sorted_value if c.isalnum() or c in ('-', '_', '+')).lower()
-            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{safe_value}'")
-            return f"{search_type}:{safe_value}"
+            sv = search_value.strip()
+            # If modifiers are appended with '+', separate them and only sort the main query tokens.
+            if '+' in sv:
+                main_part, modifiers = sv.split('+', 1)
+                modifiers = modifiers.strip()
+            else:
+                main_part, modifiers = sv, None
+
+            # Sort tokens in the main part (preserve existing numeric-sort behaviour).
+            main_terms = [t for t in (main_part or "").lower().split() if t]
+            if len(main_terms) > 1:
+                main_terms = sorted(main_terms, key=lambda x: (x.isdigit(), x))
+            # Join main tokens with underscores and sanitise main (no spaces).
+            sorted_main = "_".join(main_terms)
+
+            # sanitise main and modifiers separately. Main: allow alnum, '-', '_'.
+            safe_main = "".join(c for c in sorted_main if c.isalnum() or c in ('-', '_')).lower()
+
+            safe_mod = None
+            if modifiers:
+                # Normalise whitespace inside modifiers to underscores and allow common modifier chars.
+                mod_norm = "_".join(p for p in re.split(r"\s+", modifiers) if p)
+                safe_mod = "".join(c for c in mod_norm if c.isalnum() or c in ('-', '_', '.')).lower()
+
+            # Build final value: main first (sorted), then '+' and modifiers if present.
+            if safe_main and safe_mod:
+                final_value = f"{safe_main}+{safe_mod}"
+            elif safe_main:
+                final_value = safe_main
+            else:
+                final_value = safe_mod or ""
+
+            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{final_value}'")
+            return f"{search_type}:{final_value}"
         return search_type

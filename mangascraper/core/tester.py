@@ -728,6 +728,22 @@ def main() -> bool:
             except Exception as e:
                 _report("Get.cache_keys no value → type only", False, f"exception={e}")
 
+            # D.4) multi-word with modifiers → main tokens sorted and joined with underscores, modifiers appended
+            try:
+                key = scraperapi.Cache.cache_keys("artist", "anon 2-okunen +date 1-20")
+                ok = key == "artist:2-okunen_anon+date_1-20"
+                _report("Get.cache_keys multi-word with modifiers", ok, f"key={key}")
+            except Exception as e:
+                _report("Get.cache_keys multi-word with modifiers", False, f"exception={e}")
+
+            # D.5) modifiers with extra spaces normalize correctly
+            try:
+                key = scraperapi.Cache.cache_keys("artist", "Anon 2-okunen + date 1-20")
+                ok = key == "artist:2-okunen_anon+date_1-20"
+                _report("Get.cache_keys modifiers with spaces normalize", ok, f"key={key}")
+            except Exception as e:
+                _report("Get.cache_keys modifiers with spaces normalize", False, f"exception={e}")
+
             # ======================================================================
             # E) Get.meta_tags
             # ======================================================================
