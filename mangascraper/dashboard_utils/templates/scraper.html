@@ -276,6 +276,7 @@
       <p><strong>Groups:</strong> <span id="gdGroups"></span></p>
       <p><strong>Languages:</strong> <span id="gdLanguages"></span></p>
       <p><strong>Pages:</strong> <span id="gdPages"></span></p>
+      <p><strong>Download Status:</strong> <span id="gdStatus">-</span></p>
       <p><strong>Tags:</strong> <span id="gdTags"></span></p>
       <p><strong>Characters:</strong> <span id="gdCharacters"></span></p>
       <p><strong>Parodies:</strong> <span id="gdParodies"></span></p>
@@ -604,6 +605,9 @@ function openGalleryDetail(row) {
   document.getElementById('gdGroups').textContent = join(row.groups);
   document.getElementById('gdLanguages').textContent = join(row.languages);
   document.getElementById('gdPages').textContent = row.pages ?? '-';
+  try {
+    document.getElementById('gdStatus').textContent = String(row.status || '-');
+  } catch (e) {}
   document.getElementById('gdTags').textContent = join(row.tags);
   document.getElementById('gdCharacters').textContent = join(row.characters);
   document.getElementById('gdParodies').textContent = join(row.parodies);

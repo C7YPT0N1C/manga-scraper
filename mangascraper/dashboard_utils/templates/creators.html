@@ -93,6 +93,7 @@
 					<p><strong>Tags:</strong> <span id="galleryDetailTags">None</span></p>
 					<p><strong>Languages:</strong> <span id="galleryDetailLanguages">Unknown</span></p>
 					<p><strong>Pages:</strong> <span id="galleryDetailPages">0</span></p>
+					<p><strong>Download Status:</strong> <span id="galleryDetailStatus">Unknown</span></p>
 				</div>
 			</div>
 		</div>
@@ -471,6 +472,10 @@ function _renderGalleryDetail(gallery) {
 	document.getElementById('galleryDetailTags').textContent = tagList.length ? tagList.join(', ') : 'None';
 	document.getElementById('galleryDetailLanguages').textContent = languageList.length ? languageList.join(', ') : 'Unknown';
 	document.getElementById('galleryDetailPages').textContent = String(pageCount);
+	// download status
+	try {
+		document.getElementById('galleryDetailStatus').textContent = String(gallery.status || 'Unknown');
+	} catch (e) {}
 
 	const coverEl = document.getElementById('galleryDetailCover');
 	coverEl.style.backgroundImage = coverUrl ? `url('${coverUrl}')` : '';
@@ -506,6 +511,7 @@ async function openGalleryDetail(gallery) {
 		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
 		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
 		_detailGallery.status = String(data.status || _detailGallery.status || '');
+		document.getElementById('galleryDetailStatus').textContent = String(_detailGallery.status || 'Unknown');
 		if (Array.isArray(data.creators) && data.creators.length) {
 			_detailGallery.creators = data.creators;
 		} else if (data.creator) {
