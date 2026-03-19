@@ -773,8 +773,30 @@ def status():
             _progress_port = None
             _progress_token = None
 
-    progress = _read_runtime_progress() if running else {}
-    counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+    # Read progress and counts with retry/backoff to survive transient high-IO failures.
+    progress = {}
+    counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            progress = _read_runtime_progress() if running else {}
+            counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+            break
+        except Exception:
+            # On transient failure, wait using adaptive API sleep and retry a few times.
+            if attempt >= max_attempts:
+                try:
+                    scraperapi.logger.exception("[DashboardStatus] Failed to read runtime progress after retries.")
+                except Exception:
+                    pass
+                progress = {}
+                counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+                break
+            try:
+                wait = float(scraperapi.Sleep.dynamic("api", attempt))
+            except Exception:
+                wait = 0.5
+            time.sleep(wait)
 
     return jsonify({
         "status": "running" if running else _last_run_status,

@@ -193,7 +193,6 @@ function openReader(pages, title, onClose) {
     }
     window.__dynamicBarCollapsed = true;
     if (typeof _applyDynamicBarCollapsedState === 'function') _applyDynamicBarCollapsedState();
-    if (typeof _saveDynamicBarCollapsedState === 'function') _saveDynamicBarCollapsedState(true);
   } catch (e) {}
 
   showPage();
@@ -205,7 +204,6 @@ function closeReader() {
     if (typeof window.__dynamicBarCollapsed__prev !== 'undefined') {
       window.__dynamicBarCollapsed = !!window.__dynamicBarCollapsed__prev;
       if (typeof _applyDynamicBarCollapsedState === 'function') _applyDynamicBarCollapsedState();
-      if (typeof _saveDynamicBarCollapsedState === 'function') _saveDynamicBarCollapsedState(!!window.__dynamicBarCollapsed__prev);
       delete window.__dynamicBarCollapsed__prev;
     }
   } catch (e) {}

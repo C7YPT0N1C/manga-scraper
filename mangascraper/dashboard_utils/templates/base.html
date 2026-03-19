@@ -163,6 +163,8 @@
         dock.style.display = '';
       } catch (err) {
         content.textContent = 'Status unavailable.';
+        // Keep the dynamic bar visible on API errors so users see the status message.
+        try { dock.style.display = ''; } catch (e) { /* ignore */ }
       }
     }
 
