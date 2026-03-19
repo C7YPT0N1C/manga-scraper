@@ -452,7 +452,7 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 
 function _renderGalleryDetail(gallery) {
 	const rawTitle = String(gallery.label || gallery.name || 'Gallery');
-	const title = stripGalleryId(rawTitle);
+	const title = rawTitle;
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
 	const tagList = normaliseList(gallery.tags);
@@ -568,7 +568,7 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = stripGalleryId(label);
+		titleDiv.textContent = label;
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
@@ -768,8 +768,8 @@ async function loadPages(creator, gallery, options = {}) {
 			return;
 		}
 		_readerFromStream = false;
-		// Strip numeric prefix from title for display in reader
-		openReader(pages, stripGalleryId(galleryDisplayName), () => {
+		// Use full title for now (do not strip numeric prefix)
+		openReader(pages, galleryDisplayName, () => {
 			document.getElementById('localPane').style.display = '';
 			loadGalleries(creator);
 		});
