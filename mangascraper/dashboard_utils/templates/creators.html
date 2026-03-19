@@ -451,7 +451,8 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 }
 
 function _renderGalleryDetail(gallery) {
-	const title = String(gallery.label || gallery.name || 'Gallery');
+	const rawTitle = String(gallery.label || gallery.name || 'Gallery');
+	const title = stripGalleryId(rawTitle);
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
 	const tagList = normaliseList(gallery.tags);
