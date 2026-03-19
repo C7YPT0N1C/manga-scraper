@@ -1747,6 +1747,13 @@ def list_pages_by_id(gallery_id):
     if not locations:
         abort(404)
 
+    # Try to include a friendly gallery title if available
+    try:
+        meta = _gallery_meta_by_id(int(gallery_id)) or {}
+        friendly_title = str(meta.get("title") or "")
+    except Exception:
+        friendly_title = ""
+
     requested_root = _requested_root()
     for row in locations:
         root = str(row.get("root_path") or "")
@@ -1765,11 +1772,11 @@ def list_pages_by_id(gallery_id):
                 name for name in os.listdir(resolved_path)
                 if os.path.splitext(name)[1].lower() in IMAGE_EXTS
             )
-            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": root})
+            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": root, "title": friendly_title})
 
         if _is_archive(resolved_path):
             pages = _archive_pages(resolved_path)
-            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root})
+            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root, "title": friendly_title})
 
     # Fallback: consult Galleries.download_path if GalleryLocations didn't resolve
     try:
@@ -1783,10 +1790,10 @@ def list_pages_by_id(gallery_id):
                     name for name in os.listdir(resolved_gp)
                     if os.path.splitext(name)[1].lower() in IMAGE_EXTS
                 )
-                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": ""})
+                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": "", "title": friendly_title})
             if _is_archive(resolved_gp):
                 pages = _archive_pages(resolved_gp)
-                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": ""})
+                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": "", "title": friendly_title})
     except Exception:
         pass
 

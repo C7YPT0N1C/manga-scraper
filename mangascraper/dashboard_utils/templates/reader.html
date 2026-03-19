@@ -7,10 +7,10 @@
     <button id="readerBack" type="button">← Back</button>
     <h2 id="readerTitle">Reader</h2>
   </div>
-  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem;">
+  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem; height:calc(100vh - 160px);">
     <button id="prevBtn" class="navBtn">←</button>
-    <div id="readerImgWrap" style="max-width:80vw; max-height:75vh; display:flex; align-items:center; justify-content:center;">
-      <img id="readerImg" src="" alt="page" style="max-width:100%; max-height:100%; object-fit:contain;" />
+    <div id="readerImgWrap" style="max-width:90vw; width:90vw; display:flex; align-items:center; justify-content:center; flex:1; overflow:auto;">
+      <img id="readerImg" src="" alt="page" style="max-width:100%; max-height:100vh; height:auto; object-fit:contain; display:block; margin:0 auto;" />
     </div>
     <button id="nextBtn" class="navBtn">→</button>
   </div>
