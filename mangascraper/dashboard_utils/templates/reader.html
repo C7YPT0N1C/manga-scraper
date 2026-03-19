@@ -22,14 +22,15 @@
 /* header hidden so reader appears above navigation */
 header.topbar { display: none !important; }
 
-/* Remove standard page padding for the reader so it can occupy full viewport */
-main { padding: 0 !important; }
-.panel { padding: 0 !important; margin-bottom: 0 !important; border-radius: 0 !important; }
+/* Add small page padding top/bottom for breathing room */
+main { padding: 0.6rem 0 !important; }
+/* Keep panel layout tight but use it as positioned container for the counter */
+.panel { padding: 0 !important; margin-bottom: 0 !important; border-radius: 0 !important; position: relative; }
 
 /* Reader sizing: constrain wrapper and image so both scale to viewport
    and remain centered. Reader takes the full viewport height when open. */
 #readerWrapper {
-  height: 100vh;
+  height: calc(100vh - 1.2rem);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -57,6 +58,19 @@ main { padding: 0 !important; }
   object-fit: contain;
   display: block;
   margin: 0 auto;
+}
+
+/* Page counter: top-centre */
+#readerCounter {
+  position: absolute;
+  top: 0.45rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.18rem 0.6rem;
+  color: var(--ink-0);
+  font-weight: 600;
+  z-index: 1250;
 }
 
 /* Reader-specific nav button overrides to prevent huge buttons */
