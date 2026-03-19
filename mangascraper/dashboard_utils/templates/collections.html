@@ -255,17 +255,8 @@ function renderGalleryDetail(gallery) {
 
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
-  readBtn.onclick = () => {
-    const galleryId = Number(gallery.gallery_id || 0);
-    if (!galleryId) return;
-    if (!selectedCollectionId) {
-      // Fallback: try to open by id via list_pages_by_id
-      window.location.href = `/reader/collections/0/${galleryId}/`;
-      return;
-    }
-    closeGalleryDetail();
-    window.location.href = `/reader/collections/${selectedCollectionId}/${galleryId}/`;
-  };
+  // Disable the Read Gallery action in Collections (keep details popup only)
+  readBtn.onclick = () => { /* intentionally no-op */ };
 }
 
 async function toggleGalleryFavourite(galleryId, targetValue) {
