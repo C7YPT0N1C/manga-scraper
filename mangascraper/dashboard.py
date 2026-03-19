@@ -118,22 +118,18 @@ def create_app():
     # Reader routes (new separate reader pages)
     @app.route('/reader/creators/<path:creator_slug>/<int:gallery_id>/')
     def reader_creator_page(creator_slug, gallery_id):
-        if getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return render_template(
-                'reader.html',
-                gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-                reader_context={
-                    'type': 'creators',
-                    'creator': str(creator_slug),
-                    'gallery_id': int(gallery_id),
-                },
-            )
-        # Use creators overlay as reader when new reader is disabled
+        # If the dashboard is configured to use the overlay reader, redirect
+        # back to the creators page so the overlay can open the gallery.
+        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
+            return redirect(f"/creators/{creator_slug}/{gallery_id}/")
         return render_template(
-            'creators.html',
+            'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-            initial_creator_slug=str(creator_slug or ""),
-            initial_gallery_id=int(gallery_id),
+            reader_context={
+                'type': 'creators',
+                'creator': str(creator_slug),
+                'gallery_id': int(gallery_id),
+            },
         )
 
     @app.route('/reader/creators/<path:creator_slug>/')
@@ -142,22 +138,16 @@ def create_app():
 
     @app.route('/reader/collections/<int:collection_id>/<int:gallery_id>/')
     def reader_collection_page(collection_id, gallery_id):
-        if getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return render_template(
-                'reader.html',
-                gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
-                reader_context={
-                    'type': 'collections',
-                    'collection_id': int(collection_id),
-                    'gallery_id': int(gallery_id),
-                },
-            )
-        # Use collections overlay as reader when new reader is disabled
+        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
+            return redirect(f"/collections/{collection_id}/{gallery_id}/")
         return render_template(
-            'collections.html',
+            'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
-            initial_collection_id=int(collection_id),
-            initial_gallery_id=int(gallery_id),
+            reader_context={
+                'type': 'collections',
+                'collection_id': int(collection_id),
+                'gallery_id': int(gallery_id),
+            },
         )
 
     @app.route('/reader/collections/<int:collection_id>/')
@@ -166,27 +156,15 @@ def create_app():
 
     @app.route('/reader/stream/')
     def reader_stream_page():
-        # If configured to use the standalone reader page, render it.
-        if getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return render_template(
-                'reader.html',
-                gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-                reader_context={
-                    'type': 'stream',
-                },
-            )
-        # Otherwise, render creators overlay and pass optional stream id (query param 'id')
-        stream_id = None
-        try:
-            from flask import request
-            stream_id = request.args.get('id', default=None, type=int)
-        except Exception:
-            stream_id = None
+        # Stream page: prefer overlay if enabled; fallback to standalone reader
+        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
+            return redirect('/creators/')
         return render_template(
-            'creators.html',
+            'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-            initial_creator_slug="",
-            initial_gallery_id=int(stream_id) if stream_id else "",
+            reader_context={
+                'type': 'stream',
+            },
         )
 
     return app

@@ -991,16 +991,5 @@ async function hydrateGalleryRoute() {
 setupSearchAndFilters();
 refreshItemsPerPageSelect();
 hydrateGalleryRoute();
-
-// Auto-start stream when arriving via reader stream route (no creator slug but gallery id present)
-try {
-	if (!INITIAL_CREATOR_SLUG && Number(INITIAL_GALLERY_ID) > 0) {
-		const input = document.getElementById('streamIdInput');
-		if (input) {
-			input.value = String(INITIAL_GALLERY_ID);
-			startStream();
-		}
-	}
-} catch (e) { /* best-effort */ }
 </script>
 {% endblock %}
