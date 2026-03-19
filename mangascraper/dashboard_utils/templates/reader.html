@@ -7,7 +7,7 @@
     <button id="readerBack" type="button">← Back</button>
     <h2 id="readerTitle">Reader</h2>
   </div>
-  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem;">
+  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem;">
     <button id="prevBtn" class="navBtn">←</button>
     <div id="readerImgWrap">
       <img id="readerImg" src="" alt="page" />
@@ -143,16 +143,6 @@ function openReader(pages, title, onClose) {
     if (typeof _saveDynamicBarCollapsedState === 'function') _saveDynamicBarCollapsedState(true);
   } catch (e) {}
 
-  // save and disable page scrolling while reader is open
-  try {
-    window.__reader_prev_overflow = {
-      html: document.documentElement.style.overflow || '',
-      body: document.body.style.overflow || '',
-    };
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-  } catch (e) {}
-
   showPage();
 }
 
@@ -166,15 +156,6 @@ function closeReader() {
       delete window.__dynamicBarCollapsed__prev;
     }
   } catch (e) {}
-  // restore page scrolling
-  try {
-    if (window.__reader_prev_overflow) {
-      document.documentElement.style.overflow = window.__reader_prev_overflow.html || '';
-      document.body.style.overflow = window.__reader_prev_overflow.body || '';
-      delete window.__reader_prev_overflow;
-    }
-  } catch (e) {}
-
   if (reader.onClose) reader.onClose();
 }
 
