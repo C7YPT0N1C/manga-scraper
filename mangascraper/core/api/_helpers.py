@@ -1,5 +1,6 @@
 # mangascraper/core/api/_helpers.py
 
+from __future__ import annotations
 import os, time, threading, sqlite3, json, re
 from datetime import datetime, timezone
 

@@ -1,5 +1,6 @@
 # mangascraper/core/api/_fetch.py
 
+from __future__ import annotations
 import time, requests
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed

@@ -1,5 +1,6 @@
 # mangascraper/core/api/_cache.py
 
+from __future__ import annotations
 import time, json
 from datetime import datetime, timezone
 
