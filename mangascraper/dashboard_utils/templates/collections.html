@@ -243,7 +243,7 @@ function renderGalleryDetail(gallery) {
   const pageCount = Number(gallery.page_count || 0);
   const galleryId = Number(gallery.gallery_id || 0);
 
-  document.getElementById('galleryDetailTitle').textContent = stripGalleryId(title);
+  document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || stripGalleryId(title));
   document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
   document.getElementById('galleryDetailCreators').textContent = creators.length ? creators.join(', ') : 'Unknown';
   document.getElementById('galleryDetailTags').textContent = tags.length ? tags.join(', ') : 'None';
@@ -457,7 +457,7 @@ function renderItems(items) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';
-    titleDiv.textContent = stripGalleryId(title);
+    titleDiv.textContent = String(item.clean_title || stripGalleryId(title));
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'gallery-square-meta';

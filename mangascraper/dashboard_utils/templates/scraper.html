@@ -601,7 +601,7 @@ function openGalleryDetail(row) {
   const join = arr => Array.isArray(arr) && arr.length ? arr.join(', ') : '-';
   function stripGalleryId(title) { return String(title || '').replace(/^\(\d+\)\s*/, '').trim(); }
   document.getElementById('gdId').textContent = row.id ?? '-';
-  document.getElementById('gdTitle').textContent = stripGalleryId(row.title || `Gallery ${row.id}`);
+  document.getElementById('gdTitle').textContent = String(row.clean_title || stripGalleryId(row.title || `Gallery ${row.id}`));
   document.getElementById('gdArtists').textContent = join(row.artists);
   document.getElementById('gdGroups').textContent = join(row.groups);
   document.getElementById('gdLanguages').textContent = join(row.languages);

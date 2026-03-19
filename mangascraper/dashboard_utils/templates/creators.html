@@ -190,6 +190,13 @@ function displayLabelForItem(item) {
 	return stripGalleryId(raw);
 }
 
+function getDisplayTitleForItem(item, itemType) {
+	if (item && typeof item === 'object' && item.clean_title) return String(item.clean_title);
+	const raw = typeof item === 'string' ? item : (item.label || item.name || '');
+	if (itemType === 'gallery') return stripGalleryId(raw);
+	return raw;
+}
+
 function normaliseList(values) {
 	return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
 }
@@ -471,7 +478,7 @@ function _renderGalleryDetail(gallery) {
 		coverUrl = `/api/gallery/cover/${encodeURIComponent(_currentCreator)}/${encodeURIComponent(title)}`;
 	}
 
-	document.getElementById('galleryDetailTitle').textContent = title;
+	document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || title);
 	document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
 	document.getElementById('galleryDetailCreators').textContent = creatorList.length ? creatorList.join(', ') : 'Unknown';
 	document.getElementById('galleryDetailTags').textContent = tagList.length ? tagList.join(', ') : 'None';
@@ -579,7 +586,7 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = itemType === 'gallery' ? stripGalleryId(label) : label;
+		titleDiv.textContent = getDisplayTitleForItem(item, itemType);
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
