@@ -255,15 +255,16 @@ function renderGalleryDetail(gallery) {
 
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
-  readBtn.onclick = async () => {
+  readBtn.onclick = () => {
     const galleryId = Number(gallery.gallery_id || 0);
-    const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
-    try {
-      await readGalleryById(galleryId, title);
-      closeGalleryDetail();
-    } catch (err) {
-      document.getElementById('editorMsg').textContent = err.message;
+    if (!galleryId) return;
+    if (!selectedCollectionId) {
+      // Fallback: try to open by id via list_pages_by_id
+      window.location.href = `/reader/collections/0/${galleryId}/`;
+      return;
     }
+    closeGalleryDetail();
+    window.location.href = `/reader/collections/${selectedCollectionId}/${galleryId}/`;
   };
 }
 
@@ -511,7 +512,7 @@ function renderItems(items) {
         const collectionId = selectedCollectionId;
         const galleryId = Number(item.gallery_id || 0);
         if (collectionId && galleryId) {
-          window.open(`/collections/${collectionId}/${galleryId}/`, '_blank');
+          window.open(`/reader/collections/${collectionId}/${galleryId}/`, '_blank');
         }
       }
     });
@@ -791,14 +792,18 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
   }
 });
 
-document.getElementById('galleryDetailReadBtn').addEventListener('click', async () => {
-  if (!_detailGallery || !_detailGallery.gallery_id) return;
-  try {
-    await readGalleryById(_detailGallery.gallery_id, _detailGallery.title || `Gallery ${_detailGallery.gallery_id}`);
+document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
+  if (!_detailGallery) return;
+  const gid = Number(_detailGallery.gallery_id || 0);
+  if (!gid) return;
+  if (selectedCollectionId) {
     closeGalleryDetail();
-  } catch (err) {
-    document.getElementById('editorMsg').textContent = err.message;
+    window.location.href = `/reader/collections/${selectedCollectionId}/${gid}/`;
+    return;
   }
+  // Fallback: open stream/read-by-id reader
+  closeGalleryDetail();
+  window.location.href = `/reader/stream/?id=${gid}`;
 });
 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {

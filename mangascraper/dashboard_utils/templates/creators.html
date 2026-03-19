@@ -618,7 +618,7 @@ function createGalleryGrid(items, itemType, onClick) {
 				const creator = _currentCreator;
 				const galleryId = typeof item === 'object' && item.gallery_id ? item.gallery_id : parseGalleryId(itemLabel(item));
 				if (creator && galleryId) {
-					window.open(`/creators/${creatorSlug(creator)}/${galleryId}`, '_blank');
+					window.open(`/reader/creators/${creatorSlug(creator)}/${galleryId}/`, '_blank');
 				}
 			}
 		});
@@ -925,10 +925,13 @@ document.getElementById('galleryDetailModal').addEventListener('click', e => {
 	if (e.target.id === 'galleryDetailModal') closeGalleryDetail();
 });
 document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-	if (!_detailGallery || !_currentCreator) return;
-	const current = _detailGallery;
+	if (!_detailGallery) return;
+	const galleryId = Number(_detailGallery.gallery_id || parseGalleryId(itemLabel(_detailGallery)) || 0);
+	const creatorName = _currentCreator || (Array.isArray(_detailGallery.creators) && _detailGallery.creators[0]) || '';
+	if (!creatorName || !galleryId) return;
 	closeGalleryDetail();
-	loadPages(_currentCreator, current);
+	// Navigate to standalone reader page
+	window.location.href = `/reader/creators/${creatorSlug(creatorName)}/${galleryId}/`;
 });
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
 	if (!_detailGallery) return;
