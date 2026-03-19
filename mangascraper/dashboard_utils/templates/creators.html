@@ -180,6 +180,10 @@ function normaliseText(value) {
 	return String(value || '').trim().toLowerCase();
 }
 
+function stripGalleryId(title) {
+    return String(title || '').replace(/^\(\d+\)\s*/, '').trim();
+}
+
 function normaliseList(values) {
 	return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
 }
@@ -563,7 +567,7 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = label;
+		titleDiv.textContent = stripGalleryId(label);
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
@@ -763,7 +767,8 @@ async function loadPages(creator, gallery, options = {}) {
 			return;
 		}
 		_readerFromStream = false;
-		openReader(pages, galleryDisplayName, () => {
+		// Strip numeric prefix from title for display in reader
+		openReader(pages, stripGalleryId(galleryDisplayName), () => {
 			document.getElementById('localPane').style.display = '';
 			loadGalleries(creator);
 		});
