@@ -196,10 +196,6 @@ function normaliseList(values) {
   return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
 }
 
-function stripGalleryId(title) {
-  return String(title || '').replace(/^\(\d+\)\s*/, '').trim();
-}
-
 async function api(url, options = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
@@ -243,7 +239,7 @@ function renderGalleryDetail(gallery) {
   const pageCount = Number(gallery.page_count || 0);
   const galleryId = Number(gallery.gallery_id || 0);
 
-  document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || stripGalleryId(title));
+  document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || title);
   document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
   document.getElementById('galleryDetailCreators').textContent = creators.length ? creators.join(', ') : 'Unknown';
   document.getElementById('galleryDetailTags').textContent = tags.length ? tags.join(', ') : 'None';
