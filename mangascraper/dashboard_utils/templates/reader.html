@@ -5,7 +5,6 @@
 <div class="panel">
   <div style="display:flex; align-items:center; gap:1rem;">
     <button id="readerBack" type="button">← Back</button>
-    <h2 id="readerTitle">Reader</h2>
   </div>
   <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem;">
     <button id="prevBtn" class="navBtn">←</button>
@@ -147,7 +146,6 @@ function openReader(pages, title, onClose) {
   reader.index = 0;
   reader.title = title || '';
   reader.onClose = onClose || null;
-  document.getElementById('readerTitle').textContent = reader.title;
   document.getElementById('readerCounter').textContent = '';
   // collapse dynamic bar while reader is open, preserving previous state
   try {
@@ -205,7 +203,7 @@ document.getElementById('readerBack').addEventListener('click', () => {
 });
 
 async function loadPages() {
-  if (!GALLERY_ID) { document.getElementById('readerTitle').textContent = 'Missing gallery id'; return; }
+  if (!GALLERY_ID) { document.getElementById('readerCounter').textContent = 'Missing gallery id'; return; }
   try {
     const res = await fetch(`/api/gallery/list_pages_by_id/${encodeURIComponent(GALLERY_ID)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -218,7 +216,7 @@ async function loadPages() {
     if (!pages.length) throw new Error('Gallery is empty');
     openReader(pages, String(data.title || `Gallery ${GALLERY_ID}`));
   } catch (err) {
-    document.getElementById('readerTitle').textContent = `Could not load gallery: ${err.message}`;
+    document.getElementById('readerCounter').textContent = `Could not load gallery: ${err.message}`;
   }
 }
 
