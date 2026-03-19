@@ -457,7 +457,7 @@ function renderItems(items) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';
-    titleDiv.textContent = String(item.clean_title || stripGalleryId(title));
+    titleDiv.textContent = String(item.clean_title || stripGalleryId(title)); // TODO: Figure out why this needs stripGalleryId() and can't use clean_title
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'gallery-square-meta';
