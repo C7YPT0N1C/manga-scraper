@@ -7,10 +7,10 @@
     <button id="readerBack" type="button">← Back</button>
     <h2 id="readerTitle">Reader</h2>
   </div>
-  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem; height:calc(100vh - 160px);">
+  <div id="readerWrapper" style="display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem;">
     <button id="prevBtn" class="navBtn">←</button>
-    <div id="readerImgWrap" style="max-width:90vw; width:90vw; display:flex; align-items:center; justify-content:center; flex:1; overflow:auto;">
-      <img id="readerImg" src="" alt="page" style="max-width:100%; max-height:100vh; height:auto; object-fit:contain; display:block; margin:0 auto;" />
+    <div id="readerImgWrap">
+      <img id="readerImg" src="" alt="page" />
     </div>
     <button id="nextBtn" class="navBtn">→</button>
   </div>
@@ -18,11 +18,10 @@
 </div>
 
 <style>
-/* When reader is open, lock page scrolling */
-html.reader-open, html.reader-open body { height: 100%; overflow: hidden; }
-#readerWrapper { height: 100vh; box-sizing: border-box; }
-#readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; }
-#readerImg { max-width: 100%; max-height: calc(100vh - 120px); height: auto; object-fit: contain; display: block; margin: 0 auto; }
+/* Reader sizing: constrain wrapper and image so both scale to viewport */
+#readerWrapper { height: calc(100vh - 160px); box-sizing: border-box; display:flex; align-items:center; justify-content:center; }
+#readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; max-height: calc(100vh - 200px); }
+#readerImg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 </style>
 
 {% endblock %}
@@ -58,12 +57,11 @@ function openReader(pages, title, onClose) {
   reader.onClose = onClose || null;
   document.getElementById('readerTitle').textContent = reader.title;
   document.getElementById('readerCounter').textContent = '';
-  document.documentElement.classList.add('reader-open');
   showPage();
 }
 
 function closeReader() {
-  document.documentElement.classList.remove('reader-open');
+  // no scroll-lock; just call onClose if present
   if (reader.onClose) reader.onClose();
 }
 
