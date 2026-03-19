@@ -450,7 +450,12 @@ function _renderGalleryDetail(gallery) {
 	document.getElementById('galleryDetailPages').textContent = String(pageCount);
 
 	const coverEl = document.getElementById('galleryDetailCover');
-	coverEl.style.backgroundImage = coverUrl ? `url('${coverUrl}')` : '';
+	if (coverUrl) {
+		setGalleryCover(coverEl, coverUrl);
+	} else {
+		coverEl.style.backgroundImage = '';
+		coverEl.innerHTML = '';
+	}
 
 	const favBtn = document.getElementById('galleryDetailFavBtn');
 	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');

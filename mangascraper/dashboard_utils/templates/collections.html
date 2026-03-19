@@ -244,7 +244,12 @@ function renderGalleryDetail(gallery) {
   document.getElementById('galleryDetailPages').textContent = String(pageCount);
 
   const coverEl = document.getElementById('galleryDetailCover');
-  coverEl.style.backgroundImage = galleryId > 0 ? `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')` : '';
+  if (galleryId > 0) {
+    setGalleryCover(coverEl, `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`);
+  } else {
+    coverEl.style.backgroundImage = '';
+    coverEl.innerHTML = '';
+  }
 
   const favBtn = document.getElementById('galleryDetailFavBtn');
   favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
