@@ -19,7 +19,7 @@
 
 <style>
 /* Reader sizing: constrain wrapper and image so both scale to viewport */
-#readerWrapper { height: calc(100vh - 160px); box-sizing: border-box; display:flex; align-items:center; justify-content:center; }
+#readerWrapper { height: calc(100vh - 160px); box-sizing: border-box; display:flex; align-items:center; justify-content:center; transition: transform 0.12s ease; transform-origin: top center; }
 #readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; max-height: calc(100vh - 200px); }
 #readerImg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
 </style>
@@ -44,10 +44,43 @@ const reader = {
 function showPage() {
   const img = document.getElementById('readerImg');
   const counter = document.getElementById('readerCounter');
+  const wrapper = document.getElementById('readerWrapper');
+  // clear any previous explicit sizing so we can measure natural layout
+  wrapper.style.transform = '';
+  wrapper.style.width = '';
+  wrapper.style.height = '';
   img.src = reader.pages[reader.index] || '';
   counter.textContent = `${reader.index + 1} / ${reader.pages.length}`;
   document.getElementById('prevBtn').disabled = reader.index === 0;
   document.getElementById('nextBtn').disabled = reader.index >= reader.pages.length - 1;
+  // when image loads, adjust scale to avoid scrollbars
+  img.onload = () => { adjustReaderScale(); };
+}
+
+function adjustReaderScale() {
+  const wrapper = document.getElementById('readerWrapper');
+  if (!wrapper) return;
+  // remove transforms to measure true layout
+  wrapper.style.transform = '';
+  wrapper.style.width = '';
+  wrapper.style.height = '';
+
+  requestAnimationFrame(() => {
+    const totalHeight = wrapper.scrollHeight || wrapper.offsetHeight || 1;
+    const viewport = Math.max(100, window.innerHeight - 8);
+    if (totalHeight <= viewport) {
+      wrapper.style.transform = '';
+      wrapper.style.width = '';
+      wrapper.style.height = '';
+      return;
+    }
+    const scale = Math.max(0.5, (viewport - 8) / totalHeight);
+    // apply visual scale and reduce layout size so scrollbar disappears
+    const currentWidth = wrapper.offsetWidth || wrapper.clientWidth || wrapper.scrollWidth || 0;
+    wrapper.style.transform = `scale(${scale})`;
+    wrapper.style.width = `${Math.round(currentWidth * scale)}px`;
+    wrapper.style.height = `${Math.round(totalHeight * scale)}px`;
+  });
 }
 
 function openReader(pages, title, onClose) {
@@ -77,6 +110,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' && reader.index < reader.pages.length - 1) { reader.index++; showPage(); }
   if (e.key === 'Escape') closeReader();
 });
+
+// Recompute scale when the window changes size
+window.addEventListener('resize', () => { adjustReaderScale(); });
 
 document.getElementById('readerBack').addEventListener('click', () => {
   if (history.length > 1) { history.back(); return; }
