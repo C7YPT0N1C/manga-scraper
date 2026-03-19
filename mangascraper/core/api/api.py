@@ -31,7 +31,7 @@ from mangascraper.core.api._fetch import Fetch
 from mangascraper.core.api._build import Build
 from mangascraper.core.api._sleep import Sleep
 from mangascraper.core.api._progress import RuntimeProgress
-from mangascraper.core.api.smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
+from mangascraper.core.api._smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
 
 ####################################################################################################################
 # ATEXIT HANDLERS

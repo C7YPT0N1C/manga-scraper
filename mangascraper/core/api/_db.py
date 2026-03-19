@@ -21,7 +21,7 @@ from mangascraper.core.api._helpers import (
     read_cached_metadata_entry,
     clear_cached_items,
 )
-from mangascraper.core.api.smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
+from mangascraper.core.api._smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
 
 ####################################################################################################################
 # DB CLASS
