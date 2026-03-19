@@ -225,7 +225,7 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
 
 
 
-DASHBOARD_USE_NEW_READER = False
+DASHBOARD_USE_NEW_READER = True
 
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
