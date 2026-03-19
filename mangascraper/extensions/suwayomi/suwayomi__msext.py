@@ -827,7 +827,7 @@ def update_creator_manga(meta):
             text = " ".join(str(value or "").strip().split())
             return re.sub(r"\s*-\s*", "-", text)
 
-        with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        with scraperapi.db_lock, scraperapi.DB.connect() as conn:
             cursor = conn.cursor()
 
             row = None

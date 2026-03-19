@@ -116,13 +116,13 @@ def _temporary_test_database():
         os.makedirs(test_data_dir, exist_ok=True)
         _cleanup_stale_test_databases(test_data_dir)
         # Close any existing connection bound to the normal DB before switching.
-        scraperapi.DB.close_connection()
+        scraperapi.DB.close()
         scraperapi.DATA_DIR = test_data_dir
         scraperapi.DB_PATH = test_db_path
         yield
     finally:
         # Ensure the temporary connection is closed before restoring globals.
-        scraperapi.DB.close_connection()
+        scraperapi.DB.close()
         scraperapi.DATA_DIR = prev_data_dir
         scraperapi.DB_PATH = prev_db_path
         # Best-effort cleanup; if a crash occurs this file remains isolated in TEMP.
@@ -176,8 +176,8 @@ def main() -> bool:
             skipped += 1
 
     def _cleanup_test_data():
-        scraperapi.DB.init_db()
-        with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+        scraperapi.DB.init()
+        with scraperapi.db_lock, scraperapi.DB.connect() as conn:
             cursor = conn.cursor()
 
             gallery_ids = sorted(TEST_GALLERY_IDS)
@@ -256,7 +256,7 @@ def main() -> bool:
             conn.commit()
 
     with _temporary_test_database(), _temporary_test_runtime_paths():
-        scraperapi.DB.init_db()
+        scraperapi.DB.init()
         try:
             # 0) Runtime path safety assertion
             try:
@@ -298,7 +298,7 @@ def main() -> bool:
                 )
                 scraperapi.DB.Gallery.complete(path_gid)
 
-                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                with scraperapi.db_lock, scraperapi.DB.connect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT download_path FROM Galleries WHERE id = ?", (path_gid,))
                     row = cursor.fetchone()
@@ -481,7 +481,7 @@ def main() -> bool:
                     clean_metadata={"id": expired_gid, "title": "Expired Metadata"},
                     raw_metadata={"id": expired_gid},
                 )
-                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                with scraperapi.db_lock, scraperapi.DB.connect() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "UPDATE CachedMetadata SET expires_at = ? WHERE gallery_id = ?",
@@ -1053,7 +1053,7 @@ def main() -> bool:
             try:
                 root_a = f"{TEST_RUNTIME_ROOT}root-a"
                 root_b = f"{TEST_RUNTIME_ROOT}root-a/downloads"
-                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                with scraperapi.db_lock, scraperapi.DB.connect() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
