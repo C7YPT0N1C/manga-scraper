@@ -171,34 +171,6 @@
     _updateDynamicBarGlobal();
     setInterval(_updateDynamicBarGlobal, 5000);
   </script>
-  <script>
-    // Helper to set gallery cover into the tile element.
-    // Loads the image to detect orientation and inserts an <img> tag.
-    function setGalleryCover(el, url) {
-      if (!el) return;
-      try {
-        el.style.backgroundImage = '';
-        el.innerHTML = '';
-        const img = new Image();
-        img.decoding = 'async';
-        img.addEventListener('load', () => {
-          const isLandscape = img.naturalWidth > img.naturalHeight;
-          img.className = isLandscape ? 'cover-rotated' : 'cover-normal';
-          img.alt = '';
-          // Ensure we append after setting classes
-          if (el.firstChild) el.removeChild(el.firstChild);
-          el.appendChild(img);
-        });
-        img.addEventListener('error', () => {
-          // fallback to background-image if image fails to load
-          el.style.backgroundImage = `url('${url}')`;
-        });
-        img.src = url;
-      } catch (e) {
-        el.style.backgroundImage = `url('${url}')`;
-      }
-    }
-  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

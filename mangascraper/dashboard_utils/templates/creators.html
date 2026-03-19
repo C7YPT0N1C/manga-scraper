@@ -102,17 +102,20 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
 <script>
 'use strict';
 
 const VIEWER_CONFIG = JSON.parse(document.getElementById('galleryViewerConfig').dataset.config || '{}');
 const INITIAL_CREATOR_SLUG = String(document.getElementById('galleryViewerConfig').dataset.initialCreatorSlug || '').trim().toLowerCase();
 const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig').dataset.initialGalleryId || 0);
-const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.galleryTilesPerPage || [7, 14, 28, 56, 70];
+const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.galleryTilesPerPage || [7, 14, 21, 28, 35];
 
 function normalisePageSize(value, fallback) {
-	return Pagination.normalisePageSize(value, PAGE_SIZE_OPTIONS, fallback);
+	const numeric = Number(value);
+	if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
+		return numeric;
+	}
+	return fallback;
 }
 
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 120)}px`);
@@ -129,8 +132,8 @@ let _searchTerm = '';
 let _activeFilters = {};
 let _availableFilters = {};
 let _pageSizeByType = {
-	creators: normalisePageSize(VIEWER_CONFIG.creatorPageSize, PAGE_SIZE_OPTIONS[1]),
-	galleries: normalisePageSize(VIEWER_CONFIG.galleryPageSize, PAGE_SIZE_OPTIONS[1]),
+	creators: normalisePageSize(VIEWER_CONFIG.creatorPageSize, PAGE_SIZE_OPTIONS[0]),
+	galleries: normalisePageSize(VIEWER_CONFIG.galleryPageSize, PAGE_SIZE_OPTIONS[0]),
 };
 let _detailGallery = null;
 let _currentRootPath = '';
@@ -161,7 +164,16 @@ function getItemsPerPage() {
 function refreshItemsPerPageSelect() {
 	const select = document.getElementById('itemsPerPageSelect');
 	if (!select) return;
-	Pagination.populateItemsPerPageSelect(select, PAGE_SIZE_OPTIONS, getItemsPerPage());
+	if (!select.options.length) {
+		PAGE_SIZE_OPTIONS.forEach(size => {
+			const option = document.createElement('option');
+			option.value = String(size);
+			option.textContent = String(size);
+			select.appendChild(option);
+		});
+	}
+	const current = getItemsPerPage();
+	select.value = String(current);
 }
 
 function normaliseText(value) {
@@ -326,7 +338,13 @@ function getFilteredItems() {
 }
 
 function getPaginatedItems(items) {
-	const { items: paginatedItems, totalPages, filteredCount } = Pagination.getPaginatedSlice(items, _currentPage, getItemsPerPage());
+	const filteredCount = items.length;
+	const itemsPerPage = getItemsPerPage();
+	const totalPages = Math.ceil(filteredCount / itemsPerPage) || 1;
+	const startIdx = (_currentPage - 1) * itemsPerPage;
+	const endIdx = startIdx + itemsPerPage;
+	const paginatedItems = items.slice(startIdx, endIdx);
+
 	return { items: paginatedItems, totalPages, filteredCount };
 }
 
@@ -450,12 +468,7 @@ function _renderGalleryDetail(gallery) {
 	document.getElementById('galleryDetailPages').textContent = String(pageCount);
 
 	const coverEl = document.getElementById('galleryDetailCover');
-	if (coverUrl) {
-		setGalleryCover(coverEl, coverUrl);
-	} else {
-		coverEl.style.backgroundImage = '';
-		coverEl.innerHTML = '';
-	}
+	coverEl.style.backgroundImage = coverUrl ? `url('${coverUrl}')` : '';
 
 	const favBtn = document.getElementById('galleryDetailFavBtn');
 	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
@@ -538,21 +551,19 @@ function createGalleryGrid(items, itemType, onClick) {
 		imageDiv.className = 'gallery-square-image';
 
 		const label = itemLabel(item);
-		const rawTitle = String(item.title || label || '').trim();
-		const displayLabel = (itemType === 'gallery') ? rawTitle.replace(/^\(\d+\)\s*/, '') : label;
 
 		if (itemType === 'creator') {
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(label)}`;
-			setGalleryCover(imageDiv, coverUrl);
+			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
 		} else if (itemType === 'gallery') {
 			const creator = _currentCreator || '';
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(creator)}/${encodeURIComponent(itemPathName(item))}`;
-			setGalleryCover(imageDiv, coverUrl);
+			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
 		}
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = displayLabel;
+		titleDiv.textContent = label;
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
@@ -604,10 +615,10 @@ function createGalleryGrid(items, itemType, onClick) {
 		square.addEventListener('mousedown', (event) => {
 			if (itemType === 'gallery' && event.button === 1) {
 				// Middle click: open reader in new tab
-				const creator = _currentCreator || (Array.isArray(item.creators) && item.creators[0]) || '';
+				const creator = _currentCreator;
 				const galleryId = typeof item === 'object' && item.gallery_id ? item.gallery_id : parseGalleryId(itemLabel(item));
 				if (creator && galleryId) {
-					window.open(`/reader/creators/${creatorSlug(creator)}/${galleryId}/`, '_blank');
+					window.open(`/creators/${creatorSlug(creator)}/${galleryId}`, '_blank');
 				}
 			}
 		});
@@ -914,13 +925,10 @@ document.getElementById('galleryDetailModal').addEventListener('click', e => {
 	if (e.target.id === 'galleryDetailModal') closeGalleryDetail();
 });
 document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-	if (!_detailGallery) return;
-	const galleryId = Number(_detailGallery.gallery_id || parseGalleryId(itemLabel(_detailGallery)) || 0);
-	const creator = _currentCreator || (Array.isArray(_detailGallery.creators) && _detailGallery.creators[0]) || '';
-	if (!galleryId || !creator) return;
-	const url = `/reader/creators/${creatorSlug(creator)}/${galleryId}/`;
-	// navigate to reader page
-	window.location.href = url;
+	if (!_detailGallery || !_currentCreator) return;
+	const current = _detailGallery;
+	closeGalleryDetail();
+	loadPages(_currentCreator, current);
 });
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
 	if (!_detailGallery) return;

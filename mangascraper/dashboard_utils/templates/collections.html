@@ -126,7 +126,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/pagination.js') }}"></script>
 <script>
 'use strict';
 
@@ -136,7 +135,11 @@ const INITIAL_GALLERY_ID = Number(document.getElementById('galleryViewerConfig')
 const PAGE_SIZE_OPTIONS = VIEWER_CONFIG.galleryTilesPerPage || [14, 28, 42, 56, 70];
 
 function normalisePageSize(value, fallback) {
-  return Pagination.normalisePageSize(value, PAGE_SIZE_OPTIONS, fallback);
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && PAGE_SIZE_OPTIONS.includes(numeric)) {
+    return numeric;
+  }
+  return fallback;
 }
 
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 960)}px`);
@@ -146,7 +149,7 @@ let selectedCollectionId = null;
 let _detailGallery = null;
 let _allCollectionItems = [];
 let _collectionPage = 1;
-let _collectionItemsPerPage = normalisePageSize(VIEWER_CONFIG.collectionPageSize, PAGE_SIZE_OPTIONS[1]);
+let _collectionItemsPerPage = normalisePageSize(VIEWER_CONFIG.collectionPageSize, PAGE_SIZE_OPTIONS[0]);
 
 const reader = {
   pages: [],
@@ -244,25 +247,23 @@ function renderGalleryDetail(gallery) {
   document.getElementById('galleryDetailPages').textContent = String(pageCount);
 
   const coverEl = document.getElementById('galleryDetailCover');
-  if (galleryId > 0) {
-    setGalleryCover(coverEl, `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`);
-  } else {
-    coverEl.style.backgroundImage = '';
-    coverEl.innerHTML = '';
-  }
+  coverEl.style.backgroundImage = galleryId > 0 ? `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')` : '';
 
   const favBtn = document.getElementById('galleryDetailFavBtn');
   favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
   favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
 
-  // Add handler for Read Gallery button — navigate to reader page
+  // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
-  readBtn.onclick = () => {
+  readBtn.onclick = async () => {
     const galleryId = Number(gallery.gallery_id || 0);
-    const cid = Number(selectedCollectionId || 0);
-    if (!galleryId || !cid) return;
-    const url = `/reader/collections/${cid}/${galleryId}/`;
-    window.location.href = url;
+    const title = String(gallery.title || gallery.name || `Gallery ${galleryId}`);
+    try {
+      await readGalleryById(galleryId, title);
+      closeGalleryDetail();
+    } catch (err) {
+      document.getElementById('editorMsg').textContent = err.message;
+    }
   };
 }
 
@@ -385,11 +386,24 @@ function readFilterRows() {
 
 function refreshCollectionItemsPerPageSelect() {
   const select = document.getElementById('collectionItemsPerPageSelect');
-  Pagination.populateItemsPerPageSelect(select, PAGE_SIZE_OPTIONS, _collectionItemsPerPage);
+  if (!select.options.length) {
+    PAGE_SIZE_OPTIONS.forEach(size => {
+      const option = document.createElement('option');
+      option.value = String(size);
+      option.textContent = String(size);
+      select.appendChild(option);
+    });
+  }
+  select.value = String(_collectionItemsPerPage);
 }
 
 function getCollectionPaginatedItems(items) {
-  const { items: paginatedItems, totalPages, filteredCount } = Pagination.getPaginatedSlice(items, _collectionPage, _collectionItemsPerPage);
+  const filteredCount = Array.isArray(items) ? items.length : 0;
+  const itemsPerPage = _collectionItemsPerPage;
+  const totalPages = Math.ceil(filteredCount / itemsPerPage) || 1;
+  const startIdx = (_collectionPage - 1) * itemsPerPage;
+  const endIdx = startIdx + itemsPerPage;
+  const paginatedItems = (items || []).slice(startIdx, endIdx);
   return { items: paginatedItems, totalPages, filteredCount };
 }
 
@@ -443,7 +457,7 @@ function renderItems(items) {
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'gallery-square-image';
-    setGalleryCover(imageDiv, `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`);
+    imageDiv.style.backgroundImage = `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')`;
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';
@@ -497,7 +511,7 @@ function renderItems(items) {
         const collectionId = selectedCollectionId;
         const galleryId = Number(item.gallery_id || 0);
         if (collectionId && galleryId) {
-          window.open(`/reader/collections/${collectionId}/${galleryId}/`, '_blank');
+          window.open(`/collections/${collectionId}/${galleryId}/`, '_blank');
         }
       }
     });
@@ -777,13 +791,14 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
   }
 });
 
-document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-  if (!_detailGallery) return;
-  const galleryId = Number(_detailGallery.gallery_id || 0);
-  const cid = Number(selectedCollectionId || 0);
-  if (!galleryId || !cid) return;
-  const url = `/reader/collections/${cid}/${galleryId}/`;
-  window.location.href = url;
+document.getElementById('galleryDetailReadBtn').addEventListener('click', async () => {
+  if (!_detailGallery || !_detailGallery.gallery_id) return;
+  try {
+    await readGalleryById(_detailGallery.gallery_id, _detailGallery.title || `Gallery ${_detailGallery.gallery_id}`);
+    closeGalleryDetail();
+  } catch (err) {
+    document.getElementById('editorMsg').textContent = err.message;
+  }
 });
 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {

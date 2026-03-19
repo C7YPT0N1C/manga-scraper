@@ -464,24 +464,6 @@ table tr:nth-child(even) {
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-/* Inserted cover <img> handling */
-.gallery-square-image img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  transform-origin: center center;
-}
-.gallery-square-image img.cover-rotated {
-  transform: rotate(90deg);
-  width: auto;
-  height: 100%;
-}
-.gallery-square-image img.cover-normal {
-  transform: none;
-}
-
 .gallery-square:hover .gallery-square-image {
   border-color: var(--accent);
   box-shadow: 0 4px 16px rgba(199, 47, 86, 0.3);
@@ -1050,23 +1032,4 @@ table tr:nth-child(even) {
     flex: 1 1 calc(50% - 0.45rem);
     text-align: center;
   }
-}
-
-/* Handle inserted <img> covers and rotated (landscape) covers */
-.gallery-square-image img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  transform-origin: center center;
-}
-.gallery-square-image img.cover-rotated {
-  transform: rotate(90deg);
-  /* After rotation, keep the image filling the container height */
-  width: auto;
-  height: 100%;
-}
-.gallery-square-image img.cover-normal {
-  transform: none;
 }
