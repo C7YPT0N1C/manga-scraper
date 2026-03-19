@@ -21,9 +21,8 @@
 
 {% block scripts %}
 <script>
-"use strict";
-const RAW = JSON.parse(document.getElementById('readerContext').dataset.config || '{}');
 const VIEWER_CONFIG = RAW.viewer || {};
+</script>
 const CTX = RAW.context || {};
 const GALLERY_ID = Number(CTX.gallery_id || 0);
 const PAGES = [];
