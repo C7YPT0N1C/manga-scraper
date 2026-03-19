@@ -741,10 +741,22 @@ async function loadPages(creator, gallery, options = {}) {
 		{ label: galleryDisplayName }
 	]);
 	try {
-		const data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}`));
-		const pages = (data.pages || []).map(
-			f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}/${encodeURIComponent(f)}`)
-		);
+		let data;
+		let pages = [];
+		if (galleryId && Number.isFinite(galleryId) && galleryId > 0) {
+			// Prefer ID-based endpoints when we have a gallery_id (avoids path/name mismatches)
+			data = await apiFetch(_withRoot(`/api/gallery/list_pages_by_id/${encodeURIComponent(galleryId)}`));
+			const root = String(data.root_path || '');
+			pages = (data.pages || []).map(name => {
+				const base = `/api/gallery/view_by_id/${encodeURIComponent(galleryId)}/${encodeURIComponent(name)}`;
+				return root ? `${base}?root=${encodeURIComponent(root)}` : base;
+			});
+		} else {
+			data = await apiFetch(_withRoot(`/api/gallery/list_pages/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}`));
+			pages = (data.pages || []).map(
+				f => _withRoot(`/api/gallery/view/${encodeURIComponent(creator)}/${encodeURIComponent(galleryPathName)}/${encodeURIComponent(f)}`)
+			);
+		}
 		if (!pages.length) {
 			document.getElementById('localList').textContent = 'Gallery is empty.';
 			document.getElementById('localList').className = '';
