@@ -520,7 +520,7 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
         placeholders = ",".join("?" for _ in ids)
         cursor.execute(
             f"""
-            SELECT id, num_pages, tag_ids, language_ids, status, favourite, rating
+            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
             FROM Galleries
             WHERE id IN ({placeholders})
             """,
@@ -530,15 +530,20 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
         result = {}
         for row in cursor.fetchall():
             gid = int(row[0])
-            tag_ids = _parse_json_int_list(row[2])
-            language_ids = _parse_json_int_list(row[3])
+            clean_title = str(row[1] or "").strip()
+            raw_title = str(row[2] or "").strip()
+            tag_ids = _parse_json_int_list(row[4])
+            language_ids = _parse_json_int_list(row[5])
             result[gid] = {
-                "page_count": int(row[1]) if row[1] is not None else 0,
+                "title": clean_title or raw_title or f"Gallery {gid}",
+                "clean_title": clean_title,
+                "raw_title": raw_title,
+                "page_count": int(row[3]) if row[3] is not None else 0,
                 "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                 "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
-                "status": str(row[4] or ""),
-                "favourite": bool(row[5]),
-                "rating": float(row[6]) if row[6] is not None else None,
+                "status": str(row[6] or ""),
+                "favourite": bool(row[7]),
+                "rating": float(row[8]) if row[8] is not None else None,
             }
         return result
 
@@ -570,6 +575,13 @@ def _apply_gallery_db_meta(items: list[dict]) -> list[dict]:
         meta = meta_by_id.get(gid_int)
         if not meta:
             continue
+        # Prefer DB-clean title for display when available
+        if isinstance(meta.get("title"), str) and meta.get("title"):
+            item["title"] = meta.get("title")
+            item["name"] = meta.get("title")
+        elif isinstance(meta.get("clean_title"), str) and meta.get("clean_title"):
+            item["title"] = meta.get("clean_title")
+            item["name"] = meta.get("clean_title")
         item["page_count"] = meta["page_count"]
         item["tags"] = list(meta["tags"])
         item["languages"] = list(meta["languages"])
