@@ -22,6 +22,10 @@
 /* header hidden so reader appears above navigation */
 header.topbar { display: none !important; }
 
+/* Remove standard page padding for the reader so it can occupy full viewport */
+main { padding: 0 !important; }
+.panel { padding: 0 !important; margin-bottom: 0 !important; border-radius: 0 !important; }
+
 /* Reader sizing: constrain wrapper and image so both scale to viewport
    and remain centered. Reader takes the full viewport height when open. */
 #readerWrapper {
