@@ -185,6 +185,11 @@ function stripGalleryId(title) {
     return String(title || '').replace(/^\(\d+\)\s*/, '').trim();
 }
 
+function displayLabelForItem(item) {
+	const raw = typeof item === 'string' ? item : (item.label || item.name || '');
+	return stripGalleryId(raw);
+}
+
 function normaliseList(values) {
 	return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
 }
@@ -574,7 +579,7 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.className = 'gallery-square-title';
-		titleDiv.textContent = label;
+		titleDiv.textContent = itemType === 'gallery' ? stripGalleryId(label) : label;
 
 		const metaDiv = document.createElement('div');
 		metaDiv.className = 'gallery-square-meta';
