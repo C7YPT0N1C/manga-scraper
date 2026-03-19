@@ -188,7 +188,7 @@ function stripGalleryId(title) {
 function getDisplayTitleForItem(item, itemType) {
 	if (item && typeof item === 'object' && item.clean_title) return String(item.clean_title);
 	const raw = typeof item === 'string' ? item : (item.label || item.name || '');
-	if (itemType === 'gallery') return stripGalleryId(raw);
+	if (itemType === 'gallery') return raw;
 	return raw;
 }
 
