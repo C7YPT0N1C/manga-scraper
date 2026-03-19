@@ -219,14 +219,6 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
     "databasePageSize": 25,
 }
 
-
-
-
-
-
-
-DASHBOARD_USE_NEW_READER = True
-
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------

@@ -118,10 +118,6 @@ def create_app():
     # Reader routes (new separate reader pages)
     @app.route('/reader/creators/<path:creator_slug>/<int:gallery_id>/')
     def reader_creator_page(creator_slug, gallery_id):
-        # If the dashboard is configured to use the overlay reader, redirect
-        # back to the creators page so the overlay can open the gallery.
-        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return redirect(f"/creators/{creator_slug}/{gallery_id}/")
         return render_template(
             'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
@@ -138,8 +134,6 @@ def create_app():
 
     @app.route('/reader/collections/<int:collection_id>/<int:gallery_id>/')
     def reader_collection_page(collection_id, gallery_id):
-        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return redirect(f"/collections/{collection_id}/{gallery_id}/")
         return render_template(
             'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_COLLECTION_VIEW_CONFIG,
@@ -156,9 +150,7 @@ def create_app():
 
     @app.route('/reader/stream/')
     def reader_stream_page():
-        # Stream page: prefer overlay if enabled; fallback to standalone reader
-        if not getattr(orchestrator, 'DASHBOARD_USE_NEW_READER', False):
-            return redirect('/creators/')
+        # Stream page: standalone reader
         return render_template(
             'reader.html',
             gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,

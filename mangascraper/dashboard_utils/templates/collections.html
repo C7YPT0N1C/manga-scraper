@@ -784,7 +784,13 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
 });
 
 document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-  // Intentionally no-op: disable reader navigation from Collections
+  if (!_detailGallery) return;
+  const galleryId = Number(_detailGallery.gallery_id || 0);
+  const cid = Number(selectedCollectionId || INITIAL_COLLECTION_ID || 0);
+  if (!cid || !galleryId) return;
+  closeGalleryDetail();
+  // Navigate to standalone reader for collections
+  window.location.href = `/reader/collections/${cid}/${galleryId}/`;
 });
 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
