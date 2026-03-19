@@ -17,6 +17,14 @@
   <p id="readerCounter" style="margin-top:0.5rem"></p>
 </div>
 
+<style>
+/* When reader is open, lock page scrolling */
+html.reader-open, html.reader-open body { height: 100%; overflow: hidden; }
+#readerWrapper { height: 100vh; box-sizing: border-box; }
+#readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; }
+#readerImg { max-width: 100%; max-height: calc(100vh - 120px); height: auto; object-fit: contain; display: block; margin: 0 auto; }
+</style>
+
 {% endblock %}
 
 {% block scripts %}
@@ -50,10 +58,12 @@ function openReader(pages, title, onClose) {
   reader.onClose = onClose || null;
   document.getElementById('readerTitle').textContent = reader.title;
   document.getElementById('readerCounter').textContent = '';
+  document.documentElement.classList.add('reader-open');
   showPage();
 }
 
 function closeReader() {
+  document.documentElement.classList.remove('reader-open');
   if (reader.onClose) reader.onClose();
 }
 
