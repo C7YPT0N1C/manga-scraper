@@ -438,7 +438,7 @@ function renderItems(items) {
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'gallery-square-image';
-    imageDiv.style.backgroundImage = `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')`;
+    setGalleryCover(imageDiv, `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`);
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';

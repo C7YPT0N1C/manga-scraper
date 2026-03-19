@@ -538,11 +538,11 @@ function createGalleryGrid(items, itemType, onClick) {
 
 		if (itemType === 'creator') {
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(label)}`;
-			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
+			setGalleryCover(imageDiv, coverUrl);
 		} else if (itemType === 'gallery') {
 			const creator = _currentCreator || '';
 			const coverUrl = `/api/gallery/cover/${encodeURIComponent(creator)}/${encodeURIComponent(itemPathName(item))}`;
-			imageDiv.style.backgroundImage = `url('${coverUrl}')`;
+			setGalleryCover(imageDiv, coverUrl);
 		}
 
 		const titleDiv = document.createElement('div');
