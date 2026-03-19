@@ -26,30 +26,51 @@ const RAW = JSON.parse(document.getElementById('readerContext').dataset.config |
 const VIEWER_CONFIG = RAW.viewer || {};
 const CTX = RAW.context || {};
 const GALLERY_ID = Number(CTX.gallery_id || 0);
-const PAGES = [];
-let INDEX = 0;
 
-function setCounter() {
-  document.getElementById('readerCounter').textContent = `${INDEX+1} / ${PAGES.length}`;
-}
+const reader = {
+  pages: [],
+  index: 0,
+  title: '',
+  onClose: null,
+};
 
 function showPage() {
   const img = document.getElementById('readerImg');
-  img.src = PAGES[INDEX] || '';
-  setCounter();
-  document.getElementById('prevBtn').disabled = INDEX === 0;
-  document.getElementById('nextBtn').disabled = INDEX >= PAGES.length - 1;
+  const counter = document.getElementById('readerCounter');
+  img.src = reader.pages[reader.index] || '';
+  counter.textContent = `${reader.index + 1} / ${reader.pages.length}`;
+  document.getElementById('prevBtn').disabled = reader.index === 0;
+  document.getElementById('nextBtn').disabled = reader.index >= reader.pages.length - 1;
+}
+
+function openReader(pages, title, onClose) {
+  reader.pages = pages;
+  reader.index = 0;
+  reader.title = title || '';
+  reader.onClose = onClose || null;
+  document.getElementById('readerTitle').textContent = reader.title;
+  document.getElementById('readerCounter').textContent = '';
+  showPage();
+}
+
+function closeReader() {
+  if (reader.onClose) reader.onClose();
 }
 
 document.getElementById('prevBtn').addEventListener('click', () => {
-  if (INDEX > 0) { INDEX -= 1; showPage(); }
+  if (reader.index > 0) { reader.index -= 1; showPage(); }
 });
 document.getElementById('nextBtn').addEventListener('click', () => {
-  if (INDEX < PAGES.length - 1) { INDEX += 1; showPage(); }
+  if (reader.index < reader.pages.length - 1) { reader.index += 1; showPage(); }
+});
+document.addEventListener('keydown', e => {
+  if (document.getElementById('readerImg').src === '') return;
+  if (e.key === 'ArrowLeft' && reader.index > 0) { reader.index--; showPage(); }
+  if (e.key === 'ArrowRight' && reader.index < reader.pages.length - 1) { reader.index++; showPage(); }
+  if (e.key === 'Escape') closeReader();
 });
 
 document.getElementById('readerBack').addEventListener('click', () => {
-  // Prefer history.back, but fallback to parent listing
   if (history.length > 1) { history.back(); return; }
   if (CTX.type === 'creators') {
     window.location.href = `/creators/${encodeURIComponent(CTX.creator || '')}/`;
@@ -72,10 +93,7 @@ async function loadPages() {
       return root ? `${base}?root=${encodeURIComponent(root)}` : base;
     });
     if (!pages.length) throw new Error('Gallery is empty');
-    PAGES.push(...pages);
-    document.getElementById('readerTitle').textContent = String(data.title || `Gallery ${GALLERY_ID}`);
-    INDEX = 0;
-    showPage();
+    openReader(pages, String(data.title || `Gallery ${GALLERY_ID}`));
   } catch (err) {
     document.getElementById('readerTitle').textContent = `Could not load gallery: ${err.message}`;
   }
