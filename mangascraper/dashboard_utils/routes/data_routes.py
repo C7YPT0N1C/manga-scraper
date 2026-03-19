@@ -364,6 +364,70 @@ def _gallery_paths_from_galleries_table(gallery_id: int) -> dict:
     return {"download_path": download_path, "cover_path": cover_path}
 
 
+def _tolerant_gallery_path(gallery_id: int, candidate: str) -> str | None:
+    """Given a candidate download_path, try tolerant variants and return a path that exists.
+
+    Tries, in order:
+    - the candidate itself
+    - prefixing the basename with "(<id>) "
+    - URL-decoding the basename and variants
+    - a best-effort substring match inside the candidate directory
+    Returns the first existing filesystem path or None.
+    """
+    if not candidate:
+        return None
+    try:
+        if os.path.exists(candidate):
+            return candidate
+        dirp = os.path.dirname(candidate) or os.path.dirname(os.path.realpath(candidate))
+        base = os.path.basename(candidate)
+        # try prefixing with (id)
+        try:
+            pid = int(gallery_id)
+            pref = f"({pid}) {base}"
+            alt = os.path.join(dirp, pref)
+            if os.path.exists(alt):
+                return alt
+        except Exception:
+            pass
+
+        # try URL-decoded basename variants
+        try:
+            from urllib.parse import unquote
+            decoded = unquote(base)
+            if decoded and decoded != base:
+                alt2 = os.path.join(dirp, decoded)
+                if os.path.exists(alt2):
+                    return alt2
+                try:
+                    pref2 = f"({int(gallery_id)}) {decoded}"
+                    alt3 = os.path.join(dirp, pref2)
+                    if os.path.exists(alt3):
+                        return alt3
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # fuzzy: look for an entry in the directory that contains the base as substring
+        if os.path.isdir(dirp):
+            for name in os.listdir(dirp):
+                if not name:
+                    continue
+                if base and base in name:
+                    candidate2 = os.path.join(dirp, name)
+                    if os.path.exists(candidate2):
+                        return candidate2
+                # also accept prefixed names like (id) ...
+                if base and name.startswith(f"({gallery_id})") and base.split()[0] in name:
+                    candidate2 = os.path.join(dirp, name)
+                    if os.path.exists(candidate2):
+                        return candidate2
+    except Exception:
+        return None
+    return None
+
+
 def _build_filter_options(items: list[dict], item_type: str) -> dict:
     languages = set()
     tags = set()
@@ -1693,16 +1757,18 @@ def list_pages_by_id(gallery_id):
         if not gallery_path:
             continue
 
-        if os.path.isdir(gallery_path):
-            image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path) or gallery_path
+
+        if os.path.isdir(resolved_path):
+            IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
             pages = sorted(
-                name for name in os.listdir(gallery_path)
-                if os.path.splitext(name)[1].lower() in image_exts
+                name for name in os.listdir(resolved_path)
+                if os.path.splitext(name)[1].lower() in IMAGE_EXTS
             )
             return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": root})
 
-        if _is_archive(gallery_path):
-            pages = _archive_pages(gallery_path)
+        if _is_archive(resolved_path):
+            pages = _archive_pages(resolved_path)
             return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root})
 
     # Fallback: consult Galleries.download_path if GalleryLocations didn't resolve
@@ -1710,15 +1776,16 @@ def list_pages_by_id(gallery_id):
         tbl = _gallery_paths_from_galleries_table(gallery_id)
         gp = str(tbl.get("download_path") or "").strip()
         if gp:
-            if os.path.isdir(gp):
+            resolved_gp = _tolerant_gallery_path(gallery_id, gp) or gp
+            if os.path.isdir(resolved_gp):
                 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
                 pages = sorted(
-                    name for name in os.listdir(gp)
+                    name for name in os.listdir(resolved_gp)
                     if os.path.splitext(name)[1].lower() in IMAGE_EXTS
                 )
                 return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": ""})
-            if _is_archive(gp):
-                pages = _archive_pages(gp)
+            if _is_archive(resolved_gp):
+                pages = _archive_pages(resolved_gp)
                 return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": ""})
     except Exception:
         pass
@@ -1820,18 +1887,22 @@ def view_image_by_id(gallery_id, filename):
         if not gallery_path:
             continue
 
-        if os.path.isdir(gallery_path):
-            file_path = _safe_path(gallery_path, filename)
+        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path) or gallery_path
+        if not os.path.exists(resolved_path):
+            continue
+
+        if os.path.isdir(resolved_path):
+            file_path = _safe_path(resolved_path, filename)
             if not file_path or not os.path.isfile(file_path):
                 continue
-            rel_name = os.path.relpath(file_path, gallery_path)
-            return send_from_directory(gallery_path, rel_name)
+            rel_name = os.path.relpath(file_path, resolved_path)
+            return send_from_directory(resolved_path, rel_name)
 
-        if _is_archive(gallery_path):
+        if _is_archive(resolved_path):
             normalised = posixpath.normpath(filename)
             if normalised.startswith("../") or normalised.startswith("/"):
                 continue
-            with zipfile.ZipFile(gallery_path, "r") as zf:
+            with zipfile.ZipFile(resolved_path, "r") as zf:
                 try:
                     payload = zf.read(normalised)
                 except KeyError:
@@ -1852,15 +1923,16 @@ def view_image_by_id(gallery_id, filename):
         tbl = _gallery_paths_from_galleries_table(gallery_id)
         gp = str(tbl.get("download_path") or "").strip()
         if gp:
-            if os.path.isdir(gp):
-                file_path = _safe_path(gp, filename)
+            resolved_gp = _tolerant_gallery_path(gallery_id, gp) or gp
+            if os.path.isdir(resolved_gp):
+                file_path = _safe_path(resolved_gp, filename)
                 if file_path and os.path.isfile(file_path):
-                    rel_name = os.path.relpath(file_path, gp)
-                    return send_from_directory(gp, rel_name)
-            if _is_archive(gp):
+                    rel_name = os.path.relpath(file_path, resolved_gp)
+                    return send_from_directory(resolved_gp, rel_name)
+            if _is_archive(resolved_gp):
                 normalised = posixpath.normpath(filename)
                 if not normalised.startswith("../") and not normalised.startswith("/"):
-                    with zipfile.ZipFile(gp, "r") as zf:
+                    with zipfile.ZipFile(resolved_gp, "r") as zf:
                         try:
                             payload = zf.read(normalised)
                         except KeyError:

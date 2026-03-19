@@ -1701,11 +1701,13 @@ class DB:
                 started_at = meta.get("started_at")
 
             if gallery_title:
+                # Always store download_path in the canonical format: "(<id>) <clean_title>"
+                gallery_base = f"({int(gallery_id)}) {gallery_title}"
                 if is_archive:
-                    download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_title}.{ext}")
+                    download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_base}.{ext}")
                 else:
-                    download_path = os.path.join(ext_download_path, cleaned_creator, gallery_title)
-                cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", f"({gallery_id}) {gallery_title}")
+                    download_path = os.path.join(ext_download_path, cleaned_creator, gallery_base)
+                cover_path = os.path.join(ext_download_path, cleaned_creator, ".covers", gallery_base)
             else:
                 download_path = ""
                 cover_path = ""
