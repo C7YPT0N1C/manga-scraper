@@ -19,7 +19,7 @@ os.makedirs(CORE_DIR, exist_ok=True)
 # LOGGER
 ##########################################################################################
 
-LOG_DIR = f"{TEMP_DIR}/diagnostics"
+LOG_DIR = f"{TEMP_DIR}/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Runtime log file used by this process.

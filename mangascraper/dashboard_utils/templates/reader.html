@@ -22,6 +22,8 @@
 #readerWrapper { height: calc(100vh - 160px); box-sizing: border-box; display:flex; align-items:center; justify-content:center; transition: transform 0.12s ease; transform-origin: top center; }
 #readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; max-height: calc(100vh - 200px); }
 #readerImg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
+/* Reader-specific nav button overrides to prevent huge buttons */
+#readerWrapper .navBtn { height: auto; padding: 0.4rem 0.6rem; min-width: 44px; font-size: 1.25rem; align-self: center; }
 </style>
 
 {% endblock %}
