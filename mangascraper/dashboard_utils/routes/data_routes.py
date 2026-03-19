@@ -344,6 +344,25 @@ def _count_pages_on_disk(path: str) -> int | None:
         return None
     return None
 
+def _gallery_paths_from_galleries_table(gallery_id: int) -> dict:
+    """Return download_path and cover_path from the Galleries table for a gallery id.
+    Useful as an authoritative fallback when GalleryLocations entries don't resolve correctly.
+    """
+    scraperapi.DB.init_db()
+    download_path = ""
+    cover_path = ""
+    try:
+        with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT download_path, cover_path FROM Galleries WHERE id=?", (int(gallery_id),))
+            row = cursor.fetchone()
+            if row:
+                download_path = str(row[0] or "").strip()
+                cover_path = str(row[1] or "").strip()
+    except Exception:
+        pass
+    return {"download_path": download_path, "cover_path": cover_path}
+
 
 def _build_filter_options(items: list[dict], item_type: str) -> dict:
     languages = set()
@@ -1686,6 +1705,24 @@ def list_pages_by_id(gallery_id):
             pages = _archive_pages(gallery_path)
             return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root})
 
+    # Fallback: consult Galleries.download_path if GalleryLocations didn't resolve
+    try:
+        tbl = _gallery_paths_from_galleries_table(gallery_id)
+        gp = str(tbl.get("download_path") or "").strip()
+        if gp:
+            if os.path.isdir(gp):
+                IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+                pages = sorted(
+                    name for name in os.listdir(gp)
+                    if os.path.splitext(name)[1].lower() in IMAGE_EXTS
+                )
+                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": ""})
+            if _is_archive(gp):
+                pages = _archive_pages(gp)
+                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": ""})
+    except Exception:
+        pass
+
     abort(404)
 
 
@@ -1809,6 +1846,38 @@ def view_image_by_id(gallery_id, filename):
                 ".avif": "image/avif",
             }
             return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"), download_name=os.path.basename(normalised))
+
+    # Fallback: consult Galleries.download_path
+    try:
+        tbl = _gallery_paths_from_galleries_table(gallery_id)
+        gp = str(tbl.get("download_path") or "").strip()
+        if gp:
+            if os.path.isdir(gp):
+                file_path = _safe_path(gp, filename)
+                if file_path and os.path.isfile(file_path):
+                    rel_name = os.path.relpath(file_path, gp)
+                    return send_from_directory(gp, rel_name)
+            if _is_archive(gp):
+                normalised = posixpath.normpath(filename)
+                if not normalised.startswith("../") and not normalised.startswith("/"):
+                    with zipfile.ZipFile(gp, "r") as zf:
+                        try:
+                            payload = zf.read(normalised)
+                        except KeyError:
+                            payload = None
+                    if payload is not None:
+                        ext = os.path.splitext(normalised)[1].lower()
+                        mime_map = {
+                            ".jpg": "image/jpeg",
+                            ".jpeg": "image/jpeg",
+                            ".png": "image/png",
+                            ".gif": "image/gif",
+                            ".webp": "image/webp",
+                            ".avif": "image/avif",
+                        }
+                        return send_file(io.BytesIO(payload), mimetype=mime_map.get(ext, "application/octet-stream"), download_name=os.path.basename(normalised))
+    except Exception:
+        pass
 
     abort(404)
 
