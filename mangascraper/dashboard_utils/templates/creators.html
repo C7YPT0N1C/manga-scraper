@@ -462,9 +462,7 @@ function _renderGalleryDetail(gallery) {
 	if (galleryId > 0) {
 		coverUrl = `/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}`;
 	} else if (_currentCreator) {
-		// Use the full filesystem/gallery path name when fetching resources (preserve (ID) prefix)
-		const fullGalleryName = itemPathName(gallery) || rawTitle;
-		coverUrl = `/api/gallery/cover/${encodeURIComponent(_currentCreator)}/${encodeURIComponent(fullGalleryName)}`;
+		coverUrl = `/api/gallery/cover/${encodeURIComponent(_currentCreator)}/${encodeURIComponent(title)}`;
 	}
 
 	document.getElementById('galleryDetailTitle').textContent = title;
