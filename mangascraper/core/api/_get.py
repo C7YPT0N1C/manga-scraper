@@ -22,21 +22,6 @@ class Get:
     """Get a resource, usually generated."""
 
     @staticmethod
-    def gallery_status(gallery_id):
-        """Get the status of a Gallery keyed by its ID."""
-        from mangascraper.core.api._db import DB
-        gallery_id = Helpers.normalise_integer(gallery_id)
-        if gallery_id is None:
-            return None
-        DB.init_db()
-        from mangascraper.core.api._constants import db_lock
-        with db_lock, DB.dbconnect() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
-            row = cursor.fetchone()
-            return Helpers.safe_text(row[0], "") if row else None
-
-    @staticmethod
     def session(referrer: str = "Undisclosed Module", status: str = "rebuild"):
         """
         Ensure and return a ready cloudscraper session.
@@ -224,3 +209,18 @@ class Get:
             "max_pages": max(pages_list) if pages_list else 0,
             "avg_pages": sum(pages_list) / len(pages_list) if pages_list else 0,
         }
+    
+    @staticmethod
+    def gallery_status(gallery_id):
+        """Get the status of a Gallery keyed by its ID."""
+        from mangascraper.core.api._db import DB
+        gallery_id = Helpers.normalise_integer(gallery_id)
+        if gallery_id is None:
+            return None
+        DB.init_db()
+        from mangascraper.core.api._constants import db_lock
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
+            row = cursor.fetchone()
+            return Helpers.safe_text(row[0], "") if row else None
