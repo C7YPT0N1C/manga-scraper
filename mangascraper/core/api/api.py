@@ -28,7 +28,7 @@ session_lock = threading.Lock()
 DATA_DIR = os.path.join(orchestrator.SCRAPER_DIR, "mangascraper/core")
 DB_PATH = os.path.join(DATA_DIR, "mangascraper.db")
 
-atexit.register(lambda: DB.close()) # Ensure DB connections are closed on exit
+atexit.register(lambda: DB.close_connection()) # Ensure DB connections are closed on exit
 
 # Cache expiry windows (seconds)
 CACHE_REFERENCES_TTL_SECONDS = 60 * 60 * 24 * 1 # day
@@ -193,9 +193,9 @@ atexit.register(lambda: RuntimeProgress.stop_server())
 
 def prune_all_caches():
     """Remove expired entries in cache tables based on expires_at. Returns count of deleted entries."""
-    DB.init()
+    DB.init_db()
     now = time.time()
-    with db_lock, DB.connect() as conn:
+    with db_lock, DB.dbconnect() as conn:
         cursor = conn.cursor()
         # Delete expired cache references by expires_at
         cursor.execute(
@@ -220,13 +220,13 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
     - If gallery_id is given, returns metadata for that gallery (or None if not found).
     - If cutoff is given, returns all metadata entries newer than cutoff as a dict keyed by gallery ID.
     """
-    DB.init()
+    DB.init_db()
 
     # No-args: full cache snapshot (references + metadata)
     if cache_key is None and gallery_id is None and cutoff is None and ids is None:
         try:
             prune_all_caches()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 now = time.time()
 
@@ -283,7 +283,7 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
         lookup_key = Helpers.safe_text(cache_key, "")
         lookup_now = time.time()
         logger.debug(f"[CacheLookup] Checking CacheReferences for key='{lookup_key}' at now={lookup_now}")
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -319,7 +319,7 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
             return {"references": {str(cache_key_val): entry}, "metadata": {}}
 
     # CachedMetadata: one or more gallery lookups
-    with db_lock, DB.connect() as conn:
+    with db_lock, DB.dbconnect() as conn:
         cursor = conn.cursor()
         metadata = {}
         if ids is not None:
@@ -392,7 +392,7 @@ def read_cached_metadata_entry(cache_key: str = None, gallery_id: int = None, cu
 
 def clear_cached_items(cache_key: str = None, gallery_id: int = None):
     """Clear all cache, one CacheReferences row, or one CachedMetadata row."""
-    DB.init()
+    DB.init_db()
     prune_all_caches()
 
     if cache_key is not None and gallery_id is not None:
@@ -404,7 +404,7 @@ def clear_cached_items(cache_key: str = None, gallery_id: int = None):
         "mode": "all",
     }
 
-    with db_lock, DB.connect() as conn:
+    with db_lock, DB.dbconnect() as conn:
         cursor = conn.cursor()
 
         if cache_key is None and gallery_id is None:
@@ -452,7 +452,7 @@ class Helpers:
             return ""
         normalised = os.path.normpath(safe_path)
         try:
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT root_path FROM DownloadLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
                 roots = [Helpers.safe_text(row[0], "") for row in cursor.fetchall()]
@@ -752,6 +752,10 @@ class DB:
 
     @staticmethod
     def connect():
+        return DB.dbconnect()
+
+    @staticmethod
+    def dbconnect():
         conn = getattr(_thread_local, "connection", None)
         if conn is None:
             os.makedirs(DATA_DIR, exist_ok=True)
@@ -765,9 +769,13 @@ class DB:
 
     @staticmethod
     def init():
+        return DB.init_db()
+
+    @staticmethod
+    def init_db():
         orchestrator.refresh_globals()
         os.makedirs(DATA_DIR, exist_ok=True)
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             c = conn.cursor()
             c.executescript(f"""
             CREATE TABLE IF NOT EXISTS DownloadQueue (
@@ -1168,6 +1176,10 @@ class DB:
 
     @staticmethod
     def close():
+        return DB.close_connection()
+
+    @staticmethod
+    def close_connection():
         conn = getattr(_thread_local, "connection", None)
         if conn is not None:
             conn.close()
@@ -1175,21 +1187,21 @@ class DB:
 
     @staticmethod
     def migrate():
-        return DB.init()
+        return DB.init_db()
 
     @staticmethod
     def schema():
-        return DB.init()
+        return DB.init_db()
 
     @staticmethod
     def migrations():
-        return DB.init()
+        return DB.init_db()
 
     @staticmethod
     def list_table_names() -> list[str]:
         """Return all user-created table names in the database."""
-        DB.init()
-        with db_lock, DB.connect() as conn:
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -1210,12 +1222,12 @@ class DB:
         table_name is validated against the live table list to prevent injection.
         Optional search filters any column that contains the search string.
         """
-        DB.init()
+        DB.init_db()
         allowed = DB.list_table_names()
         if table_name not in allowed:
             return {"columns": [], "rows": [], "error": f"Unknown table '{table_name}'"}
 
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(f"PRAGMA table_info({table_name})")  # table name already validated above
             columns = [row[1] for row in cursor.fetchall()]
@@ -1267,10 +1279,10 @@ class DB:
     @staticmethod
     def set_queued_galleries(ids):
         """Store selected Gallery IDs as a single DownloadQueue entry with status='selected'."""
-        DB.init()
+        DB.init_db()
         normalised_ids = sorted(set(Helpers.normalise_integer_list(ids)))
         now = datetime.now(timezone.utc).isoformat()
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM DownloadQueue WHERE LOWER(COALESCE(status, ''))='selected'")
             if normalised_ids:
@@ -1302,12 +1314,12 @@ class DB:
 
         @staticmethod
         def enqueue(ids: list[int]) -> dict | None:
-            DB.init()
+            DB.init_db()
             normalised_ids = sorted(set(Helpers.normalise_integer_list(ids)))
             if not normalised_ids:
                 return None
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1328,13 +1340,13 @@ class DB:
 
         @staticmethod
         def list(statuses: list[str] | None = None) -> list[dict]:
-            DB.init()
+            DB.init_db()
             if statuses is None:
                 statuses = ["queued", "running"]
             normalised_statuses = [Helpers.safe_text(s, "").strip().lower() for s in (statuses or [])]
             normalised_statuses = [s for s in normalised_statuses if s]
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 if normalised_statuses:
                     placeholders = ",".join("?" for _ in normalised_statuses)
@@ -1365,8 +1377,8 @@ class DB:
 
         @staticmethod
         def next_queued() -> dict | None:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1381,13 +1393,13 @@ class DB:
 
         @staticmethod
         def set_status(download_no: int, status: str) -> bool:
-            DB.init()
+            DB.init_db()
             job_no = Helpers.normalise_integer(download_no)
             safe_status = Helpers.safe_text(status, "").strip().lower()
             if job_no is None or safe_status not in {"queued", "running"}:
                 return False
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "UPDATE DownloadQueue SET status=?, updated_at=? WHERE download_no=?",
@@ -1398,11 +1410,11 @@ class DB:
 
         @staticmethod
         def remove(download_no: int) -> bool:
-            DB.init()
+            DB.init_db()
             job_no = Helpers.normalise_integer(download_no)
             if job_no is None:
                 return False
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM DownloadQueue WHERE download_no=?", (int(job_no),))
                 conn.commit()
@@ -1410,8 +1422,8 @@ class DB:
 
         @staticmethod
         def clear() -> int:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM DownloadQueue")
                 deleted = cursor.rowcount if cursor.rowcount is not None else 0
@@ -1420,11 +1432,11 @@ class DB:
 
         @staticmethod
         def remove_by_status(status: str) -> int:
-            DB.init()
+            DB.init_db()
             safe_status = Helpers.safe_text(status, "").strip().lower()
             if not safe_status:
                 return 0
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM DownloadQueue WHERE LOWER(COALESCE(status, ''))=?", (safe_status,))
                 deleted = cursor.rowcount if cursor.rowcount is not None else 0
@@ -1434,8 +1446,8 @@ class DB:
     @staticmethod
     def list_galleries(status=None):
         """List all galleries, optionally filtered by status."""
-        DB.init()
-        with db_lock, DB.connect() as conn:
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             if status:
                 cursor.execute("SELECT id, status, started_at, completed_at FROM Galleries WHERE status=?", (status,))
@@ -1709,11 +1721,12 @@ class DB:
                 "UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?",
                 (len(related_gallery_ids), json.dumps(most_popular), datetime.now(timezone.utc).isoformat(), int(creator_id)),
             )
+
     class Collection:
         @staticmethod
         def list() -> list[dict]:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1753,19 +1766,19 @@ class DB:
 
         @staticmethod
         def get(collection_id: int) -> dict | None:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 return collection
 
         @staticmethod
         def create(name: str, description: str = "", collection_type: str = "normal", sort_mode: str = "id_desc") -> dict:
-            DB.init()
+            DB.init_db()
             now = datetime.now(timezone.utc).isoformat()
             ctype = DB._normalise_collection_type(collection_type)
             smode = DB._normalise_sort_mode(sort_mode, ctype)
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1791,8 +1804,8 @@ class DB:
 
         @staticmethod
         def update(collection_id: int, name: str | None = None, description: str | None = None, sort_mode: str | None = None) -> dict | None:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1811,8 +1824,8 @@ class DB:
 
         @staticmethod
         def delete(collection_id: int) -> bool:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM Collections WHERE id=?", (int(collection_id),))
                 conn.commit()
@@ -1820,8 +1833,8 @@ class DB:
 
         @staticmethod
         def set_filters(collection_id: int, filters: "list[dict]") -> dict | None:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1859,8 +1872,8 @@ class DB:
 
         @staticmethod
         def set_smart_rule(collection_id: int, expression: str, clear_existing_items: bool = True) -> dict | None:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1893,14 +1906,14 @@ class DB:
 
         @staticmethod
         def add_galleries(collection_id: int, gallery_ids: "list[int]", manual: bool = True) -> dict:
-            DB.init()
+            DB.init_db()
             ids = sorted({int(gid) for gid in Helpers.normalise_integer_list(gallery_ids)})
             if not ids:
                 return {"added": 0, "ids": []}
 
             now = datetime.now(timezone.utc).isoformat()
             added = 0
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1928,12 +1941,12 @@ class DB:
 
         @staticmethod
         def add_creator_snapshot(collection_id: int, creator_name: str) -> dict:
-            DB.init()
+            DB.init_db()
             creator_text = Helpers.safe_text(creator_name, "").strip().lower()
             if not creator_text:
                 return {"added": 0, "ids": []}
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 galleries, _, _ = DB._collection_gallery_dataset(cursor)
                 ids = [int(row["id"]) for row in galleries if creator_text in (row.get("creator_names") or set())]
@@ -1941,11 +1954,11 @@ class DB:
 
         @staticmethod
         def remove_gallery(collection_id: int, gallery_id: int) -> bool:
-            DB.init()
+            DB.init_db()
             gid = Helpers.normalise_integer(gallery_id)
             if gid is None:
                 return False
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1963,8 +1976,8 @@ class DB:
 
         @staticmethod
         def clear_items(collection_id: int) -> bool:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -1980,10 +1993,10 @@ class DB:
 
         @staticmethod
         def refresh_smart(collection_id: int) -> dict:
-            DB.init()
+            DB.init_db()
             now = datetime.now(timezone.utc).isoformat()
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -2037,8 +2050,8 @@ class DB:
 
         @staticmethod
         def refresh_all_smart() -> dict:
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM Collections WHERE LOWER(collection_type)='smart'")
                 ids = [int(row[0]) for row in cursor.fetchall() if row and row[0] is not None]
@@ -2058,8 +2071,8 @@ class DB:
 
         @staticmethod
         def items(collection_id: int) -> "list[dict]":
-            DB.init()
-            with db_lock, DB.connect() as conn:
+            DB.init_db()
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 collection = DB._read_collection_row(cursor, int(collection_id))
                 if not collection:
@@ -2113,13 +2126,13 @@ class DB:
 
     @staticmethod
     def remove_gallery_from_database(gallery_id: int) -> dict:
-        DB.init()
+        DB.init_db()
         gid = Helpers.normalise_integer(gallery_id)
         if gid is None:
             return {"removed": False, "gallery_id": None}
 
         removed = False
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, items FROM Collections")
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -2149,7 +2162,7 @@ class DB:
 
     @staticmethod
     def upsert_gallery_location(gallery_id, extension_used=None, download_path=None, cover_path=None, first_seen=None, last_seen=None, root_path=None):
-        DB.init()
+        DB.init_db()
         gallery_id = Helpers.normalise_integer(gallery_id)
         download_path = Helpers.safe_text(download_path, "")
         if gallery_id is None or not download_path:
@@ -2167,7 +2180,7 @@ class DB:
             return
         first_seen = Helpers.safe_text(first_seen, "") or datetime.now(timezone.utc).isoformat()
         last_seen = Helpers.safe_text(last_seen, "") or first_seen
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
@@ -2193,8 +2206,8 @@ class DB:
     @staticmethod
     def list_download_locations() -> list[dict]:
         """Return one dict per distinct download root, with a gallery count."""
-        DB.init()
-        with db_lock, DB.connect() as conn:
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT dl.id, dl.root_path, dl.extension_used, COUNT(gl.gallery_id) AS gallery_count
@@ -2216,13 +2229,13 @@ class DB:
     @staticmethod
     def upsert_download_location(root_path: str, extension_used: str = ""):
         """Ensure a managed download root exists in DownloadLocations."""
-        DB.init()
+        DB.init_db()
         root_path = Helpers.safe_text(root_path, "").strip()
         if not root_path:
             return
         root_path = os.path.normpath(root_path)
         extension_used = Helpers.safe_text(extension_used, "").strip()
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -2253,7 +2266,7 @@ class DB:
         Returns a dictionary with cleanup statistics.
         Consolidates cache and orphan cleanup operations into a single transaction.
         """
-        DB.init()
+        DB.init_db()
         
         stats = {
             "cache_entries_pruned": 0,
@@ -2273,7 +2286,7 @@ class DB:
             
             # Step 1: Prune unmanaged download locations
             logger.debug("[DATABASE_CLEANUP] Pruning unmanaged download locations...")
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id, root_path FROM DownloadLocations")
                 dl_rows = cursor.fetchall()
@@ -2301,7 +2314,7 @@ class DB:
             
             # Step 2: Check for orphaned galleries (files don't exist on disk)
             logger.debug("[DATABASE_CLEANUP] Scanning for orphaned galleries...")
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT gl.gallery_id, gl.download_path, gl.location_id
@@ -2323,7 +2336,7 @@ class DB:
                     logger.debug(f"[DATABASE_CLEANUP] Orphaned gallery found: {gid} at missing path {dpath}")
             
             if orphaned_galleries:
-                with db_lock, DB.connect() as conn:
+                with db_lock, DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     for gid, location_id, dpath in orphaned_galleries:
                         try:
@@ -2343,7 +2356,7 @@ class DB:
             
             # Step 3: Check page counts and identify missing pages
             logger.debug("[DATABASE_CLEANUP] Checking gallery page counts...")
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     SELECT id, num_pages, download_path
@@ -2387,7 +2400,7 @@ class DB:
                 except Exception as e:
                     logger.debug(f"[DATABASE_CLEANUP] Error checking pages for gallery {gid}: {e}")
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 DB._recompute_creator_rollups(cursor)
                 conn.commit()
@@ -2414,7 +2427,7 @@ class DB:
     @staticmethod
     def list_gallery_locations(gallery_id=None, root_path=None) -> list[dict]:
         """Return location rows joined from GalleryLocations + DownloadLocations."""
-        DB.init()
+        DB.init_db()
         query = """
             SELECT gl.gallery_id, dl.extension_used, dl.root_path, gl.download_path,
                    gl.cover_path, gl.first_seen, gl.last_seen, dl.id
@@ -2434,7 +2447,7 @@ class DB:
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY dl.root_path, gl.download_path"
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(query, tuple(params))
             return [
@@ -2458,14 +2471,14 @@ class DB:
 
         @staticmethod
         def start(gallery_id, download_path=None, extension_used=None):
-            DB.init()
+            DB.init_db()
             gallery_id = Helpers.normalise_integer(gallery_id)
             if gallery_id is None:
                 return
             download_path = Helpers.safe_text(download_path, "")
             extension_used = Helpers.safe_text(extension_used, "")
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
                 row = cursor.fetchone()
@@ -2495,12 +2508,12 @@ class DB:
 
         @staticmethod
         def skip(gallery_id):
-            DB.init()
+            DB.init_db()
             gallery_id = Helpers.normalise_integer(gallery_id)
             if gallery_id is None:
                 return
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                 UPDATE Galleries
@@ -2513,12 +2526,12 @@ class DB:
 
         @staticmethod
         def fail(gallery_id):
-            DB.init()
+            DB.init_db()
             gallery_id = Helpers.normalise_integer(gallery_id)
             if gallery_id is None:
                 return
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                 UPDATE Galleries
@@ -2531,7 +2544,7 @@ class DB:
 
         @staticmethod
         def complete(gallery_id):
-            DB.init()
+            DB.init_db()
             gallery_id = Helpers.normalise_integer(gallery_id)
             if gallery_id is None:
                 return
@@ -2553,12 +2566,12 @@ class DB:
             gallery_title = ""
 
             if meta and meta.get("clean_title"):
-                with db_lock, DB.connect() as conn:
+                with db_lock, DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("UPDATE Galleries SET clean_title=? WHERE id=?", (meta["clean_title"], gallery_id))
                     conn.commit()
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT clean_title FROM Galleries WHERE id=?", (gallery_id,))
                 row = cursor.fetchone()
@@ -2606,14 +2619,14 @@ class DB:
                 cover_path = ""
 
             if not started_at:
-                with db_lock, DB.connect() as conn:
+                with db_lock, DB.dbconnect() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT started_at FROM Galleries WHERE id=?", (gallery_id,))
                     row = cursor.fetchone()
                     if row and row[0]:
                         started_at = row[0]
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT extension_used FROM Galleries WHERE id=?", (gallery_id,))
                 row = cursor.fetchone()
@@ -2704,7 +2717,7 @@ class DB:
                 gallery_tags[gid] = tag_names
                 gallery_languages[gid] = language_names
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 creator_id_map = {}
                 tag_id_map = {}
@@ -2840,12 +2853,12 @@ class DB:
         @staticmethod
         def favourite(gallery_id, value=None):
             """Toggle or set favourite for a gallery and return the new value (0 or 1)."""
-            DB.init()
+            DB.init_db()
             gallery_id = Helpers.normalise_integer(gallery_id)
             if gallery_id is None:
                 return 0
 
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT favourite FROM Galleries WHERE id=?", (gallery_id,))
                 row = cursor.fetchone()
@@ -2865,13 +2878,13 @@ class DB:
         @staticmethod
         def favourite(creator_name, value=None):
             """Toggle or set favourite for a creator and return the new value (0 or 1)."""
-            DB.init()
+            DB.init_db()
             creator_name = Helpers.safe_text(creator_name, "").strip()
             if not creator_name:
                 return 0
 
             display_name = Helpers.sanitise(creator_name)
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -3130,8 +3143,8 @@ class Get:
         gallery_id = Helpers.normalise_integer(gallery_id)
         if gallery_id is None:
             return None
-        DB.init()
-        with db_lock, DB.connect() as conn:
+        DB.init_db()
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
             row = cursor.fetchone()
@@ -4071,7 +4084,7 @@ class Cache:
 
     @staticmethod
     def upsert_cached_metadata(gallery_id: str, timestamp: float, clean_metadata=None, raw_metadata=None):
-        DB.init()
+        DB.init_db()
         gid = Helpers.normalise_integer(gallery_id)
         if gid is None:
             return
@@ -4089,7 +4102,7 @@ class Cache:
         entry["timestamp"] = Helpers.safe_float(timestamp, time.time())
         entry["expires_at"] = entry["timestamp"] + CACHED_METADATA_TTL_SECONDS
 
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO CachedMetadata (gallery_id, timestamp, clean_metadata, raw_metadata, expires_at) "
@@ -4111,7 +4124,7 @@ class Cache:
 
     @staticmethod
     def upsert_cache_reference(cache_key: str, entry: dict):
-        DB.init()
+        DB.init_db()
         cache_key = Helpers.safe_text(cache_key)
         ids = Helpers.normalise_integer_list(entry.get("ids"))
         cache_type = Helpers.safe_text(entry.get("cache_type"), "")
@@ -4120,7 +4133,7 @@ class Cache:
         if expires_at <= 0:
             expires_at = time.time() + CACHE_REFERENCES_TTL_SECONDS
         ids_json = json.dumps(ids)
-        with db_lock, DB.connect() as conn:
+        with db_lock, DB.dbconnect() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO CacheReferences (cache_key, cache_type, cache_target, ids, expires_at) "
@@ -4222,8 +4235,8 @@ class Cache:
         @staticmethod
         def broken_symbols() -> dict[str, str]:
             """Load all detected broken symbols as { symbol: '_' }."""
-            # Do NOT call DB.init() here to avoid self-recursion.
-            with db_lock, DB.connect() as conn:
+            # Do NOT call DB.init_db() here to avoid self-recursion.
+            with db_lock, DB.dbconnect() as conn:
                 c = conn.cursor()
                 c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
                 rows = c.fetchall()
@@ -4237,10 +4250,10 @@ class Cache:
         @staticmethod
         def queued_galleries() -> list:
             """Fetch selected gallery IDs from DownloadQueue entries with status='selected'."""
-            DB.init()
+            DB.init_db()
             merged_ids = []
             seen = set()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -4385,9 +4398,9 @@ class Cache:
             """Insert or update broken symbols into the database, keeping the mapping (symbol -> replacement)."""
             if not symbol_map:
                 return
-            # Do NOT call DB.init() here to avoid self-recursion.
+            # Do NOT call DB.init_db() here to avoid self-recursion.
             now = datetime.now(timezone.utc).isoformat()
-            with db_lock, DB.connect() as conn:
+            with db_lock, DB.dbconnect() as conn:
                 c = conn.cursor()
                 for symbol in symbol_map.keys():
                     c.execute("""

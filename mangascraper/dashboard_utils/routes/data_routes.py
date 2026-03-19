@@ -1688,6 +1688,7 @@ def list_pages_by_id(gallery_id):
 
     abort(404)
 
+
 @gallery_bp.route("/details/<path:creator>/<path:gallery>", methods=["GET"])
 def gallery_details(creator, gallery):
     root, gallery_path = _resolve_gallery_path(creator, gallery)
