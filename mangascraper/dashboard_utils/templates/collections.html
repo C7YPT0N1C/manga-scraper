@@ -784,17 +784,7 @@ document.getElementById('galleryDetailModal').addEventListener('click', event =>
 });
 
 document.getElementById('galleryDetailReadBtn').addEventListener('click', () => {
-  if (!_detailGallery) return;
-  const gid = Number(_detailGallery.gallery_id || 0);
-  if (!gid) return;
-  if (selectedCollectionId) {
-    closeGalleryDetail();
-    window.location.href = `/reader/collections/${selectedCollectionId}/${gid}/`;
-    return;
-  }
-  // Fallback: open stream/read-by-id reader
-  closeGalleryDetail();
-  window.location.href = `/reader/stream/?id=${gid}`;
+  // Intentionally no-op: disable reader navigation from Collections
 });
 
 document.getElementById('galleryDetailFavBtn').addEventListener('click', async () => {
