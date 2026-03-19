@@ -18,12 +18,51 @@
 </div>
 
 <style>
-/* Reader sizing: constrain wrapper and image so both scale to viewport */
-#readerWrapper { height: calc(100vh - 160px); box-sizing: border-box; display:flex; align-items:center; justify-content:center; transition: transform 0.12s ease; transform-origin: top center; }
-#readerImgWrap { max-width: 90vw; width: 90vw; display: flex; align-items: center; justify-content: center; flex: 1; overflow: auto; max-height: calc(100vh - 200px); }
-#readerImg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto; }
+/* Reader sizing: hide topbar and collapse dynamic bar on open */
+/* header hidden so reader appears above navigation */
+header.topbar { display: none !important; }
+
+/* Reader sizing: constrain wrapper and image so both scale to viewport
+   and remain centered. Reader takes the full viewport height when open. */
+#readerWrapper {
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease;
+  transform-origin: top center;
+}
+
+#readerImgWrap {
+  max-width: 90vw;
+  width: 90vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  overflow: auto;
+  max-height: calc(100vh - 120px);
+}
+
+#readerImg {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
 /* Reader-specific nav button overrides to prevent huge buttons */
-#readerWrapper .navBtn { height: auto; padding: 0.4rem 0.6rem; min-width: 44px; font-size: 1.25rem; align-self: center; }
+#readerWrapper .navBtn {
+  height: auto;
+  padding: 0.4rem 0.6rem;
+  min-width: 44px;
+  font-size: 1.25rem;
+  align-self: center;
+}
 </style>
 
 {% endblock %}
@@ -92,11 +131,31 @@ function openReader(pages, title, onClose) {
   reader.onClose = onClose || null;
   document.getElementById('readerTitle').textContent = reader.title;
   document.getElementById('readerCounter').textContent = '';
+  // collapse dynamic bar while reader is open, preserving previous state
+  try {
+    if (typeof window.__dynamicBarCollapsed !== 'undefined') {
+      window.__dynamicBarCollapsed__prev = !!window.__dynamicBarCollapsed;
+    } else {
+      window.__dynamicBarCollapsed__prev = localStorage.getItem('mangascraper.dynamicBarCollapsed') === '1';
+    }
+    window.__dynamicBarCollapsed = true;
+    if (typeof _applyDynamicBarCollapsedState === 'function') _applyDynamicBarCollapsedState();
+    if (typeof _saveDynamicBarCollapsedState === 'function') _saveDynamicBarCollapsedState(true);
+  } catch (e) {}
+
   showPage();
 }
 
 function closeReader() {
-  // no scroll-lock; just call onClose if present
+  // restore dynamic bar collapsed state if we changed it
+  try {
+    if (typeof window.__dynamicBarCollapsed__prev !== 'undefined') {
+      window.__dynamicBarCollapsed = !!window.__dynamicBarCollapsed__prev;
+      if (typeof _applyDynamicBarCollapsedState === 'function') _applyDynamicBarCollapsedState();
+      if (typeof _saveDynamicBarCollapsedState === 'function') _saveDynamicBarCollapsedState(!!window.__dynamicBarCollapsed__prev);
+      delete window.__dynamicBarCollapsed__prev;
+    }
+  } catch (e) {}
   if (reader.onClose) reader.onClose();
 }
 
