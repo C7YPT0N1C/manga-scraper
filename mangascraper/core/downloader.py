@@ -834,7 +834,9 @@ def process_galleries(batch_ids):
                     os.makedirs(primary_folder, exist_ok=True)
 
                 # --- Prepare download tasks (only once, for primary creator) ---
+                # Use zero-padded filenames so lexicographic sorting preserves numeric page order.
                 tasks = []
+                pad_width = max(1, len(str(num_pages)))
                 for i in range(num_pages):
                     page = i + 1
                     img_urls = scraperapi.Fetch.image_urls(meta, page)
@@ -843,7 +845,8 @@ def process_galleries(batch_ids):
                         update_skipped_galleries(False, meta, "Failed to get URLs.", reportable=False)
                         continue
 
-                    img_filename = f"{page}.{img_urls[0].split('.')[-1]}"
+                    ext = img_urls[0].split('.')[-1]
+                    img_filename = f"{str(page).zfill(pad_width)}.{ext}"
                     img_path = os.path.join(primary_folder, img_filename)
                     tasks.append((page, img_urls, img_path, primary_creator))
 

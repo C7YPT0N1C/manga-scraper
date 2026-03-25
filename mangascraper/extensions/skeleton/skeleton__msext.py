@@ -362,9 +362,25 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     gallery_paths[creator_name] = gallery_path
 
                     if cover_source is None:
-                        candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
-                        if candidates:
-                            page1_file = os.path.join(gallery_path, candidates[0])
+                        # Find files with a leading numeric page index (handles zero-padded names)
+                        numeric_files = []
+                        for fn in os.listdir(gallery_path):
+                            try:
+                                m = re.match(r"^(\d+)\.", fn)
+                                if m:
+                                    numeric_files.append((int(m.group(1)), fn))
+                            except Exception:
+                                continue
+                        if numeric_files:
+                            numeric_files.sort()
+                            chosen = None
+                            for num, fn in numeric_files:
+                                if num == 1:
+                                    chosen = fn
+                                    break
+                            if chosen is None:
+                                chosen = numeric_files[0][1]
+                            page1_file = os.path.join(gallery_path, chosen)
                             _, ext = os.path.splitext(page1_file)
                             cover_source = page1_file
                             cover_gallery_name = gallery_items[0]
