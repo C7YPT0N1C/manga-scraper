@@ -355,13 +355,13 @@ class DB:
                     )
                 """)
                 c.execute("SELECT gallery_id, root_path, download_path, cover_path, first_seen, last_seen FROM GalleryLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
-                for g_id, root_path, dl_path, cov_path, f_seen, l_seen in c.fetchall():
+                for gallery_id, root_path, dl_path, cov_path, f_seen, l_seen in c.fetchall():
                     c.execute("SELECT id FROM DownloadLocations WHERE root_path=?", (root_path,))
                     loc = c.fetchone()
                     if loc:
                         c.execute(
                             "INSERT OR IGNORE INTO GalleryLocations_new (gallery_id, location_id, download_path, cover_path, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-                            (g_id, loc[0], dl_path or "", cov_path or "", f_seen or "", l_seen or ""),
+                            (gallery_id, loc[0], dl_path or "", cov_path or "", f_seen or "", l_seen or ""),
                         )
                 c.execute("DROP TABLE GalleryLocations")
                 c.execute("ALTER TABLE GalleryLocations_new RENAME TO GalleryLocations")
