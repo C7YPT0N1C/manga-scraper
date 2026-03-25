@@ -53,7 +53,7 @@ class Build:
     #    GET /galleries/character/{character}
     #    - Fetch galleries by a specific character
     #
-    # 9. Popular / Trending (if supported)
+    # 9. Popular / Trending
     #    GET /galleries/popular
     #    GET /galleries/trending
     #
