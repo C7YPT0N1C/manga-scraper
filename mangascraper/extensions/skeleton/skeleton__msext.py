@@ -15,6 +15,8 @@ from mangascraper.extensions.extension_manager import (
     find_latest_gallery_entry,
     parse_gallery_id,
     repair_covers_hook,
+    find_first_image_file,
+    link_creator_cover,
 )
 
 # This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
@@ -362,25 +364,9 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     gallery_paths[creator_name] = gallery_path
 
                     if cover_source is None:
-                        # Find files with a leading numeric page index (handles zero-padded names)
-                        numeric_files = []
-                        for fn in os.listdir(gallery_path):
-                            try:
-                                m = re.match(r"^(\d+)\.", fn)
-                                if m:
-                                    numeric_files.append((int(m.group(1)), fn))
-                            except Exception:
-                                continue
-                        if numeric_files:
-                            numeric_files.sort()
-                            chosen = None
-                            for num, fn in numeric_files:
-                                if num == 1:
-                                    chosen = fn
-                                    break
-                            if chosen is None:
-                                chosen = numeric_files[0][1]
-                            page1_file = os.path.join(gallery_path, chosen)
+                        candidate = find_first_image_file(gallery_path)
+                        if candidate:
+                            page1_file = os.path.join(gallery_path, candidate)
                             _, ext = os.path.splitext(page1_file)
                             cover_source = page1_file
                             cover_gallery_name = gallery_items[0]
@@ -417,20 +403,11 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     cover_in_subfolder = os.path.join(covers_folder, f"{cover_gallery_name}{cover_ext}")
                     shutil.copy2(cover_source, cover_in_subfolder)
                     logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
-
-                    # Remove any existing cover files (regardless of extension)
-                    for f in os.listdir(creator_folder):
-                        if f.startswith("cover") and f != "covers" and f != ".covers":
-                            try:
-                                os.unlink(os.path.join(creator_folder, f))
-                            except Exception as e:
-                                logger.debug(f"Could not remove old cover file {f}: {e}")
-
-                    # Symlink cover into creator root
-                    cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
-                    os.symlink(cover_in_subfolder, cover_link)
-                    logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
-                    cover_generated[creator_name] = True
+                    # Use link_creator_cover which handles safe symlink/copy and removes old covers
+                    linked = link_creator_cover(creator_folder, cover_in_subfolder)
+                    if linked:
+                        logger.debug(f"Updated cover link for {creator_name}: {linked} -> {cover_in_subfolder}")
+                        cover_generated[creator_name] = True
                 except Exception as e:
                     logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
 

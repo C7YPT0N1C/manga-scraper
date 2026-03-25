@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/extension_loader.py
 
-import os, json, importlib, importlib.util, shutil, subprocess, sys, re
+import os, json, importlib, importlib.util, shutil, subprocess, sys, re, zipfile
 
 from urllib.request import urlopen
 
@@ -847,6 +847,87 @@ def parse_gallery_id(text: str) -> int | None:
     except ValueError:
         return None
 
+
+# Image helpers
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+def is_image_name(filename: str) -> bool:
+    _, ext = os.path.splitext(filename or "")
+    return ext.lower() in IMAGE_EXTS
+
+def find_first_image_file(folder: str) -> str | None:
+    """Find the first image file in a folder using numeric-prefix logic.
+
+    Returns the filename (not full path) of the first image, preferring index 1,
+    otherwise the smallest numeric index. Returns None if none found.
+    """
+    if not os.path.isdir(folder):
+        return None
+    numeric_files = []
+    for fn in os.listdir(folder):
+        if not is_image_name(fn):
+            continue
+        m = re.match(r"^(\d+)\.", fn)
+        if m:
+            try:
+                numeric_files.append((int(m.group(1)), fn))
+            except Exception:
+                continue
+    if not numeric_files:
+        # Fallback: return first image sorted lexicographically
+        images = sorted(f for f in os.listdir(folder) if is_image_name(f))
+        return images[0] if images else None
+    numeric_files.sort()
+    for num, fn in numeric_files:
+        if num == 1:
+            return fn
+    return numeric_files[0][1]
+
+def find_first_image_in_archive(zip_path: str) -> str | None:
+    """Return the archive internal name of the first image using numeric-prefix logic, or None."""
+    if not os.path.isfile(zip_path):
+        return None
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = [n for n in zf.namelist() if not n.endswith("/") and is_image_name(n)]
+            if not names:
+                return None
+            numeric_files = []
+            for n in names:
+                base = os.path.basename(n)
+                m = re.match(r"^(\d+)\.", base)
+                if m:
+                    try:
+                        numeric_files.append((int(m.group(1)), n))
+                    except Exception:
+                        continue
+            if not numeric_files:
+                return sorted(names)[0]
+            numeric_files.sort()
+            for num, n in numeric_files:
+                if num == 1:
+                    return n
+            return numeric_files[0][1]
+    except Exception:
+        return None
+
+def _safe_symlink_or_copy(src: str, dest: str):
+    """Try to create a symlink; if not possible, fall back to copying the file."""
+    try:
+        if os.path.exists(dest) or os.path.islink(dest):
+            try:
+                os.unlink(dest)
+            except Exception:
+                pass
+        os.symlink(src, dest)
+        return True
+    except Exception:
+        try:
+            shutil.copy2(src, dest)
+            return True
+        except Exception:
+            return False
+
 def find_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | None, bool]:
     if not os.path.isdir(creator_folder):
         return None, None, False
@@ -901,9 +982,11 @@ def link_creator_cover(creator_folder: str, cover_source: str) -> str | None:
                 except Exception:
                     pass
         cover_link = os.path.join(creator_folder, f"cover{ext}")
-        os.symlink(cover_source, cover_link)
-        logger.info(f"Cover updated for {creator_folder}: {cover_link} -> {cover_source}")
-        return cover_link
+        ok = _safe_symlink_or_copy(cover_source, cover_link)
+        if ok:
+            logger.info(f"Cover updated for {creator_folder}: {cover_link} -> {cover_source}")
+            return cover_link
+        return None
     except Exception:
         return None
 
