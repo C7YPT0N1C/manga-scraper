@@ -14,7 +14,7 @@
       "version": "7.3.0",
       "description": "Suwayomi extension",
       "repo_url": "https://github.com/C7YPT0N1C/manga-scraper-extensions.git",
-      "installed": true,
+      "installed": false,
       "entry_point": "suwayomi__msext.py",
       "image_download_path": "/opt/suwayomi-server/local/"
     }
