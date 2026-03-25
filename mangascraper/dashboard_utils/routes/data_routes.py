@@ -1065,7 +1065,9 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 "max_page_count": None,
             },
         )
-        creator_item["favourite"] = bool(creator_item.get("favourite")) or bool(gallery_item.get("favourite"))
+        # A gallery being favourited should not automatically mark its creator as favourited.
+        # Preserve only the creator-level favourite flag (from DB or explicit creator actions).
+        creator_item["favourite"] = bool(creator_item.get("favourite"))
         creator_item["gallery_count"] += 1
         creator_item["languages"].update(gallery_item["languages"])
         creator_item["tags"].update(gallery_item["tags"])
@@ -1641,7 +1643,59 @@ def favourite_creator():
     if set_value is None:
         favourite_value = scraperapi.DB.Creator.favourite(creator_name)
     else:
+        # Set creator favourite flag
         favourite_value = scraperapi.DB.Creator.favourite(creator_name, bool(set_value))
+
+        # Propagate the creator favourite state to all known galleries for that creator.
+        try:
+            target_val = bool(set_value)
+            gallery_ids_to_update: set[int] = set()
+
+            # 1) Find matching creator IDs in Creators table (match name or display_name)
+            scraperapi.DB.init_db()
+            with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name, display_name FROM Creators")
+                creator_lower = creator_name.lower()
+                matched_creator_ids = {int(row[0]) for row in cursor.fetchall() if (str(row[1] or "").strip().lower() == creator_lower) or (str(row[2] or "").strip().lower() == creator_lower)}
+
+                # 2) From Galleries.creator_ids JSON, collect galleries referencing these creator ids
+                if matched_creator_ids:
+                    cursor.execute("SELECT id, creator_ids FROM Galleries")
+                    for gid, creator_ids_json in cursor.fetchall():
+                        try:
+                            gids = _parse_json_int_list(creator_ids_json)
+                        except Exception:
+                            gids = []
+                        if any(int(cid) in matched_creator_ids for cid in gids):
+                            try:
+                                gallery_ids_to_update.add(int(gid))
+                            except Exception:
+                                continue
+
+            # 3) Additionally, scan GalleryLocations to find any gallery_ids mapped from filesystem locations for this creator
+            for row in scraperapi.DB.list_gallery_locations():
+                gid = row.get("gallery_id")
+                dpath = row.get("download_path")
+                if gid is None or not dpath:
+                    continue
+                found_creator, _ = _creator_and_gallery_from_location(row.get("root_path") or "", dpath)
+                if str(found_creator or "").strip().lower() == creator_name.lower():
+                    try:
+                        gallery_ids_to_update.add(int(gid))
+                    except Exception:
+                        continue
+
+            # 4) Apply favourite change to each gallery id found
+            for gid in sorted(gallery_ids_to_update):
+                try:
+                    scraperapi.DB.Gallery.favourite(gid, target_val)
+                except Exception:
+                    # best-effort: ignore individual failures
+                    continue
+        except Exception:
+            # If propagation fails, do not fail the creator update request; log silently
+            pass
     return jsonify({"creator": creator_name, "favourite": int(favourite_value)})
 
 
