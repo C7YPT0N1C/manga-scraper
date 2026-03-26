@@ -47,36 +47,6 @@ class DB:
         return conn
 
     @staticmethod
-    def rows_to_dicts(cursor, rows=None) -> list[dict]:
-        """Return a list of dicts for the given cursor and optional rows.
-
-        If `rows` is not provided, `cursor.fetchall()` is used. Column names are
-        taken from `cursor.description` so callers can access row values by name
-        instead of numeric indexes.
-        """
-        if rows is None:
-            rows = cursor.fetchall()
-        col_names = [c[0] for c in (cursor.description or [])] if getattr(cursor, "description", None) else []
-        if not col_names:
-            return [dict() for _ in rows]
-        return [dict(zip(col_names, row)) for row in rows]
-
-    @staticmethod
-    def fetchall_map(cursor, key_col: str = "id", value_col: str = "name", rows=None) -> dict:
-        """Convenience helper to build a mapping from `key_col` -> `value_col` for rows on the cursor."""
-        result: dict = {}
-        for r in DB.rows_to_dicts(cursor, rows=rows):
-            k = r.get(key_col)
-            v = r.get(value_col)
-            if k is None or v is None:
-                continue
-            try:
-                result[int(k)] = str(v)
-            except Exception:
-                result[str(k)] = str(v)
-        return result
-
-    @staticmethod
     def init():
         return DB.init_db()
 

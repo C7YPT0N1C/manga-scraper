@@ -357,10 +357,8 @@ def _gallery_paths_from_galleries_table(gallery_id: int) -> dict:
             cursor.execute("SELECT download_path, cover_path FROM Galleries WHERE id=?", (int(gallery_id),))
             row = cursor.fetchone()
             if row:
-                col_names = [c[0] for c in cursor.description]
-                row_map = dict(zip(col_names, row))
-                download_path = str(row_map.get("download_path") or "").strip()
-                cover_path = str(row_map.get("cover_path") or "").strip()
+                download_path = str(row[0] or "").strip()
+                cover_path = str(row[1] or "").strip()
     except Exception:
         pass
     return {"download_path": download_path, "cover_path": cover_path}
@@ -497,11 +495,9 @@ def _table_filter_options() -> dict:
     with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM Languages WHERE name IS NOT NULL AND TRIM(name) != ''")
-        _rows = scraperapi.DB.rows_to_dicts(cursor)
-        languages = sorted({str(r.get("name")).strip() for r in _rows if r.get("name")}, key=str.lower)
+        languages = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
         cursor.execute("SELECT name FROM Tags WHERE name IS NOT NULL AND TRIM(name) != ''")
-        _rows = scraperapi.DB.rows_to_dicts(cursor)
-        tags = sorted({str(r.get("name")).strip() for r in _rows if r.get("name")}, key=str.lower)
+        tags = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
     return {"languages": languages, "tags": tags}
 
 
@@ -516,13 +512,13 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
         cursor = conn.cursor()
 
         cursor.execute("SELECT id, name FROM Tags")
-        tag_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        tag_name_map = {int(tag_id): str(name) for tag_id, name in cursor.fetchall() if tag_id is not None and name}
 
         cursor.execute("SELECT id, name FROM Languages")
-        language_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
 
         cursor.execute("SELECT id, name FROM Parodies")
-        parody_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        parody_name_map = {int(parody_id): str(name) for parody_id, name in cursor.fetchall() if parody_id is not None and name}
 
         placeholders = ",".join("?" for _ in ids)
         cursor.execute(
@@ -535,34 +531,24 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
         )
 
         result = {}
-        col_names = [c[0] for c in cursor.description]
         for row in cursor.fetchall():
-            row_map = dict(zip(col_names, row))
-            try:
-                gid = int(row_map.get("id"))
-            except Exception:
-                continue
-            clean_title = str(row_map.get("clean_title") or "").strip()
-            raw_title = str(row_map.get("raw_title") or "").strip()
-            tag_ids = _parse_json_int_list(row_map.get("tag_ids"))
-            language_ids = _parse_json_int_list(row_map.get("language_ids"))
-            parody_ids = _parse_json_int_list(row_map.get("parody_ids"))
-            page_count = int(row_map.get("num_pages")) if row_map.get("num_pages") is not None else 0
-            status = str(row_map.get("status") or "")
-            favourite = bool(row_map.get("favourite"))
-            rating = float(row_map.get("rating")) if row_map.get("rating") is not None else None
-
+            gid = int(row[0])
+            clean_title = str(row[1] or "").strip()
+            raw_title = str(row[2] or "").strip()
+            tag_ids = _parse_json_int_list(row[4])
+            language_ids = _parse_json_int_list(row[5])
+            parody_ids = _parse_json_int_list(row[6])
             result[gid] = {
                 "title": clean_title or raw_title or f"Gallery {gid}",
                 "clean_title": clean_title,
                 "raw_title": raw_title,
-                "page_count": page_count,
+                "page_count": int(row[3]) if row[3] is not None else 0,
                 "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                 "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
                 "parodies": [parody_name_map[parody_id] for parody_id in parody_ids if parody_id in parody_name_map],
-                "status": status,
-                "favourite": favourite,
-                "rating": rating,
+                "status": str(row[6] or ""),
+                "favourite": bool(row[7]),
+                "rating": float(row[8]) if row[8] is not None else None,
             }
         return result
 
@@ -623,13 +609,13 @@ def _apply_creator_db_meta(items: list[dict]) -> list[dict]:
         cursor = conn.cursor()
 
         cursor.execute("SELECT id, name FROM Tags")
-        tag_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        tag_name_map = {int(tag_id): str(name) for tag_id, name in cursor.fetchall() if tag_id is not None and name}
 
         cursor.execute("SELECT id, name FROM Languages")
-        language_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
 
         cursor.execute("SELECT id, name, display_name, most_popular_tags, favourite FROM Creators")
-        creator_rows = scraperapi.DB.rows_to_dicts(cursor)
+        creator_rows = cursor.fetchall()
 
         creator_match: dict[str, dict] = {}
         creator_ids: set[int] = set()
@@ -641,9 +627,9 @@ def _apply_creator_db_meta(items: list[dict]) -> list[dict]:
             creator_name_lower = creator_name.lower()
             matched = None
             for row in creator_rows:
-                creator_id = int(row.get("id")) if row.get("id") is not None else None
-                raw_name = str(row.get("name") or "").strip()
-                display_name = str(row.get("display_name") or "").strip()
+                creator_id = int(row[0])
+                raw_name = str(row[1] or "").strip()
+                display_name = str(row[2] or "").strip()
 
                 if display_name and display_name.lower() == creator_name_lower:
                     matched = row
@@ -651,7 +637,7 @@ def _apply_creator_db_meta(items: list[dict]) -> list[dict]:
 
             if matched is None:
                 for row in creator_rows:
-                    raw_name = str(row.get("name") or "").strip()
+                    raw_name = str(row[1] or "").strip()
                     if raw_name and raw_name.lower() == creator_name_lower:
                         matched = row
                         break
@@ -659,22 +645,22 @@ def _apply_creator_db_meta(items: list[dict]) -> list[dict]:
             if matched is None:
                 continue
 
-            creator_id = int(matched.get("id")) if matched.get("id") is not None else None
+            creator_id = int(matched[0])
             creator_match[creator_name] = {
                 "creator_id": creator_id,
-                "most_popular_tags": _parse_json_int_list(matched.get("most_popular_tags")),
-                "favourite": bool(matched.get("favourite")),
+                "most_popular_tags": _parse_json_int_list(matched[3]),
+                "favourite": bool(matched[4]),
             }
             creator_ids.add(creator_id)
 
         creator_languages: dict[int, set[str]] = {creator_id: set() for creator_id in creator_ids}
         if creator_ids:
             cursor.execute("SELECT creator_ids, language_ids FROM Galleries")
-            for r in scraperapi.DB.rows_to_dicts(cursor):
-                gallery_creator_ids = set(_parse_json_int_list(r.get("creator_ids")))
+            for row in cursor.fetchall():
+                gallery_creator_ids = set(_parse_json_int_list(row[0]))
                 if not gallery_creator_ids:
                     continue
-                gallery_language_ids = _parse_json_int_list(r.get("language_ids"))
+                gallery_language_ids = _parse_json_int_list(row[1])
                 gallery_languages = {language_name_map[language_id] for language_id in gallery_language_ids if language_id in language_name_map}
                 for creator_id in gallery_creator_ids.intersection(creator_ids):
                     creator_languages.setdefault(int(creator_id), set()).update(gallery_languages)
@@ -849,7 +835,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
 
         cursor.execute(
             """
-            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, parody_ids, status, favourite, rating, creator_ids
+            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating, creator_ids
             FROM Galleries
             WHERE id = ?
             """,
@@ -859,32 +845,28 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         if not row:
             return meta
 
-        col_names = [c[0] for c in cursor.description]
-        row_map = dict(zip(col_names, row))
-        tag_ids = _parse_json_int_list(row_map.get("tag_ids"))
-        language_ids = _parse_json_int_list(row_map.get("language_ids"))
-        parody_ids = _parse_json_int_list(row_map.get("parody_ids"))
-        creator_ids = _parse_json_int_list(row_map.get("creator_ids"))
+        tag_ids = _parse_json_int_list(row[3])
+        language_ids = _parse_json_int_list(row[4])
+        creator_ids = _parse_json_int_list(row[8])
 
         cursor.execute("SELECT id, name, display_name FROM Creators")
         creator_name_map = {}
-        for r in scraperapi.DB.rows_to_dicts(cursor):
-            creator_id = r.get("id")
+        for creator_id, name, display_name in cursor.fetchall():
             if creator_id is None:
                 continue
-            label = str(r.get("display_name") or r.get("name") or "").strip()
+            label = str(display_name or name or "").strip()
             if label:
                 creator_name_map[int(creator_id)] = label
 
-        meta["title"] = _display_gallery_name(str(row_map.get("clean_title") or row_map.get("raw_title") or ""))
-        meta["page_count"] = int(row_map.get("num_pages")) if row_map.get("num_pages") is not None else 0
+        meta["title"] = _display_gallery_name(str(row[0] or row[1] or ""))
+        meta["page_count"] = int(row[2]) if row[2] is not None else 0
         meta["creators"] = [creator_name_map[cid] for cid in creator_ids if cid in creator_name_map]
         meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
         meta["languages"] = [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map]
         meta["parodies"] = [parody_name_map[parody_id] for parody_id in (parody_ids or []) if parody_id in parody_name_map]
-        meta["status"] = str(row_map.get("status") or "")
-        meta["favourite"] = bool(row_map.get("favourite"))
-        meta["rating"] = float(row_map.get("rating")) if row_map.get("rating") is not None else None
+        meta["status"] = str(row[5] or "")
+        meta["favourite"] = bool(row[6])
+        meta["rating"] = float(row[7]) if row[7] is not None else None
 
     return meta
 
@@ -897,10 +879,10 @@ def _build_gallery_lookup_by_creator_and_title(
     """Build fallback lookup for gallery metadata by (creator, title)."""
     creator_names_by_id: dict[int, set[str]] = {}
     cursor.execute("SELECT id, name, display_name FROM Creators")
-    for r in scraperapi.DB.rows_to_dicts(cursor):
-        cid = int(r.get("id"))
+    for creator_id, name, display_name in cursor.fetchall():
+        cid = int(creator_id)
         names = set()
-        for raw in (r.get("name"), r.get("display_name")):
+        for raw in (name, display_name):
             text = str(raw or "").strip().lower()
             if text:
                 names.add(text)
@@ -914,13 +896,13 @@ def _build_gallery_lookup_by_creator_and_title(
         FROM Galleries
         """
     )
-    for r in scraperapi.DB.rows_to_dicts(cursor):
-        gallery_id = int(r.get("id"))
-        clean_title = str(r.get("clean_title") or "").strip()
-        raw_title = str(r.get("raw_title") or "").strip()
-        tag_ids = _parse_json_int_list(r.get("tag_ids"))
-        language_ids = _parse_json_int_list(r.get("language_ids"))
-        creator_ids = _parse_json_int_list(r.get("creator_ids"))
+    for row in cursor.fetchall():
+        gallery_id = int(row[0])
+        clean_title = str(row[1] or "").strip()
+        raw_title = str(row[2] or "").strip()
+        tag_ids = _parse_json_int_list(row[4])
+        language_ids = _parse_json_int_list(row[5])
+        creator_ids = _parse_json_int_list(row[9])
 
         creator_names: set[str] = set()
         for creator_id in creator_ids:
@@ -944,12 +926,12 @@ def _build_gallery_lookup_by_creator_and_title(
             "gallery_id": gallery_id,
             "clean_title": clean_title,
             "raw_title": raw_title,
-            "num_pages": int(r.get("num_pages")) if r.get("num_pages") is not None else None,
+            "num_pages": int(row[3]) if row[3] is not None else None,
             "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
             "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
-            "status": str(r.get("status") or ""),
-            "favourite": bool(r.get("favourite")),
-            "rating": float(r.get("rating")) if r.get("rating") is not None else None,
+            "status": str(row[6] or ""),
+            "favourite": bool(row[7]),
+            "rating": float(row[8]) if row[8] is not None else None,
         }
 
         for creator_name in creator_names:
@@ -1002,23 +984,19 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
         cursor = conn.cursor()
 
         cursor.execute("PRAGMA table_info(Creators)")
-        _cols = scraperapi.DB.rows_to_dicts(cursor)
-        creator_columns = {str(r.get( "name") or "") for r in _cols}
+        creator_columns = {str(row[1] or "") for row in cursor.fetchall()}
         if "favourite" in creator_columns:
             cursor.execute("SELECT name, display_name, favourite FROM Creators")
-            for r in scraperapi.DB.rows_to_dicts(cursor):
-                name = r.get("name")
-                display_name = r.get("display_name")
-                favourite = r.get("favourite")
+            for name, display_name, favourite in cursor.fetchall():
                 for key in (str(name or "").strip().lower(), str(display_name or "").strip().lower()):
                     if key:
                         creator_favourite_map[key] = bool(favourite)
 
         cursor.execute("SELECT id, name FROM Tags")
-        tag_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        tag_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
 
         cursor.execute("SELECT id, name FROM Languages")
-        language_name_map = scraperapi.DB.fetchall_map(cursor, key_col="id", value_col="name")
+        language_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
 
         if gallery_ids:
             placeholders = ",".join("?" for _ in gallery_ids)
@@ -1030,20 +1008,20 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 """,
                 tuple(sorted(gallery_ids)),
             )
-            for r in scraperapi.DB.rows_to_dicts(cursor):
-                gallery_id = int(r.get("id"))
-                tag_ids = _parse_json_int_list(r.get("tag_ids"))
-                language_ids = _parse_json_int_list(r.get("language_ids"))
+            for row in cursor.fetchall():
+                gallery_id = int(row[0])
+                tag_ids = _parse_json_int_list(row[4])
+                language_ids = _parse_json_int_list(row[5])
                 gallery_meta[gallery_id] = {
                     "gallery_id": gallery_id,
-                    "clean_title": str(r.get("clean_title") or ""),
-                    "raw_title": str(r.get("raw_title") or ""),
-                    "num_pages": int(r.get("num_pages")) if r.get("num_pages") is not None else None,
+                    "clean_title": str(row[1] or ""),
+                    "raw_title": str(row[2] or ""),
+                    "num_pages": int(row[3]) if row[3] is not None else None,
                     "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                     "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
-                    "status": str(r.get("status") or ""),
-                    "favourite": bool(r.get("favourite")),
-                    "rating": float(r.get("rating")) if r.get("rating") is not None else None,
+                    "status": str(row[6] or ""),
+                    "favourite": bool(row[7]),
+                    "rating": float(row[8]) if row[8] is not None else None,
                 }
 
         gallery_lookup = _build_gallery_lookup_by_creator_and_title(cursor, tag_name_map, language_name_map)
@@ -1687,21 +1665,12 @@ def favourite_creator():
                 cursor = conn.cursor()
                 cursor.execute("SELECT id, name, display_name FROM Creators")
                 creator_lower = creator_name.lower()
-                matched_creator_ids = set()
-                for r in scraperapi.DB.rows_to_dicts(cursor):
-                    try:
-                        rid = int(r.get("id"))
-                    except Exception:
-                        continue
-                    if (str(r.get("name") or "").strip().lower() == creator_lower) or (str(r.get("display_name") or "").strip().lower() == creator_lower):
-                        matched_creator_ids.add(rid)
+                matched_creator_ids = {int(row[0]) for row in cursor.fetchall() if (str(row[1] or "").strip().lower() == creator_lower) or (str(row[2] or "").strip().lower() == creator_lower)}
 
                 # 2) From Galleries.creator_ids JSON, collect galleries referencing these creator ids
                 if matched_creator_ids:
                     cursor.execute("SELECT id, creator_ids FROM Galleries")
-                    for r in scraperapi.DB.rows_to_dicts(cursor):
-                        gid = r.get("id")
-                        creator_ids_json = r.get("creator_ids")
+                    for gid, creator_ids_json in cursor.fetchall():
                         try:
                             gids = _parse_json_int_list(creator_ids_json)
                         except Exception:

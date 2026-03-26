@@ -178,28 +178,11 @@ def _status_counts() -> dict:
         "skipped": 0,
     }
 
-    # Be defensive about the row shape: DB implementations may return tuples, lists, or dicts.
-    valid_statuses = set(k for k in counts.keys() if k != "total")
     for row in rows:
-        status = ""
-        try:
-            if isinstance(row, dict):
-                status = str(row.get("status") or "").lower()
-            elif isinstance(row, (list, tuple)):
-                # Try to find a status-like element in the tuple to avoid positional index issues.
-                for elem in row:
-                    try:
-                        if isinstance(elem, str) and elem.lower() in valid_statuses:
-                            status = elem.lower()
-                            break
-                    except Exception:
-                        continue
-                # If nothing matched, prefer to leave status empty rather than
-                # rely on positional indexes which can shift when SELECT columns change.
-        except Exception:
-            status = ""
-
-        if status in valid_statuses:
+        if not isinstance(row, (list, tuple)) or len(row) < 2:
+            continue
+        status = str(row[1] or "").lower()
+        if status in counts:
             counts[status] += 1
 
     return counts
