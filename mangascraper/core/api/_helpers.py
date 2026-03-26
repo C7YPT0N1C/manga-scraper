@@ -16,7 +16,7 @@ from mangascraper.core.api._constants import (
     DOWNLOAD_ROOT_MARKER_FILE,
 )
 
-# These are imported for use inside Helpers.sanitise — they live in orchestrator
+# These are imported for use inside Helpers.sanitise() — they live in orchestrator
 from mangascraper.core.orchestrator import (
     ALLOWED_SYMBOLS,
     BROKEN_SYMBOL_REPLACEMENTS,

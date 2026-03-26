@@ -92,7 +92,51 @@ class Build:
         raise ValueError(f"Unknown query format: {query_type}='{query_value}'")
 
     @staticmethod
-    def estimate_gallery_size(meta: dict, use_head_requests: bool = False) -> tuple:
+    def cache_key(search_type: str, search_value: str = None) -> str:
+        """Generate cache key based on search criteria."""
+        search_type = str(search_type or "")
+        if search_value is not None:
+            search_value = str(search_value)
+
+        if search_value:
+            sv = search_value.strip()
+            # If modifiers are appended with '+', separate them and only sort the main query tokens.
+            if '+' in sv:
+                main_part, modifiers = sv.split('+', 1)
+                modifiers = modifiers.strip()
+            else:
+                main_part, modifiers = sv, None
+
+            # Sort tokens in the main part (preserve existing numeric-sort behaviour).
+            main_terms = [t for t in (main_part or "").lower().split() if t]
+            if len(main_terms) > 1:
+                main_terms = sorted(main_terms, key=lambda x: (x.isdigit(), x))
+            # Join main tokens with underscores and sanitise main (no spaces).
+            sorted_main = "_".join(main_terms)
+
+            # sanitise main and modifiers separately. Main: allow alnum, '-', '_'.
+            safe_main = "".join(c for c in sorted_main if c.isalnum() or c in ('-', '_')).lower()
+
+            safe_mod = None
+            if modifiers:
+                # Normalise whitespace inside modifiers to underscores and allow common modifier chars.
+                mod_norm = "_".join(p for p in re.split(r"\s+", modifiers) if p)
+                safe_mod = "".join(c for c in mod_norm if c.isalnum() or c in ('-', '_', '.')).lower()
+
+            # Build final value: main first (sorted), then '+' and modifiers if present.
+            if safe_main and safe_mod:
+                final_value = f"{safe_main}+{safe_mod}"
+            elif safe_main:
+                final_value = safe_main
+            else:
+                final_value = safe_mod or ""
+
+            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{final_value}'")
+            return f"{search_type}:{final_value}"
+        return search_type
+
+    @staticmethod
+    def gallery_size_estimate(meta: dict, use_head_requests: bool = False) -> tuple:
         orchestrator.refresh_globals()
 
         pages = meta.get("images", {}).get("pages", [])
@@ -135,47 +179,3 @@ class Build:
             actual_total = estimated_total
 
         return estimated_total, actual_total, image_count
-
-    @staticmethod
-    def cache_keys(search_type: str, search_value: str = None) -> str:
-        """Generate cache key based on search criteria."""
-        search_type = str(search_type or "")
-        if search_value is not None:
-            search_value = str(search_value)
-
-        if search_value:
-            sv = search_value.strip()
-            # If modifiers are appended with '+', separate them and only sort the main query tokens.
-            if '+' in sv:
-                main_part, modifiers = sv.split('+', 1)
-                modifiers = modifiers.strip()
-            else:
-                main_part, modifiers = sv, None
-
-            # Sort tokens in the main part (preserve existing numeric-sort behaviour).
-            main_terms = [t for t in (main_part or "").lower().split() if t]
-            if len(main_terms) > 1:
-                main_terms = sorted(main_terms, key=lambda x: (x.isdigit(), x))
-            # Join main tokens with underscores and sanitise main (no spaces).
-            sorted_main = "_".join(main_terms)
-
-            # sanitise main and modifiers separately. Main: allow alnum, '-', '_'.
-            safe_main = "".join(c for c in sorted_main if c.isalnum() or c in ('-', '_')).lower()
-
-            safe_mod = None
-            if modifiers:
-                # Normalise whitespace inside modifiers to underscores and allow common modifier chars.
-                mod_norm = "_".join(p for p in re.split(r"\s+", modifiers) if p)
-                safe_mod = "".join(c for c in mod_norm if c.isalnum() or c in ('-', '_', '.')).lower()
-
-            # Build final value: main first (sorted), then '+' and modifiers if present.
-            if safe_main and safe_mod:
-                final_value = f"{safe_main}+{safe_mod}"
-            elif safe_main:
-                final_value = safe_main
-            else:
-                final_value = safe_mod or ""
-
-            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{final_value}'")
-            return f"{search_type}:{final_value}"
-        return search_type

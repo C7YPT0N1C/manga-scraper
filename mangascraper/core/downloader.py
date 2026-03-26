@@ -287,7 +287,7 @@ def pre_download_checks(gallery_ids: list) -> tuple:
         try:
             meta = scraperapi.Fetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
-                estimated_size, _, _ = scraperapi.Build.estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, _ = scraperapi.Build.gallery_size_estimate(meta, use_head_requests=False)
                 gallery_sizes.append((gallery_id, estimated_size))
                 download_estimated += estimated_size
         except Exception as e:
@@ -783,7 +783,7 @@ def process_galleries(batch_ids):
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
-                estimated_size, _, img_count = scraperapi.Build.estimate_gallery_size(meta, use_head_requests=False)
+                estimated_size, _, img_count = scraperapi.Build.gallery_size_estimate(meta, use_head_requests=False)
                 space_monitor["total_estimated_bytes"] += estimated_size * 2 # keep this here i think
                 
                 time.sleep(scraperapi.Sleep.dynamic("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.

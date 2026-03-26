@@ -25,14 +25,14 @@ from mangascraper.core.api._helpers import (
 class Cache:
 
     @staticmethod
-    def cache_keys(search_type: str, search_value: str = None) -> str:
+    def cache_key(search_type: str, search_value: str = None) -> str:
         """
         Generate cache key based on search criteria.
-        Alias for Build.cache_keys().
+        Alias for Build.cache_key().
         """
         # Lazy import to avoid circular: Build imports Cache
         from mangascraper.core.api._build import Build
-        return Build.cache_keys(search_type, search_value)
+        return Build.cache_key(search_type, search_value)
 
     @staticmethod
     def split_key(cache_key):

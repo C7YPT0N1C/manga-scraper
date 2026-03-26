@@ -770,10 +770,10 @@ class DB:
             return result
 
         @staticmethod
-        def select_table(table_name: str, cols: list | None = None, where: str | None = None, params: tuple | None = None, limit: int | None = None) -> list[dict]:
+        def fetch_rows_as_dicts(table_name: str, columns: list | None = None, where: str | None = None, params: tuple | None = None, limit: int | None = None) -> list[dict]:
             """Select rows from a table and return a list of dicts keyed by column name.
 
-            - `cols` defaults to `None` meaning `*` (all columns).
+            - `columns` defaults to `None` meaning `*` (all columns).
             - `where` may include placeholders (`?`) and `params` will be bound.
             - `limit` can restrict returned rows.
 
@@ -783,8 +783,8 @@ class DB:
 
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
-                cols_sql = ", ".join(cols) if cols else "*"
-                sql = f"SELECT {cols_sql} FROM {table_name}"
+                columns_sql = ", ".join(columns) if columns else "*"
+                sql = f"SELECT {columns_sql} FROM {table_name}"
                 if where:
                     sql += " WHERE " + where
                 if limit and isinstance(limit, int) and limit > 0:

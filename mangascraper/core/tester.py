@@ -699,7 +699,7 @@ def main() -> bool:
 
             # D.1) multi-word value → tokens sorted alphabetically
             try:
-                key = scraperapi.Cache.cache_keys("artist", "John Doe")
+                key = scraperapi.Cache.cache_key("artist", "John Doe")
                 ok = key == "artist:doe_john"
                 _report("Get.cache_keys multi-word → sorted tokens", ok, f"key={key}")
             except Exception as e:
@@ -707,7 +707,7 @@ def main() -> bool:
 
             # D.2) single-word value → type:value
             try:
-                key = scraperapi.Cache.cache_keys("tag", "schoolgirl")
+                key = scraperapi.Cache.cache_key("tag", "schoolgirl")
                 ok = key == "tag:schoolgirl"
                 _report("Get.cache_keys single-word", ok, f"key={key}")
             except Exception as e:
@@ -715,7 +715,7 @@ def main() -> bool:
 
             # D.3) no value → type only
             try:
-                key = scraperapi.Cache.cache_keys("homepage")
+                key = scraperapi.Cache.cache_key("homepage")
                 ok = key == "homepage"
                 _report("Get.cache_keys no value → type only", ok, f"key={key}")
             except Exception as e:
@@ -723,7 +723,7 @@ def main() -> bool:
 
             # D.4) multi-word with modifiers → main tokens sorted and joined with underscores, modifiers appended
             try:
-                key = scraperapi.Cache.cache_keys("artist", "anon 2-okunen +date 1-20")
+                key = scraperapi.Cache.cache_key("artist", "anon 2-okunen +date 1-20")
                 ok = key == "artist:2-okunen_anon+date_1-20"
                 _report("Get.cache_keys multi-word with modifiers", ok, f"key={key}")
             except Exception as e:
@@ -731,7 +731,7 @@ def main() -> bool:
 
             # D.5) modifiers with extra spaces normalise correctly
             try:
-                key = scraperapi.Cache.cache_keys("artist", "Anon 2-okunen + date 1-20")
+                key = scraperapi.Cache.cache_key("artist", "Anon 2-okunen + date 1-20")
                 ok = key == "artist:2-okunen_anon+date_1-20"
                 _report("Get.cache_keys modifiers with spaces normalise", ok, f"key={key}")
             except Exception as e:
@@ -996,7 +996,7 @@ def main() -> bool:
                     "media_id": "999999",
                     "images": {"pages": [{"t": "j"}, {"t": "p"}, {"t": "w"}, {"t": "g"}]},
                 }
-                est, actual, count = scraperapi.Build.estimate_gallery_size(_meta_pages, use_head_requests=False)
+                est, actual, count = scraperapi.Build.gallery_size_estimate(_meta_pages, use_head_requests=False)
                 ok = isinstance(est, int) and est > 0 and count == 4
                 _report("estimate_gallery_size with typed pages", ok, f"est={est} count={count}")
             except Exception as e:
@@ -1004,7 +1004,7 @@ def main() -> bool:
 
             # L.2) empty meta → (0, 0, 0)
             try:
-                est, actual, count = scraperapi.Build.estimate_gallery_size({}, use_head_requests=False)
+                est, actual, count = scraperapi.Build.gallery_size_estimate({}, use_head_requests=False)
                 ok = est == 0 and actual == 0 and count == 0
                 _report("estimate_gallery_size empty meta → (0, 0, 0)", ok, f"result=({est},{actual},{count})")
             except Exception as e:

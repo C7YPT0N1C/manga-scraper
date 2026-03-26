@@ -98,7 +98,7 @@ class Fetch:
         else:
             cache_target = cache_modifier
 
-        cache_key = Cache.cache_keys(query_type, cache_target)
+        cache_key = Cache.cache_key(query_type, cache_target)
 
         def _normalise_target_text(value) -> str:
             return Helpers.safe_text(value, "").strip().lower()
