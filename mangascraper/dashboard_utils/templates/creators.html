@@ -90,6 +90,7 @@
 				<div class="detail-modal-main">
 					<p><strong>ID:</strong> <span id="galleryDetailId">Unknown</span></p>
 					<p><strong>Creators:</strong> <span id="galleryDetailCreators">Unknown</span></p>
+					<p><strong>Parodies:</strong> <span id="galleryDetailParodies">None</span></p>
 					<p><strong>Tags:</strong> <span id="galleryDetailTags">None</span></p>
 					<p><strong>Languages:</strong> <span id="galleryDetailLanguages">Unknown</span></p>
 					<p><strong>Pages:</strong> <span id="galleryDetailPages">0</span></p>
@@ -464,6 +465,7 @@ function _renderGalleryDetail(gallery) {
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
 	const tagList = normaliseList(gallery.tags);
+	const parodyList = normaliseList(gallery.parodies);
 	const creatorList = normaliseList(gallery.creators);
 	const galleryId = Number(gallery.gallery_id || 0);
 	let coverUrl = '';
@@ -476,6 +478,7 @@ function _renderGalleryDetail(gallery) {
 	document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || title);
 	document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
 	document.getElementById('galleryDetailCreators').textContent = creatorList.length ? creatorList.join(', ') : 'Unknown';
+	document.getElementById('galleryDetailParodies').textContent = parodyList.length ? parodyList.join(', ') : 'None';
 	document.getElementById('galleryDetailTags').textContent = tagList.length ? tagList.join(', ') : 'None';
 	document.getElementById('galleryDetailLanguages').textContent = languageList.length ? languageList.join(', ') : 'Unknown';
 	document.getElementById('galleryDetailPages').textContent = String(pageCount);
