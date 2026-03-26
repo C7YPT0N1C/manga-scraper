@@ -169,7 +169,12 @@ def _normalise_cli_args(payload) -> list[str]:
 
 
 def _status_counts() -> dict:
-    rows = scraperapi.DB.Gallery.list()
+    # Read rows as dicts to avoid positional-index brittleness.
+    try:
+        rows = scraperapi.DB.select_table("Galleries", cols=["id", "status", "started_at", "completed_at"]) or []
+    except Exception:
+        rows = []
+
     counts = {
         "total": len(rows),
         "started": 0,
@@ -179,9 +184,9 @@ def _status_counts() -> dict:
     }
 
     for row in rows:
-        if not isinstance(row, (list, tuple)) or len(row) < 2:
+        if not isinstance(row, dict):
             continue
-        status = str(row[1] or "").lower()
+        status = str(row.get("status") or "").strip().lower()
         if status in counts:
             counts[status] += 1
 

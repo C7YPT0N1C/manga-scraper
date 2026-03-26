@@ -777,6 +777,29 @@ class DB:
                 result.append((gid, Helpers.safe_text(row[1], ""), Helpers.safe_text(row[2], ""), Helpers.safe_text(row[3], "")))
             return result
 
+        @staticmethod
+        def select_table(table_name: str, cols: list | None = None, where: str | None = None, params: tuple | None = None, limit: int | None = None) -> list[dict]:
+            """Select rows from a table and return a list of dicts keyed by column name.
+
+            - `cols` defaults to `None` meaning `*` (all columns).
+            - `where` may include placeholders (`?`) and `params` will be bound.
+            - `limit` can restrict returned rows.
+
+            This helper takes the DB lock and creates its own connection so callers
+            don't need to manage cursors or concern themselves with column ordering.
+            """
+
+            with db_lock, DB.dbconnect() as conn:
+                cursor = conn.cursor()
+                cols_sql = ", ".join(cols) if cols else "*"
+                sql = f"SELECT {cols_sql} FROM {table_name}"
+                if where:
+                    sql += " WHERE " + where
+                if limit and isinstance(limit, int) and limit > 0:
+                    sql += " LIMIT " + str(int(limit))
+                cursor.execute(sql, params or ())
+                return DB.rows_to_dicts(cursor)
+
     @staticmethod
     def remove_gallery_from_database(gallery_id: int) -> dict:
         DB.init_db()
