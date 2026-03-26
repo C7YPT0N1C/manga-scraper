@@ -184,45 +184,112 @@ function normaliseText(value) {
 
 function stripGalleryId(title) {
     return String(title || '').replace(/^\(\d+\)\s*/, '').trim();
-}
 
-function getDisplayTitleForItem(item, itemType) {
-	if (item && typeof item === 'object' && item.clean_title) return String(item.clean_title);
-	const raw = typeof item === 'string' ? item : (item.label || item.name || '');
-	if (itemType === 'gallery') return stripGalleryId(raw); // TODO: Why does stripGalleryId(raw) have to be used instead of clean_title from the db?
-	return raw;
-}
+	// 1) Apply dropdown/select filters first (language, parody, tag)
+	items = items.filter(item => {
+		const languages = normaliseList(item.languages).map(normaliseText);
+		const tags = normaliseList(item.tags).map(normaliseText);
+		const parodies = normaliseList(item.parodies).map(normaliseText);
 
-function normaliseList(values) {
-	return Array.isArray(values) ? values.map(item => String(item || '').trim()).filter(Boolean) : [];
-}
+		if (_activeFilters.language && !languages.includes(normaliseText(_activeFilters.language))) {
+			return false;
+		}
+		if (_activeFilters.parody && !parodies.includes(normaliseText(_activeFilters.parody))) {
+			return false;
+		}
+		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
+			return false;
+		}
+		return true;
+	});
 
-function itemLabel(item) {
-	return typeof item === 'string' ? item : (item.label || item.name || 'Unknown');
-}
+	// 2) Apply free-text query (if present). Support either the simple field:term parser or
+	//    a tokenised list (future/legacy). This preserves existing behaviour while allowing
+	//    the dropdowns to take precedence.
+	if (_searchTerm) {
+		const parsed = parseSearchQuery(_searchTerm);
+		// If parseSearchQuery returns an array of tokens (include/exclude order), apply them in order.
+		if (Array.isArray(parsed)) {
+			parsed.forEach(token => {
+				if (!token || !token.term) return;
+				const term = String(token.term).toLowerCase();
+				if (token.exclude) {
+					items = items.filter(item => {
+						const hay = ([itemLabel(item)].concat(normaliseList(item.languages), normaliseList(item.parodies), normaliseList(item.tags))).join(' ').toLowerCase();
+						return !hay.includes(term);
+					});
+				} else {
+					items = items.filter(item => {
+						const hay = ([itemLabel(item)].concat(normaliseList(item.languages), normaliseList(item.parodies), normaliseList(item.tags))).join(' ').toLowerCase();
+						return hay.includes(term);
+					});
+				}
+			});
+		} else {
+			items = items.filter(item => {
+				const languages = normaliseList(item.languages).map(normaliseText);
+				const tags = normaliseList(item.tags).map(normaliseText);
+				const parodies = normaliseList(item.parodies).map(normaliseText);
+				const creators = normaliseList(item.creators).map(normaliseText);
+				const label = itemLabel(item).toLowerCase();
+				const searchableParts = [itemLabel(item)];
+				if (typeof item !== 'string') {
+					searchableParts.push(...normaliseList(item.languages));
+					searchableParts.push(...normaliseList(item.parodies));
+					searchableParts.push(...normaliseList(item.tags));
+					const status = String(item.status || '').trim();
+					if (status) searchableParts.push(status);
+				}
+				if (!parsed.term) {
+					return true;
+				}
+				if (parsed.field === 'artist' || parsed.field === 'group' || parsed.field === 'creator') {
+					return label.includes(parsed.term) || creators.some(value => value.includes(parsed.term));
+				}
+				if (parsed.field === 'tag' || parsed.field === 'character') {
+					return tags.some(value => value.includes(parsed.term));
+				}
+				if (parsed.field === 'parody') {
+					return parodies.some(value => value.includes(parsed.term));
+				}
+				if (parsed.field === 'language' || parsed.field === 'lang') {
+					return languages.some(value => value.includes(parsed.term));
+				}
+				return searchableParts.join(' ').toLowerCase().includes(parsed.term);
+			});
+		}
+	}
 
-function itemPathName(item) {
-	return typeof item === 'string' ? item : (item.path_name || item.name || item.label || '');
-}
+	// 3) Apply "downloaded" filter last if present. Interpret "downloaded" as having
+	//    a non-empty `download_path` or status === 'completed'. Value expected truthy to filter only downloaded.
+	if (_activeFilters.downloaded) {
+		items = items.filter(item => {
+			try {
+				const hasPath = Boolean(item.download_path || item.downloadPath || item.download || '');
+				const isCompleted = String(item.status || '').toLowerCase() === 'completed';
+				return hasPath || isCompleted;
+			} catch (e) { return false; }
+		});
+	}
 
-function creatorSlug(name) {
-	return encodeURIComponent(String(name || '').trim().toLowerCase());
-}
+	return items;
 
-function creatorMatchesSlug(name, slugText) {
-	return String(name || '').trim().toLowerCase() === String(slugText || '').trim().toLowerCase();
-}
+	items = items.filter(item => {
+		const languages = normaliseList(item.languages).map(normaliseText);
+		const tags = normaliseList(item.tags).map(normaliseText);
+		const parodies = normaliseList(item.parodies).map(normaliseText);
 
-function _setCreatorsUrl() {
-	window.history.pushState({}, '', '/creators/');
-}
-
-function _setCreatorUrl(creatorName) {
-	window.history.pushState({}, '', `/creators/${creatorSlug(creatorName)}`);
-}
-
-function _setCreatorGalleryUrl(creatorName, galleryId) {
-	const gid = Number(galleryId || 0);
+		if (_activeFilters.language && !languages.includes(normaliseText(_activeFilters.language))) {
+			return false;
+		}
+		if (_activeFilters.parody && !parodies.includes(normaliseText(_activeFilters.parody))) {
+			return false;
+		}
+		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
+			return false;
+		}
+		return true;
+	});
 	if (!gid) {
 		_setCreatorUrl(creatorName);
 		return;
