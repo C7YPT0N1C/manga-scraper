@@ -82,8 +82,8 @@ class DB:
                 num_pages INTEGER,
                 creator_ids TEXT,
                 language_ids TEXT,
-                tag_ids TEXT,
                 parody_ids TEXT,
+                tag_ids TEXT,
                 status TEXT,
                 started_at TEXT,
                 completed_at TEXT,
@@ -98,17 +98,17 @@ class DB:
                 root_path TEXT NOT NULL UNIQUE,
                 extension_used TEXT
             );
-            CREATE TABLE IF NOT EXISTS Tags (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE,
-                count INTEGER
-            );
             CREATE TABLE IF NOT EXISTS Languages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 count INTEGER
             );
             CREATE TABLE IF NOT EXISTS Parodies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE,
+                count INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS Tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 count INTEGER
@@ -521,7 +521,7 @@ class DB:
     def _normalise_collection_filter_type(value: str) -> str:
         text = Helpers.safe_text(value, "").strip().lower()
         allowed = {
-            "id", "language", "tag", "creator", "favourite", "status",
+            "id", "language", "parody", "tag", "creator", "favourite", "status",
             "rating_min", "rating_max", "page_min", "page_max",
         }
         return text if text in allowed else ""
@@ -617,11 +617,14 @@ class DB:
 
     @staticmethod
     def _collection_gallery_dataset(cursor) -> tuple[list[dict], dict[int, str], dict[int, str]]:
-        cursor.execute("SELECT id, name FROM Tags")
-        tag_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
-
         cursor.execute("SELECT id, name FROM Languages")
         language_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
+        
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
+        
+        cursor.execute("SELECT id, name FROM Tags")
+        tag_map = {int(row[0]): Helpers.safe_text(row[1], "") for row in cursor.fetchall() if row[0] is not None}
 
         cursor.execute("SELECT id, name, display_name FROM Creators")
         creator_name_map: dict[int, set[str]] = {}
@@ -639,7 +642,7 @@ class DB:
         cursor.execute(
             """
             SELECT id, clean_title, raw_title, status, favourite, rating, num_pages,
-                   creator_ids, tag_ids, language_ids
+                   creator_ids, language_ids, parody_ids, tag_ids
             FROM Galleries
             WHERE LOWER(COALESCE(status,'')) = 'completed'
             """
@@ -650,8 +653,9 @@ class DB:
             if gallery_id is None:
                 continue
             creator_ids = DB._parse_json_int_list(row[7])
-            tag_ids = DB._parse_json_int_list(row[8])
-            language_ids = DB._parse_json_int_list(row[9])
+            language_ids = DB._parse_json_int_list(row[8])
+            parody_ids = DB._parse_json_int_list(row[9])
+            tag_ids = DB._parse_json_int_list(row[10])
             creator_names = set()
             for creator_id in creator_ids:
                 creator_names.update(creator_name_map.get(int(creator_id), set()))
@@ -663,10 +667,11 @@ class DB:
                 "rating": Helpers.safe_float(row[5], 0.0),
                 "num_pages": Helpers.normalise_integer(row[6]) or 0,
                 "creator_names": creator_names,
-                "tag_names": {Helpers.safe_text(tag_map.get(tag_id), "").strip().lower() for tag_id in tag_ids if tag_id in tag_map},
                 "language_names": {Helpers.safe_text(language_map.get(language_id), "").strip().lower() for language_id in language_ids if language_id in language_map},
+                "parody_names": {Helpers.safe_text(parody_map.get(parody_id), "").strip().lower() for parody_id in parody_ids if parody_id in parody_map},
+                "tag_names": {Helpers.safe_text(tag_map.get(tag_id), "").strip().lower() for tag_id in tag_ids if tag_id in tag_map},
             })
-        return galleries, tag_map, language_map
+        return galleries, language_map, parody_map, tag_map
 
     @staticmethod
     def _filter_matches_gallery(filter_type: str, filter_value: str, gallery_row: dict) -> bool:
@@ -680,6 +685,8 @@ class DB:
             return gid is not None and int(gallery_row.get("id") or 0) == int(gid)
         if filter_type == "language":
             return lower_value in (gallery_row.get("language_names") or set())
+        if filter_type == "parody":
+            return lower_value in (gallery_row.get("parody_names") or set())
         if filter_type == "tag":
             return lower_value in (gallery_row.get("tag_names") or set())
         if filter_type == "creator":
@@ -1759,9 +1766,9 @@ class DB:
 
             cache = read_cached_metadata_entry(ids=[gallery_id])
             creators = {}
-            tags = {}
             languages = {}
             parodies = {}
+            tags = {}
             galleries = {}
             gallery_tags = {}
             gallery_languages = {}
@@ -1784,15 +1791,18 @@ class DB:
                     for group in meta["groups"]:
                         creator_types[group] = "group"
 
-                tag_names = meta.get("tags") or []
-                if isinstance(tag_names, str):
-                    tag_names = [tag_names]
                 language_names = meta.get("languages") or meta.get("language") or []
                 if isinstance(language_names, str):
                     language_names = [language_names]
+                
                 parody_names = meta.get("parodies") or meta.get("parody") or []
                 if isinstance(parody_names, str):
                     parody_names = [parody_names]
+                
+                tag_names = meta.get("tags") or []
+                if isinstance(tag_names, str):
+                    tag_names = [tag_names]
+                
                 # Normalise parody names and default empty values to 'original'
                 normalised_parody_names = []
                 for p in parody_names:
@@ -1805,8 +1815,6 @@ class DB:
                 for cname in creator_names:
                     ctype = creator_types.get(cname, None)
                     creators.setdefault(cname, {"display_name": cname, "creator_type": ctype, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
-                for tname in tag_names:
-                    tags.setdefault(tname, {"count": 0})
                 for lname in language_names:
                     languages.setdefault(lname, {"count": 0})
                 for pname in parody_names:
@@ -1814,6 +1822,8 @@ class DB:
                     if not pname:
                         pname = "original"
                     parodies.setdefault(pname, {"count": 0})
+                for tname in tag_names:
+                    tags.setdefault(tname, {"count": 0})
 
                 galleries[gid] = {
                     "id": gid,
@@ -1822,8 +1832,8 @@ class DB:
                     "num_pages": num_pages,
                     "creator_names": creator_names,
                     "language_names": language_names,
-                    "tag_names": tag_names,
                     "parody_names": parody_names,
+                    "tag_names": tag_names,
                     "status": Helpers.safe_text(meta.get("status"), ""),
                     "started_at": Helpers.safe_text(meta.get("started_at"), ""),
                     "completed_at": Helpers.safe_text(meta.get("completed_at"), ""),
@@ -1831,16 +1841,16 @@ class DB:
                     "cover_path": Helpers.safe_text(meta.get("cover_path"), ""),
                     "extension_used": Helpers.safe_text(meta.get("extension_used"), ""),
                 }
-                gallery_tags[gid] = tag_names
                 gallery_languages[gid] = language_names
                 gallery_parodies[gid] = parody_names
+                gallery_tags[gid] = tag_names
 
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 creator_id_map = {}
-                tag_id_map = {}
                 lang_id_map = {}
                 parody_id_map = {}
+                tag_id_map = {}
                 now = datetime.now(timezone.utc).isoformat()
 
                 for cname, cdata in creators.items():
@@ -1852,11 +1862,6 @@ class DB:
                     cursor.execute("UPDATE Creators SET creator_type=?, display_name=? WHERE name=?", (cdata["creator_type"], display_name, cname))
                     cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
                     creator_id_map[cname] = cursor.fetchone()[0]
-
-                for tname in tags:
-                    cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?)", (tname, 0))
-                    cursor.execute("SELECT id FROM Tags WHERE name=?", (tname,))
-                    tag_id_map[tname] = cursor.fetchone()[0]
 
                 for lname in languages:
                     cursor.execute("INSERT OR IGNORE INTO Languages (name, count) VALUES (?, ?)", (lname, 0))
@@ -1870,15 +1875,20 @@ class DB:
                     cursor.execute("INSERT OR IGNORE INTO Parodies (name, count) VALUES (?, ?)", (pname, 0))
                     cursor.execute("SELECT id FROM Parodies WHERE name=?", (pname,))
                     parody_id_map[pname] = cursor.fetchone()[0]
+                
+                for tname in tags:
+                    cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?)", (tname, 0))
+                    cursor.execute("SELECT id FROM Tags WHERE name=?", (tname,))
+                    tag_id_map[tname] = cursor.fetchone()[0]
 
                 for gid, gdata in galleries.items():
                     creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
-                    tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
                     language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
                     parody_ids = [parody_id_map[p] for p in gdata.get("parody_names", []) if p in parody_id_map]
+                    tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
                     cursor.execute(
-                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=?, parody_ids=? WHERE id=?",
-                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), json.dumps(parody_ids), gid),
+                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, parody_ids=?, tag_ids=? WHERE id=?",
+                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(parody_ids), json.dumps(tag_ids), gid),
                     )
 
                 for cname, cid in creator_id_map.items():
@@ -1899,17 +1909,6 @@ class DB:
                         "UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?",
                         (len(gallery_ids), json.dumps(most_popular_tag_ids), now, cid),
                     )
-
-                for tname, tid in tag_id_map.items():
-                    cursor.execute("SELECT tag_ids FROM Galleries WHERE tag_ids IS NOT NULL")
-                    count = 0
-                    for (tag_ids_json,) in cursor.fetchall():
-                        if tag_ids_json:
-                            try:
-                                count += json.loads(tag_ids_json).count(tid)
-                            except Exception:
-                                continue
-                    cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
                 for lname, lid in lang_id_map.items():
                     cursor.execute("SELECT language_ids FROM Galleries WHERE language_ids IS NOT NULL")
@@ -1932,6 +1931,17 @@ class DB:
                             except Exception:
                                 continue
                     cursor.execute("UPDATE Parodies SET count=? WHERE id=?", (count, pid))
+                    
+                for tname, tid in tag_id_map.items():
+                    cursor.execute("SELECT tag_ids FROM Galleries WHERE tag_ids IS NOT NULL")
+                    count = 0
+                    for (tag_ids_json,) in cursor.fetchall():
+                        if tag_ids_json:
+                            try:
+                                count += json.loads(tag_ids_json).count(tid)
+                            except Exception:
+                                continue
+                    cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
                 conn.commit()
 
