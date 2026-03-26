@@ -498,7 +498,9 @@ def _table_filter_options() -> dict:
         languages = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
         cursor.execute("SELECT name FROM Tags WHERE name IS NOT NULL AND TRIM(name) != ''")
         tags = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
-    return {"languages": languages, "tags": tags}
+        cursor.execute("SELECT name FROM Parodies WHERE name IS NOT NULL AND TRIM(name) != ''")
+        parodies = sorted({str(row[0]).strip() for row in cursor.fetchall() if row and row[0]}, key=str.lower)
+    return {"languages": languages, "tags": tags, "parodies": parodies}
 
 
 def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
@@ -516,11 +518,14 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
 
         cursor.execute("SELECT id, name FROM Languages")
         language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
-
+        
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_name_map = {int(parody_id): str(name) for parody_id, name in cursor.fetchall() if parody_id is not None and name}
+        
         placeholders = ",".join("?" for _ in ids)
         cursor.execute(
             f"""
-            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, parody_ids, status, favourite, rating
             FROM Galleries
             WHERE id IN ({placeholders})
             """,
@@ -534,17 +539,25 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
             raw_title = str(row[2] or "").strip()
             tag_ids = _parse_json_int_list(row[4])
             language_ids = _parse_json_int_list(row[5])
+            parody_ids = _parse_json_int_list(row[6])
             result[gid] = {
                 "title": clean_title or raw_title or f"Gallery {gid}",
                 "clean_title": clean_title,
                 "raw_title": raw_title,
                 "page_count": int(row[3]) if row[3] is not None else 0,
+                "parodies": [parody_name_map[pid] for pid in parody_ids if pid in parody_name_map],
                 "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                 "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
                 "status": str(row[6] or ""),
-                "favourite": bool(row[7]),
-                "rating": float(row[8]) if row[8] is not None else None,
+                "favourite": bool(row[8]),
+                "rating": float(row[9]) if row[9] is not None else None,
             }
+
+        # NOTE: ensure parodies key exists for all galleries
+        for gid in result:
+            if "parodies" not in result[gid]:
+                result[gid]["parodies"] = []
+
         return result
 
 
@@ -585,6 +598,7 @@ def _apply_gallery_db_meta(items: list[dict]) -> list[dict]:
         item["page_count"] = meta["page_count"]
         item["tags"] = list(meta["tags"])
         item["languages"] = list(meta["languages"])
+        item["parodies"] = list(meta.get("parodies") or [])
         item["tag_count"] = len(meta["tags"])
         item["status"] = meta["status"]
         item["favourite"] = bool(meta["favourite"])
@@ -722,17 +736,28 @@ def _db_filter_options_for_creator(creator_name: str, roots: list[str] | None = 
             if language_id is not None and name
         }
 
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_name_map = {
+            int(parody_id): str(name)
+            for parody_id, name in cursor.fetchall()
+            if parody_id is not None and name
+        }
+
         placeholders = ",".join("?" for _ in gallery_ids)
         cursor.execute(
-            f"SELECT tag_ids, language_ids FROM Galleries WHERE id IN ({placeholders})",
+            f"SELECT tag_ids, language_ids, parody_ids FROM Galleries WHERE id IN ({placeholders})",
             tuple(sorted(gallery_ids)),
         )
 
         tag_ids = set()
         language_ids = set()
-        for tag_ids_json, language_ids_json in cursor.fetchall():
+        parody_ids = set()
+        for tag_ids_json, language_ids_json, parody_ids_json in cursor.fetchall():
             tag_ids.update(_parse_json_int_list(tag_ids_json))
             language_ids.update(_parse_json_int_list(language_ids_json))
+            parody_ids.update(_parse_json_int_list(parody_ids_json))
+
+        parodies = sorted([parody_name_map[pid] for pid in parody_ids if pid in parody_name_map], key=str.lower)
 
     languages = sorted(
         [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
@@ -742,7 +767,7 @@ def _db_filter_options_for_creator(creator_name: str, roots: list[str] | None = 
         [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
         key=str.lower,
     )
-    return {"languages": languages, "tags": tags}
+    return {"languages": languages, "tags": tags, "parodies": parodies}
 
 
 def _prefer_gallery_item(existing: dict | None, candidate: dict) -> dict:
@@ -826,9 +851,12 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         cursor.execute("SELECT id, name FROM Languages")
         language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
 
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_name_map = {int(parody_id): str(name) for parody_id, name in cursor.fetchall() if parody_id is not None and name}
+
         cursor.execute(
             """
-            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating, creator_ids
+            SELECT clean_title, raw_title, num_pages, tag_ids, language_ids, parody_ids, status, favourite, rating, creator_ids
             FROM Galleries
             WHERE id = ?
             """,
@@ -840,7 +868,8 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
 
         tag_ids = _parse_json_int_list(row[3])
         language_ids = _parse_json_int_list(row[4])
-        creator_ids = _parse_json_int_list(row[8])
+        parody_ids = _parse_json_int_list(row[5])
+        creator_ids = _parse_json_int_list(row[9])
 
         cursor.execute("SELECT id, name, display_name FROM Creators")
         creator_name_map = {}
@@ -856,6 +885,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         meta["creators"] = [creator_name_map[cid] for cid in creator_ids if cid in creator_name_map]
         meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
         meta["languages"] = [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map]
+        meta["parodies"] = [parody_name_map[pid] for pid in parody_ids if pid in parody_name_map]
         meta["status"] = str(row[5] or "")
         meta["favourite"] = bool(row[6])
         meta["rating"] = float(row[7]) if row[7] is not None else None
@@ -990,11 +1020,14 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
         cursor.execute("SELECT id, name FROM Languages")
         language_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
 
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_name_map = {int(row[0]): str(row[1]) for row in cursor.fetchall() if row[0] is not None and row[1]}
+
         if gallery_ids:
             placeholders = ",".join("?" for _ in gallery_ids)
             cursor.execute(
                 f"""
-                SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+                SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, parody_ids, status, favourite, rating
                 FROM Galleries
                 WHERE id IN ({placeholders})
                 """,
@@ -1004,6 +1037,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 gallery_id = int(row[0])
                 tag_ids = _parse_json_int_list(row[4])
                 language_ids = _parse_json_int_list(row[5])
+                parody_ids = _parse_json_int_list(row[6])
                 gallery_meta[gallery_id] = {
                     "gallery_id": gallery_id,
                     "clean_title": str(row[1] or ""),
@@ -1011,10 +1045,17 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                     "num_pages": int(row[3]) if row[3] is not None else None,
                     "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                     "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
-                    "status": str(row[6] or ""),
-                    "favourite": bool(row[7]),
-                    "rating": float(row[8]) if row[8] is not None else None,
+                    "parodies": [parody_name_map[pid] for pid in parody_ids if pid in parody_name_map],
+                    "status": str(row[7] or ""),
+                    "favourite": bool(row[8]),
+                    "rating": float(row[9]) if row[9] is not None else None,
                 }
+
+        # ensure parodies key exists for galleries fetched
+        if gallery_meta:
+            for gid, meta in gallery_meta.items():
+                if "parodies" not in meta:
+                    meta["parodies"] = []
 
         gallery_lookup = _build_gallery_lookup_by_creator_and_title(cursor, tag_name_map, language_name_map)
 
@@ -1042,6 +1083,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
             "page_count": page_count,
             "languages": list(meta.get("languages") or []),
             "tags": list(meta.get("tags") or []),
+            "parodies": list(meta.get("parodies") or []),
             "tag_count": len(meta.get("tags") or []),
             "status": str(meta.get("status") or ""),
             "favourite": bool(meta.get("favourite")),
@@ -1071,6 +1113,17 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
         creator_item["gallery_count"] += 1
         creator_item["languages"].update(gallery_item["languages"])
         creator_item["tags"].update(gallery_item["tags"])
+        # aggregate parodies for creator filters
+        if "parodies" not in creator_item:
+            creator_item["parodies"] = set()
+        creator_item["parodies"].update(gallery_item.get("parodies") or [])
+        # aggregate gallery titles for creator search matching
+        if "gallery_titles" not in creator_item:
+            creator_item["gallery_titles"] = set()
+        try:
+            creator_item["gallery_titles"].add(str(gallery_item.get("name") or gallery_item.get("label") or "").strip())
+        except Exception:
+            pass
         creator_item["tag_count"] = len(creator_item["tags"])
         if isinstance(page_count, int):
             if creator_item["min_page_count"] is None or page_count < creator_item["min_page_count"]:
@@ -1116,6 +1169,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 "page_count": page_count,
                 "languages": list(meta.get("languages") or []),
                 "tags": list(meta.get("tags") or []),
+                "parodies": list(meta.get("parodies") or []),
                 "tag_count": len(meta.get("tags") or []),
                 "status": str(meta.get("status") or ""),
                 "favourite": bool(meta.get("favourite")),
@@ -1131,9 +1185,33 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
                 if current_max is None or page_count > current_max:
                     creators[creator_name]["max_page_count"] = page_count
 
+            # aggregate parodies for filesystem-derived galleries
+            if "parodies" not in creators[creator_name]:
+                creators[creator_name]["parodies"] = set()
+            creators[creator_name]["parodies"].update(gallery_item.get("parodies") or [])
+            # aggregate gallery titles for filesystem-derived galleries
+            if "gallery_titles" not in creators[creator_name]:
+                creators[creator_name]["gallery_titles"] = set()
+            try:
+                creators[creator_name]["gallery_titles"].add(str(gallery_item.get("name") or gallery_item.get("label") or "").strip())
+            except Exception:
+                pass
+
     for creator_name, creator_item in creators.items():
         creator_item["languages"] = sorted(creator_item["languages"], key=str.lower)
         creator_item["tags"] = sorted(creator_item["tags"], key=str.lower)
+        # coerce parodies set to sorted list
+        if "parodies" in creator_item:
+            try:
+                creator_item["parodies"] = sorted(creator_item["parodies"], key=str.lower)
+            except Exception:
+                creator_item["parodies"] = list(creator_item.get("parodies") or [])
+        # coerce gallery_titles set to sorted list
+        if "gallery_titles" in creator_item:
+            try:
+                creator_item["gallery_titles"] = sorted(creator_item["gallery_titles"], key=str.lower)
+            except Exception:
+                creator_item["gallery_titles"] = list(creator_item.get("gallery_titles") or [])
         creator_item["tag_count"] = len(creator_item["tags"])
         creator_item["min_page_count"] = creator_item["min_page_count"] or 0
         creator_item["max_page_count"] = creator_item["max_page_count"] or 0
@@ -1745,6 +1823,29 @@ def list_creators():
     creator_items = sorted(creators.values(), key=lambda item: str(item.get("name") or "").lower())
     creator_items = _apply_creator_db_meta(creator_items)
     return jsonify({"creators": creator_items, "filters": _table_filter_options(), "root_path": ""})
+
+
+@gallery_bp.route("/parody_map", methods=["GET"])
+def parody_map():
+    """Return a compact id->name map for Parodies table to help clients resolve legacy numeric parody IDs."""
+    mapping = {}
+    try:
+        scraperapi.DB.init_db()
+        with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, name FROM Parodies")
+            rows = cur.fetchall() or []
+            for row in rows:
+                try:
+                    pid = int(row[0])
+                    name = str(row[1] or '').strip()
+                    if name:
+                        mapping[str(pid)] = name
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return jsonify({"parody_map": mapping})
 
 
 @gallery_bp.route("/list_galleries/<path:creator>", methods=["GET"])
