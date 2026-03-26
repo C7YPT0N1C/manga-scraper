@@ -257,8 +257,8 @@ function renderGalleryDetail(gallery) {
   coverEl.style.backgroundImage = galleryId > 0 ? `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')` : '';
 
   const favBtn = document.getElementById('galleryDetailFavBtn');
-  favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
-  favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+  favBtn.className = 'fav-btn' + (Number(gallery.favourite) ? ' fav-active' : '');
+  favBtn.textContent = Number(gallery.favourite) ? '★ Unfavourite' : '☆ Favourite';
 
   // Add handler for Read Gallery button
   const readBtn = document.getElementById('galleryDetailReadBtn');
@@ -273,7 +273,7 @@ async function toggleGalleryFavourite(galleryId, targetValue) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ favourite: targetValue }),
   });
-  const isFav = Boolean(data.favourite);
+  const isFav = Number(data.favourite) ? 1 : 0;
 
   const cards = document.querySelectorAll('#collectionItems .remove-item-btn');
   cards.forEach(btn => {
@@ -308,7 +308,7 @@ async function openGalleryDetail(item) {
     title: String(item.title || `Gallery ${galleryId}`),
     page_count: Number(item.page_count || 0),
     status: String(item.status || ''),
-    favourite: Boolean(item.favourite),
+    favourite: Number(item.favourite) ? 1 : 0,
     creators: normaliseList(item.creators),
     parodies: normaliseList(item.parodies || (item.parody ? (Array.isArray(item.parody) ? item.parody : [item.parody]) : [])),
     tags: normaliseList(item.tags),
@@ -334,7 +334,7 @@ async function openGalleryDetail(item) {
       tags: normaliseList(data.tags || _detailGallery.tags),
       languages: normaliseList(data.languages || _detailGallery.languages),
       page_count: Number(data.page_count || _detailGallery.page_count || 0),
-      favourite: Boolean(data.favourite),
+      favourite: Number(data.favourite) ? 1 : 0,
     };
     renderGalleryDetail(_detailGallery);
   } catch (err) {
@@ -454,7 +454,7 @@ function renderItems(items) {
     const card = document.createElement('div');
     card.className = 'gallery-square';
     card.dataset.galleryId = String(galleryId);
-    card.dataset.favourite = item.favourite ? '1' : '0';
+    card.dataset.favourite = Number(item.favourite) ? '1' : '0';
 
     const imageDiv = document.createElement('div');
     imageDiv.className = 'gallery-square-image';

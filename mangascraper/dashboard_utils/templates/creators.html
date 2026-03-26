@@ -428,7 +428,7 @@ async function toggleCreatorFavourite(creatorName, targetValue) {
 		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = await res.json();
-		const isFav = Boolean(data.favourite);
+		const isFav = Number(data.favourite) ? 1 : 0;
 		_allCreators.forEach(item => {
 			if (itemLabel(item) === creatorName) {
 				item.favourite = isFav;
@@ -455,7 +455,7 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = await res.json();
-		const isFav = Boolean(data.favourite);
+		const isFav = Number(data.favourite) ? 1 : 0;
 		_allGalleries.forEach(item => {
 			if (Number(item.gallery_id || 0) === Number(galleryId)) {
 				item.favourite = isFav;
@@ -502,8 +502,8 @@ function _renderGalleryDetail(gallery) {
 	coverEl.style.backgroundImage = coverUrl ? `url('${coverUrl}')` : '';
 
 	const favBtn = document.getElementById('galleryDetailFavBtn');
-	favBtn.className = 'fav-btn' + (gallery.favourite ? ' fav-active' : '');
-	favBtn.textContent = gallery.favourite ? '★ Unfavourite' : '☆ Favourite';
+	favBtn.className = 'fav-btn' + (Number(gallery.favourite) ? ' fav-active' : '');
+	favBtn.textContent = Number(gallery.favourite) ? '★ Unfavourite' : '☆ Favourite';
 }
 
 async function openGalleryDetail(gallery) {
@@ -541,7 +541,7 @@ async function openGalleryDetail(gallery) {
 		} else if (!_detailGallery.creators || !_detailGallery.creators.length) {
 			_detailGallery.creators = _currentCreator ? [_currentCreator] : [];
 		}
-		_detailGallery.favourite = Boolean(data.favourite);
+		_detailGallery.favourite = Number(data.favourite) ? 1 : 0;
 
 		for (const item of _allGalleries) {
 			if (itemLabel(item) === itemLabel(_detailGallery)) {
@@ -629,12 +629,12 @@ function createGalleryGrid(items, itemType, onClick) {
 		if (itemType === 'creator') {
 			const favBtn = document.createElement('button');
 			favBtn.type = 'button';
-			favBtn.className = 'fav-btn' + (item.favourite ? ' fav-active' : '');
-			favBtn.textContent = item.favourite ? '★ Unfavourite' : '☆ Favourite';
+			favBtn.className = 'fav-btn' + (Number(item.favourite) ? ' fav-active' : '');
+			favBtn.textContent = Number(item.favourite) ? '★ Unfavourite' : '☆ Favourite';
 			favBtn.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
-				const newTarget = !Boolean(item.favourite);
+				const newTarget = !Boolean(Number(item.favourite));
 				toggleCreatorFavourite(label, newTarget);
 			});
 			controlsDiv.appendChild(favBtn);
