@@ -309,11 +309,13 @@ function getFilteredItems() {
 		items = items.filter(item => {
 			const languages = normaliseList(item.languages).map(normaliseText);
 			const tags = normaliseList(item.tags).map(normaliseText);
+			const parodies = normaliseList(item.parodies).map(normaliseText);
 			const creators = normaliseList(item.creators).map(normaliseText);
 			const label = itemLabel(item).toLowerCase();
 			const searchableParts = [itemLabel(item)];
 			if (typeof item !== 'string') {
 				searchableParts.push(...normaliseList(item.languages));
+				searchableParts.push(...normaliseList(item.parodies));
 				searchableParts.push(...normaliseList(item.tags));
 				const status = String(item.status || '').trim();
 				if (status) searchableParts.push(status);
@@ -324,8 +326,11 @@ function getFilteredItems() {
 			if (parsed.field === 'artist' || parsed.field === 'group' || parsed.field === 'creator') {
 				return label.includes(parsed.term) || creators.some(value => value.includes(parsed.term));
 			}
-			if (parsed.field === 'tag' || parsed.field === 'character' || parsed.field === 'parody') {
+			if (parsed.field === 'tag' || parsed.field === 'character') {
 				return tags.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'parody') {
+				return parodies.some(value => value.includes(parsed.term));
 			}
 			if (parsed.field === 'language' || parsed.field === 'lang') {
 				return languages.some(value => value.includes(parsed.term));
@@ -337,8 +342,12 @@ function getFilteredItems() {
 	items = items.filter(item => {
 		const languages = normaliseList(item.languages).map(normaliseText);
 		const tags = normaliseList(item.tags).map(normaliseText);
+		const parodies = normaliseList(item.parodies).map(normaliseText);
 
 		if (_activeFilters.language && !languages.includes(normaliseText(_activeFilters.language))) {
+			return false;
+		}
+		if (_activeFilters.parody && !parodies.includes(normaliseText(_activeFilters.parody))) {
 			return false;
 		}
 		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
@@ -387,6 +396,7 @@ function setupFiltersForCreators(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
@@ -394,6 +404,7 @@ function setupFiltersForGalleries(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
+	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
