@@ -194,16 +194,13 @@ class Cache:
             """Load all detected broken symbols as { symbol: '_' }."""
             # Do NOT call DB.init_db() here to avoid self-recursion.
             from mangascraper.core.api._db import DB
-            with db_lock, DB.dbconnect() as conn:
-                c = conn.cursor()
-                c.execute("SELECT symbol FROM BrokenSymbols WHERE fixed=0")
-                rows = c.fetchall()
-                result = {}
-                for row in rows:
-                    symbol = Helpers.safe_text(row[0], "").strip()
-                    if symbol:
-                        result[symbol] = "_"
-                return result
+            rows = DB.select_table("BrokenSymbols", cols=["symbol"], where="fixed=0") or []
+            result = {}
+            for r in rows:
+                symbol = Helpers.safe_text(r.get("symbol"), "").strip()
+                if symbol:
+                    result[symbol] = "_"
+            return result
 
         @staticmethod
         def queued_galleries() -> list:
