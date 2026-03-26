@@ -83,6 +83,7 @@ class DB:
                 creator_ids TEXT,
                 language_ids TEXT,
                 tag_ids TEXT,
+                parody_ids TEXT,
                 status TEXT,
                 started_at TEXT,
                 completed_at TEXT,
@@ -97,22 +98,43 @@ class DB:
                 root_path TEXT NOT NULL UNIQUE,
                 extension_used TEXT
             );
-            CREATE TABLE IF NOT EXISTS GalleryTags (
-                gallery_id INTEGER PRIMARY KEY,
-                tag_ids TEXT,
-                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+            CREATE TABLE IF NOT EXISTS GalleryLocations (
+                gallery_id INTEGER NOT NULL,
+                location_id INTEGER NOT NULL,
+                download_path TEXT NOT NULL,
+                cover_path TEXT,
+                first_seen TEXT,
+                last_seen TEXT,
+                PRIMARY KEY (gallery_id, location_id),
+                FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
+                FOREIGN KEY (location_id) REFERENCES DownloadLocations(id)
             );
             CREATE TABLE IF NOT EXISTS GalleryLanguages (
                 gallery_id INTEGER PRIMARY KEY,
                 language_ids TEXT,
                 FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
             );
+            CREATE TABLE IF NOT EXISTS GalleryTags (
+                gallery_id INTEGER PRIMARY KEY,
+                tag_ids TEXT,
+                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+            );
+            CREATE TABLE IF NOT EXISTS GalleryParodies (
+                gallery_id INTEGER PRIMARY KEY,
+                parody_ids TEXT,
+                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
+            );
+            CREATE TABLE IF NOT EXISTS Languages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE,
+                count INTEGER
+            );
             CREATE TABLE IF NOT EXISTS Tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 count INTEGER
             );
-            CREATE TABLE IF NOT EXISTS Languages (
+            CREATE TABLE IF NOT EXISTS Parodies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 count INTEGER
@@ -152,220 +174,7 @@ class DB:
             );
             """)
             c.execute("CREATE INDEX IF NOT EXISTS idx_downloadqueue_status_no ON DownloadQueue(status, download_no)")
-
-            # Migrate legacy GalleriesQueue
-            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='GalleriesQueue'")
-            if c.fetchone() is not None:
-                c.execute("SELECT id FROM GalleriesQueue")
-                legacy_ids = sorted({int(row[0]) for row in c.fetchall() if row and row[0] is not None})
-                if legacy_ids:
-                    now_iso = datetime.now(timezone.utc).isoformat()
-                    c.execute("DELETE FROM DownloadQueue WHERE LOWER(COALESCE(status, ''))='selected'")
-                    c.execute(
-                        "INSERT INTO DownloadQueue (status, ids_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                        ("selected", json.dumps(legacy_ids), now_iso, now_iso),
-                    )
-                c.execute("DROP TABLE GalleriesQueue")
-
-            # Schema migrations
-            c.execute("PRAGMA table_info(CacheReferences)")
-            if "expires_at" not in [row[1] for row in c.fetchall()]:
-                c.execute("ALTER TABLE CacheReferences ADD COLUMN expires_at REAL")
-
-            c.execute("PRAGMA table_info(CachedMetadata)")
-            if "expires_at" not in [row[1] for row in c.fetchall()]:
-                c.execute("ALTER TABLE CachedMetadata ADD COLUMN expires_at REAL")
-
-            c.execute("PRAGMA table_info(Collections)")
-            collection_columns = [row[1] for row in c.fetchall()]
-            if "expressions" not in collection_columns:
-                c.execute("ALTER TABLE Collections ADD COLUMN expressions TEXT")
-            if "items" not in collection_columns:
-                c.execute("ALTER TABLE Collections ADD COLUMN items TEXT")
-
-            c.execute("PRAGMA table_info(Collections)")
-            collection_columns = [row[1] for row in c.fetchall()]
-            desired_collection_columns = [
-                "id", "name", "description", "collection_type", "sort_mode",
-                "expressions", "smart_expression", "items", "created_at",
-                "updated_at", "last_refreshed_at",
-            ]
-
-            if collection_columns != desired_collection_columns:
-                c.execute("DROP TABLE IF EXISTS Collections__reordered")
-                c.execute(
-                    """
-                    CREATE TABLE Collections__reordered (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL UNIQUE,
-                        description TEXT,
-                        collection_type TEXT NOT NULL DEFAULT 'normal',
-                        sort_mode TEXT NOT NULL DEFAULT 'id_desc',
-                        expressions TEXT,
-                        smart_expression TEXT,
-                        items TEXT,
-                        created_at TEXT,
-                        updated_at TEXT,
-                        last_refreshed_at TEXT
-                    )
-                    """
-                )
-                select_parts = []
-                for col in desired_collection_columns:
-                    if col in collection_columns:
-                        if col in {"expressions", "items"}:
-                            select_parts.append(f"COALESCE({col}, '[]') AS {col}")
-                        elif col == "smart_expression":
-                            select_parts.append(f"COALESCE({col}, '') AS {col}")
-                        else:
-                            select_parts.append(col)
-                    else:
-                        if col in {"expressions", "items"}:
-                            select_parts.append(f"'[]' AS {col}")
-                        elif col == "smart_expression":
-                            select_parts.append(f"'' AS {col}")
-                        else:
-                            select_parts.append(f"NULL AS {col}")
-                c.execute(
-                    "INSERT INTO Collections__reordered (" + ", ".join(desired_collection_columns) + ") "
-                    "SELECT " + ", ".join(select_parts) + " FROM Collections"
-                )
-                c.execute("DROP TABLE Collections")
-                c.execute("ALTER TABLE Collections__reordered RENAME TO Collections")
-
-            # Migrate CollectionFilters / CollectionItems
-            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionFilters'")
-            has_collection_filters = c.fetchone() is not None
-            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='CollectionItems'")
-            has_collection_items = c.fetchone() is not None
-
-            if has_collection_filters or has_collection_items:
-                c.execute("SELECT id FROM Collections")
-                collection_ids = [int(row[0]) for row in c.fetchall() if row and row[0] is not None]
-
-                for collection_id in collection_ids:
-                    expressions_payload = []
-                    if has_collection_filters:
-                        c.execute(
-                            "SELECT filter_key, filter_type, filter_value FROM CollectionFilters WHERE collection_id=? ORDER BY id",
-                            (int(collection_id),),
-                        )
-                        for fkey, ftype, fvalue in c.fetchall():
-                            key_text = Helpers.safe_text(fkey, "").strip().upper()
-                            type_text = Helpers.safe_text(ftype, "").strip().lower()
-                            value_text = Helpers.safe_text(fvalue, "").strip()
-                            if not key_text or not type_text or not value_text:
-                                continue
-                            expressions_payload.append({
-                                "filter_key": key_text,
-                                "filter_type": type_text,
-                                "filter_value": value_text,
-                            })
-
-                    items_payload = []
-                    if has_collection_items:
-                        c.execute(
-                            "SELECT gallery_id FROM CollectionItems WHERE collection_id=? ORDER BY manual_order ASC, gallery_id DESC",
-                            (int(collection_id),),
-                        )
-                        seen_gallery_ids = set()
-                        for (gallery_id,) in c.fetchall():
-                            gid = Helpers.normalise_integer(gallery_id)
-                            if gid is None or gid in seen_gallery_ids:
-                                continue
-                            seen_gallery_ids.add(int(gid))
-                            items_payload.append(int(gid))
-
-                    c.execute(
-                        "UPDATE Collections SET expressions=?, items=? WHERE id=?",
-                        (
-                            json.dumps(expressions_payload, ensure_ascii=True),
-                            json.dumps(items_payload, ensure_ascii=True),
-                            int(collection_id),
-                        ),
-                    )
-
-                if has_collection_filters:
-                    c.execute("DROP TABLE CollectionFilters")
-                if has_collection_items:
-                    c.execute("DROP TABLE CollectionItems")
-
-            c.execute("PRAGMA table_info(Creators)")
-            if "favourite" not in [row[1] for row in c.fetchall()]:
-                c.execute("ALTER TABLE Creators ADD COLUMN favourite INTEGER DEFAULT 0")
-
-            c.execute("UPDATE Collections SET expressions='[]' WHERE expressions IS NULL")
-            c.execute("UPDATE Collections SET items='[]' WHERE items IS NULL")
-
-            now = time.time()
-            c.execute(
-                "UPDATE CacheReferences SET expires_at = ? WHERE expires_at IS NULL",
-                (now + CACHE_REFERENCES_TTL_SECONDS,),
-            )
-            c.execute(
-                """
-                UPDATE CachedMetadata
-                SET expires_at = CASE
-                    WHEN timestamp IS NOT NULL THEN timestamp + ?
-                    ELSE ?
-                END
-                WHERE expires_at IS NULL
-                """,
-                (CACHED_METADATA_TTL_SECONDS, now + CACHED_METADATA_TTL_SECONDS),
-            )
-
-            # GalleryLocations schema migration
-            c.execute("PRAGMA table_info(GalleryLocations)")
-            gl_cols = {row[1] for row in c.fetchall()}
-
-            if not gl_cols:
-                c.execute("""
-                    CREATE TABLE GalleryLocations (
-                        gallery_id INTEGER NOT NULL,
-                        location_id INTEGER NOT NULL,
-                        download_path TEXT NOT NULL,
-                        cover_path TEXT,
-                        first_seen TEXT,
-                        last_seen TEXT,
-                        PRIMARY KEY (gallery_id, location_id),
-                        FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
-                        FOREIGN KEY (location_id) REFERENCES DownloadLocations(id)
-                    )
-                """)
-                c.execute("CREATE INDEX IF NOT EXISTS idx_gallerylocations_gallery_id ON GalleryLocations(gallery_id)")
-
-            elif "root_path" in gl_cols and "location_id" not in gl_cols:
-                c.execute("SELECT DISTINCT root_path, extension_used FROM GalleryLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
-                for root_path, ext_used in c.fetchall():
-                    c.execute(
-                        "INSERT OR IGNORE INTO DownloadLocations (root_path, extension_used) VALUES (?, ?)",
-                        (root_path, ext_used or ""),
-                    )
-                c.execute("""
-                    CREATE TABLE GalleryLocations_new (
-                        gallery_id INTEGER NOT NULL,
-                        location_id INTEGER NOT NULL,
-                        download_path TEXT NOT NULL,
-                        cover_path TEXT,
-                        first_seen TEXT,
-                        last_seen TEXT,
-                        PRIMARY KEY (gallery_id, location_id),
-                        FOREIGN KEY (gallery_id) REFERENCES Galleries(id),
-                        FOREIGN KEY (location_id) REFERENCES DownloadLocations(id)
-                    )
-                """)
-                c.execute("SELECT gallery_id, root_path, download_path, cover_path, first_seen, last_seen FROM GalleryLocations WHERE root_path IS NOT NULL AND TRIM(root_path) != ''")
-                for gallery_id, root_path, dl_path, cov_path, f_seen, l_seen in c.fetchall():
-                    c.execute("SELECT id FROM DownloadLocations WHERE root_path=?", (root_path,))
-                    loc = c.fetchone()
-                    if loc:
-                        c.execute(
-                            "INSERT OR IGNORE INTO GalleryLocations_new (gallery_id, location_id, download_path, cover_path, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-                            (gallery_id, loc[0], dl_path or "", cov_path or "", f_seen or "", l_seen or ""),
-                        )
-                c.execute("DROP TABLE GalleryLocations")
-                c.execute("ALTER TABLE GalleryLocations_new RENAME TO GalleryLocations")
-                c.execute("CREATE INDEX IF NOT EXISTS idx_gallerylocations_gallery_id ON GalleryLocations(gallery_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_gallerylocations_gallery_id ON GalleryLocations(gallery_id)")
 
             # Backfill GalleryLocations from Galleries.download_path
             c.execute(
@@ -791,8 +600,9 @@ class DB:
                     (json.dumps(next_ids, ensure_ascii=True), now_iso, int(collection_id)),
                 )
             cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM GalleryLanguages WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
+            cursor.execute("DELETE FROM GalleryParodies WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM CachedMetadata WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM Galleries WHERE id=?", (int(gid),))
             removed = bool(cursor.rowcount)
@@ -1743,11 +1553,13 @@ class DB:
 
             cache = read_cached_metadata_entry(ids=[gallery_id])
             creators = {}
-            tags = {}
             languages = {}
+            tags = {}
+            parodies = {}
             galleries = {}
-            gallery_tags = {}
             gallery_languages = {}
+            gallery_tags = {}
+            gallery_parodies = {}
 
             for gid, entry in cache["metadata"].items():
                 meta = entry.get("clean_metadata") or {}
@@ -1766,20 +1578,25 @@ class DB:
                     for group in meta["groups"]:
                         creator_types[group] = "group"
 
-                tag_names = meta.get("tags") or []
-                if isinstance(tag_names, str):
-                    tag_names = [tag_names]
                 language_names = meta.get("languages") or meta.get("language") or []
                 if isinstance(language_names, str):
                     language_names = [language_names]
+                tag_names = meta.get("tags") or []
+                if isinstance(tag_names, str):
+                    tag_names = [tag_names]
+                parody_names = meta.get("parodies") or meta.get("parody") or []
+                if isinstance(parody_names, str):
+                    parody_names = [parody_names]
 
                 for cname in creator_names:
                     ctype = creator_types.get(cname, None)
                     creators.setdefault(cname, {"display_name": cname, "creator_type": ctype, "first_seen": None, "last_updated": None, "total_galleries": 0, "most_popular_tags": []})
-                for tname in tag_names:
-                    tags.setdefault(tname, {"count": 0})
                 for lname in language_names:
                     languages.setdefault(lname, {"count": 0})
+                for tname in tag_names:
+                    tags.setdefault(tname, {"count": 0})
+                for pname in parody_names:
+                    parodies.setdefault(pname, {"count": 0})
 
                 galleries[gid] = {
                     "id": gid,
@@ -1789,6 +1606,7 @@ class DB:
                     "creator_names": creator_names,
                     "language_names": language_names,
                     "tag_names": tag_names,
+                    "parody_names": parody_names,
                     "status": Helpers.safe_text(meta.get("status"), ""),
                     "started_at": Helpers.safe_text(meta.get("started_at"), ""),
                     "completed_at": Helpers.safe_text(meta.get("completed_at"), ""),
@@ -1796,14 +1614,16 @@ class DB:
                     "cover_path": Helpers.safe_text(meta.get("cover_path"), ""),
                     "extension_used": Helpers.safe_text(meta.get("extension_used"), ""),
                 }
-                gallery_tags[gid] = tag_names
                 gallery_languages[gid] = language_names
+                gallery_tags[gid] = tag_names
+                gallery_parodies[gid] = parody_names
 
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 creator_id_map = {}
-                tag_id_map = {}
                 lang_id_map = {}
+                tag_id_map = {}
+                parody_id_map = {}
                 now = datetime.now(timezone.utc).isoformat()
 
                 for cname, cdata in creators.items():
@@ -1816,26 +1636,33 @@ class DB:
                     cursor.execute("SELECT id FROM Creators WHERE name=?", (cname,))
                     creator_id_map[cname] = cursor.fetchone()[0]
 
+                for lname in languages:
+                    cursor.execute("INSERT OR IGNORE INTO Languages (name, count) VALUES (?, ?)", (lname, 0))
+                    cursor.execute("SELECT id FROM Languages WHERE name=?", (lname,))
+                    lang_id_map[lname] = cursor.fetchone()[0]
+                
                 for tname in tags:
                     cursor.execute("INSERT OR IGNORE INTO Tags (name, count) VALUES (?, ?)", (tname, 0))
                     cursor.execute("SELECT id FROM Tags WHERE name=?", (tname,))
                     tag_id_map[tname] = cursor.fetchone()[0]
 
-                for lname in languages:
-                    cursor.execute("INSERT OR IGNORE INTO Languages (name, count) VALUES (?, ?)", (lname, 0))
-                    cursor.execute("SELECT id FROM Languages WHERE name=?", (lname,))
-                    lang_id_map[lname] = cursor.fetchone()[0]
+                for pname in parodies:
+                    cursor.execute("INSERT OR IGNORE INTO Parodies (name, count) VALUES (?, ?)", (pname, 0))
+                    cursor.execute("SELECT id FROM Parodies WHERE name=?", (pname,))
+                    parody_id_map[pname] = cursor.fetchone()[0]
 
                 for gid, gdata in galleries.items():
                     creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
-                    tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
                     language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+                    tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
+                    parody_ids = [parody_id_map[p] for p in gdata.get("parody_names", []) if p in parody_id_map]
                     cursor.execute(
-                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
-                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), gid),
+                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=?, parody_ids=? WHERE id=?",
+                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(parody_ids), json.dumps(tag_ids), gid),
                     )
-                    cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
                     cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gid, json.dumps(language_ids)))
+                    cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
+                    cursor.execute("INSERT OR REPLACE INTO GalleryParodies (gallery_id, parody_ids) VALUES (?, ?)", (gid, json.dumps(parody_ids)))
 
                 for cname, cid in creator_id_map.items():
                     cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))
@@ -1855,6 +1682,17 @@ class DB:
                         "UPDATE Creators SET total_galleries=?, most_popular_tags=?, last_updated=? WHERE id=?",
                         (len(gallery_ids), json.dumps(most_popular_tag_ids), now, cid),
                     )
+                
+                for lname, lid in lang_id_map.items():
+                    cursor.execute("SELECT language_ids FROM GalleryLanguages")
+                    count = 0
+                    for (lang_ids_json,) in cursor.fetchall():
+                        if lang_ids_json:
+                            try:
+                                count += json.loads(lang_ids_json).count(lid)
+                            except Exception:
+                                continue
+                    cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
                 for tname, tid in tag_id_map.items():
                     cursor.execute("SELECT tag_ids FROM GalleryTags")
@@ -1868,16 +1706,16 @@ class DB:
                     )
                     cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
-                for lname, lid in lang_id_map.items():
-                    cursor.execute("SELECT language_ids FROM GalleryLanguages")
+                for pname, pid in parody_id_map.items():
+                    cursor.execute("SELECT parody_ids FROM GalleryParodies")
                     count = 0
-                    for (lang_ids_json,) in cursor.fetchall():
-                        if lang_ids_json:
+                    for (par_ids_json,) in cursor.fetchall():
+                        if par_ids_json:
                             try:
-                                count += json.loads(lang_ids_json).count(lid)
+                                count += json.loads(par_ids_json).count(pid)
                             except Exception:
                                 continue
-                    cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
+                    cursor.execute("UPDATE Parodies SET count=? WHERE id=?", (count, pid))
 
                 conn.commit()
 
