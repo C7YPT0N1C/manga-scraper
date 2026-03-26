@@ -455,21 +455,6 @@ function getFilteredItems() {
 		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
 			return false;
 		}
-		// pages filtering
-		const minp = (typeof _activeFilters.min_pages === 'number' && Number.isFinite(_activeFilters.min_pages)) ? Number(_activeFilters.min_pages) : null;
-		const maxp = (typeof _activeFilters.max_pages === 'number' && Number.isFinite(_activeFilters.max_pages)) ? Number(_activeFilters.max_pages) : null;
-		if (minp !== null || maxp !== null) {
-			if (_currentItemType === 'galleries') {
-				const pc = Number(item.page_count || 0);
-				if (minp !== null && pc < minp) return false;
-				if (maxp !== null && pc > maxp) return false;
-			} else if (_currentItemType === 'creators') {
-				const cmin = Number(item.min_page_count || 0);
-				const cmax = Number(item.max_page_count || 0);
-				if (minp !== null && cmax < minp) return false;
-				if (maxp !== null && cmin > maxp) return false;
-			}
-		}
 		return true;
 	});
 
@@ -515,31 +500,6 @@ function setupFiltersForCreators(filters) {
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
-	// Pages min/max inputs
-	const minIn = document.createElement('input');
-	minIn.type = 'number';
-	minIn.min = '0';
-	minIn.placeholder = 'Min pages';
-	minIn.value = String(_activeFilters.min_pages || '');
-	minIn.addEventListener('change', () => {
-		const v = Number(minIn.value);
-		_activeFilters.min_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	const maxIn = document.createElement('input');
-	maxIn.type = 'number';
-	maxIn.min = '0';
-	maxIn.placeholder = 'Max pages';
-	maxIn.value = String(_activeFilters.max_pages || '');
-	maxIn.addEventListener('change', () => {
-		const v = Number(maxIn.value);
-		_activeFilters.max_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	filterGroup.appendChild(createFilterField('Pages min', minIn));
-	filterGroup.appendChild(createFilterField('Pages max', maxIn));
 }
 
 function setupFiltersForGalleries(filters) {
@@ -548,31 +508,6 @@ function setupFiltersForGalleries(filters) {
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
-	// Pages min/max inputs
-	const minIn = document.createElement('input');
-	minIn.type = 'number';
-	minIn.min = '0';
-	minIn.placeholder = 'Min pages';
-	minIn.value = String(_activeFilters.min_pages || '');
-	minIn.addEventListener('change', () => {
-		const v = Number(minIn.value);
-		_activeFilters.min_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	const maxIn = document.createElement('input');
-	maxIn.type = 'number';
-	maxIn.min = '0';
-	maxIn.placeholder = 'Max pages';
-	maxIn.value = String(_activeFilters.max_pages || '');
-	maxIn.addEventListener('change', () => {
-		const v = Number(maxIn.value);
-		_activeFilters.max_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	filterGroup.appendChild(createFilterField('Pages min', minIn));
-	filterGroup.appendChild(createFilterField('Pages max', maxIn));
 }
 
 document.querySelectorAll('.modeTab').forEach(btn => {

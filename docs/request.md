@@ -76,3 +76,26 @@ Test checklist (quick verifications)
 - [ ] Pages filters: use the `Pages min` / `Pages max` inputs in the filter bar and confirm galleries and creators are filtered as described (galleries by `page_count`; creators by `min_page_count`/`max_page_count` intersection).
 - [ ] Parody numeric IDs: open a gallery whose metadata contains numeric parody IDs and confirm the gallery detail shows names (may require the client to fetch `/api/gallery/parody_map` — open detail and wait briefly or re-open to confirm mapping applied).
 - [ ] Server special query types: POST sample payloads to `/api/scraper/search` for `cache_key`, `id_range`, and `ids` flows and confirm the server returns expected ID lists.
+
+
+
+
+
+# IMPROVEMENTS:
+
+- Remove the "Pages min" and "Pages max" dropdowns
+
+- Upon downloading, galleries are marked as "favourite". The value in the database is 0, and doesn't seem to change. This is incorrect.
+
+- Details Page:
+"
+(297635) The Strange Creature and I
+ID: 297635
+Creators: yana, nekoarashi
+Parodies: original
+Tags: big breasts, pregnant, uncensored, unbirth, breast feeding, living clothes, anal, monster, exhibitionism, inflation, breast expansion, lactation, stockings, parasite, tentacles, eggs, sole female, hidden sex
+Languages: english, translated
+Pages: 48
+Download Status: [1]
+"
+Download Status: [1] is incorrect. It should be the value of the "status" field from the Galleries table.

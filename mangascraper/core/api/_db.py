@@ -1738,8 +1738,18 @@ class DB:
                 row = cursor.fetchone()
                 extension_used = row[0] if row and row[0] else (meta.get("extension_used") or meta.get("extension") or None)
                 cursor.execute(
-                    "UPDATE Galleries SET status=?, completed_at=?, download_path=?, cover_path=?, extension_used=?, started_at=? WHERE id=?",
-                    ("completed", now, download_path, cover_path, extension_used, started_at, gallery_id),
+                    """
+                    INSERT INTO Galleries (id, status, completed_at, download_path, cover_path, extension_used, started_at, favourite)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT favourite FROM Galleries WHERE id=?), 0))
+                    ON CONFLICT(id) DO UPDATE SET
+                        status=excluded.status,
+                        completed_at=excluded.completed_at,
+                        download_path=excluded.download_path,
+                        cover_path=excluded.cover_path,
+                        extension_used=excluded.extension_used,
+                        started_at=excluded.started_at
+                    """,
+                    (gallery_id, "completed", now, download_path, cover_path, extension_used, started_at, gallery_id),
                 )
                 conn.commit()
 
