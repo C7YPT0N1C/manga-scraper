@@ -83,7 +83,6 @@ class DB:
                 creator_ids TEXT,
                 language_ids TEXT,
                 tag_ids TEXT,
-                parody_ids TEXT,
                 status TEXT,
                 started_at TEXT,
                 completed_at TEXT,
@@ -103,11 +102,6 @@ class DB:
                 tag_ids TEXT,
                 FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
             );
-            CREATE TABLE IF NOT EXISTS GalleryParodies (
-                gallery_id INTEGER PRIMARY KEY,
-                parody_ids TEXT,
-                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
-            );
             CREATE TABLE IF NOT EXISTS GalleryLanguages (
                 gallery_id INTEGER PRIMARY KEY,
                 language_ids TEXT,
@@ -119,11 +113,6 @@ class DB:
                 count INTEGER
             );
             CREATE TABLE IF NOT EXISTS Languages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE,
-                count INTEGER
-            );
-            CREATE TABLE IF NOT EXISTS Parodies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 count INTEGER
@@ -804,7 +793,6 @@ class DB:
             cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM GalleryLanguages WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM GalleryParodies WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM CachedMetadata WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM Galleries WHERE id=?", (int(gid),))
             removed = bool(cursor.rowcount)
