@@ -178,3 +178,4 @@ cython_debug/
 # Other
 *.db
 *-workspace
+docs/request.md
