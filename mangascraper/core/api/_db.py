@@ -98,21 +98,6 @@ class DB:
                 root_path TEXT NOT NULL UNIQUE,
                 extension_used TEXT
             );
-            CREATE TABLE IF NOT EXISTS GalleryTags (
-                gallery_id INTEGER PRIMARY KEY,
-                tag_ids TEXT,
-                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
-            );
-            CREATE TABLE IF NOT EXISTS GalleryParodies (
-                gallery_id INTEGER PRIMARY KEY,
-                parody_ids TEXT,
-                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
-            );
-            CREATE TABLE IF NOT EXISTS GalleryLanguages (
-                gallery_id INTEGER PRIMARY KEY,
-                language_ids TEXT,
-                FOREIGN KEY (gallery_id) REFERENCES Galleries(id)
-            );
             CREATE TABLE IF NOT EXISTS Tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
@@ -747,7 +732,7 @@ class DB:
 
             tag_counter = {}
             for gallery_id in related_gallery_ids:
-                cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (int(gallery_id),))
+                cursor.execute("SELECT tag_ids FROM Galleries WHERE id=?", (int(gallery_id),))
                 row = cursor.fetchone()
                 if not row or not row[0]:
                     continue
@@ -825,10 +810,6 @@ class DB:
                     (json.dumps(next_ids, ensure_ascii=True), now_iso, int(collection_id)),
                 )
             cursor.execute("DELETE FROM GalleryLocations WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM GalleryTags WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM GalleryLanguages WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM GalleryParodies WHERE gallery_id=?", (int(gid),))
-            cursor.execute("DELETE FROM CachedMetadata WHERE gallery_id=?", (int(gid),))
             cursor.execute("DELETE FROM Galleries WHERE id=?", (int(gid),))
             removed = bool(cursor.rowcount)
             DB._recompute_creator_rollups(cursor)
@@ -1899,16 +1880,13 @@ class DB:
                         "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=?, parody_ids=? WHERE id=?",
                         (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), json.dumps(parody_ids), gid),
                     )
-                    cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
-                    cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gid, json.dumps(language_ids)))
-                    cursor.execute("INSERT OR REPLACE INTO GalleryParodies (gallery_id, parody_ids) VALUES (?, ?)", (gid, json.dumps(parody_ids)))
 
                 for cname, cid in creator_id_map.items():
                     cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))
                     gallery_ids = [row[0] for row in cursor.fetchall()]
                     tag_counter = {}
                     for gid in gallery_ids:
-                        cursor.execute("SELECT tag_ids FROM GalleryTags WHERE gallery_id=?", (gid,))
+                        cursor.execute("SELECT tag_ids FROM Galleries WHERE id=?", (gid,))
                         row = cursor.fetchone()
                         if row and row[0]:
                             try:
@@ -1923,19 +1901,18 @@ class DB:
                     )
 
                 for tname, tid in tag_id_map.items():
-                    cursor.execute("SELECT tag_ids FROM GalleryTags")
-                    # TODO: simplify this to match the language count loop pattern below
-                    count = sum(
-                        json.loads(r[0]).count(tid)
-                        for r in cursor.fetchall()
-                        if r[0]
-                        for _ in [None]
-                        if not (lambda: False)()
-                    )
+                    cursor.execute("SELECT tag_ids FROM Galleries WHERE tag_ids IS NOT NULL")
+                    count = 0
+                    for (tag_ids_json,) in cursor.fetchall():
+                        if tag_ids_json:
+                            try:
+                                count += json.loads(tag_ids_json).count(tid)
+                            except Exception:
+                                continue
                     cursor.execute("UPDATE Tags SET count=? WHERE id=?", (count, tid))
 
                 for lname, lid in lang_id_map.items():
-                    cursor.execute("SELECT language_ids FROM GalleryLanguages")
+                    cursor.execute("SELECT language_ids FROM Galleries WHERE language_ids IS NOT NULL")
                     count = 0
                     for (lang_ids_json,) in cursor.fetchall():
                         if lang_ids_json:
@@ -1946,7 +1923,7 @@ class DB:
                     cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
 
                 for pname, pid in parody_id_map.items():
-                    cursor.execute("SELECT parody_ids FROM GalleryParodies")
+                    cursor.execute("SELECT parody_ids FROM Galleries WHERE parody_ids IS NOT NULL")
                     count = 0
                     for (par_ids_json,) in cursor.fetchall():
                         if par_ids_json:

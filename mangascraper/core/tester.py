@@ -204,14 +204,7 @@ def main() -> bool:
                     f"DELETE FROM CachedMetadata WHERE gallery_id IN ({placeholders})",
                     gallery_ids,
                 )
-                cursor.execute(
-                    f"DELETE FROM GalleryTags WHERE gallery_id IN ({placeholders})",
-                    gallery_ids,
-                )
-                cursor.execute(
-                    f"DELETE FROM GalleryLanguages WHERE gallery_id IN ({placeholders})",
-                    gallery_ids,
-                )
+                # Delete galleries directly; per-gallery tag/language/parody lists are stored on Galleries
                 cursor.execute(
                     f"DELETE FROM Galleries WHERE id IN ({placeholders})",
                     gallery_ids,
@@ -237,8 +230,8 @@ def main() -> bool:
                 DELETE FROM Tags
                 WHERE id NOT IN (
                     SELECT DISTINCT CAST(json_each.value AS INTEGER)
-                    FROM GalleryTags, json_each(GalleryTags.tag_ids)
-                    WHERE GalleryTags.tag_ids IS NOT NULL
+                    FROM Galleries, json_each(Galleries.tag_ids)
+                    WHERE Galleries.tag_ids IS NOT NULL
                 )
                 """
             )
@@ -247,8 +240,8 @@ def main() -> bool:
                 DELETE FROM Languages
                 WHERE id NOT IN (
                     SELECT DISTINCT CAST(json_each.value AS INTEGER)
-                    FROM GalleryLanguages, json_each(GalleryLanguages.language_ids)
-                    WHERE GalleryLanguages.language_ids IS NOT NULL
+                    FROM Galleries, json_each(Galleries.language_ids)
+                    WHERE Galleries.language_ids IS NOT NULL
                 )
                 """
             )
