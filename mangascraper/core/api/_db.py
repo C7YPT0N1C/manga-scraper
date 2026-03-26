@@ -1757,9 +1757,11 @@ class DB:
             creators = {}
             tags = {}
             languages = {}
+            parodies = {}
             galleries = {}
             gallery_tags = {}
             gallery_languages = {}
+            gallery_parodies = {}
 
             for gid, entry in cache["metadata"].items():
                 meta = entry.get("clean_metadata") or {}
@@ -1784,6 +1786,9 @@ class DB:
                 language_names = meta.get("languages") or meta.get("language") or []
                 if isinstance(language_names, str):
                     language_names = [language_names]
+                parody_names = meta.get("parodies") or meta.get("parody") or []
+                if isinstance(parody_names, str):
+                    parody_names = [parody_names]
 
                 for cname in creator_names:
                     ctype = creator_types.get(cname, None)
@@ -1792,6 +1797,8 @@ class DB:
                     tags.setdefault(tname, {"count": 0})
                 for lname in language_names:
                     languages.setdefault(lname, {"count": 0})
+                for pname in parody_names:
+                    parodies.setdefault(pname, {"count": 0})
 
                 galleries[gid] = {
                     "id": gid,
@@ -1801,6 +1808,7 @@ class DB:
                     "creator_names": creator_names,
                     "language_names": language_names,
                     "tag_names": tag_names,
+                    "parody_names": parody_names,
                     "status": Helpers.safe_text(meta.get("status"), ""),
                     "started_at": Helpers.safe_text(meta.get("started_at"), ""),
                     "completed_at": Helpers.safe_text(meta.get("completed_at"), ""),
@@ -1810,12 +1818,14 @@ class DB:
                 }
                 gallery_tags[gid] = tag_names
                 gallery_languages[gid] = language_names
+                gallery_parodies[gid] = parody_names
 
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 creator_id_map = {}
                 tag_id_map = {}
                 lang_id_map = {}
+                parody_id_map = {}
                 now = datetime.now(timezone.utc).isoformat()
 
                 for cname, cdata in creators.items():
@@ -1838,16 +1848,23 @@ class DB:
                     cursor.execute("SELECT id FROM Languages WHERE name=?", (lname,))
                     lang_id_map[lname] = cursor.fetchone()[0]
 
+                for pname in parodies:
+                    cursor.execute("INSERT OR IGNORE INTO Parodies (name, count) VALUES (?, ?)", (pname, 0))
+                    cursor.execute("SELECT id FROM Parodies WHERE name=?", (pname,))
+                    parody_id_map[pname] = cursor.fetchone()[0]
+
                 for gid, gdata in galleries.items():
                     creator_ids = [creator_id_map[c] for c in gdata["creator_names"] if c in creator_id_map]
                     tag_ids = [tag_id_map[t] for t in gdata["tag_names"] if t in tag_id_map]
                     language_ids = [lang_id_map[l] for l in gdata["language_names"] if l in lang_id_map]
+                    parody_ids = [parody_id_map[p] for p in gdata.get("parody_names", []) if p in parody_id_map]
                     cursor.execute(
-                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=? WHERE id=?",
-                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), gid),
+                        "UPDATE Galleries SET raw_title=?, clean_title=?, num_pages=?, creator_ids=?, language_ids=?, tag_ids=?, parody_ids=? WHERE id=?",
+                        (gdata["raw_title"], gdata["clean_title"], gdata["num_pages"], json.dumps(creator_ids), json.dumps(language_ids), json.dumps(tag_ids), json.dumps(parody_ids), gid),
                     )
                     cursor.execute("INSERT OR REPLACE INTO GalleryTags (gallery_id, tag_ids) VALUES (?, ?)", (gid, json.dumps(tag_ids)))
                     cursor.execute("INSERT OR REPLACE INTO GalleryLanguages (gallery_id, language_ids) VALUES (?, ?)", (gid, json.dumps(language_ids)))
+                    cursor.execute("INSERT OR REPLACE INTO GalleryParodies (gallery_id, parody_ids) VALUES (?, ?)", (gid, json.dumps(parody_ids)))
 
                 for cname, cid in creator_id_map.items():
                     cursor.execute("SELECT Galleries.id FROM Galleries, json_each(Galleries.creator_ids) WHERE json_each.value = ?", (cid,))
@@ -1890,6 +1907,17 @@ class DB:
                             except Exception:
                                 continue
                     cursor.execute("UPDATE Languages SET count=? WHERE id=?", (count, lid))
+
+                for pname, pid in parody_id_map.items():
+                    cursor.execute("SELECT parody_ids FROM GalleryParodies")
+                    count = 0
+                    for (par_ids_json,) in cursor.fetchall():
+                        if par_ids_json:
+                            try:
+                                count += json.loads(par_ids_json).count(pid)
+                            except Exception:
+                                continue
+                    cursor.execute("UPDATE Parodies SET count=? WHERE id=?", (count, pid))
 
                 conn.commit()
 
