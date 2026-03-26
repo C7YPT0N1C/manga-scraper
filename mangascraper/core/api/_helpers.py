@@ -538,7 +538,10 @@ class Helpers:
         if not title:
             title = f"UNTITLED_{meta.get('id', 'UNKNOWN')}" if isinstance(meta_or_title, dict) else "UNTITLED"
 
-        return title.replace("/", "-").replace("\\", "-").strip()
+        # Replace problematic filesystem characters: keep slashes turned to dashes,
+        # backslashes to dashes, and convert colons to underscores (important for creators)
+        title = title.replace("/", "-").replace("\\", "-").replace(":", "_")
+        return title.strip()
 
     @staticmethod
     def summary(meta, referrer: str):
