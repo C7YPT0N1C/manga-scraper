@@ -252,7 +252,6 @@ function renderGalleryDetail(gallery) {
   document.getElementById('galleryDetailTags').textContent = tags.length ? tags.join(', ') : 'None';
   document.getElementById('galleryDetailLanguages').textContent = languages.length ? languages.join(', ') : 'Unknown';
   document.getElementById('galleryDetailPages').textContent = String(pageCount);
-  document.getElementById('galleryDetailStatus').textContent = String(gallery.status || 'Unknown');
 
   const coverEl = document.getElementById('galleryDetailCover');
   coverEl.style.backgroundImage = galleryId > 0 ? `url('/api/gallery/cover_by_id/${encodeURIComponent(galleryId)}')` : '';
