@@ -169,7 +169,7 @@ def _normalise_cli_args(payload) -> list[str]:
 
 
 def _status_counts() -> dict:
-    # Use select_table() helper to avoid positional row indexes
+    # Read rows as dicts to avoid positional-index brittleness.
     try:
         rows = scraperapi.DB.select_table("Galleries", cols=["id", "status", "started_at", "completed_at"]) or []
     except Exception:

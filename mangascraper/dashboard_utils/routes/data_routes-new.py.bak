@@ -517,10 +517,13 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
         cursor.execute("SELECT id, name FROM Languages")
         language_name_map = {int(language_id): str(name) for language_id, name in cursor.fetchall() if language_id is not None and name}
 
+        cursor.execute("SELECT id, name FROM Parodies")
+        parody_name_map = {int(parody_id): str(name) for parody_id, name in cursor.fetchall() if parody_id is not None and name}
+
         placeholders = ",".join("?" for _ in ids)
         cursor.execute(
             f"""
-            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, status, favourite, rating
+            SELECT id, clean_title, raw_title, num_pages, tag_ids, language_ids, parody_ids, status, favourite, rating
             FROM Galleries
             WHERE id IN ({placeholders})
             """,
@@ -534,6 +537,7 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
             raw_title = str(row[2] or "").strip()
             tag_ids = _parse_json_int_list(row[4])
             language_ids = _parse_json_int_list(row[5])
+            parody_ids = _parse_json_int_list(row[6])
             result[gid] = {
                 "title": clean_title or raw_title or f"Gallery {gid}",
                 "clean_title": clean_title,
@@ -541,6 +545,7 @@ def _gallery_meta_by_ids(gallery_ids: list[int]) -> dict[int, dict]:
                 "page_count": int(row[3]) if row[3] is not None else 0,
                 "tags": [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map],
                 "languages": [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map],
+                "parodies": [parody_name_map[parody_id] for parody_id in parody_ids if parody_id in parody_name_map],
                 "status": str(row[6] or ""),
                 "favourite": bool(row[7]),
                 "rating": float(row[8]) if row[8] is not None else None,
@@ -585,6 +590,7 @@ def _apply_gallery_db_meta(items: list[dict]) -> list[dict]:
         item["page_count"] = meta["page_count"]
         item["tags"] = list(meta["tags"])
         item["languages"] = list(meta["languages"])
+        item["parodies"] = list(meta.get("parodies") or [])
         item["tag_count"] = len(meta["tags"])
         item["status"] = meta["status"]
         item["favourite"] = bool(meta["favourite"])
@@ -810,6 +816,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         "page_count": 0,
         "creators": [],
         "languages": [],
+        "parodies": [],
         "tags": [],
         "status": "",
         "favourite": False,
@@ -856,6 +863,7 @@ def _gallery_meta_by_id(gallery_id: int) -> dict:
         meta["creators"] = [creator_name_map[cid] for cid in creator_ids if cid in creator_name_map]
         meta["tags"] = [tag_name_map[tag_id] for tag_id in tag_ids if tag_id in tag_name_map]
         meta["languages"] = [language_name_map[language_id] for language_id in language_ids if language_id in language_name_map]
+        meta["parodies"] = [parody_name_map[parody_id] for parody_id in (parody_ids or []) if parody_id in parody_name_map]
         meta["status"] = str(row[5] or "")
         meta["favourite"] = bool(row[6])
         meta["rating"] = float(row[7]) if row[7] is not None else None

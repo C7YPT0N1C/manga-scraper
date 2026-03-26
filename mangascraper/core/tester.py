@@ -291,8 +291,12 @@ def main() -> bool:
                 )
                 scraperapi.DB.Gallery.complete(path_gid)
 
-                rows = scraperapi.DB.select_table("Galleries", cols=["download_path"], where="id=?", params=(path_gid,), limit=1) or []
-                final_path = str(rows[0].get("download_path") or "").strip() if rows else ""
+                with scraperapi.db_lock, scraperapi.DB.dbconnect() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT download_path FROM Galleries WHERE id = ?", (path_gid,))
+                    row = cursor.fetchone()
+
+                final_path = str(row[0]) if row and row[0] is not None else ""
                 ok = final_path.startswith(TEST_RUNTIME_ROOT)
                 _report(f"computed gallery output path stays under {orchestrator.TEMP_DIR}/", ok, f"download_path={final_path}")
             except Exception as e:
@@ -902,7 +906,7 @@ def main() -> bool:
 
             # I.4) list_galleries() includes newly inserted row
             try:
-                all_ids = {int(r.get("id")) for r in scraperapi.DB.Gallery.list_as_dicts()}
+                all_ids = {row[0] for row in scraperapi.DB.Gallery.list()}
                 ok = _STATUS_GID_STARTED in all_ids
                 _report("list_galleries() includes newly started gallery", ok)
             except Exception as e:
@@ -910,8 +914,8 @@ def main() -> bool:
 
             # I.5) list_galleries(status) filters by status correctly
             try:
-                started_ids = {int(r.get("id")) for r in scraperapi.DB.Gallery.list_as_dicts(status="started")}
-                skipped_ids = {int(r.get("id")) for r in scraperapi.DB.Gallery.list_as_dicts(status="skipped")}
+                started_ids = {row[0] for row in scraperapi.DB.Gallery.list_by_status("started")}
+                skipped_ids = {row[0] for row in scraperapi.DB.Gallery.list_by_status("skipped")}
                 ok = (
                     _STATUS_GID_STARTED in started_ids
                     and _STATUS_GID_SKIPPED not in started_ids

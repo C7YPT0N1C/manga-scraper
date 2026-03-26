@@ -218,7 +218,9 @@ class Get:
         if gallery_id is None:
             return None
         DB.init_db()
-        rows = DB.select_table("Galleries", cols=["status"], where="id=?", params=(gallery_id,), limit=1) or []
-        if not rows:
-            return None
-        return Helpers.safe_text(rows[0].get("status"), "")
+        from mangascraper.core.api._constants import db_lock
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM Galleries WHERE id=?", (gallery_id,))
+            row = cursor.fetchone()
+            return Helpers.safe_text(row[0], "") if row else None
