@@ -81,26 +81,6 @@ def _parse_prefixed_query(value: str) -> tuple[str, str] | None:
     return query_type, query_value
 
 
-def _validate_prefixed_tokens(value: str) -> bool:
-    """Validate that any +/ - prefixed tokens in the query use quoted terms.
-
-    Returns True if valid, False if an unquoted prefixed token is present.
-    """
-    text = str(value or "")
-    if not text:
-        return True
-    # Match tokens that start with + or - (start or preceded by whitespace), optional field:,
-    # and then a bare unquoted term. If any such token exists it's invalid per rules.
-    try:
-        m = re.search(r"(?:(?:^|\s))([+-])(?:[A-Za-z_]+:)?([^\"'\s][^\s]*)", text)
-        if m:
-            return False
-    except Exception:
-        # On any regex error, be conservative and accept
-        return True
-    return True
-
-
 def _queue_rows(ids: list[int], metadata: dict | None = None) -> list[dict]:
     metadata = metadata or {}
     rows = []
@@ -482,16 +462,9 @@ def search_galleries():
         return jsonify({"message": f"Unsupported query_type '{query_type}'."}), 400
 
     query_value = str(payload.get("query_value") or "").strip()
-    # Server-side validation: reject unquoted +/- prefixed tokens (treat as invalid -> empty results)
-    if not _validate_prefixed_tokens(query_value):
-        return jsonify({
-            "message": "No galleries found.",
-            "cache_key": None,
-            "ids": [],
-            "summary": {},
-            "results": [],
-        })
-    # Note: key:value parsing removed — treat query_value as free-text search.
+    parsed_prefixed = _parse_prefixed_query(query_value)
+    if parsed_prefixed and query_type in {"search", "artist", "group", "tag", "character", "parody"}:
+        query_type, query_value = parsed_prefixed
     sort_value = str(payload.get("sort") or orchestrator.DEFAULT_PAGE_SORT).strip()
     sort_value = orchestrator.get_valid_sort_value(sort_value)
     start_page = _safe_int(payload.get("start_page"), orchestrator.DEFAULT_PAGE_RANGE_START)

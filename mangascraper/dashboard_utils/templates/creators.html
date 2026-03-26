@@ -139,40 +139,6 @@ let _pageSizeByType = {
 };
 let _detailGallery = null;
 let _currentRootPath = '';
-let _parodyMap = {};
-let _parodyMapLoaded = false;
-
-async function loadParodyMap() {
-	if (_parodyMapLoaded) return;
-	try {
-		const res = await fetch('/api/gallery/parody_map');
-		if (!res.ok) throw new Error('HTTP ' + res.status);
-		const data = await res.json();
-		_parodyMap = data.parody_map || {};
-	} catch (e) {
-		_parodyMap = {};
-	} finally {
-		_parodyMapLoaded = true;
-	}
-}
-
-function resolveParodyList(arr) {
-	const list = normaliseList(arr || []);
-	const resolved = list.map(item => {
-		if (!item) return item;
-		// numeric id or numeric string -> map
-		if (/^\d+$/.test(String(item).trim())) {
-			const mapped = _parodyMap[String(Number(item))];
-			return mapped || String(item);
-		}
-		return String(item);
-	});
-	// if we encountered numeric entries but map not yet loaded, trigger background load
-	if (!_parodyMapLoaded && list.some(it => /^\d+$/.test(String(it)))) {
-		loadParodyMap().then(() => { if (document.getElementById('galleryDetailModal').style.display !== 'none' && _detailGallery) _renderGalleryDetail(_detailGallery); });
-	}
-	return resolved;
-}
 
 const reader = {
 	pages: [],
@@ -265,65 +231,15 @@ function _setCreatorGalleryUrl(creatorName, galleryId) {
 }
 
 function parseSearchQuery(raw) {
-	const text = String(raw || '');
-	let i = 0;
-	const n = text.length;
-	const tokens = [];
-
-	function isWhitespace(ch) { return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r'; }
-
-	while (i < n) {
-		// skip whitespace
-		while (i < n && isWhitespace(text[i])) i++;
-		if (i >= n) break;
-
-		// optional prefix
-		let prefix = '';
-		if (text[i] === '+' || text[i] === '-') {
-			prefix = text[i];
-			i++;
-		}
-
-		// parse term (quoted or bare). DO NOT treat field:value specially — keep simple free-text.
-		let term = '';
-		let quoted = false;
-		if (i < n && (text[i] === '"' || text[i] === "'")) {
-			quoted = true;
-			const q = text[i];
-			i++;
-			while (i < n) {
-				const ch = text[i];
-				if (ch === '\\') {
-					if (i + 1 < n) {
-						term += text[i + 1];
-						i += 2;
-						continue;
-					}
-					i++;
-					continue;
-				}
-				if (ch === q) { i++; break; }
-				term += ch;
-				i++;
-			}
-		} else {
-			const start = i;
-			while (i < n && !isWhitespace(text[i])) i++;
-			term = text.slice(start, i);
-		}
-
-		// enforce: +/ - prefixes require quoted terms
-		if ((prefix === '+' || prefix === '-') && !quoted) return null;
-
-		term = String(term || '').trim().toLowerCase();
-		tokens.push({ field: '', term: term, include: prefix !== '-', exclude: prefix === '-' });
-	}
-
-	return tokens;
+	const text = String(raw || '').trim();
+	if (!text) return { field: '', term: '' };
+	const match = text.match(/^([a-z_]+)\s*:\s*(.+)$/i);
+	if (!match) return { field: '', term: text.toLowerCase() };
+	return {
+		field: String(match[1] || '').toLowerCase(),
+		term: String(match[2] || '').trim().toLowerCase(),
+	};
 }
-
-// Parse a pages term into a numeric range {min, max} or null if invalid.
-// pages-range parsing is handled via explicit filter inputs (min/max) rather than key:value tokens.
 
 function parseGalleryId(value) {
 	const text = String(value || '').trim();
@@ -389,9 +305,7 @@ function getFilteredItems() {
 	let items = _currentItemType === 'creators' ? _allCreators : _allGalleries;
 
 	if (_searchTerm) {
-		const tokens = parseSearchQuery(_searchTerm);
-		// If tokeniser returned null, treat the query as invalid and return no results.
-		if (tokens === null) return [];
+		const parsed = parseSearchQuery(_searchTerm);
 		items = items.filter(item => {
 			const languages = normaliseList(item.languages).map(normaliseText);
 			const tags = normaliseList(item.tags).map(normaliseText);
@@ -406,38 +320,22 @@ function getFilteredItems() {
 				const status = String(item.status || '').trim();
 				if (status) searchableParts.push(status);
 			}
-			if (!tokens.length) return true;
-			// WITH simplified search (no key:value parsing) tokens are free-text terms.
-			// For creators: match if the creator name (and creator-level fields) match ALL include tokens,
-			// OR at least one owned gallery title matches ALL include tokens. Exclude tokens always disqualify
-			// if they appear in either the creator name/fields or any gallery title.
-			const includeTokens = tokens.filter(t => !t.exclude).map(t => String(t.term || '').toLowerCase()).filter(Boolean);
-			const excludeTokens = tokens.filter(t => t.exclude).map(t => String(t.term || '').toLowerCase()).filter(Boolean);
-
-			// build creator-level hay
-			const creatorHay = searchableParts.join(' ').toLowerCase();
-			// gallery titles (lowercase)
-			const galleryTitles = normaliseList(item.gallery_titles || []).map(t => String(t || '').toLowerCase());
-
-			// Exclude tokens: if any exclude term appears in creatorHay or in any galleryTitle, reject
-			for (const ex of excludeTokens) {
-				if (!ex) continue;
-				if (creatorHay.includes(ex)) return false;
-				for (const gt of galleryTitles) {
-					if (gt.includes(ex)) return false;
-				}
+			if (!parsed.term) {
+				return true;
 			}
-
-			// If there are no include tokens, treat as pass (subject only to excludes)
-			if (!includeTokens.length) return true;
-
-			// creator name must contain ALL include tokens to be a name-match
-			const creatorNameMatch = includeTokens.every(term => creatorHay.includes(term));
-
-			// gallery match: at least one gallery title must include ALL include tokens
-			const galleryMatch = galleryTitles.some(gt => includeTokens.every(term => gt.includes(term)));
-
-			return creatorNameMatch || galleryMatch;
+			if (parsed.field === 'artist' || parsed.field === 'group' || parsed.field === 'creator') {
+				return label.includes(parsed.term) || creators.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'tag' || parsed.field === 'character') {
+				return tags.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'parody') {
+				return parodies.some(value => value.includes(parsed.term));
+			}
+			if (parsed.field === 'language' || parsed.field === 'lang') {
+				return languages.some(value => value.includes(parsed.term));
+			}
+			return searchableParts.join(' ').toLowerCase().includes(parsed.term);
 		});
 	}
 
@@ -454,21 +352,6 @@ function getFilteredItems() {
 		}
 		if (_activeFilters.tag && !tags.includes(normaliseText(_activeFilters.tag))) {
 			return false;
-		}
-		// pages filtering
-		const minp = (typeof _activeFilters.min_pages === 'number' && Number.isFinite(_activeFilters.min_pages)) ? Number(_activeFilters.min_pages) : null;
-		const maxp = (typeof _activeFilters.max_pages === 'number' && Number.isFinite(_activeFilters.max_pages)) ? Number(_activeFilters.max_pages) : null;
-		if (minp !== null || maxp !== null) {
-			if (_currentItemType === 'galleries') {
-				const pc = Number(item.page_count || 0);
-				if (minp !== null && pc < minp) return false;
-				if (maxp !== null && pc > maxp) return false;
-			} else if (_currentItemType === 'creators') {
-				const cmin = Number(item.min_page_count || 0);
-				const cmax = Number(item.max_page_count || 0);
-				if (minp !== null && cmax < minp) return false;
-				if (maxp !== null && cmin > maxp) return false;
-			}
 		}
 		return true;
 	});
@@ -513,66 +396,16 @@ function setupFiltersForCreators(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
-	// Pages min/max inputs
-	const minIn = document.createElement('input');
-	minIn.type = 'number';
-	minIn.min = '0';
-	minIn.placeholder = 'Min pages';
-	minIn.value = String(_activeFilters.min_pages || '');
-	minIn.addEventListener('change', () => {
-		const v = Number(minIn.value);
-		_activeFilters.min_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	const maxIn = document.createElement('input');
-	maxIn.type = 'number';
-	maxIn.min = '0';
-	maxIn.placeholder = 'Max pages';
-	maxIn.value = String(_activeFilters.max_pages || '');
-	maxIn.addEventListener('change', () => {
-		const v = Number(maxIn.value);
-		_activeFilters.max_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	filterGroup.appendChild(createFilterField('Pages min', minIn));
-	filterGroup.appendChild(createFilterField('Pages max', maxIn));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 function setupFiltersForGalleries(filters) {
 	const filterGroup = document.getElementById('filterGroup');
 	filterGroup.innerHTML = '';
 	filterGroup.appendChild(createSelectFilter('language', 'Language', filters.languages || [], 'All languages'));
-	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 	filterGroup.appendChild(createSelectFilter('parody', 'Parody', filters.parodies || [], 'All parodies'));
-	// Pages min/max inputs
-	const minIn = document.createElement('input');
-	minIn.type = 'number';
-	minIn.min = '0';
-	minIn.placeholder = 'Min pages';
-	minIn.value = String(_activeFilters.min_pages || '');
-	minIn.addEventListener('change', () => {
-		const v = Number(minIn.value);
-		_activeFilters.min_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	const maxIn = document.createElement('input');
-	maxIn.type = 'number';
-	maxIn.min = '0';
-	maxIn.placeholder = 'Max pages';
-	maxIn.value = String(_activeFilters.max_pages || '');
-	maxIn.addEventListener('change', () => {
-		const v = Number(maxIn.value);
-		_activeFilters.max_pages = Number.isFinite(v) && v >= 0 ? v : '';
-		_currentPage = 1;
-		refreshDisplay();
-	});
-	filterGroup.appendChild(createFilterField('Pages min', minIn));
-	filterGroup.appendChild(createFilterField('Pages max', maxIn));
+	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
 document.querySelectorAll('.modeTab').forEach(btn => {
@@ -643,7 +476,7 @@ function _renderGalleryDetail(gallery) {
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
 	const tagList = normaliseList(gallery.tags);
-	const parodyList = resolveParodyList(normaliseList(gallery.parodies));
+	const parodyList = normaliseList(gallery.parodies);
 	const creatorList = normaliseList(gallery.creators);
 	const galleryId = Number(gallery.gallery_id || 0);
 	let coverUrl = '';
