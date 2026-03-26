@@ -496,7 +496,7 @@ function _renderGalleryDetail(gallery) {
 }
 
 async function openGalleryDetail(gallery) {
-	_detailGallery = { ...gallery, creators: (_currentCreator ? [_currentCreator] : []) };
+	_detailGallery = { ...gallery, creators: (_currentCreator ? [_currentCreator] : []), parodies: normaliseList(gallery.parodies || (gallery.parody ? (Array.isArray(gallery.parody) ? gallery.parody : [gallery.parody]) : [])) };
 	if (!_detailGallery.gallery_id) {
 		_detailGallery.gallery_id = parseGalleryId(itemLabel(gallery));
 	}
@@ -514,12 +514,13 @@ async function openGalleryDetail(gallery) {
 			data = await apiFetch(_withRoot(`/api/gallery/details/${creatorName}/${galleryName}`));
 		}
 
-		if (data.gallery_id) {
+				if (data.gallery_id) {
 			_detailGallery.gallery_id = data.gallery_id;
 		}
 		_detailGallery.page_count = Number(data.page_count || _detailGallery.page_count || 0);
-		_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
-		_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
+				_detailGallery.languages = Array.isArray(data.languages) ? data.languages : (_detailGallery.languages || []);
+				_detailGallery.parodies = Array.isArray(data.parodies) ? data.parodies : (data.parody ? (Array.isArray(data.parody) ? data.parody : [String(data.parody)]) : (_detailGallery.parodies || []));
+				_detailGallery.tags = Array.isArray(data.tags) ? data.tags : (_detailGallery.tags || []);
 		_detailGallery.status = String(data.status || _detailGallery.status || '');
 		document.getElementById('galleryDetailStatus').textContent = String(_detailGallery.status || 'Unknown');
 		if (Array.isArray(data.creators) && data.creators.length) {

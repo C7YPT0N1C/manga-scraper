@@ -310,6 +310,7 @@ async function openGalleryDetail(item) {
     status: String(item.status || ''),
     favourite: Boolean(item.favourite),
     creators: normaliseList(item.creators),
+    parodies: normaliseList(item.parodies || (item.parody ? (Array.isArray(item.parody) ? item.parody : [item.parody]) : [])),
     tags: normaliseList(item.tags),
     languages: normaliseList(item.languages),
   };
@@ -329,6 +330,7 @@ async function openGalleryDetail(item) {
       gallery_id: Number(data.gallery_id || galleryId),
       title: String(data.title || _detailGallery.title || `Gallery ${galleryId}`),
       creators: normaliseList(data.creators || _detailGallery.creators),
+      parodies: normaliseList(data.parodies || (data.parody ? (Array.isArray(data.parody) ? data.parody : [data.parody]) : _detailGallery.parodies)),
       tags: normaliseList(data.tags || _detailGallery.tags),
       languages: normaliseList(data.languages || _detailGallery.languages),
       page_count: Number(data.page_count || _detailGallery.page_count || 0),
