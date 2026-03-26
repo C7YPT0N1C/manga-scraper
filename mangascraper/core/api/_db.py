@@ -1812,6 +1812,14 @@ class DB:
                 parody_names = meta.get("parodies") or meta.get("parody") or []
                 if isinstance(parody_names, str):
                     parody_names = [parody_names]
+                # Normalise parody names and default empty values to 'original'
+                normalised_parody_names = []
+                for p in parody_names:
+                    pname = str(p or "").strip()
+                    if not pname:
+                        pname = "original"
+                    normalised_parody_names.append(pname)
+                parody_names = normalised_parody_names
 
                 for cname in creator_names:
                     ctype = creator_types.get(cname, None)
@@ -1821,6 +1829,9 @@ class DB:
                 for lname in language_names:
                     languages.setdefault(lname, {"count": 0})
                 for pname in parody_names:
+                    pname = str(pname or "").strip()
+                    if not pname:
+                        pname = "original"
                     parodies.setdefault(pname, {"count": 0})
 
                 galleries[gid] = {
@@ -1872,6 +1883,9 @@ class DB:
                     lang_id_map[lname] = cursor.fetchone()[0]
 
                 for pname in parodies:
+                    pname = str(pname or "").strip()
+                    if not pname:
+                        pname = "original"
                     cursor.execute("INSERT OR IGNORE INTO Parodies (name, count) VALUES (?, ?)", (pname, 0))
                     cursor.execute("SELECT id FROM Parodies WHERE name=?", (pname,))
                     parody_id_map[pname] = cursor.fetchone()[0]
