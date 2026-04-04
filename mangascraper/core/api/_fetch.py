@@ -466,7 +466,7 @@ class Fetch:
             return cached_meta
 
         metadata_session = Get.session(referrer="API", status="return")
-        url = f"{orchestrator.nhentai_api_base}/gallery/{gallery_id}"
+        url = f"{orchestrator.nhentai_api_base}/galleries/{gallery_id}"
 
         for attempt in range(1, orchestrator.max_retries + 1):
             try:

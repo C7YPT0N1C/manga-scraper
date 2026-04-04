@@ -256,7 +256,7 @@ extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 # ------------------------------------------------------------
 # APIs and Mirrors
 # ------------------------------------------------------------
-DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api"
+DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api/v2"
 nhentai_api_base = DEFAULT_NHENTAI_API_BASE
 
 DEFAULT_NHENTAI_MIRRORS = "https://i.nhentai.net"

@@ -16,7 +16,7 @@ class Build:
     ################################################################################################################
     # NHentai API Handling / Endpoints
     ################################################################################################################
-    # Default base URL: https://nhentai.net/api
+    # Default base URL: https://nhentai.net/api/v2
     #
     # 1. Homepage
     #    GET /galleries
