@@ -1,6 +1,8 @@
 # mangascraper/core/api/_sleep.py
 
 import random
+import time
+import threading
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import log, log_clarification
@@ -11,6 +13,100 @@ from mangascraper.core.orchestrator import log, log_clarification
 
 class Sleep:
     """Adaptive retry sleep calculations."""
+
+    # Token-bucket rate limiter for API endpoints
+    _buckets_lock = threading.RLock()
+    _buckets = {}
+
+    class TokenBucket:
+        def __init__(self, rate_per_sec: float, capacity: float):
+            self.rate = float(rate_per_sec)
+            self.capacity = float(capacity)
+            self._tokens = float(capacity)
+            self._last = time.monotonic()
+            self._lock = threading.Lock()
+
+        def _refill(self):
+            now = time.monotonic()
+            delta = now - self._last
+            if delta <= 0:
+                return
+            self._last = now
+            self._tokens = min(self.capacity, self._tokens + delta * self.rate)
+
+        def consume(self, tokens: float = 1.0) -> bool:
+            with self._lock:
+                self._refill()
+                if self._tokens >= tokens:
+                    self._tokens -= tokens
+                    return True
+                return False
+
+        def wait(self, tokens: float = 1.0):
+            while True:
+                with self._lock:
+                    self._refill()
+                    if self._tokens >= tokens:
+                        self._tokens -= tokens
+                        return
+                    need = tokens - self._tokens
+                    wait = max(need / self.rate, 0.01) if self.rate > 0 else 0.5
+                time.sleep(wait)
+
+    @staticmethod
+    def _get_bucket(name: str, rate_per_min: float, capacity: float = None):
+        """Return or create a TokenBucket for the given logical name.
+
+        rate_per_min: tokens allowed per minute.
+        capacity default = rate_per_min (allow one-minute burst).
+        """
+        with Sleep._buckets_lock:
+            if name in Sleep._buckets:
+                return Sleep._buckets[name]
+            rate_per_sec = float(rate_per_min) / 60.0
+            cap = float(capacity) if capacity is not None else float(rate_per_min)
+            bucket = Sleep.TokenBucket(rate_per_sec, cap)
+            Sleep._buckets[name] = bucket
+            return bucket
+
+    @staticmethod
+    def api_wait_for_url(url: str):
+        """Map URL to a rate group and wait on its token bucket before making the request."""
+        try:
+            u = str(url)
+            # Default group / conservative limits
+            group = "default"
+            # Map by path
+            if "/api/v2/galleries/" in u:
+                # If path contains galleries/{id} (detail)
+                # gallery detail limit: 45/min
+                group = "gallery_detail"
+            elif "/api/v2/galleries" in u and "/search" not in u:
+                # listing / homepage: 30/min
+                group = "galleries_list"
+            elif "/api/v2/search" in u:
+                group = "search"
+            elif "/api/v2/galleries/popular" in u:
+                group = "popular"
+            elif "/api/v2/galleries/random" in u:
+                group = "random"
+            # Create buckets with sensible defaults
+            if group == "gallery_detail":
+                b = Sleep._get_bucket(group, 45)
+            elif group == "galleries_list":
+                b = Sleep._get_bucket(group, 30)
+            elif group == "search":
+                b = Sleep._get_bucket(group, 20)
+            elif group == "popular":
+                b = Sleep._get_bucket(group, 20)
+            elif group == "random":
+                b = Sleep._get_bucket(group, 60)
+            else:
+                b = Sleep._get_bucket(group, 20)
+            b.wait(1.0)
+        except Exception:
+            # Non-fatal: if rate limiter fails, allow the request to proceed
+            return
 
     @staticmethod
     def calculate_load(stage: str, num_items: int, attempt: int, gallery_cap: int = 3750):

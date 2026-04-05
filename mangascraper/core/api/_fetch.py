@@ -18,6 +18,59 @@ from mangascraper.core.api._cache import Cache
 class Fetch:
     """Fetch a resource."""
 
+    # Module-level flag to avoid repeated CDN/config requests
+    _mirrors_loaded = False
+    
+    @staticmethod
+    def _ensure_mirrors(session):
+        """Fetch CDN/config from nhentai and update orchestrator.nhentai_mirrors once.
+
+        Non-fatal — failures will be ignored and the default mirrors remain.
+        """
+        global _mirrors_loaded
+        if _mirrors_loaded:
+            return
+        try:
+            orchestrator.refresh_globals()
+            base = orchestrator.nhentai_api_base.rstrip("/")
+            urls_to_try = [f"{base}/cdn", f"{base}/config"]
+            servers = None
+            for url in urls_to_try:
+                try:
+                    from mangascraper.core.api._sleep import Sleep
+                    try:
+                        Sleep.api_wait_for_url(url)
+                    except Exception:
+                        pass
+                    r = session.get(url, timeout=(6, 6))
+                    if r.status_code != 200:
+                        continue
+                    payload = r.json()
+                    # /cdn returns { image_servers: [...], thumb_servers: [...] }
+                    if isinstance(payload, dict):
+                        if payload.get("image_servers"):
+                            servers = payload.get("image_servers")
+                            break
+                        # /config may nest image servers under keys
+                        if payload.get("image_servers"):
+                            servers = payload.get("image_servers")
+                            break
+                except Exception:
+                    continue
+
+            if servers and isinstance(servers, (list, tuple)) and servers:
+                # Ensure default mirror first, then others (dedup)
+                new_list = [orchestrator.DEFAULT_NHENTAI_MIRRORS]
+                for s in servers:
+                    s = str(s).rstrip("/")
+                    if s and s != orchestrator.DEFAULT_NHENTAI_MIRRORS:
+                        new_list.append(s)
+                orchestrator.nhentai_mirrors = new_list
+                logger.debug(f"Updated NHentai mirrors from API: {orchestrator.nhentai_mirrors}")
+            _mirrors_loaded = True
+        except Exception as e:
+            logger.debug(f"Could not refresh CDN mirrors: {e}")
+
     @staticmethod
     def latest_gallery_id(timeout: int = 5) -> int | None:
         """Fetch the latest gallery ID directly from nhentai homepage API."""
@@ -27,7 +80,18 @@ class Fetch:
             log("Fetching latest gallery ID from nhentai homepage...", "debug")
 
             session = Get.session(referrer="Latest ID Fetch", status="return")
+            # Ensure we have up-to-date CDN mirrors before requesting
+            try:
+                Fetch._ensure_mirrors(session)
+            except Exception:
+                pass
             url = f"{orchestrator.nhentai_api_base}/galleries/all?page=1"
+
+            from mangascraper.core.api._sleep import Sleep
+            try:
+                Sleep.api_wait_for_url(url)
+            except Exception:
+                pass
 
             resp = session.get(url, timeout=(timeout, timeout))
             resp.raise_for_status()
@@ -249,6 +313,11 @@ class Fetch:
                     resp = None
                     for api_attempt in range(1, orchestrator.max_retries + 1):
                         try:
+                            from mangascraper.core.api._sleep import Sleep
+                            try:
+                                Sleep.api_wait_for_url(url)
+                            except Exception:
+                                pass
                             resp = gallery_ids_session.get(url, timeout=(60, 60))
                             if resp.status_code == 429:
                                 from mangascraper.core.api._sleep import Sleep
@@ -440,6 +509,12 @@ class Fetch:
             ext = ext_map.get(type_code, "webp")
             filename = f"{page}.{ext}"
 
+            # Ensure mirrors are refreshed lazily
+            try:
+                Fetch._ensure_mirrors(Get.session(referrer="Image URL Builder", status="return"))
+            except Exception:
+                pass
+
             urls = [
                 f"{mirror}/galleries/{meta.get('media_id', '')}/{filename}"
                 for mirror in orchestrator.nhentai_mirrors
@@ -474,6 +549,11 @@ class Fetch:
                 log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
                 resp = metadata_session.get(url, timeout=(60, 60))
+                from mangascraper.core.api._sleep import Sleep
+                try:
+                    Sleep.api_wait_for_url(url)
+                except Exception:
+                    pass
                 if resp.status_code == 429:
                     from mangascraper.core.api._sleep import Sleep
                     wait = Sleep.dynamic("api", attempt=attempt)
