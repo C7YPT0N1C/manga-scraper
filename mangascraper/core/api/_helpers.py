@@ -395,7 +395,7 @@ class Helpers:
         elif isinstance(res, list) and len(res) == 1 and isinstance(res[0], dict) and res[0].get("id"):
             meta = dict(res[0])
 
-        # Normalize id
+        # Normalise id
         if "id" not in meta:
             for alt in ("gallery_id", "gid"):
                 if alt in meta:
@@ -407,7 +407,7 @@ class Helpers:
         except Exception:
             pass
 
-        # Normalize media_id
+        # Normalise media_id
         if "media_id" not in meta:
             for alt in ("mediaId", "media"):
                 if alt in meta:
@@ -442,7 +442,7 @@ class Helpers:
         if isinstance(tags, list) and tags and all(isinstance(t, str) for t in tags):
             meta["tags"] = [{"type": "tag", "name": t} for t in tags]
 
-        # Normalize pages: accept top-level 'pages', images.pages, or num_pages
+        # Normalise pages: accept top-level 'pages', images.pages, or num_pages
         pages_list = None
         if isinstance(meta.get("pages"), list):
             pages_list = list(meta.pop("pages"))
