@@ -573,18 +573,33 @@ class Fetch:
                     logger.error(f"Unexpected response type for Gallery: {gallery_id}: {type(data)}")
                     return None
 
-                cached_entry = Cache.Save.cache(data, gallery_id)
+                # Keep original raw JSON, but normalise before generating clean metadata
+                original_raw = data
+                try:
+                    norm = Helpers.normalise_api_metadata(data)
+                except Exception:
+                    norm = data
+
+                # Save clean metadata generated from the normalised shape
+                cached_entry = Cache.Save.cache(norm, gallery_id)
                 if cached_entry:
                     general_metadata = Cache.Load.cached_metadata(clean=True)
                     general_metadata[gallery_id] = cached_entry
                     Cache.Save.cached_metadata(general_metadata, clean=True)
-                raw_cache = Cache.Load.cached_metadata()
-                raw_cache[gallery_id] = data
-                Cache.Save.cached_metadata(raw_cache)
+
+                # Ensure raw_metadata in DB stores the original API response
+                try:
+                    now = time.time()
+                    gid = Helpers.normalise_integer(gallery_id)
+                    if gid is not None:
+                        Cache.upsert_cached_metadata(gallery_id=gid, timestamp=now, raw_metadata=original_raw)
+                except Exception:
+                    # Non-fatal: ignore errors writing raw metadata
+                    pass
 
                 log_clarification("debug")
                 log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
-                return data
+                return norm
 
             except requests.HTTPError as e:
                 if "404 Client Error: Not Found for url" in str(e):

@@ -368,6 +368,204 @@ class Helpers:
         return result
 
     @staticmethod
+    def normalise_api_metadata(raw_meta: dict) -> dict:
+        """Normalise API metadata from multiple possible nhentai API shapes into the
+        internal format expected by the rest of the codebase.
+
+        Defensive: unwraps common wrappers and maps alternate field names into the
+        canonical keys (`id`, `media_id`, `images.pages`, `tags`, `title`).
+        Adds derived fields `pages` (int) and `clean_title` (string).
+        """
+        if not isinstance(raw_meta, dict):
+            return raw_meta
+
+        meta = dict(raw_meta)
+
+        # Unwrap common wrappers
+        for key in ("gallery", "data"):
+            val = meta.get(key)
+            if isinstance(val, dict) and val.get("id"):
+                meta = dict(val)
+                break
+
+        # Handle 'result' wrapper
+        res = meta.get("result")
+        if isinstance(res, dict) and res.get("id"):
+            meta = dict(res)
+        elif isinstance(res, list) and len(res) == 1 and isinstance(res[0], dict) and res[0].get("id"):
+            meta = dict(res[0])
+
+        # Normalize id
+        if "id" not in meta:
+            for alt in ("gallery_id", "gid"):
+                if alt in meta:
+                    meta["id"] = meta.pop(alt)
+                    break
+        try:
+            if "id" in meta:
+                meta["id"] = int(meta["id"])  # coerce when possible
+        except Exception:
+            pass
+
+        # Normalize media_id
+        if "media_id" not in meta:
+            for alt in ("mediaId", "media"):
+                if alt in meta:
+                    meta["media_id"] = meta.pop(alt)
+                    break
+        # Infer media_id from page path if missing
+        if "media_id" not in meta:
+            pages_guess = None
+            if isinstance(meta.get("pages"), list):
+                pages_guess = meta.get("pages")
+            elif isinstance(meta.get("images"), dict) and isinstance(meta["images"].get("pages"), list):
+                pages_guess = meta["images"]["pages"]
+            if isinstance(pages_guess, list) and pages_guess:
+                first = pages_guess[0]
+                path = first.get("path") if isinstance(first, dict) else None
+                if isinstance(path, str) and "/galleries/" in path:
+                    try:
+                        parts = path.split("/galleries/", 1)[1].split("/", 1)
+                        media_candidate = parts[0]
+                        if media_candidate:
+                            meta["media_id"] = media_candidate
+                    except Exception:
+                        pass
+
+        # Title -> object
+        title = meta.get("title")
+        if isinstance(title, str):
+            meta["title"] = {"english": title}
+
+        # Tags: support list[str]
+        tags = meta.get("tags")
+        if isinstance(tags, list) and tags and all(isinstance(t, str) for t in tags):
+            meta["tags"] = [{"type": "tag", "name": t} for t in tags]
+
+        # Normalize pages: accept top-level 'pages', images.pages, or num_pages
+        pages_list = None
+        if isinstance(meta.get("pages"), list):
+            pages_list = list(meta.pop("pages"))
+        else:
+            if isinstance(meta.get("images"), dict) and isinstance(meta["images"].get("pages"), list):
+                pages_list = list(meta["images"]["pages"])
+
+        if pages_list is None:
+            for alt in ("page_list", "pages_list"):
+                if isinstance(meta.get(alt), list):
+                    pages_list = list(meta.pop(alt))
+                    break
+
+        if pages_list is None:
+            num = None
+            for alt in ("num_pages", "pages_count", "page_count"):
+                if alt in meta:
+                    try:
+                        num = int(meta.get(alt) or 0)
+                    except Exception:
+                        num = None
+                    break
+            if num is not None and num > 0:
+                pages_list = [{} for _ in range(num)]
+
+        images = meta.get("images") if isinstance(meta.get("images"), dict) else {}
+        if pages_list is not None:
+            norm_pages = []
+            for i, p in enumerate(pages_list):
+                page = dict(p) if isinstance(p, dict) else {}
+                try:
+                    page_number = int(page.get("number", i + 1))
+                except Exception:
+                    page_number = i + 1
+                page["number"] = page_number
+
+                path = page.get("path") or page.get("file") or page.get("url")
+                if isinstance(path, str):
+                    page["path"] = path
+
+                # infer type code 't' from extension
+                if not page.get("t"):
+                    ext = None
+                    if isinstance(page.get("path"), str) and "." in page.get("path"):
+                        try:
+                            ext = page.get("path").rsplit(".", 1)[-1].lower()
+                        except Exception:
+                            ext = None
+                    if not ext and isinstance(page.get("thumbnail"), str) and "." in page.get("thumbnail"):
+                        try:
+                            ext = page.get("thumbnail").rsplit(".", 1)[-1].lower()
+                        except Exception:
+                            ext = None
+                    if ext in ("jpg", "jpeg"):
+                        page["t"] = "j"
+                    elif ext == "png":
+                        page["t"] = "p"
+                    elif ext == "gif":
+                        page["t"] = "g"
+                    else:
+                        page["t"] = "w"
+
+                if page.get("width"):
+                    try:
+                        page["width"] = int(page.get("width"))
+                    except Exception:
+                        pass
+                if page.get("height"):
+                    try:
+                        page["height"] = int(page.get("height"))
+                    except Exception:
+                        pass
+
+                norm_pages.append(page)
+
+            images["pages"] = norm_pages
+        else:
+            images.setdefault("pages", [])
+
+        meta["images"] = images
+
+        # Ensure cover maps to page 1 if cover.path exists
+        cover = meta.get("cover")
+        if isinstance(cover, dict) and isinstance(cover.get("path"), str):
+            try:
+                if meta.get("images") and isinstance(meta["images"].get("pages"), list) and len(meta["images"]["pages"]) >= 1:
+                    meta["images"]["pages"][0]["path"] = cover.get("path")
+                    p0 = meta["images"]["pages"][0]
+                    if p0.get("path") and "." in p0.get("path"):
+                        ext = p0.get("path").rsplit(".", 1)[-1].lower()
+                        if ext in ("jpg", "jpeg"):
+                            p0["t"] = "j"
+                        elif ext == "png":
+                            p0["t"] = "p"
+                        elif ext == "gif":
+                            p0["t"] = "g"
+                        else:
+                            p0["t"] = "w"
+            except Exception:
+                pass
+
+        # Derived convenience fields
+        try:
+            page_count = len(meta.get("images", {}).get("pages", []))
+        except Exception:
+            page_count = 0
+        meta["pages"] = page_count
+
+        try:
+            meta["clean_title"] = Helpers.sanitise(meta)
+        except Exception:
+            try:
+                t = meta.get("title")
+                if isinstance(t, dict):
+                    meta["clean_title"] = Helpers.safe_text(t.get("english") or t.get("pretty") or "")
+                else:
+                    meta["clean_title"] = Helpers.safe_text(t)
+            except Exception:
+                meta["clean_title"] = ""
+
+        return meta
+
+    @staticmethod
     def creator_candidates(meta: dict) -> list[str]:
         if not isinstance(meta, dict):
             return ["Unknown Creator"]
