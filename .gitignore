@@ -130,8 +130,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+*.env
+*.venv
 env/
 venv/
 ENV/
@@ -176,6 +176,8 @@ cython_debug/
 .pypirc
 
 # Other
-*.db
+.vscode/
 *-workspace
+*.db
 docs/request.md
+Doujinshi_IDs.txt

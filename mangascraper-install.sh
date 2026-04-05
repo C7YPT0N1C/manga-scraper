@@ -18,7 +18,6 @@ fi
 SCRAPER_DIR="/opt/manga-scraper"
 FILEBROWSER_DIR="/opt/filebrowser"
 FILEBROWSER_BIN="/usr/local/bin/filebrowser"
-ENV_FILE="$SCRAPER_DIR/mangascraper/core/manga-scraper.env"
 REQUIRED_PYTHON_VERSION="3.9"
 DEFAULT_BRANCH="main"
 SCRAPER_PRIMARY_REPO="https://github.com/C7YPT0N1C/manga-scraper.git"
@@ -166,64 +165,10 @@ install_scraper() {
     echo -e "\nmanga-scraper (branch: $branch) installed at $SCRAPER_DIR"
 }
 
-create_env_file() {
-    # Update defaults in Config.py
-    echo -e "\nUpdating environment variables..."
-    echo "Creating environment file..."
-    mkdir -p "$(dirname "$ENV_FILE")"
-    sudo tee "$ENV_FILE" > /dev/null <<EOF
-# Manga Scraper Configuration
-
-# Custom (Username and Password must be manually set for now)
-# TEST
-AUTH_USERNAME = "Username"
-AUTH_PASSWORD = "Password"
-
-# Directories
-SCRAPER_DIR=/opt/manga-scraper
-
-# Default Paths
-DOWNLOAD_PATH=
-DOUJIN_TXT_PATH=
-
-# Extensions
-EXTENSION=
-EXTENSION_DOWNLOAD_PATH=
-
-# APIs and Mirrors
-NHENTAI_API_BASE=
-NHENTAI_MIRRORS=
-
-# Gallery ID selection
-PAGE_SORT=
-PAGE_RANGE_START=
-PAGE_RANGE_END=
-RANGE_START=
-RANGE_END=
-GALLERIES=
-
-# Filters
-EXCLUDED_TAGS=
-LANGUAGE=
-TITLE_TYPE=
-
-# Threads
-THREADS_GALLERIES=
-THREADS_IMAGES=
-MAX_RETRIES=
-MIN_SLEEP=
-MAX_SLEEP=
-
-# Download Options
-USE_TOR=
-SKIP_POST_BATCH=
-SKIP_POST_RUN=
-DRY_RUN=
-CALM=
-DEBUG=
-EOF
-    echo "Environment file created at $ENV_FILE"
-    echo "Environment updated."
+sync_config_db() {
+    echo -e "\nSyncing runtime configuration to database..."
+    "$SCRAPER_DIR/venv/bin/python3" -m mangascraper.cli --update-config
+    echo "Runtime config synced."
 }
 
 create_systemd_services() {
@@ -259,7 +204,6 @@ WorkingDirectory=$SCRAPER_DIR
 ExecStart=$SCRAPER_DIR/venv/bin/python3 -m mangascraper.dashboard
 Restart=always
 RestartSec=3
-EnvironmentFile=$ENV_FILE
 
 [Install]
 WantedBy=multi-user.target
@@ -379,27 +323,27 @@ start_update() {
 
     check_python_version
     install_system_packages
-    create_env_file
+    sync_config_db
     create_systemd_services
     print_links
 
     echo "Update complete (branch: $branch)"
 }
 
-update_env_file() {
+update_config_db() {
     echo ""
     echo "===================================================="
-    echo "           manga-scraper .ENV UPDATER             "
+    echo "        manga-scraper CONFIG DB SYNC              "
     echo "===================================================="
-    read -p "Are you sure you want to update the .env file? (y/N): " confirm
+    read -p "Are you sure you want to sync runtime config to DB? (y/N): " confirm
     confirm=${confirm,,}  # lowercase input
 
     if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
-        echo ".env update cancelled."
+        echo "Config sync cancelled."
         return
     fi
 
-    create_env_file
+    sync_config_db
 }
 
 start_install() {
@@ -414,7 +358,7 @@ start_install() {
             select_install_branch
             install_filebrowser
             install_scraper
-            create_env_file
+            sync_config_db
             create_systemd_services
             print_links
             echo -e "\nInstallation complete!"
@@ -442,8 +386,8 @@ case "$1" in
     --install)
         start_install
         ;;
-    --update-env)
-        update_env_file
+    --update-config)
+        update_config_db
         ;;
     --update)
         start_update
@@ -454,7 +398,7 @@ case "$1" in
     *)
         echo "Invalid or missing argument. Options:"
         echo "    --install"
-        echo "    --update-env"
+        echo "    --update-config"
         echo "    --update"
         echo "    --uninstall / --remove"
         exit 1

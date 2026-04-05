@@ -1701,7 +1701,7 @@ class DB:
                     ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
                     base_ext_path = calculate_extension_download_path(ext_name)
                 except Exception:
-                    base_ext_path = getattr(orchestrator, "extension_download_path", "/opt/manga-scraper/downloads/")
+                    base_ext_path = getattr(orchestrator, "extension_download_path", getattr(orchestrator, "DEFAULT_EXTENSION_DOWNLOAD_PATH", ""))
                 if not ext_download_path:
                     ext_download_path = base_ext_path
                 elif not os.path.isabs(ext_download_path):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/skeleton/skeleton__msext.py
 
-import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile
+import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile, tempfile
 from tqdm import tqdm
 
 from mangascraper.core import orchestrator
@@ -31,7 +31,7 @@ EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
-EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
+EXTENSION_INSTALL_PATH = os.path.join(getattr(orchestrator, "SCRAPER_DIR", os.path.expanduser("~")), "extensions", EXTENSION_NAME)
 
 DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
 
@@ -335,7 +335,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
-        temp_root = f"/opt/manga-scraper/mangascraper/core/archive_temp/"
+        temp_root = os.path.join(getattr(orchestrator, "TEMP_DIR", tempfile.gettempdir()), "archive_temp")
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             temp_creator_folder = os.path.join(temp_root, creator_name)

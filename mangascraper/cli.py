@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/cli.py
 
-import os, time, sys, argparse, re, subprocess, urllib.parse
+import os, time, sys, argparse, re, subprocess, urllib.parse, webbrowser, threading
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
@@ -16,9 +16,13 @@ from mangascraper.extensions.extension_manager import (
 # GLOBAL VARIABLES
 ####################################################################################################################
 
-INSTALLER_PATH = "/opt/manga-scraper/mangascraper-install.sh"
+INSTALLER_PATH = os.getenv(
+    "MANGASCRAPER_INSTALLER_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mangascraper-install.sh")),
+)
 
 EPILOG = """Examples:
+    manga-scraper --gui
     manga-scraper --file archive=true
     manga-scraper --homepage 1 3
     manga-scraper --homepage recent 1 5
@@ -35,12 +39,50 @@ class _HelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefaultsHel
 # Delegate to installer
 ####################################################################################################################
 
-INSTALLER_FLAGS = ["--install", "--update", "--update-env", "--uninstall", "--remove"]
+INSTALLER_FLAGS = ["--install", "--update", "--update-config", "--uninstall", "--remove"]
 
 def run_installer(flag: str):
     """
     Call the Bash installer with the given flag, using sudo if needed.
     """
+
+    if os.name == "nt":
+        # Windows local installer path (no systemd/apt/sudo). Keep CLI semantics.
+        repo_root = os.getcwd()
+        if not (os.path.exists(os.path.join(repo_root, "pyproject.toml")) and os.path.isdir(os.path.join(repo_root, "mangascraper"))):
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        try:
+            if flag == "--install":
+                print(f"[INFO] Installing manga-scraper from: {repo_root}")
+                subprocess.run([sys.executable, "-m", "pip", "install", "-e", repo_root], check=True)
+                normalise_config()
+                print("[INFO] Installation complete.")
+                sys.exit(0)
+
+            if flag == "--update":
+                print(f"[INFO] Updating manga-scraper from: {repo_root}")
+                subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "-e", repo_root], check=True)
+                normalise_config()
+                print("[INFO] Update complete.")
+                sys.exit(0)
+
+            if flag == "--update-config":
+                normalise_config()
+                print(f"[INFO] Runtime config synced to database: {CONFIG_DB_PATH}")
+                sys.exit(0)
+
+            if flag in ("--uninstall", "--remove"):
+                print("[INFO] Uninstalling manga-scraper package from current Python environment...")
+                subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "manga-scraper"], check=True)
+                print("[INFO] Uninstall complete.")
+                sys.exit(0)
+
+            print(f"[ERROR] Unsupported installer flag on Windows: {flag}")
+            sys.exit(2)
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Windows installer step failed with exit code {e.returncode}")
+            sys.exit(e.returncode)
     
     if not os.path.exists(INSTALLER_PATH):
         print(f"[ERROR] Installer not found at {INSTALLER_PATH}")
@@ -50,7 +92,7 @@ def run_installer(flag: str):
     cmd = ["/bin/bash", INSTALLER_PATH, flag]
 
     # If not root, prepend sudo
-    if os.geteuid() != 0:
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
         cmd.insert(0, "sudo")
 
     try:
@@ -87,7 +129,7 @@ def parse_args():
     # Installer / Updater flags
     installer_group.add_argument("--install", action="store_true", help="Install manga-scraper and dependencies")
     installer_group.add_argument("--update", action="store_true", help="Update manga-scraper")
-    installer_group.add_argument("--update-env", action="store_true", help="Update the .env file")
+    installer_group.add_argument("--update-config", dest="update_config_db", action="store_true", help="Sync runtime configuration to database")
     installer_group.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall manga-scraper")
 
     # Extension selection / management
@@ -122,7 +164,7 @@ def parse_args():
         type=str,
         nargs="?",
         const=[DEFAULT_DOUJIN_TXT_PATH],  # Use default if --file is passed without a value
-        help="Usage: --file [PATH] [ARCHIVE]. PATH defaults to the .env list. ARCHIVE is archive=true or archive=false.",
+        help="Usage: --file [PATH] [ARCHIVE]. PATH defaults to the configured list file. ARCHIVE is archive=true or archive=false.",
     )
     
     source_group.add_argument(
@@ -284,6 +326,12 @@ def parse_args():
     
     # Download / runtime options
     runtime_group.add_argument(
+        "--gui",
+        action="store_true",
+        default=False,
+        help="Launch dashboard web GUI and open it in the default browser (must be used alone)",
+    )
+    runtime_group.add_argument(
         "--use-tor",
         action="store_true",
         default=argparse.SUPPRESS,
@@ -363,6 +411,12 @@ def _parse_archive_flag(value: str) -> bool | None:
 
 
 def _validate_args(args):
+    if getattr(args, "gui", False):
+        # --gui must be used by itself to avoid ambiguous mixed modes.
+        extra_flags = [a for a in sys.argv[1:] if a != "--gui"]
+        if extra_flags:
+            raise ValueError("--gui cannot be combined with other options.")
+
     if args.range:
         start, end = args.range
         if start <= 0 or end <= 0:
@@ -777,7 +831,7 @@ def build_gallery_list(args):
     gallery_ids = set()
 
     # ------------------------------------------------------------
-    # File input (overrides .env galleries)
+    # File input (overrides configured galleries)
     # ------------------------------------------------------------
     if args.file:
         gallery_ids.update(_handle_gallery_args(args.file, "file"))
@@ -861,8 +915,8 @@ def update_config(args):
     log_clarification("debug")
     log("Updating Config...", "debug")
     
-    # Only update .env for values explicitly provided via CLI flags
-    # If flag not provided, use value already loaded from .env (or default)
+    # Only update persisted config for values explicitly provided via CLI flags.
+    # If flag not provided, use current runtime config values.
     
     if args.extension is not None:
         update_env("EXTENSION", args.extension)
@@ -928,6 +982,38 @@ def update_config(args):
     log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
     log(f"IMAGE THREADS = {orchestrator.threads_images}", "debug")
 
+
+def launch_gui():
+    """Start the dashboard and open it in the default browser."""
+    from mangascraper import dashboard
+
+    orchestrator.refresh_globals()
+    host = orchestrator.DASHBOARD_HOST
+    port = orchestrator.DASHBOARD_PORT
+
+    browser_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    url = f"http://{browser_host}:{port}/"
+
+    log_clarification()
+    log(f"Launching dashboard at {url}")
+
+    def _open_browser():
+        try:
+            webbrowser.open(url, new=2)
+        except Exception as e:
+            logger.warning(f"Could not open browser automatically: {e}")
+
+    # Open browser shortly after server starts to avoid racing startup.
+    threading.Timer(1.0, _open_browser).start()
+
+    app = dashboard.create_app()
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        use_reloader=False,
+    )
+
 # ------------------------------------------------------------
 # Main
 # ------------------------------------------------------------
@@ -946,7 +1032,7 @@ def main():
         sys.exit(2)
 
     # Overwrite placeholder logger with real one
-    # Use orchestrator values (from .env or defaults) if flags not provided
+    # Use orchestrator values (from config store or defaults) if flags not provided
     calm = getattr(args, 'calm', orchestrator.calm)
     debug = getattr(args, 'debug', orchestrator.debug)
     logger = setup_logger(calm=calm, debug=debug)
@@ -965,8 +1051,8 @@ def main():
         run_installer("--install")
     elif args.update:
         run_installer("--update")
-    elif args.update_env:
-        run_installer("--update-env")
+    elif args.update_config_db:
+        run_installer("--update-config")
     elif args.uninstall:
         run_installer("--uninstall")
         
@@ -1004,6 +1090,11 @@ def main():
     # Update Config With CLI Args
     # Allows session to use correct config values on creation
     update_config(args)
+
+    # GUI mode: launch dashboard and exit this codepath.
+    if args.gui:
+        launch_gui()
+        return
 
     # --- Self-test mode ---
     if args.self_test:

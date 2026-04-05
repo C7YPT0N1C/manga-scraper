@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "manga-scraper"
-version = "4.0.0"
+version = "5.0.0"
 description = "Manga scraper with extensions for the integration into other services."
 readme = "README.md"
 authors = [{ name = "C7YPT0N1C" }]

@@ -17,7 +17,7 @@ from mangascraper.extensions.extension_manager import get_selected_extension  # 
 
 active_extension = "skeleton"
 download_location = ""
-ARCHIVE_TEMP_ROOT = "/opt/manga-scraper/mangascraper/core/archive_temp/"
+ARCHIVE_TEMP_ROOT = os.path.join(orchestrator.TEMP_DIR, "archive_temp")
 
 skipped_galleries = {}
 skipped_galleries_lock = threading.Lock()
@@ -224,8 +224,9 @@ def _format_bytes(bytes_val: int) -> str:
 def get_available_disk_space(path: str) -> int:
     """Get available disk space in bytes at the given path."""
     try:
-        stat = os.statvfs(path)
-        return stat.f_bavail * stat.f_frsize
+        # Cross-platform disk usage API (works on Windows and POSIX)
+        usage = shutil.disk_usage(path)
+        return int(usage.free)
     except Exception as e:
         logger.warning(f"Failed to check disk space: {e}")
         return -1  # Return -1 if we can't check

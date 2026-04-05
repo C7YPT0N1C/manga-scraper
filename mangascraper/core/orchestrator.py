@@ -1,17 +1,32 @@
 #!/usr/bin/env python3
 # mangascraper/core/orchestrator.py
 
-import os, sys, logging, math, threading, ast
+import os, sys, logging, math, threading, ast, tempfile, sqlite3
 from datetime import datetime
-from dotenv import load_dotenv, set_key
 
 ##########################################################################################
 # DIRECTORIES
 ##########################################################################################
 
-SCRAPER_DIR = "/opt/manga-scraper"
+# Use Linux defaults in production, but Windows-safe local defaults for development/testing.
+_SOURCE_CHECKOUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+if os.name == "nt":
+    _WINDOWS_FALLBACK_DIR = os.path.join(os.path.expanduser("~"), "manga-scraper")
+    if os.path.isdir(os.path.join(_SOURCE_CHECKOUT_DIR, "mangascraper")):
+        _DEFAULT_SCRAPER_DIR = _SOURCE_CHECKOUT_DIR
+    else:
+        _DEFAULT_SCRAPER_DIR = _WINDOWS_FALLBACK_DIR
+else:
+    _DEFAULT_SCRAPER_DIR = "/opt/manga-scraper"
+
+_SCRAPER_DIR_ENV = str(os.getenv("SCRAPER_DIR", "")).strip().strip("\"").strip("'")
+if os.name == "nt" and (_SCRAPER_DIR_ENV == "" or _SCRAPER_DIR_ENV.replace("\\", "/").lower().startswith("/opt/manga-scraper")):
+    SCRAPER_DIR = _DEFAULT_SCRAPER_DIR
+else:
+    SCRAPER_DIR = _SCRAPER_DIR_ENV or _DEFAULT_SCRAPER_DIR
 CORE_DIR = os.path.join(SCRAPER_DIR, "mangascraper", "core")
-TEMP_DIR = "/tmp/manga-scraper"
+TEMP_DIR = os.path.join(tempfile.gettempdir(), "manga-scraper")
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(CORE_DIR, exist_ok=True)
 
@@ -174,17 +189,14 @@ def with_env_lock(func, *args, **kwargs):
         return func(*args, **kwargs)
 
 # ------------------------------------------------------------
-# Env
+# Runtime Config Database
 # ------------------------------------------------------------
-ENV_FILE = os.path.join(CORE_DIR, "manga-scraper.env")
+CONFIG_DB_PATH = os.path.join(CORE_DIR, "mangascraper.db")
+CONFIG_TABLE = "Config"
 
 # Ensure NHentai directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
 
-# Load environment variables
-if os.path.exists(ENV_FILE):
-    load_dotenv(dotenv_path=ENV_FILE)
-    
 # ------------------------------------------------------------
 # Dashboard
 # ------------------------------------------------------------
@@ -222,10 +234,10 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
-DEFAULT_DOWNLOAD_PATH = "/opt/manga-scraper/downloads"
+DEFAULT_DOWNLOAD_PATH = os.path.join(SCRAPER_DIR, "downloads")
 download_path = DEFAULT_DOWNLOAD_PATH  # public variable
 
-DEFAULT_DOUJIN_TXT_PATH = "/root/Doujinshi_IDs.txt"
+DEFAULT_DOUJIN_TXT_PATH = os.path.join(SCRAPER_DIR, "Doujinshi_IDs.txt")
 if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
     # Create an empty file with instructions for the user
     with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
@@ -249,7 +261,7 @@ doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 DEFAULT_EXTENSION = "skeleton"
 extension = DEFAULT_EXTENSION
 
-DEFAULT_EXTENSION_DOWNLOAD_PATH = "/opt/manga-scraper/downloads/"
+DEFAULT_EXTENSION_DOWNLOAD_PATH = DEFAULT_DOWNLOAD_PATH
 extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
 
 
@@ -362,7 +374,7 @@ max_retry_sleep = DEFAULT_MAX_RETRY_SLEEP
 # ------------------------------------------------------------
 # Download Options
 # ------------------------------------------------------------
-DEFAULT_USE_TOR = True
+DEFAULT_USE_TOR = (os.name != "nt")
 use_tor = DEFAULT_USE_TOR
 
 DEFAULT_SKIP_POST_BATCH = False
@@ -385,9 +397,162 @@ debug = DEFAULT_DEBUG
 # ------------------------------------------------------------
 def getenv_numeric_value(key, default):
     val = os.getenv(key)
-    if val is None or val.strip() == "":
+    if val is None:
         return default
-    return float(val)
+    text = _clean_env_string(val)
+    if text == "":
+        return default
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clean_env_string(value):
+    """Trim and unquote a scalar env string value."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        return text[1:-1].strip()
+    return text
+
+
+def _is_legacy_linux_download_path(path_text: str) -> bool:
+    text = _clean_env_string(path_text).replace("\\", "/").lower().rstrip("/")
+    return text.startswith("/opt/manga-scraper")
+
+
+def _normalise_path_default_for_windows(key: str, value):
+    if os.name != "nt":
+        return value
+    if key in ("DOWNLOAD_PATH", "EXTENSION_DOWNLOAD_PATH", "DOUJIN_TXT_PATH") and _is_legacy_linux_download_path(value):
+        if key == "DOWNLOAD_PATH":
+            return DEFAULT_DOWNLOAD_PATH
+        if key == "EXTENSION_DOWNLOAD_PATH":
+            return DEFAULT_EXTENSION_DOWNLOAD_PATH
+        if key == "DOUJIN_TXT_PATH":
+            return DEFAULT_DOUJIN_TXT_PATH
+    return value
+
+
+def _parse_bool(value, default=False):
+    """Normalise bool-like values from env/config payloads."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        text = _clean_env_string(value).lower()
+        if text in ("1", "true", "yes", "y", "on"):
+            return True
+        if text in ("0", "false", "no", "n", "off", ""):
+            return False
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
+def _format_config_store_value(key: str, value) -> str:
+    if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS", "GALLERIES"):
+        if isinstance(value, (list, tuple, set)):
+            return ",".join(str(v).strip() for v in value if str(v).strip())
+    if key in ("USE_TOR", "SKIP_POST_BATCH", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
+        return "true" if _parse_bool(value) else "false"
+    return str(value)
+
+
+def _with_config_db(operation):
+    os.makedirs(CORE_DIR, exist_ok=True)
+    conn = sqlite3.connect(CONFIG_DB_PATH, timeout=60.0)
+    conn.execute("PRAGMA busy_timeout = 60000")
+    try:
+        return operation(conn)
+    finally:
+        conn.close()
+
+
+def _ensure_config_table(conn):
+    # One-time migration from old RuntimeConfig table name.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+    if CONFIG_TABLE != "Config":
+        raise RuntimeError("CONFIG_TABLE must remain 'Config'.")
+
+    has_legacy = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='RuntimeConfig'"
+    ).fetchone() is not None
+
+    if has_legacy:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO Config (key, value, updated_at)
+            SELECT key, value, COALESCE(updated_at, ?) FROM RuntimeConfig
+            """,
+            (datetime.utcnow().isoformat(),),
+        )
+        conn.execute("DROP TABLE RuntimeConfig")
+
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {CONFIG_TABLE} (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _bootstrap_config_store(seed_config: dict):
+    now_iso = datetime.utcnow().isoformat()
+
+    def _op(conn):
+        _ensure_config_table(conn)
+        for key, value in seed_config.items():
+            conn.execute(
+                f"INSERT OR IGNORE INTO {CONFIG_TABLE} (key, value, updated_at) VALUES (?, ?, ?)",
+                (str(key), _format_config_store_value(str(key), value), now_iso),
+            )
+        conn.commit()
+
+    with_env_lock(_with_config_db, _op)
+
+
+def _load_config_store_values() -> dict:
+    def _op(conn):
+        _ensure_config_table(conn)
+        rows = conn.execute(f"SELECT key, value FROM {CONFIG_TABLE}").fetchall()
+        return {str(k): v for k, v in rows}
+
+    return with_env_lock(_with_config_db, _op)
+
+
+def _save_config_value(key: str, value):
+    now_iso = datetime.utcnow().isoformat()
+
+    def _op(conn):
+        _ensure_config_table(conn)
+        conn.execute(
+            f"""
+            INSERT INTO {CONFIG_TABLE} (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            (str(key), _format_config_store_value(str(key), value), now_iso),
+        )
+        conn.commit()
+
+    with_env_lock(_with_config_db, _op)
 
 # ------------------------------------------------------------
 # Config Dictionary
@@ -398,7 +563,7 @@ def getenv_numeric_value(key, default):
 # NHENTAI_MIRRORS: always a list
 MIRRORS_ENV = os.getenv("NHENTAI_MIRRORS", DEFAULT_NHENTAI_MIRRORS)
 if isinstance(MIRRORS_ENV, str):
-    MIRRORS_LIST = [m.strip() for m in MIRRORS_ENV.split(",") if m.strip()]
+    MIRRORS_LIST = [_clean_env_string(m) for m in MIRRORS_ENV.split(",") if _clean_env_string(m)]
 else:
     MIRRORS_LIST = list(MIRRORS_ENV)
 
@@ -409,37 +574,37 @@ config = {
     "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
-    "PAGE_SORT": os.getenv("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
+    "PAGE_SORT": os.getenv("PAGE_SORT", DEFAULT_PAGE_SORT),
     "PAGE_RANGE_START": getenv_numeric_value("PAGE_RANGE_START", DEFAULT_PAGE_RANGE_START),
     "PAGE_RANGE_END": getenv_numeric_value("PAGE_RANGE_END", DEFAULT_PAGE_RANGE_END),
     "RANGE_START": getenv_numeric_value("RANGE_START", DEFAULT_RANGE_START),
     "RANGE_END": getenv_numeric_value("RANGE_END", DEFAULT_RANGE_END),
     "GALLERIES": os.getenv("GALLERIES", DEFAULT_GALLERIES),
-    "ARTIST": os.getenv("ARTIST", ""),
-    "GROUP": os.getenv("GROUP", ""),
-    "TAG": os.getenv("TAG", ""),
-    "PARODY": os.getenv("PARODY", ""),
     "EXCLUDED_TAGS": os.getenv("EXCLUDED_TAGS", DEFAULT_EXCLUDED_TAGS),
     "LANGUAGE": os.getenv("LANGUAGE", DEFAULT_LANGUAGE),
     "TITLE_TYPE": os.getenv("TITLE_TYPE", DEFAULT_TITLE_TYPE),
     "GALLERY_FORMAT": os.getenv("GALLERY_FORMAT", DEFAULT_GALLERY_FORMAT),
     "THREADS_GALLERIES": getenv_numeric_value("THREADS_GALLERIES", DEFAULT_THREADS_GALLERIES),
     "THREADS_IMAGES": getenv_numeric_value("THREADS_IMAGES", DEFAULT_THREADS_IMAGES),
-    "USE_DAEMON_THREADS": str(os.getenv("USE_DAEMON_THREADS", DEFAULT_USE_DAEMON_THREADS)).lower() == "true",
+    "USE_DAEMON_THREADS": _parse_bool(os.getenv("USE_DAEMON_THREADS"), DEFAULT_USE_DAEMON_THREADS),
     "MAX_RETRIES": getenv_numeric_value("MAX_RETRIES", DEFAULT_MAX_RETRIES),
-    "VERIFY_SSL": str(os.getenv("VERIFY_SSL", DEFAULT_VERIFY_SSL)).lower() == "true",
-    "USE_TOR": str(os.getenv("USE_TOR", DEFAULT_USE_TOR)).lower() == "true",
-    "SKIP_POST_BATCH": str(os.getenv("SKIP_POST_BATCH", DEFAULT_SKIP_POST_BATCH)).lower() == "true",
-    "SKIP_POST_RUN": str(os.getenv("SKIP_POST_RUN", DEFAULT_SKIP_POST_RUN)).lower() == "true",
-    "DRY_RUN": str(os.getenv("DRY_RUN", DEFAULT_DRY_RUN)).lower() == "true",
-    "CALM": str(os.getenv("CALM", DEFAULT_CALM)).lower() == "true",
-    "DEBUG": str(os.getenv("DEBUG", DEFAULT_DEBUG)).lower() == "true",
+    "VERIFY_SSL": _parse_bool(os.getenv("VERIFY_SSL"), DEFAULT_VERIFY_SSL),
+    "USE_TOR": _parse_bool(os.getenv("USE_TOR"), DEFAULT_USE_TOR),
+    "SKIP_POST_BATCH": _parse_bool(os.getenv("SKIP_POST_BATCH"), DEFAULT_SKIP_POST_BATCH),
+    "SKIP_POST_RUN": _parse_bool(os.getenv("SKIP_POST_RUN"), DEFAULT_SKIP_POST_RUN),
+    "DRY_RUN": _parse_bool(os.getenv("DRY_RUN"), DEFAULT_DRY_RUN),
+    "CALM": _parse_bool(os.getenv("CALM"), DEFAULT_CALM),
+    "DEBUG": _parse_bool(os.getenv("DEBUG"), DEFAULT_DEBUG),
 }
+
+# Seed the runtime config store from env-derived values, then load authoritative values from DB.
+_bootstrap_config_store(config)
+config.update(_load_config_store_values())
 
 ##################
 
 # ------------------------------------------------------------
-# Update .env safely
+# Runtime Config Sync
 # ------------------------------------------------------------
 def refresh_globals():
     """
@@ -452,6 +617,8 @@ def refresh_globals():
         global range_start, range_end, galleries, excluded_tags, language, title_type, gallery_format
         global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
         global use_tor, skip_post_batch, skip_post_run, dry_run, calm, debug, verify_ssl, use_daemon_threads
+
+        config.update(_load_config_store_values())
 
         for key, default in {
             "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -489,14 +656,11 @@ def refresh_globals():
 
 def normalise_config():
     """
-    Normalise config with defaults.
-    normalise_config() is called by CLI to normalise and populate the .env file
+    Normalise config with defaults persisted to Config in SQLite.
     """
     log_clarification("debug")
     log("Populating Config...", "debug")
 
-    ensure_env_file()
-    
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
@@ -531,20 +695,25 @@ def normalise_config():
         val = config.get(key)
         if val is None or (isinstance(val, str) and val.strip() == ""):
             config[key] = default_val
-            update_env(key, default_val)
+            _save_config_value(key, default_val)
+
+    # Ensure DB has all keys from current runtime config (legacy migration + new keys).
+    for key, value in config.items():
+        _save_config_value(key, value)
     
     refresh_globals()
 
 def normalise_value(key: str, value):
     """
-    Normalise values from .env/config to consistent runtime types.
+    Normalise values from config store to consistent runtime types.
     """
+    value = _normalise_path_default_for_windows(key, value)
     
     if key == "NHENTAI_MIRRORS":
         if isinstance(value, str):
-            mirrors = [m.strip() for m in value.split(",") if m.strip()]
+            mirrors = [_clean_env_string(m) for m in value.split(",") if _clean_env_string(m)]
         elif isinstance(value, list):
-            mirrors = value
+            mirrors = [_clean_env_string(v) for v in value if _clean_env_string(v)]
         else:
             mirrors = [DEFAULT_NHENTAI_MIRRORS]
         # Ensure default mirror is first
@@ -552,7 +721,7 @@ def normalise_value(key: str, value):
     
     if key in ("EXCLUDED_TAGS", "LANGUAGE"):
         if isinstance(value, str):
-            stripped = value.strip()
+            stripped = _clean_env_string(value)
             if stripped.startswith("[") and stripped.endswith("]"):
                 try:
                     parsed = ast.literal_eval(stripped)
@@ -560,15 +729,15 @@ def normalise_value(key: str, value):
                     parsed = None
                 if isinstance(parsed, (list, tuple)):
                     return [str(v).strip().lower() for v in parsed if str(v).strip()]
-            return [v.strip().lower() for v in value.split(",") if v.strip()]
+            return [_clean_env_string(v).lower() for v in value.split(",") if _clean_env_string(v)]
         elif isinstance(value, list):
-            return [str(v).lower() for v in value]
+            return [_clean_env_string(v).lower() for v in value if _clean_env_string(v)]
         else:
             return []
 
     if key == "GALLERIES":
         if isinstance(value, str):
-            stripped = value.strip()
+            stripped = _clean_env_string(value)
             if not stripped:
                 return []
             if stripped.startswith("[") and stripped.endswith("]"):
@@ -586,7 +755,7 @@ def normalise_value(key: str, value):
                     return ids
             ids = []
             for v in stripped.split(","):
-                v = v.strip()
+                v = _clean_env_string(v)
                 if not v:
                     continue
                 try:
@@ -605,98 +774,47 @@ def normalise_value(key: str, value):
         return []
 
     if key == "GALLERY_FORMAT":
-        fmt = str(value).lower()
+        fmt = _clean_env_string(value).lower()
         if fmt not in ("directory", "zip", "cbz"):
             return DEFAULT_GALLERY_FORMAT
         return fmt
     
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
-        return str(value).lower() == "true"
+    if key in ("USE_TOR", "SKIP_POST_BATCH", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
+        return _parse_bool(value)
 
-    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES"):
-        return int(value)
+    if key in ("THREADS_GALLERIES", "THREADS_IMAGES", "MAX_RETRIES", "PAGE_RANGE_START", "PAGE_RANGE_END", "RANGE_START", "RANGE_END"):
+        defaults = {
+            "THREADS_GALLERIES": DEFAULT_THREADS_GALLERIES,
+            "THREADS_IMAGES": DEFAULT_THREADS_IMAGES,
+            "MAX_RETRIES": DEFAULT_MAX_RETRIES,
+            "PAGE_RANGE_START": DEFAULT_PAGE_RANGE_START,
+            "PAGE_RANGE_END": DEFAULT_PAGE_RANGE_END,
+            "RANGE_START": DEFAULT_RANGE_START,
+            "RANGE_END": DEFAULT_RANGE_END,
+        }
+        try:
+            return int(float(_clean_env_string(value)))
+        except (TypeError, ValueError):
+            return int(defaults[key])
 
     # Default: return as string
-    return str(value)
-
-def _format_env_value(key: str, value) -> str:
-    if key in ("EXCLUDED_TAGS", "LANGUAGE", "NHENTAI_MIRRORS", "GALLERIES"):
-        if isinstance(value, (list, tuple, set)):
-            return ",".join(str(v).strip() for v in value if str(v).strip())
-    if key in ("USE_TOR", "SKIP_POST_RUN", "DRY_RUN", "CALM", "DEBUG", "VERIFY_SSL", "USE_DAEMON_THREADS"):
-        return "true" if str(value).lower() == "true" else "false"
-    return str(value)
-
-def _build_env_template() -> str:
-    return (
-        "# Manga Scraper Configuration\n\n"
-        "# Custom (Username and Password must be manually set for now)\n"
-        "AUTH_USERNAME=\n"
-        "AUTH_PASSWORD=\n\n"
-        "# Directories\n"
-        f"SCRAPER_DIR={SCRAPER_DIR}\n\n"
-        "# Default Paths\n"
-        f"DOWNLOAD_PATH={_format_env_value('DOWNLOAD_PATH', DEFAULT_DOWNLOAD_PATH)}\n"
-        f"DOUJIN_TXT_PATH={_format_env_value('DOUJIN_TXT_PATH', DEFAULT_DOUJIN_TXT_PATH)}\n\n"
-        "# Extensions\n"
-        f"EXTENSION={_format_env_value('EXTENSION', DEFAULT_EXTENSION)}\n"
-        f"EXTENSION_DOWNLOAD_PATH={_format_env_value('EXTENSION_DOWNLOAD_PATH', DEFAULT_EXTENSION_DOWNLOAD_PATH)}\n\n"
-        "# APIs and Mirrors\n"
-        f"NHENTAI_API_BASE={_format_env_value('NHENTAI_API_BASE', DEFAULT_NHENTAI_API_BASE)}\n"
-        f"NHENTAI_MIRRORS={_format_env_value('NHENTAI_MIRRORS', DEFAULT_NHENTAI_MIRRORS)}\n\n"
-        "# Gallery ID selection\n"
-        f"PAGE_SORT={_format_env_value('PAGE_SORT', DEFAULT_PAGE_SORT)}\n"
-        f"PAGE_RANGE_START={_format_env_value('PAGE_RANGE_START', DEFAULT_PAGE_RANGE_START)}\n"
-        f"PAGE_RANGE_END={_format_env_value('PAGE_RANGE_END', DEFAULT_PAGE_RANGE_END)}\n"
-        f"RANGE_START={_format_env_value('RANGE_START', DEFAULT_RANGE_START)}\n"
-        f"RANGE_END={_format_env_value('RANGE_END', DEFAULT_RANGE_END)}\n"
-        f"GALLERIES={_format_env_value('GALLERIES', DEFAULT_GALLERIES)}\n\n"
-        "# Filters\n"
-        f"EXCLUDED_TAGS={_format_env_value('EXCLUDED_TAGS', DEFAULT_EXCLUDED_TAGS)}\n"
-        f"LANGUAGE={_format_env_value('LANGUAGE', DEFAULT_LANGUAGE)}\n"
-        f"TITLE_TYPE={_format_env_value('TITLE_TYPE', DEFAULT_TITLE_TYPE)}\n\n"
-        "# Threads\n"
-        f"THREADS_GALLERIES={_format_env_value('THREADS_GALLERIES', DEFAULT_THREADS_GALLERIES)}\n"
-        f"THREADS_IMAGES={_format_env_value('THREADS_IMAGES', DEFAULT_THREADS_IMAGES)}\n"
-        f"MAX_RETRIES={_format_env_value('MAX_RETRIES', DEFAULT_MAX_RETRIES)}\n"
-        f"USE_DAEMON_THREADS={_format_env_value('USE_DAEMON_THREADS', DEFAULT_USE_DAEMON_THREADS)}\n\n"
-        "# Download Options\n"
-        f"USE_TOR={_format_env_value('USE_TOR', DEFAULT_USE_TOR)}\n"
-        f"SKIP_POST_BATCH={_format_env_value('SKIP_POST_BATCH', DEFAULT_SKIP_POST_BATCH)}\n"
-        f"SKIP_POST_RUN={_format_env_value('SKIP_POST_RUN', DEFAULT_SKIP_POST_RUN)}\n"
-        f"DRY_RUN={_format_env_value('DRY_RUN', DEFAULT_DRY_RUN)}\n"
-        f"CALM={_format_env_value('CALM', DEFAULT_CALM)}\n"
-        f"DEBUG={_format_env_value('DEBUG', DEFAULT_DEBUG)}\n"
-        f"GALLERY_FORMAT={_format_env_value('GALLERY_FORMAT', DEFAULT_GALLERY_FORMAT)}\n"
-        f"VERIFY_SSL={_format_env_value('VERIFY_SSL', DEFAULT_VERIFY_SSL)}\n"
-    )
+    return _clean_env_string(value)
 
 def ensure_env_file(overwrite: bool = False):
-    def _ensure():
-        if overwrite or not os.path.exists(ENV_FILE):
-            with open(ENV_FILE, "w", encoding="utf-8") as f:
-                f.write(_build_env_template())
-    with_env_lock(_ensure)
+    # Compatibility shim: keep existing call sites functional.
+    # Runtime config is database-only and synced via normalise_config().
+    normalise_config()
 
 def update_env(key, value):
     """
-    Update a single variable in the .env file safely under lock.
+    Update a single config key in the SQLite Config store.
+    Kept as update_env for API compatibility.
     """
     
     global threads_galleries, threads_images, max_retries, min_retry_sleep, max_retry_sleep
     
-    def _update():
-        if not os.path.exists(ENV_FILE):
-            with open(ENV_FILE, "w") as f:
-                f.write("")
-
-        # Safely update .env
-        set_key(ENV_FILE, key, _format_env_value(key, value))
-        
-        # Update runtime config
-        config[key] = normalise_value(key, value)
-
-    with_env_lock(_update)
+    _save_config_value(key, value)
+    config[key] = normalise_value(key, value)
     refresh_globals()
 
 def get_valid_sort_value(sort_value):

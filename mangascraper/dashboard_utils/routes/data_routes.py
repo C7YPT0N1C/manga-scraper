@@ -2,6 +2,7 @@
 # mangascraper/dashboard/routes/data_routes.py
 
 import os, time, threading, io, requests, json, re, zipfile, tempfile, posixpath, mimetypes
+from urllib.parse import unquote
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
 from mangascraper.core.api import api as scraperapi
@@ -376,9 +377,35 @@ def _tolerant_gallery_path(gallery_id: int, candidate: str) -> str | None:
     """
     if not candidate:
         return None
+
+    def _existing_path(path_text: str) -> str | None:
+        raw = str(path_text or "").strip().strip('"').strip("'")
+        if not raw:
+            return None
+        variants = [raw]
+        decoded = unquote(raw)
+        if decoded != raw:
+            variants.append(decoded)
+        # Try separator variants to tolerate legacy stored paths.
+        variants.append(raw.replace("/", os.sep))
+        variants.append(raw.replace("\\", os.sep))
+        variants.append(decoded.replace("/", os.sep))
+        variants.append(decoded.replace("\\", os.sep))
+
+        seen = set()
+        for item in variants:
+            text = os.path.normpath(str(item))
+            if text in seen:
+                continue
+            seen.add(text)
+            if os.path.exists(text):
+                return text
+        return None
+
     try:
-        if os.path.exists(candidate):
-            return candidate
+        existing = _existing_path(candidate)
+        if existing:
+            return existing
         dirp = os.path.dirname(candidate) or os.path.dirname(os.path.realpath(candidate))
         base = os.path.basename(candidate)
         # try prefixing with (id)
@@ -386,8 +413,9 @@ def _tolerant_gallery_path(gallery_id: int, candidate: str) -> str | None:
             pid = int(gallery_id)
             pref = f"({pid}) {base}"
             alt = os.path.join(dirp, pref)
-            if os.path.exists(alt):
-                return alt
+            existing = _existing_path(alt)
+            if existing:
+                return existing
         except Exception:
             pass
 
@@ -397,13 +425,15 @@ def _tolerant_gallery_path(gallery_id: int, candidate: str) -> str | None:
             decoded = unquote(base)
             if decoded and decoded != base:
                 alt2 = os.path.join(dirp, decoded)
-                if os.path.exists(alt2):
-                    return alt2
+                existing = _existing_path(alt2)
+                if existing:
+                    return existing
                 try:
                     pref2 = f"({int(gallery_id)}) {decoded}"
                     alt3 = os.path.join(dirp, pref2)
-                    if os.path.exists(alt3):
-                        return alt3
+                    existing = _existing_path(alt3)
+                    if existing:
+                        return existing
                 except Exception:
                     pass
         except Exception:
@@ -416,13 +446,70 @@ def _tolerant_gallery_path(gallery_id: int, candidate: str) -> str | None:
                     continue
                 if base and base in name:
                     candidate2 = os.path.join(dirp, name)
-                    if os.path.exists(candidate2):
-                        return candidate2
+                    existing = _existing_path(candidate2)
+                    if existing:
+                        return existing
                 # also accept prefixed names like (id) ...
                 if base and name.startswith(f"({gallery_id})") and base.split()[0] in name:
                     candidate2 = os.path.join(dirp, name)
-                    if os.path.exists(candidate2):
-                        return candidate2
+                    existing = _existing_path(candidate2)
+                    if existing:
+                        return existing
+    except Exception:
+        return None
+    return None
+
+
+def _find_gallery_path_by_id(root_path: str, gallery_id: int) -> str | None:
+    """Best-effort scan for a gallery path by its canonical '(id)' prefix under a root."""
+    root = os.path.realpath(str(root_path or "").strip())
+    if not root or not os.path.isdir(root):
+        return None
+
+    needle = f"({int(gallery_id)})"
+    try:
+        for creator_name in os.listdir(root):
+            if not creator_name or creator_name.startswith("."):
+                continue
+            creator_dir = _safe_path(root, creator_name)
+            if not creator_dir or not os.path.isdir(creator_dir):
+                continue
+
+            for entry_name in os.listdir(creator_dir):
+                if not entry_name or not entry_name.startswith(needle):
+                    continue
+                candidate = os.path.join(creator_dir, entry_name)
+                if os.path.isdir(candidate) or _is_archive(candidate):
+                    return candidate
+    except Exception:
+        return None
+    return None
+
+
+def _find_cover_path_by_id(root_path: str, gallery_id: int) -> str | None:
+    """Best-effort scan for a cover image by gallery id in creator .covers folders."""
+    root = os.path.realpath(str(root_path or "").strip())
+    if not root or not os.path.isdir(root):
+        return None
+
+    needle = f"({int(gallery_id)})"
+    exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+    try:
+        for creator_name in os.listdir(root):
+            if not creator_name or creator_name.startswith("."):
+                continue
+            covers_dir = _safe_path(root, creator_name, ".covers")
+            if not covers_dir or not os.path.isdir(covers_dir):
+                continue
+
+            for entry_name in os.listdir(covers_dir):
+                if not entry_name or not entry_name.startswith(needle):
+                    continue
+                if os.path.splitext(entry_name)[1].lower() not in exts:
+                    continue
+                candidate = os.path.join(covers_dir, entry_name)
+                if os.path.isfile(candidate):
+                    return candidate
     except Exception:
         return None
     return None
@@ -1883,7 +1970,10 @@ def list_pages_by_id(gallery_id):
         if not gallery_path:
             continue
 
-        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path) or gallery_path
+        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path)
+        if not resolved_path and root:
+            resolved_path = _find_gallery_path_by_id(root, gallery_id)
+        resolved_path = resolved_path or gallery_path
 
         if os.path.isdir(resolved_path):
             IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
@@ -2014,7 +2104,10 @@ def view_image_by_id(gallery_id, filename):
         if not gallery_path:
             continue
 
-        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path) or gallery_path
+        resolved_path = _tolerant_gallery_path(gallery_id, gallery_path)
+        if not resolved_path and root:
+            resolved_path = _find_gallery_path_by_id(root, gallery_id)
+        resolved_path = resolved_path or gallery_path
         if not os.path.exists(resolved_path):
             continue
 
@@ -2022,8 +2115,7 @@ def view_image_by_id(gallery_id, filename):
             file_path = _safe_path(resolved_path, filename)
             if not file_path or not os.path.isfile(file_path):
                 continue
-            rel_name = os.path.relpath(file_path, resolved_path)
-            return send_from_directory(resolved_path, rel_name)
+            return send_file(file_path)
 
         if _is_archive(resolved_path):
             normalised = posixpath.normpath(filename)
@@ -2054,8 +2146,7 @@ def view_image_by_id(gallery_id, filename):
             if os.path.isdir(resolved_gp):
                 file_path = _safe_path(resolved_gp, filename)
                 if file_path and os.path.isfile(file_path):
-                    rel_name = os.path.relpath(file_path, resolved_gp)
-                    return send_from_directory(resolved_gp, rel_name)
+                    return send_file(file_path)
             if _is_archive(resolved_gp):
                 normalised = posixpath.normpath(filename)
                 if not normalised.startswith("../") and not normalised.startswith("/"):
@@ -2194,12 +2285,24 @@ def get_gallery_cover_by_id(gallery_id):
             if not os.path.splitext(cover_base)[1]:
                 cover_candidates.extend(f"{cover_base}.{ext}" for ext in ("jpg", "jpeg", "png", "gif", "webp", "avif"))
             for candidate in cover_candidates:
-                if os.path.isfile(candidate):
-                    return send_file(candidate)
+                resolved_cover = _tolerant_gallery_path(gallery_id, candidate)
+                if resolved_cover and os.path.isfile(resolved_cover):
+                    return send_file(resolved_cover)
+
+        # Fallback: search .covers under root by gallery id.
+        if root_path:
+            discovered_cover = _find_cover_path_by_id(root_path, gallery_id)
+            if discovered_cover and os.path.isfile(discovered_cover):
+                return send_file(discovered_cover)
 
         gallery_path = str(row.get("download_path") or "")
         if not gallery_path:
             continue
+
+        resolved_gallery = _tolerant_gallery_path(gallery_id, gallery_path)
+        if not resolved_gallery and root_path:
+            resolved_gallery = _find_gallery_path_by_id(root_path, gallery_id)
+        gallery_path = resolved_gallery or gallery_path
 
         if os.path.isdir(gallery_path):
             image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
@@ -2252,7 +2355,7 @@ _STREAM_TTL = 60 * 30   # 30 minutes before auto-cleanup
 
 def _stream_temp_root() -> str:
     """Use the scraper temp root for stream sessions (e.g. /tmp/manga-scraper/)."""
-    root = getattr(orchestrator, "TEMP_DIR", "/tmp/manga-scraper") or "/tmp/manga-scraper"
+    root = getattr(orchestrator, "TEMP_DIR", None) or os.path.join(tempfile.gettempdir(), "manga-scraper")
     os.makedirs(root, exist_ok=True)
     return root
 

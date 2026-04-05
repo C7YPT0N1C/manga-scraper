@@ -13,9 +13,10 @@ from mangascraper.extensions import * # Ensure extensions package is recognised
 # ------------------------------------------------------------
 # Constants / Paths
 # ------------------------------------------------------------
-EXTENSIONS_DIR = "/opt/manga-scraper/mangascraper/extensions"
+# Keep extensions inside the installed package path (cross-platform).
+EXTENSIONS_DIR = os.path.abspath(os.path.dirname(__file__))
 os.makedirs(EXTENSIONS_DIR, exist_ok=True)
-REMOTE_EXTENSIONS_TMP = f"{orchestrator.TEMP_DIR}/manga-scraper-extensions"
+REMOTE_EXTENSIONS_TMP = os.path.join(orchestrator.TEMP_DIR, "manga-scraper-extensions")
 LOCAL_MANIFEST_PATH = os.path.join(EXTENSIONS_DIR, "local_manifest.json")
 
 # Primary + backup repo / manifest locations
@@ -206,8 +207,12 @@ def _resolve_extension_version_dir(
     /<repo>/<branch>/<extension>/<version>
     """
     branch = str(extension_branch or "main").strip() or "main"
-    extension_root = os.path.join(tmp_root, branch, extension_name)
-    if not os.path.isdir(extension_root):
+    candidate_roots = [
+        os.path.join(tmp_root, branch, extension_name),  # newer layout: /<branch>/<extension>/<version>
+        os.path.join(tmp_root, extension_name),          # legacy layout: /<extension>/<version>
+    ]
+    extension_root = next((p for p in candidate_roots if os.path.isdir(p)), None)
+    if extension_root is None:
         return None
 
     preferred = str(preferred_version or "").strip()
@@ -236,6 +241,39 @@ def _ensure_remote_repo_tmp(url: str):
     log(f"Syncing extensions repo: {url}", "debug")
     os.makedirs(REMOTE_EXTENSIONS_TMP, exist_ok=True)
 
+    def _local_repo_candidates() -> list[str]:
+        candidates = []
+        env_repo = os.getenv("MANGASCRAPER_EXTENSIONS_REPO")
+        if env_repo:
+            candidates.append(env_repo)
+
+        cwd_parent = os.path.abspath(os.path.join(os.getcwd(), "..", "manga-scraper-extensions"))
+        candidates.append(cwd_parent)
+
+        package_parent = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        candidates.append(os.path.join(package_parent, "manga-scraper-extensions"))
+
+        dedup = []
+        seen = set()
+        for c in candidates:
+            p = os.path.abspath(c)
+            if p in seen:
+                continue
+            seen.add(p)
+            dedup.append(p)
+        return dedup
+
+    def _sync_from_local_repo_if_available() -> bool:
+        for repo_root in _local_repo_candidates():
+            manifest = os.path.join(repo_root, "master_manifest.json")
+            if os.path.isdir(repo_root) and os.path.isfile(manifest):
+                log(f"Using local extensions repo fallback: {repo_root}", "debug")
+                if os.path.isdir(REMOTE_EXTENSIONS_TMP):
+                    _clear_directory(REMOTE_EXTENSIONS_TMP)
+                shutil.copytree(repo_root, REMOTE_EXTENSIONS_TMP, dirs_exist_ok=True)
+                return True
+        return False
+
     tmp_manifest_path = os.path.join(REMOTE_EXTENSIONS_TMP, "master_manifest.json")
     tmp_versions = _read_manifest_versions(tmp_manifest_path)
     remote_versions = {
@@ -248,8 +286,20 @@ def _ensure_remote_repo_tmp(url: str):
     if needs_refresh:
         log("Remote manifest differs or missing; refreshing tmp repo...", "debug")
         _clear_directory(REMOTE_EXTENSIONS_TMP)
-        subprocess.run(["git", "clone", "--depth", "1", url, REMOTE_EXTENSIONS_TMP], check=True)
-        log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
+
+        git_exe = shutil.which("git")
+        if git_exe:
+            try:
+                subprocess.run([git_exe, "clone", "--depth", "1", url, REMOTE_EXTENSIONS_TMP], check=True)
+                log(f"Clone complete: {REMOTE_EXTENSIONS_TMP}", "debug")
+                return
+            except Exception as clone_err:
+                log(f"Git clone failed, trying local fallback: {clone_err}", "warning")
+
+        if _sync_from_local_repo_if_available():
+            log(f"Local extensions repo sync complete: {REMOTE_EXTENSIONS_TMP}", "debug")
+        else:
+            raise FileNotFoundError("Could not sync extensions repo: git not available and no local fallback repo found.")
     else:
         log("Tmp repo is up to date; reusing existing clone.", "debug")
 
@@ -729,6 +779,10 @@ def get_extension_download_path(extension_name: str) -> str:
             return path
         return path if path.endswith("/") else f"{path}/"
 
+    def _is_legacy_linux_path(path: str) -> bool:
+        text = str(path or "").strip().strip("\"").strip("'").replace("\\", "/").lower().rstrip("/")
+        return text.startswith("/opt/manga-scraper") or text.startswith("/opt/suwayomi-server")
+
     # If a custom path was set via CLI or config, use it
     if override_download_path:
         override_norm = os.path.normpath(override_download_path)
@@ -746,6 +800,8 @@ def get_extension_download_path(extension_name: str) -> str:
         if ext.get("name") == extension_name.lower():
             manifest_path = ext.get("image_download_path")
             if manifest_path:
+                if os.name == "nt" and _is_legacy_linux_path(manifest_path):
+                    continue
                 resolved = _ensure_trailing_slash(manifest_path)
                 logger.debug(
                     f"Extension download path resolved: {resolved} (source=manifest)"
@@ -805,6 +861,10 @@ def calculate_extension_download_path(extension_name: str) -> str:
             return path
         return path if path.endswith("/") else f"{path}/"
 
+    def _is_legacy_linux_path(path: str) -> bool:
+        text = str(path or "").strip().strip("\"").strip("'").replace("\\", "/").lower().rstrip("/")
+        return text.startswith("/opt/manga-scraper") or text.startswith("/opt/suwayomi-server")
+
     # If a custom path was set via CLI or config (and it's not the default), use it
     if override_download_path:
         override_norm = os.path.normpath(override_download_path)
@@ -820,6 +880,9 @@ def calculate_extension_download_path(extension_name: str) -> str:
     ext_info = get_extension_manifest_info(extension_name)
     if ext_info:
         manifest_path = ext_info.get("image_download_path")
+        if manifest_path:
+            if os.name == "nt" and _is_legacy_linux_path(manifest_path):
+                manifest_path = None
         if manifest_path:
             resolved = _ensure_trailing_slash(manifest_path)
             logger.debug(
