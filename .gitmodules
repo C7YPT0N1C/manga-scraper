@@ -1,0 +1,4 @@
+[submodule "vendor/dovetail"]
+	path = vendor/dovetail
+	url = https://github.com/anthrosystems/dovetail.git
+	branch = main

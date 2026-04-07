@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/skeleton/skeleton__msext.py
 
-import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile, tempfile
+import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile
 from tqdm import tqdm
 
 from mangascraper.core import orchestrator
@@ -15,8 +15,6 @@ from mangascraper.extensions.extension_manager import (
     find_latest_gallery_entry,
     parse_gallery_id,
     repair_covers_hook,
-    find_first_image_file,
-    link_creator_cover,
 )
 
 # This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
@@ -31,7 +29,7 @@ EXTENSION_NAME = "skeleton" # Must be fully lowercase
 EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
-EXTENSION_INSTALL_PATH = os.path.join(getattr(orchestrator, "SCRAPER_DIR", os.path.expanduser("~")), "extensions", EXTENSION_NAME)
+EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
 
 DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
 
@@ -335,7 +333,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         gallery_paths = {}
         cover_gallery_id = None
         
-        temp_root = os.path.join(getattr(orchestrator, "TEMP_DIR", tempfile.gettempdir()), "archive_temp")
+        temp_root = f"/opt/manga-scraper/mangascraper/core/archive_temp/"
         for creator_name in creators:
             creator_folder = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
             temp_creator_folder = os.path.join(temp_root, creator_name)
@@ -364,9 +362,9 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     gallery_paths[creator_name] = gallery_path
 
                     if cover_source is None:
-                        candidate = find_first_image_file(gallery_path)
-                        if candidate:
-                            page1_file = os.path.join(gallery_path, candidate)
+                        candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+                        if candidates:
+                            page1_file = os.path.join(gallery_path, candidates[0])
                             _, ext = os.path.splitext(page1_file)
                             cover_source = page1_file
                             cover_gallery_name = gallery_items[0]
@@ -403,11 +401,20 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     cover_in_subfolder = os.path.join(covers_folder, f"{cover_gallery_name}{cover_ext}")
                     shutil.copy2(cover_source, cover_in_subfolder)
                     logger.debug(f"Extracted cover for {creator_name}: {cover_in_subfolder}")
-                    # Use link_creator_cover which handles safe symlink/copy and removes old covers
-                    linked = link_creator_cover(creator_folder, cover_in_subfolder)
-                    if linked:
-                        logger.debug(f"Updated cover link for {creator_name}: {linked} -> {cover_in_subfolder}")
-                        cover_generated[creator_name] = True
+
+                    # Remove any existing cover files (regardless of extension)
+                    for f in os.listdir(creator_folder):
+                        if f.startswith("cover") and f != "covers" and f != ".covers":
+                            try:
+                                os.unlink(os.path.join(creator_folder, f))
+                            except Exception as e:
+                                logger.debug(f"Could not remove old cover file {f}: {e}")
+
+                    # Symlink cover into creator root
+                    cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
+                    os.symlink(cover_in_subfolder, cover_link)
+                    logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
+                    cover_generated[creator_name] = True
                 except Exception as e:
                     logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
 
