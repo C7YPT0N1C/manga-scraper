@@ -538,7 +538,21 @@ class Fetch:
         raw_cache = Cache.Load.cached_metadata()
         cached_meta = raw_cache.get(gallery_id)
         if cached_meta and isinstance(cached_meta, dict):
-            return cached_meta
+            # Only trust cached raw metadata when it has the minimum shape
+            # required by downloader/image URL logic.
+            images = cached_meta.get("images")
+            pages = images.get("pages") if isinstance(images, dict) else None
+            media_id = cached_meta.get("media_id")
+            if isinstance(pages, list) and media_id:
+                log(f"[Fetcher] Gallery {gallery_id}: Using cached raw metadata ({len(pages)} pages).", "debug")
+                return cached_meta
+            log(
+                f"[Fetcher] Gallery {gallery_id}: Cached raw metadata rejected "
+                f"(images_is_dict={isinstance(images, dict)}, pages_is_list={isinstance(pages, list)}, media_id_present={bool(media_id)}).",
+                "debug",
+            )
+        else:
+            log(f"[Fetcher] Gallery {gallery_id}: No cached raw metadata entry, fetching.", "debug")
 
         metadata_session = Get.session(referrer="API", status="return")
         url = f"{orchestrator.nhentai_api_base}/galleries/{gallery_id}"

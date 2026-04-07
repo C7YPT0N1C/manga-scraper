@@ -1725,7 +1725,8 @@ class DB:
 
             if gallery_title:
                 # Always store download_path in the canonical format: "(<id>) <clean_title>"
-                gallery_base = f"({int(gallery_id)}) {gallery_title}"
+                safe_gallery_title = Helpers.sanitise(gallery_title)
+                gallery_base = f"({int(gallery_id)}) {safe_gallery_title}"
                 if is_archive:
                     download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_base}.{ext}")
                 else:

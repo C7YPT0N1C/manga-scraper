@@ -866,7 +866,7 @@ async function refreshStatus() {
   const progress = data.progress || {};
 
   const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
-  const runTotal = Number(progress.total_galleries ?? data.queue_total ?? 0);
+  const runTotal = Number(counts.total ?? progress.total_galleries ?? data.queue_total ?? 0);
   const completedCount = Number(counts.completed ?? progress.completed ?? 0);
   const failedCount = Number(counts.failed ?? progress.failed ?? 0);
   const skippedCount = Number(counts.skipped ?? progress.skipped ?? 0);
@@ -1136,7 +1136,35 @@ async function refreshQueue() {
   const data = await res.json();
   const rows = sortRowsByIdDesc(data.queue || []);
   const downloads = Array.isArray(data.downloads) ? data.downloads : [];
-  queueIds = new Set((data.ids || []).map(Number).filter(Number.isFinite));
+  const selectedIds = (data.ids || []).map(Number).filter(Number.isFinite);
+  const downloadIds = downloads.flatMap(entry => {
+    const rawIds = entry?.ids;
+    if (Array.isArray(rawIds)) {
+      return rawIds.map(Number).filter(Number.isFinite);
+    }
+    if (typeof rawIds === 'string') {
+      const trimmed = rawIds.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map(Number).filter(Number.isFinite);
+        }
+      } catch {
+        // Fall back to delimiter-based parse for legacy payloads.
+      }
+      return trimmed
+        .replace(/^[\[]|[\]]$/g, '')
+        .split(/[\s,]+/)
+        .map(Number)
+        .filter(Number.isFinite);
+    }
+    if (rawIds && typeof rawIds === 'object') {
+      return Object.values(rawIds).map(Number).filter(Number.isFinite);
+    }
+    return [];
+  });
+  queueIds = new Set([...selectedIds, ...downloadIds]);
   renderDownloadQueueRows(downloads);
   renderRows('#queueTable', rows);
   renderSearchTables();

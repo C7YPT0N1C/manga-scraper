@@ -868,6 +868,8 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
                         update_failed_galleries(False, gallery_id=gallery_id, Reason="Failed to fetch metadata.")
                         scraperapi.DB.Gallery.fail(gallery_id)
+                        if on_gallery_status:
+                            on_gallery_status("failed")
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))

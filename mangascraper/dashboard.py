@@ -148,17 +148,6 @@ def create_app():
     def reader_collection_redirect(collection_id):
         return redirect(f'/collections/{collection_id}/')
 
-    @app.route('/reader/stream/')
-    def reader_stream_page():
-        # Stream page: standalone reader
-        return render_template(
-            'reader.html',
-            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-            reader_context={
-                'type': 'stream',
-            },
-        )
-
     return app
 
 if __name__ == "__main__":
