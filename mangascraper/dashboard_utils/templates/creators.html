@@ -645,17 +645,45 @@ function createGalleryGrid(items, itemType, onClick) {
 		square.appendChild(metaDiv);
 		square.appendChild(controlsDiv);
 
+		function openReaderInNewTab(event = null) {
+			if (itemType !== 'gallery') return false;
+			const creator = _currentCreator;
+			const galleryId = Number(
+				(typeof item === 'object' && item !== null
+					? (item.gallery_id ?? item.id ?? null)
+					: null) || parseGalleryId(itemLabel(item)) || 0
+			);
+			if (!creator || !Number.isFinite(galleryId) || galleryId <= 0) return false;
+
+			if (event) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+
+			const newTab = window.open(`/reader/creators/${creatorSlug(creator)}/${galleryId}/`, '_blank', 'noopener,noreferrer');
+			if (newTab) {
+				newTab.opener = null;
+			}
+			return true;
+		}
+
 		square.addEventListener('mousedown', (event) => {
 			if (itemType === 'gallery' && event.button === 1) {
-				// Middle click: open reader in new tab
-				const creator = _currentCreator;
-				const galleryId = typeof item === 'object' && item.gallery_id ? item.gallery_id : parseGalleryId(itemLabel(item));
-				if (creator && galleryId) {
-					window.open(`/reader/creators/${creatorSlug(creator)}/${galleryId}/`, '_blank');
-				}
+				// Prevent Windows autoscroll from swallowing middle-click intent.
+				event.preventDefault();
 			}
 		});
-		square.addEventListener('click', () => {
+
+		square.addEventListener('auxclick', (event) => {
+			if (itemType === 'gallery' && event.button === 1) {
+				openReaderInNewTab(event);
+			}
+		});
+
+		square.addEventListener('click', (event) => {
+			if (itemType === 'gallery' && (event.ctrlKey || event.metaKey)) {
+				if (openReaderInNewTab(event)) return;
+			}
 			if (itemType === 'creator') {
 				onClick(itemLabel(item));
 				return;

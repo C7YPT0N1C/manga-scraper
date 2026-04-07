@@ -252,12 +252,12 @@ def run_gallery_batch(
         raise
     _register_dovetail(dvt)
 
-    def _run_gallery(gallery_id: int):
+    def download_gallery_task(gallery_id: int):
         return process_gallery_sync(int(gallery_id))
 
     try:
         outcomes = dvt.task.map_blocking(
-            _run_gallery,
+            download_gallery_task,
             gallery_ids,
             max_concurrency=gallery_workers,
             return_exceptions=True,
@@ -833,7 +833,7 @@ def finalise_gallery_format(
 # MAIN
 ####################################################################################################
 
-def process_galleries(batch_ids):
+def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None = None):
     orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
@@ -905,6 +905,8 @@ def process_galleries(batch_ids):
                     else:
                         log_clarification()
                         logger.info(f"[DRY RUN] [Downloader] Would mark Gallery {gallery_id} as skipped.")
+                    if on_gallery_status:
+                        on_gallery_status("skipped")
                     break  # exit retry loop, skip gallery
 
                 use_local_archive = (
@@ -1034,6 +1036,8 @@ def process_galleries(batch_ids):
 
                 logger.debug(f"[Downloader] Completed Gallery: {gallery_id}")
                 log_clarification()
+                if on_gallery_status:
+                    on_gallery_status("completed")
                 break  # exit retry loop on success
 
             except Exception as e:
@@ -1049,6 +1053,8 @@ def process_galleries(batch_ids):
                         gallery_id,
                         context=f"Gallery {gallery_id} fail",
                     )
+                    if on_gallery_status:
+                        on_gallery_status("failed")
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None, overall_start_index: int = 0, overall_total_galleries: int | None = None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
@@ -1097,8 +1103,17 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     # Shared state for progress
     page_lock = threading.Lock()
     progress_state = {"pages": 0, "gallery": 1}
+    gallery_state = {"completed": 0, "failed": 0, "skipped": 0}
     batch_started_at = time.perf_counter()
     total_gallery_count = overall_total_galleries or len(batch_list)
+
+    def _set_progress_postfix() -> None:
+        page_progress.set_postfix_str(
+            f"Completed: {gallery_state['completed']} | Failed: {gallery_state['failed']} | Skipped: {gallery_state['skipped']}",
+            refresh=False,
+        )
+
+    _set_progress_postfix()
     scraperapi.RuntimeProgress.update(
         current_gallery_number=min(overall_start_index + 1, total_gallery_count) if batch_list else 0,
         current_gallery_id=batch_list[0] if batch_list else None,
@@ -1118,6 +1133,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                    progress_state["pages"] > gallery_milestones[progress_state["gallery"] - 1]):
                 progress_state["gallery"] += 1
             page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
+            _set_progress_postfix()
             page_progress.update(1)
 
             elapsed = max(time.perf_counter() - batch_started_at, 0.001)
@@ -1137,6 +1153,13 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                 download_speed_bytes=round(space_monitor["total_actual_bytes"] / elapsed, 2) if space_monitor["total_actual_bytes"] > 0 else 0,
             )
 
+    def gallery_status_hook(status: str):
+        with page_lock:
+            if status in gallery_state:
+                gallery_state[status] += 1
+            _set_progress_postfix()
+            page_progress.refresh()
+
     # Patch the download_images_hook to call our page_update_hook after each page
     orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
     def wrapped_download_images_hook(*args, **kwargs):
@@ -1152,7 +1175,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     # Each gallery is processed in parallel via the in-module Dovetail coordinator.
     errors = run_gallery_batch(
         gallery_ids=[int(gid) for gid in batch_list],
-        process_gallery_sync=lambda gid: process_galleries([int(gid)]),
+        process_gallery_sync=lambda gid: process_galleries([int(gid)], on_gallery_status=gallery_status_hook),
     )
     for exc in errors:
         logger.error(f"[Downloader] Gallery task failed: {exc}")
