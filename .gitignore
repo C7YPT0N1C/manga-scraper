@@ -181,3 +181,4 @@ cython_debug/
 *.db
 docs/request.md
 Doujinshi_IDs.txt
+mangascraper/core/mangascraper.db-journal

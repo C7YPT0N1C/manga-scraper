@@ -708,8 +708,8 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
 
     if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
         log_clarification("debug")
-        logger.debug("Extension Loader: Ready.")
-        log("Extension Loader: Debugging Started.", "debug")
+        logger.debug("[Extension Loader] Ready.")
+        log("[Extension Loader] Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()

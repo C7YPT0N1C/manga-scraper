@@ -309,7 +309,7 @@ class Fetch:
                     if end_page is not None and page > end_page:
                         break
                     url = Build.url(qt, query_value, sort_value, page)
-                    log(f"Fetcher: Requesting URL: {url}", "debug")
+                    log(f"[Fetcher] Requesting URL: {url}", "debug")
                     resp = None
                     for api_attempt in range(1, orchestrator.max_retries + 1):
                         try:
@@ -441,14 +441,14 @@ class Fetch:
                         num_pages = len(images.get("pages", []))
                         orchestrator.total_gallery_images += num_pages
 
-                    log(f"Fetcher: {qt}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
+                    log(f"[Fetcher] {qt}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
                     log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
 
                     if not results:
-                        logger.info(f"Fetcher: {qt}{query_str}, Page {page}: No more results from NHentai, stopping.")
+                        logger.info(f"[Fetcher] {qt}{query_str}, Page {page}: No more results from NHentai, stopping.")
                         break
                     if not batch:
-                        logger.debug(f"Fetcher: {qt}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
+                        logger.debug(f"[Fetcher] {qt}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
                         page += 1
                         continue
 
@@ -520,7 +520,7 @@ class Fetch:
                 for mirror in orchestrator.nhentai_mirrors
             ]
 
-            log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
+            log(f"[Fetcher] Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
             return urls
 
         except Exception as e:
@@ -546,7 +546,7 @@ class Fetch:
         for attempt in range(1, orchestrator.max_retries + 1):
             try:
                 log_clarification("debug")
-                log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
+                log(f"[Fetcher] Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
                 resp = metadata_session.get(url, timeout=(60, 60))
                 from mangascraper.core.api._sleep import Sleep
@@ -598,7 +598,7 @@ class Fetch:
                     pass
 
                 log_clarification("debug")
-                log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
+                log(f"[Fetcher] Fetched metadata for Gallery: {gallery_id}", "debug")
                 return norm
 
             except requests.HTTPError as e:

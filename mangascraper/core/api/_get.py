@@ -29,16 +29,16 @@ class Get:
         - If status="return", returns the current session without rebuilding.
         """
         log_clarification("debug")
-        logger.debug("Fetcher: Ready.")
-        log("Fetcher: Debugging Started.", "debug")
+        logger.debug("[Fetcher] Ready.")
+        log("[Fetcher] Debugging Started.", "debug")
 
         orchestrator.refresh_globals()
 
         log_clarification("debug")
         if status == "none":
-            logger.debug(f"{referrer}: Requesting to only retrieve session.")
+            logger.debug(f"[{referrer}] Requesting to only retrieve session.")
         else:
-            logger.debug(f"{referrer}: Requesting to {status} session.")
+            logger.debug(f"[{referrer}] Requesting to {status} session.")
 
         with session_lock:
             # Refresh SSL verification on every access

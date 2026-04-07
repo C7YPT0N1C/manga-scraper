@@ -210,6 +210,26 @@ def _call_db_with_lock_wait(func, *args, context: str = "database", **kwargs):
             raise
 
 
+def _safe_symlink_or_copy(src: str, dest: str) -> bool:
+    """Prefer symlink; fall back to copying (file/dir) when symlink is unavailable."""
+    try:
+        os.symlink(src, dest)
+        return True
+    except Exception as symlink_error:
+        try:
+            if os.path.isdir(src):
+                shutil.copytree(src, dest)
+            else:
+                shutil.copy2(src, dest)
+            logger.debug(f"[Downloader] Symlink unavailable; copied instead: {src} -> {dest} ({symlink_error})")
+            return True
+        except Exception as copy_error:
+            logger.warning(
+                f"[Downloader] Failed to create link/copy for '{dest}': symlink={symlink_error}; copy={copy_error}"
+            )
+            return False
+
+
 def run_gallery_batch(
     gallery_ids: list[int],
     process_gallery_sync: Callable[[int], None],
@@ -217,9 +237,13 @@ def run_gallery_batch(
 ) -> list[Exception]:
     """Run sync gallery processors with async orchestration via Dovetail."""
 
-    dovetail = Dovetail(max_workers=max(1, int(max_gallery_workers or 1)))
-    _register_dovetail(dovetail)
-    log("[DOVETAIL] ENABLED.")
+    try:
+        dvt = Dovetail(max_workers=max(1, int(max_gallery_workers or 1)))
+        log("[DOVETAIL] Enabled.", "debug")
+    except Exception as e:
+        logger.error(f"[DOVETAIL] Failed to initialise gallery worker pool: {e}")
+        raise
+    _register_dovetail(dvt)
 
     async def _run() -> list[Exception]:
         semaphore = asyncio.Semaphore(max(1, int(max_gallery_workers or 1)))
@@ -228,7 +252,7 @@ def run_gallery_batch(
         async def _run_one(gallery_id: int):
             async with semaphore:
                 try:
-                    await dovetail.task.to_thread(process_gallery_sync, int(gallery_id))
+                    await dvt.task.to_thread(process_gallery_sync, int(gallery_id))
                 except Exception as exc:
                     errors.append(exc)
 
@@ -236,13 +260,13 @@ def run_gallery_batch(
         return errors
 
     try:
-        return dovetail.task.run_blocking(_run)
+        return dvt.task.run_blocking(_run)
     finally:
         try:
-            _active_dovetails.remove(dovetail)
+            _active_dovetails.remove(dvt)
         except ValueError:
             pass
-        dovetail.shutdown(wait=True)
+        dvt.shutdown(wait=True)
 
 def _signal_handler(signum, frame):
     """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
@@ -536,7 +560,7 @@ def update_failed_galleries(ReturnReport: bool, gallery_id=None, meta=None, Reas
 
     gid = scraperapi.Helpers.normalise_integer(gallery_id)
     if gid is None:
-        logger.warning("Downloader: update_failed_galleries called without a valid gallery_id.")
+        logger.warning("[Downloader] update_failed_galleries called without a valid gallery_id.")
         return
 
     cached_meta = scraperapi.Cache.Load.cache(gallery_id=gid) or {}
@@ -617,7 +641,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Excluded Tags ---
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
-    gallery_tags = [t.lower() for t in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
+    gallery_tags = [t.lower() for t in scraperapi.Get.meta_tags("[Downloader] Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
     
     for tag in gallery_tags:
@@ -626,7 +650,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Allowed Languages ---
     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
-    gallery_langs = [l.lower() for l in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
+    gallery_langs = [l.lower() for l in scraperapi.Get.meta_tags("[Downloader] Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
     if allowed_gallery_language:
@@ -659,13 +683,18 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
     Submit download tasks for a single creator's pages.
     """
 
-    dovetail = Dovetail(max_workers=max(1, int(threads_images or 1)))
-    _register_dovetail(dovetail)
+    try:
+        dvt = Dovetail(max_workers=max(1, int(threads_images or 1)))
+        log("[DOVETAIL] Enabled.", "debug")
+    except Exception as e:
+        logger.error(f"[DOVETAIL] Failed to initialise image worker pool: {e}")
+        raise
+    _register_dovetail(dvt)
 
     async def _run_page_tasks() -> list[bool]:
         async def _run_one(page, urls, path):
             try:
-                result = await dovetail.task.to_thread(
+                result = await dvt.task.to_thread(
                     active_extension.download_images_hook,
                     gallery_id,
                     page,
@@ -685,14 +714,14 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
         )
 
     try:
-        results = dovetail.task.run_blocking(_run_page_tasks)
+        results = dvt.task.run_blocking(_run_page_tasks)
         return all(results)
     finally:
         try:
-            _active_dovetails.remove(dovetail)
+            _active_dovetails.remove(dvt)
         except ValueError:
             pass
-        dovetail.shutdown(wait=True)
+        dvt.shutdown(wait=True)
 
 #----------------------
 # ARCHIVE CONVERSION
@@ -804,7 +833,7 @@ def process_galleries(batch_ids):
             )
         else:
             log_clarification()
-            logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
+            logger.info(f"[DRY RUN] [Downloader] Would mark Gallery {gallery_id} as started.")
 
         gallery_attempts = 0
 
@@ -860,7 +889,7 @@ def process_galleries(batch_ids):
                         )
                     else:
                         log_clarification()
-                        logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
+                        logger.info(f"[DRY RUN] [Downloader] Would mark Gallery {gallery_id} as skipped.")
                     break  # exit retry loop, skip gallery
 
                 use_local_archive = (
@@ -884,7 +913,7 @@ def process_galleries(batch_ids):
                 )
 
                 if orchestrator.dry_run:
-                    log(f"[DRY RUN] Downloader: Would create primary folder for {creators[0]}: {primary_folder}", "debug")
+                    log(f"[DRY RUN] [Downloader] Would create primary folder for {creators[0]}: {primary_folder}", "debug")
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
 
@@ -943,7 +972,7 @@ def process_galleries(batch_ids):
 
                     if orchestrator.dry_run:
                         target_name = "archive" if orchestrator.gallery_format != "directory" else "primary folder"
-                        log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {target_name}", "debug")
+                        log(f"[DRY RUN] [Downloader] Would symlink {extra_folder} -> {target_name}", "debug")
                     else:
                         if os.path.normcase(os.path.normpath(extra_folder)) == os.path.normcase(os.path.normpath(finalised_path)):
                             logger.debug(f"[Downloader] Skipping self-symlink for Gallery {gallery_id}: {extra_folder}")
@@ -951,10 +980,10 @@ def process_galleries(batch_ids):
                         if os.path.islink(extra_folder):
                             os.unlink(extra_folder)  # remove old symlink only
                         elif os.path.exists(extra_folder):
-                            logger.warning(f"[Downloader] Extra path already exists and is not a symlink: {extra_folder}")
-                            continue  # skip creating symlink if real folder exists
-                        os.symlink(finalised_path, extra_folder)
-                        logger.debug(f"[Downloader] Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
+                            logger.warning(f"[Downloader] Extra path already exists and is not a symlink/copy target: {extra_folder}")
+                            continue  # skip replacing real existing content
+                        if _safe_symlink_or_copy(finalised_path, extra_folder):
+                            logger.debug(f"[Downloader] Linked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
                     _call_db_with_lock_wait(
@@ -1123,8 +1152,8 @@ def start_downloader(gallery_list=None):
     global galleries, failed_galleries, skipped_galleries
     
     log_clarification("debug")
-    logger.debug("Downloader: Ready.")
-    log("Downloader: Debugging Started.", "debug")
+    logger.debug("[Downloader] Ready.")
+    log("[Downloader] Debugging Started.", "debug")
 
     with failed_galleries_lock:
         failed_galleries = {}

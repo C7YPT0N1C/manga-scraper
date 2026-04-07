@@ -1067,8 +1067,8 @@ def main():
         uninstall_selected_extension(args.uninstall_extension)
         return
 
-    logger.debug("CLI: Ready.")
-    log("CLI: Debugging Started.", "debug")
+    logger.debug("[CLI] Ready.")
+    log("[CLI] Debugging Started.", "debug")
     
     # If no gallery input is provided, default to homepage
     gallery_args = [

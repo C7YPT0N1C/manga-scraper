@@ -44,14 +44,8 @@ RUNS_PER_X_BATCHES = 1
 ARCHIVE_WAIT_SECONDS = 120
 ARCHIVE_POLL_INTERVAL = 0.5
 
-####################################################################
-# CUSTOM VARIABLES
-####################################################################
-
-# PUT YOUR VARIABLES HERE
-
 ####################################################################################################################
-# CORE
+# EXTENSION INSTALL / UNINSTALL HOOKS
 ####################################################################################################################
 
 # Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
@@ -61,8 +55,8 @@ def pre_run_hook():
     """
     global DEDICATED_DOWNLOAD_PATH
     
-    logger.debug(f"{EXTENSION_REFERRER}: Ready.")
-    log(f"{EXTENSION_REFERRER}: Debugging started.", "debug")
+    logger.debug(f"[{EXTENSION_REFERRER}] Ready.")
+    log(f"[{EXTENSION_REFERRER}] Debugging started.", "debug")
     
     orchestrator.refresh_globals()
     DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
@@ -73,9 +67,9 @@ def pre_run_hook():
         return
     try:
         os.makedirs(DEDICATED_DOWNLOAD_PATH, exist_ok=True)
-        logger.debug(f"{EXTENSION_REFERRER}: Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
+        logger.debug(f"[{EXTENSION_REFERRER}] Download path ready at '{DEDICATED_DOWNLOAD_PATH}'.")
     except Exception as e:
-        logger.error(f"{EXTENSION_REFERRER}: Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
+        logger.error(f"[{EXTENSION_REFERRER}] Failed to create download path '{DEDICATED_DOWNLOAD_PATH}': {e}")
 
 def install_extension():
     """
@@ -98,10 +92,10 @@ def install_extension():
         
         pre_run_hook()
         
-        logger.info(f"{EXTENSION_REFERRER}: Installed.")
+        logger.info(f"[{EXTENSION_REFERRER}] Installed successfully.")
     
     except Exception as e:
-        logger.error(f"{EXTENSION_REFERRER}: Failed to install: {e}")
+        logger.error(f"[{EXTENSION_REFERRER}] Failed to install: {e}")
 
 def uninstall_extension():
     """
@@ -123,13 +117,13 @@ def uninstall_extension():
         if os.path.exists(DEDICATED_DOWNLOAD_PATH):
             shutil.rmtree(DEDICATED_DOWNLOAD_PATH, ignore_errors=True)
 
-        logger.info(f"Extension {EXTENSION_REFERRER}: Uninstalled successfully. Your galleries folder will NOT be deleted.")
+        logger.info(f"[{EXTENSION_REFERRER}] Uninstalled successfully. Your galleries folder will NOT be deleted.")
 
     except Exception as e:
-        logger.error(f"Extension {EXTENSION_REFERRER}: Failed to uninstall: {e}")
+        logger.error(f"[{EXTENSION_REFERRER}] Failed to uninstall: {e}")
 
 ####################################################################################################################
-# CUSTOM HOOKS (Create your custom hooks here, add them into the corresponding CORE HOOK. Must be thread-safe.)
+# CUSTOM VARIABLES / FUNCTIONS (Create your custom hooks here, add them into the corresponding CORE HOOK. Must be thread-safe.)
 ####################################################################################################################
 
 # Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
@@ -142,7 +136,147 @@ def test_hook():
     orchestrator.refresh_globals()
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Test Hook Called.", "debug")
+    log(f"[{EXTENSION_REFERRER}] Test Hook Called.", "debug")
+
+def _create_cover_link_or_copy(cover_source: str, cover_link: str, creator_name: str) -> bool:
+    """Create a symlink to the cover; fall back to copying for Windows/non-privileged environments."""
+    try:
+        os.symlink(cover_source, cover_link)
+        logger.debug(f"[COVERS] Updated cover symlink for {creator_name}: {cover_link} -> {cover_source}")
+        return True
+    except Exception as symlink_error:
+        try:
+            shutil.copy2(cover_source, cover_link)
+            logger.debug(
+                f"[COVERS] Symlink unavailable for {creator_name}; copied cover instead: {cover_source} -> {cover_link} ({symlink_error})"
+            )
+            return True
+        except Exception as copy_error:
+            logger.debug(
+                f"[COVERS] Failed to create cover link/copy for {creator_name}: symlink={symlink_error}; copy={copy_error}"
+            )
+            return False
+
+def maintain_gallery_covers():
+    """
+    Maintain cover images for galleries.
+    
+    Structure:
+    - CreatorFolder/cover.ext → symlink to latest gallery cover
+    - CreatorFolder/.covers/(GalleryID) GalleryTitle.ext → cover images
+    """
+    if not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
+        return
+    
+    try:
+        for creator_name in os.listdir(DEDICATED_DOWNLOAD_PATH):
+            if creator_name.startswith("."):
+                continue
+            
+            creator_path = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
+            if not os.path.isdir(creator_path):
+                continue
+            
+            # Create .covers subfolder
+            covers_folder = os.path.join(creator_path, ".covers")
+            os.makedirs(covers_folder, exist_ok=True)
+            
+            latest_gallery_id = None
+            latest_gallery_name = None
+            
+            # Process all galleries in the creator folder
+            for entry_name in os.listdir(creator_path):
+                if entry_name.startswith("."):
+                    continue
+                
+                entry_path = os.path.join(creator_path, entry_name)
+                
+                # Extract gallery ID and title
+                match = re.search(r"\((\d+)\)", entry_name)
+                if not match:
+                    continue
+                
+                try:
+                    gallery_id = int(match.group(1))
+                except ValueError:
+                    continue
+                
+                # Track the latest gallery
+                if latest_gallery_id is None or gallery_id > latest_gallery_id:
+                    latest_gallery_id = gallery_id
+                    latest_gallery_name = entry_name
+                
+                # Get the base name without extension for directories
+                if os.path.isdir(entry_path):
+                    gallery_base = entry_name
+                    # Look for first image page
+                    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+                    pages = sorted(f for f in os.listdir(entry_path) 
+                                 if os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+                    if pages:
+                        first_page = os.path.join(entry_path, pages[0])
+                        _, ext = os.path.splitext(first_page)
+                        cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
+                        # Copy first page as cover if it doesn't exist
+                        if not os.path.exists(cover_dest):
+                            try:
+                                shutil.copy2(first_page, cover_dest)
+                                logger.debug(f"[COVERS] Created cover for {creator_name}/{gallery_base}")
+                            except Exception as e:
+                                logger.debug(f"[COVERS] Failed to copy cover for {gallery_base}: {e}")
+                
+                # Handle archive files (.cbz, .zip)
+                elif entry_path.endswith((".cbz", ".zip")) and os.path.isfile(entry_path):
+                    gallery_base = os.path.splitext(entry_name)[0]
+                    # Try to extract first image from archive
+                    try:
+                        with zipfile.ZipFile(entry_path, "r") as zf:
+                            IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+                            pages = sorted(f for f in zf.namelist()
+                                         if not f.endswith("/") and 
+                                         os.path.splitext(f)[1].lower() in IMAGE_EXTS)
+                            if pages:
+                                first_page_data = zf.read(pages[0])
+                                _, ext = os.path.splitext(pages[0])
+                                cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
+                                if not os.path.exists(cover_dest):
+                                    with open(cover_dest, "wb") as f:
+                                        f.write(first_page_data)
+                                    logger.debug(f"[COVERS] Created cover from archive {creator_name}/{gallery_base}")
+                    except Exception as e:
+                        logger.debug(f"[COVERS] Failed to extract cover from {entry_name}: {e}")
+            
+            # Create/update creator cover (symlink to latest gallery cover)
+            if latest_gallery_name:
+                gallery_base = os.path.splitext(latest_gallery_name)[0] if latest_gallery_name.endswith((".cbz", ".zip")) else latest_gallery_name
+                
+                # Find the cover file for the latest gallery
+                for ext in ("jpg", "jpeg", "png", "gif", "webp"):
+                    cover_source = os.path.join(covers_folder, f"{gallery_base}.{ext}")
+                    if os.path.exists(cover_source):
+                        # Remove old cover links
+                        for old_ext in ("jpg", "jpeg", "png", "gif", "webp"):
+                            old_cover = os.path.join(creator_path, f"cover.{old_ext}")
+                            if os.path.islink(old_cover) or os.path.isfile(old_cover):
+                                try:
+                                    os.unlink(old_cover)
+                                except Exception:
+                                    pass
+                        
+                        # Create new symlink
+                        cover_link = os.path.join(creator_path, f"cover.{ext}")
+                        _create_cover_link_or_copy(cover_source, cover_link, creator_name)
+                        break
+    
+    except Exception as e:
+        logger.debug(f"[COVERS] Error in maintain_gallery_covers: {e}")
+        
+def cleanup_hook():
+    maintain_gallery_covers()
+    repair_covers_hook(DEDICATED_DOWNLOAD_PATH, referrer=EXTENSION_REFERRER)
+    cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
+
+# PUT YOUR FUNCTIONS / VARIABLES HERE
 
 ####################################################################################################################
 # CORE HOOKS (Please add to the functions, try not to change or remove anything. Must be thread-safe.)
@@ -267,7 +401,7 @@ def pre_batch_hook(gallery_list):
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Pre-batch Hook Called.", "debug")
+    log(f"[{EXTENSION_REFERRER}] Pre-batch Hook Called.", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -282,7 +416,7 @@ def pre_gallery_download_hook(gallery_id):
         logger.info(f"[DRY RUN] {EXTENSION_REFERRER}: Pre-download Hook Inactive.")
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Pre-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"[{EXTENSION_REFERRER}] Pre-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -296,7 +430,7 @@ def during_gallery_download_hook(gallery_id):
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: During-download Hook Called: Gallery: {gallery_id}", "debug")
+    log(f"[{EXTENSION_REFERRER}] During-download Hook Called: Gallery: {gallery_id}", "debug")
     
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
@@ -310,15 +444,16 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
+    log(f"[{EXTENSION_REFERRER}] Post-Completed Gallery Download Hook Called: Gallery: {meta['id']}: Downloaded.", "debug")
     
     # Extract cover and delete original gallery folder after archiving
+    
     try:
         gallery_format = str(orchestrator.gallery_format).lower() # Check if gallery format is valid, if not, treat as "directory" for safety
         valid_formats = {"directory", "zip", "cbz"}
         if gallery_format not in valid_formats:
             logger.warning(
-                f"{EXTENSION_REFERRER}: Unknown GALLERY_FORMAT '{orchestrator.gallery_format}', "
+                f"[{EXTENSION_REFERRER}] Unknown GALLERY_FORMAT '{orchestrator.gallery_format}', "
                 "treating as 'directory' for safety."
             )
             gallery_format = "directory"
@@ -362,8 +497,13 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                     gallery_paths[creator_name] = gallery_path
 
                     if cover_source is None:
-                        candidates = [f for f in os.listdir(gallery_path) if f.startswith("1.")]
+                        # Accept both non-padded and zero-padded first-page names (1.jpg, 01.jpg, 001.jpg, ...)
+                        candidates = [
+                            f for f in os.listdir(gallery_path)
+                            if re.match(r"^0*1\.[^.]+$", f, re.IGNORECASE)
+                        ]
                         if candidates:
+                            candidates.sort()
                             page1_file = os.path.join(gallery_path, candidates[0])
                             _, ext = os.path.splitext(page1_file)
                             cover_source = page1_file
@@ -412,17 +552,13 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
                     # Symlink cover into creator root
                     cover_link = os.path.join(creator_folder, f"cover{cover_ext}")
-                    os.symlink(cover_in_subfolder, cover_link)
-                    logger.debug(f"Updated cover symlink for {creator_name}: {cover_link} -> {cover_in_subfolder}")
-                    cover_generated[creator_name] = True
+                    cover_generated[creator_name] = _create_cover_link_or_copy(
+                        cover_in_subfolder,
+                        cover_link,
+                        creator_name,
+                    )
                 except Exception as e:
                     logger.debug(f"Could not extract cover for Gallery {gallery_id}: {e}")
-
-            if not cover_generated.get(creator_name):
-                logger.debug(
-                    f"Skipping delete for {creator_name}; cover not generated for gallery {gallery_id}."
-                )
-                continue
 
             gallery_path = gallery_paths.get(creator_name)
             if gallery_format == "directory" or not gallery_path:
@@ -445,7 +581,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                             file_path = os.path.join(root, file)
                             arcname = os.path.relpath(file_path, gallery_path)
                             archive.write(file_path, arcname)
-                logger.debug(f"{EXTENSION_REFERRER}: Archived gallery {gallery_path} to {archive_path}")
+                logger.debug(f"[{EXTENSION_REFERRER}] Archived gallery {gallery_path} to {archive_path}")
             
             # Wait for the archive to exist
             if not os.path.exists(expected_archive):
@@ -475,130 +611,6 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     except Exception as e:
         logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
 
-# Hook for cleaning after downloads
-def maintain_gallery_covers():
-    """
-    Maintain cover images for galleries.
-    
-    Structure:
-    - CreatorFolder/cover.ext → symlink to latest gallery cover
-    - CreatorFolder/.covers/(GalleryID) GalleryTitle.ext → cover images
-    """
-    if not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
-        return
-    
-    try:
-        for creator_name in os.listdir(DEDICATED_DOWNLOAD_PATH):
-            if creator_name.startswith("."):
-                continue
-            
-            creator_path = os.path.join(DEDICATED_DOWNLOAD_PATH, creator_name)
-            if not os.path.isdir(creator_path):
-                continue
-            
-            # Create .covers subfolder
-            covers_folder = os.path.join(creator_path, ".covers")
-            os.makedirs(covers_folder, exist_ok=True)
-            
-            latest_gallery_id = None
-            latest_gallery_name = None
-            
-            # Process all galleries in the creator folder
-            for entry_name in os.listdir(creator_path):
-                if entry_name.startswith("."):
-                    continue
-                
-                entry_path = os.path.join(creator_path, entry_name)
-                
-                # Extract gallery ID and title
-                match = re.search(r"\((\d+)\)", entry_name)
-                if not match:
-                    continue
-                
-                try:
-                    gallery_id = int(match.group(1))
-                except ValueError:
-                    continue
-                
-                # Track the latest gallery
-                if latest_gallery_id is None or gallery_id > latest_gallery_id:
-                    latest_gallery_id = gallery_id
-                    latest_gallery_name = entry_name
-                
-                # Get the base name without extension for directories
-                if os.path.isdir(entry_path):
-                    gallery_base = entry_name
-                    # Look for first image page
-                    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-                    pages = sorted(f for f in os.listdir(entry_path) 
-                                 if os.path.splitext(f)[1].lower() in IMAGE_EXTS)
-                    if pages:
-                        first_page = os.path.join(entry_path, pages[0])
-                        _, ext = os.path.splitext(first_page)
-                        cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
-                        # Copy first page as cover if it doesn't exist
-                        if not os.path.exists(cover_dest):
-                            try:
-                                shutil.copy2(first_page, cover_dest)
-                                logger.debug(f"[COVERS] Created cover for {creator_name}/{gallery_base}")
-                            except Exception as e:
-                                logger.debug(f"[COVERS] Failed to copy cover for {gallery_base}: {e}")
-                
-                # Handle archive files (.cbz, .zip)
-                elif entry_path.endswith((".cbz", ".zip")) and os.path.isfile(entry_path):
-                    gallery_base = os.path.splitext(entry_name)[0]
-                    # Try to extract first image from archive
-                    try:
-                        with zipfile.ZipFile(entry_path, "r") as zf:
-                            IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-                            pages = sorted(f for f in zf.namelist()
-                                         if not f.endswith("/") and 
-                                         os.path.splitext(f)[1].lower() in IMAGE_EXTS)
-                            if pages:
-                                first_page_data = zf.read(pages[0])
-                                _, ext = os.path.splitext(pages[0])
-                                cover_dest = os.path.join(covers_folder, f"{gallery_base}{ext}")
-                                if not os.path.exists(cover_dest):
-                                    with open(cover_dest, "wb") as f:
-                                        f.write(first_page_data)
-                                    logger.debug(f"[COVERS] Created cover from archive {creator_name}/{gallery_base}")
-                    except Exception as e:
-                        logger.debug(f"[COVERS] Failed to extract cover from {entry_name}: {e}")
-            
-            # Create/update creator cover (symlink to latest gallery cover)
-            if latest_gallery_name:
-                gallery_base = os.path.splitext(latest_gallery_name)[0] if latest_gallery_name.endswith((".cbz", ".zip")) else latest_gallery_name
-                
-                # Find the cover file for the latest gallery
-                for ext in ("jpg", "jpeg", "png", "gif", "webp"):
-                    cover_source = os.path.join(covers_folder, f"{gallery_base}.{ext}")
-                    if os.path.exists(cover_source):
-                        # Remove old cover links
-                        for old_ext in ("jpg", "jpeg", "png", "gif", "webp"):
-                            old_cover = os.path.join(creator_path, f"cover.{old_ext}")
-                            if os.path.islink(old_cover) or os.path.isfile(old_cover):
-                                try:
-                                    os.unlink(old_cover)
-                                except Exception:
-                                    pass
-                        
-                        # Create new symlink
-                        cover_link = os.path.join(creator_path, f"cover.{ext}")
-                        try:
-                            os.symlink(cover_source, cover_link)
-                            logger.debug(f"[COVERS] Updated cover link for {creator_name}")
-                        except Exception as e:
-                            logger.debug(f"[COVERS] Failed to create cover link for {creator_name}: {e}")
-                        break
-    
-    except Exception as e:
-        logger.debug(f"[COVERS] Error in maintain_gallery_covers: {e}")
-
-def cleanup_hook():
-    maintain_gallery_covers()
-    repair_covers_hook(DEDICATED_DOWNLOAD_PATH, referrer=EXTENSION_REFERRER)
-    cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
-
 # Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     orchestrator.refresh_globals()
@@ -608,7 +620,7 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Post-batch Hook Called.", "debug")
+    log(f"[{EXTENSION_REFERRER}] Post-batch Hook Called.", "debug")
     
     def _should_run_post_batch():
         # --- If Total Batches higher than MAX_X_BATCHES, do not run ---
@@ -642,11 +654,11 @@ def post_run_hook():
         return
     
     log_clarification("debug")
-    log(f"{EXTENSION_REFERRER}: Post-run Hook Called.", "debug")
+    log(f"[{EXTENSION_REFERRER}] Post-run Hook Called.", "debug")
     
     if orchestrator.skip_post_run:
         log_clarification("debug")
-        log(f"{EXTENSION_REFERRER}: Post-run Hook Skipped.", "debug")
+        log(f"[{EXTENSION_REFERRER}] Post-run Hook Skipped.", "debug")
     else:
         cleanup_hook() # Call the cleanup hook
         
