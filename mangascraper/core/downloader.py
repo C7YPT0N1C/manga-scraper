@@ -701,7 +701,7 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
         raise
     _register_dovetail(dvt)
 
-    def _run_page(task_tuple):
+    def download_image_task(task_tuple):
         page, urls, path, _ = task_tuple
         return bool(
             active_extension.download_images_hook(
@@ -717,7 +717,7 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
 
     try:
         results = dvt.task.map_blocking(
-            _run_page,
+            download_image_task,
             creator_tasks,
             max_concurrency=image_workers,
             return_exceptions=True,
