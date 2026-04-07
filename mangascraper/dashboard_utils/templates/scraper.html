@@ -88,6 +88,11 @@
       <input id="cfg_calm" type="checkbox">
     </label>
 
+    <label title="Enable verbose debug logging, including detailed concurrency traces when supported.">
+      Debug Logs
+      <input id="cfg_debug" type="checkbox">
+    </label>
+
   </div>
   <button id="loadConfigBtn">Load Config</button>
   <button id="saveConfigBtn">Save Config</button>
@@ -923,6 +928,7 @@ async function loadConfig() {
   document.getElementById('cfg_verify_ssl').checked = !!c.verify_ssl;
   document.getElementById('cfg_use_daemon_threads').checked = !!c.use_daemon_threads;
   document.getElementById('cfg_calm').checked = !!c.calm;
+  document.getElementById('cfg_debug').checked = !!c.debug;
 
   document.getElementById('configMsg').textContent = 'Configuration loaded.';
 }
@@ -943,7 +949,8 @@ async function saveConfig() {
     dry_run: document.getElementById('cfg_dry_run').checked,
     verify_ssl: document.getElementById('cfg_verify_ssl').checked,
     use_daemon_threads: document.getElementById('cfg_use_daemon_threads').checked,
-    calm: document.getElementById('cfg_calm').checked
+    calm: document.getElementById('cfg_calm').checked,
+    debug: document.getElementById('cfg_debug').checked
   };
 
   const res = await fetch('/api/scraper/config', {
@@ -1245,6 +1252,18 @@ document.getElementById('otherResultsPrevPageBtn').addEventListener('click', () 
 document.getElementById('otherResultsNextPageBtn').addEventListener('click', () => {
   otherResultsPage += 1;
   renderSearchTables();
+});
+
+document.getElementById('cfg_calm').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    document.getElementById('cfg_debug').checked = false;
+  }
+});
+
+document.getElementById('cfg_debug').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    document.getElementById('cfg_calm').checked = false;
+  }
 });
 
 // ── Initialise ───────────────────────────────────────────────────────────────

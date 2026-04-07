@@ -570,11 +570,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
 
             archive_ext = ".cbz" if gallery_format == "cbz" else ".zip"
             gallery_name = os.path.basename(gallery_path)
-            expected_archive = os.path.join(creator_folder, f"{gallery_name}{archive_ext}")
+            archive_name = scraperapi.Helpers.archive_filename(gallery_name, archive_ext)
+            expected_archive = os.path.join(creator_folder, archive_name)
             
             # Archive the gallery if it's a directory and not already archived
             if gallery_format in {"cbz", "zip"} and os.path.isdir(gallery_path):
-                archive_path = os.path.join(creator_folder, f"{gallery_name}{archive_ext}")
+                archive_path = os.path.join(creator_folder, archive_name)
                 with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as archive:
                     for root, _, files in os.walk(gallery_path):
                         for file in files:

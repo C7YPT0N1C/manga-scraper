@@ -742,6 +742,24 @@ class Helpers:
         return title.strip()
 
     @staticmethod
+    def archive_filename(base_name: str, archive_ext: str) -> str:
+        """Build a safe archive filename from a gallery base name.
+
+        Trims trailing dots/spaces to avoid accidental names like "TITLE..cbz"
+        when a title ends with a full stop.
+        """
+        raw = Helpers.safe_text(base_name, "").strip()
+        ext = Helpers.safe_text(archive_ext, "").strip().lower() or ".cbz"
+        if not ext.startswith("."):
+            ext = f".{ext}"
+
+        stem = os.path.splitext(raw)[0] if raw.lower().endswith((".cbz", ".zip")) else raw
+        stem = stem.rstrip(" .")
+        if not stem:
+            stem = "UNTITLED"
+        return f"{stem}{ext}"
+
+    @staticmethod
     def summary(meta, referrer: str):
         orchestrator.refresh_globals()
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 import time, requests
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from dovetail import Dovetail
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log, log_clarification
@@ -651,7 +651,7 @@ class Fetch:
     @staticmethod
     def fetch_metadata_batch(gallery_ids: list) -> dict:
         """
-        Fetch metadata for multiple galleries efficiently using threading.
+        Fetch metadata for multiple galleries efficiently using Dovetail workers.
         Used for pre-fetching before filtering/sizing.
         """
         if not gallery_ids:
@@ -664,18 +664,45 @@ class Fetch:
         metadata = {}
         failed_ids = []
         max_workers = min(10, len(gallery_ids))
+        orchestrator.refresh_globals()
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(Fetch.gallery_metadata, gid): gid for gid in gallery_ids}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching metadata", unit="gallery"):
-                gallery_id = futures[future]
-                try:
-                    meta = future.result()
-                    if meta and isinstance(meta, dict):
-                        metadata[gallery_id] = meta
-                except Exception as e:
-                    logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {e}")
-                    failed_ids.append(gallery_id)
+        try:
+            dvt = Dovetail(
+                max_workers=max(1, int(max_workers or 1)),
+                trace=bool(orchestrator.debug),
+                trace_logger=logger,
+                trace_prefix="DVT-MetadataPool",
+            )
+            log("[DOVETAIL] Metadata worker pool initialised.", "debug")
+        except Exception as e:
+            logger.error(f"[DOVETAIL] Failed to initialise metadata worker pool: {e}")
+            raise
+
+        def _fetch_one(gallery_id: int):
+            return Fetch.gallery_metadata(gallery_id)
+
+        try:
+            results = dvt.task.map_blocking(
+                _fetch_one,
+                gallery_ids,
+                max_concurrency=max(1, int(max_workers or 1)),
+                return_exceptions=True,
+            )
+        finally:
+            dvt.shutdown(wait=True)
+
+        for gallery_id, result in tqdm(
+            list(zip(gallery_ids, results)),
+            total=len(gallery_ids),
+            desc="Fetching metadata",
+            unit="gallery",
+        ):
+            if isinstance(result, Exception):
+                logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {result}")
+                failed_ids.append(gallery_id)
+                continue
+            if result and isinstance(result, dict):
+                metadata[gallery_id] = result
 
         if failed_ids:
             logger.warning(f"Failed to fetch metadata for {len(failed_ids)}/{len(gallery_ids)} galleries")

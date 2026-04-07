@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, sys, time, random, math, zipfile, shutil, signal, tempfile, threading, asyncio
+import os, sys, time, random, math, zipfile, shutil, signal, tempfile, threading
 from typing import Callable
 from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
@@ -233,34 +233,36 @@ def _safe_symlink_or_copy(src: str, dest: str) -> bool:
 def run_gallery_batch(
     gallery_ids: list[int],
     process_gallery_sync: Callable[[int], None],
-    max_gallery_workers: int,
 ) -> list[Exception]:
     """Run sync gallery processors with async orchestration via Dovetail."""
 
+    orchestrator.refresh_globals()
+    gallery_workers = max(1, int(orchestrator.threads_galleries or 1))
+
     try:
-        dvt = Dovetail(max_workers=max(1, int(max_gallery_workers or 1)))
-        log("[DOVETAIL] Enabled.", "debug")
+        dvt = Dovetail(
+            max_workers=gallery_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-GalleryPool",
+        )
+        log("[DOVETAIL] Gallery worker pool initialised.", "debug")
     except Exception as e:
         logger.error(f"[DOVETAIL] Failed to initialise gallery worker pool: {e}")
         raise
     _register_dovetail(dvt)
 
-    async def _run() -> list[Exception]:
-        semaphore = asyncio.Semaphore(max(1, int(max_gallery_workers or 1)))
-        errors: list[Exception] = []
-
-        async def _run_one(gallery_id: int):
-            async with semaphore:
-                try:
-                    await dvt.task.to_thread(process_gallery_sync, int(gallery_id))
-                except Exception as exc:
-                    errors.append(exc)
-
-        await asyncio.gather(*(_run_one(gid) for gid in gallery_ids), return_exceptions=False)
-        return errors
+    def _run_gallery(gallery_id: int):
+        return process_gallery_sync(int(gallery_id))
 
     try:
-        return dvt.task.run_blocking(_run)
+        outcomes = dvt.task.map_blocking(
+            _run_gallery,
+            gallery_ids,
+            max_concurrency=gallery_workers,
+            return_exceptions=True,
+        )
+        return [out for out in outcomes if isinstance(out, Exception)]
     finally:
         try:
             _active_dovetails.remove(dvt)
@@ -683,39 +685,51 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
     Submit download tasks for a single creator's pages.
     """
 
+    orchestrator.refresh_globals()
+    image_workers = max(1, int(orchestrator.threads_images or 1))
+
     try:
-        dvt = Dovetail(max_workers=max(1, int(threads_images or 1)))
-        log("[DOVETAIL] Enabled.", "debug")
+        dvt = Dovetail(
+            max_workers=image_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-ImagePool",
+        )
+        log("[DOVETAIL] Image worker pool initialised.", "debug")
     except Exception as e:
         logger.error(f"[DOVETAIL] Failed to initialise image worker pool: {e}")
         raise
     _register_dovetail(dvt)
 
-    async def _run_page_tasks() -> list[bool]:
-        async def _run_one(page, urls, path):
-            try:
-                result = await dvt.task.to_thread(
-                    active_extension.download_images_hook,
-                    gallery_id,
-                    page,
-                    urls,
-                    path,
-                    local_session,
-                    None,
-                    safe_creator_name,
-                )
-                return bool(result)
-            except Exception:
-                return False
-
-        return await asyncio.gather(
-            *(_run_one(page, urls, path) for page, urls, path, _ in creator_tasks),
-            return_exceptions=False,
+    def _run_page(task_tuple):
+        page, urls, path, _ = task_tuple
+        return bool(
+            active_extension.download_images_hook(
+                gallery_id,
+                page,
+                urls,
+                path,
+                local_session,
+                None,
+                safe_creator_name,
+            )
         )
 
     try:
-        results = dvt.task.run_blocking(_run_page_tasks)
-        return all(results)
+        results = dvt.task.map_blocking(
+            _run_page,
+            creator_tasks,
+            max_concurrency=image_workers,
+            return_exceptions=True,
+        )
+        all_succeeded = True
+        for result in results:
+            if isinstance(result, Exception):
+                all_succeeded = False
+                continue
+            if not result:
+                all_succeeded = False
+        return all_succeeded
     finally:
         try:
             _active_dovetails.remove(dvt)
@@ -756,7 +770,8 @@ def finalise_gallery_format(
     parent_dir = os.path.dirname(gallery_folder)
     folder_name = os.path.basename(gallery_folder)
     archive_ext = ".cbz" if format_type == "cbz" else ".zip"
-    archive_path = os.path.join(final_parent_dir or parent_dir, folder_name + archive_ext)
+    archive_filename = scraperapi.Helpers.archive_filename(folder_name, archive_ext)
+    archive_path = os.path.join(final_parent_dir or parent_dir, archive_filename)
     temp_archive_path = None
     
     try:
@@ -966,7 +981,12 @@ def process_galleries(batch_ids):
                     # If archiving, append the extension for the symlink target
                     if orchestrator.gallery_format != "directory":
                         archive_ext = ".cbz" if orchestrator.gallery_format == "cbz" else ".zip"
-                        extra_folder = extra_folder + archive_ext
+                        extra_parent = os.path.dirname(extra_folder)
+                        extra_name = os.path.basename(extra_folder)
+                        extra_folder = os.path.join(
+                            extra_parent,
+                            scraperapi.Helpers.archive_filename(extra_name, archive_ext),
+                        )
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
@@ -1133,7 +1153,6 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     errors = run_gallery_batch(
         gallery_ids=[int(gid) for gid in batch_list],
         process_gallery_sync=lambda gid: process_galleries([int(gid)]),
-        max_gallery_workers=orchestrator.threads_galleries,
     )
     for exc in errors:
         logger.error(f"[Downloader] Gallery task failed: {exc}")

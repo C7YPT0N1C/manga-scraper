@@ -118,6 +118,7 @@ def _current_config() -> dict:
         "use_daemon_threads": bool(orchestrator.use_daemon_threads),
         "max_retries": int(orchestrator.max_retries),
         "calm": bool(orchestrator.calm),
+        "debug": bool(orchestrator.debug),
     }
 
 
@@ -138,6 +139,7 @@ def _update_config(payload: dict) -> dict:
         "use_daemon_threads": ("USE_DAEMON_THREADS", _safe_bool),
         "max_retries": ("MAX_RETRIES", _safe_int),
         "calm": ("CALM", _safe_bool),
+        "debug": ("DEBUG", _safe_bool),
     }
 
     applied = {}
