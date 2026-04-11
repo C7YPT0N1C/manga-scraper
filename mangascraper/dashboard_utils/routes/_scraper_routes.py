@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/dashboard/routes/scraper_routes.py
+# mangascraper/dashboard/routes/_scraper_routes.py
 
 import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile, re
 from datetime import datetime, timezone

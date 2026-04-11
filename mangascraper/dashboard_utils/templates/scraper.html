@@ -7,9 +7,967 @@
   <h3>Runtime</h3>
   <button id="refreshAllBtn">Refresh Scraper</button>
   <button id="startBtn" title="Start a scraper run using only galleries currently selected in the queue.">Start Scraper</button>
-  {% block scripts %}
-  <script type="module" src="{{ url_for('static', filename='js/scraper.js') }}"></script>
-  {% endblock %}
+  <button id="stopBtn">Stop Scraper</button>
+</section>
+
+<!-- ===== CONFIGURATION ===== -->
+<section>
+  <h3>Configuration</h3>
+  <div id="configGrid">
+
+    <label title="Comma-separated list of image mirror URLs to try when downloading images. The first reachable mirror is used.">
+      Mirrors
+      <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net">
+    </label>
+
+    <label title="Filter galleries by language. Comma-separated (e.g. english,japanese). Leave blank to allow all languages.">
+      Language(s)
+      <input id="cfg_language" type="text" placeholder="english">
+    </label>
+
+    <label title="Which title variant to use when naming downloaded gallery folders.">
+      Title Type
+      <select id="cfg_title_type">
+        <option value="english">english</option>
+        <option value="japanese">japanese</option>
+        <option value="pretty">pretty</option>
+      </select>
+    </label>
+
+    <label title="Comma-separated list of tags to skip. Any gallery containing one of these tags will be excluded from the download batch.">
+      Excluded Tags
+      <input id="cfg_excluded_tags" type="text" placeholder="e.g. guro,snuff">
+    </label>
+
+    <label title="How galleries are stored on disk: as a plain folder of images, a .zip archive, or a .cbz comic archive.">
+      Format
+      <select id="cfg_format">
+        <option value="directory">directory</option>
+        <option value="zip">zip</option>
+        <option value="cbz">cbz</option>
+      </select>
+    </label>
+
+    <label title="How many galleries to process in parallel. Higher values speed things up but use more memory and bandwidth.">
+      Gallery Threads
+      <input id="cfg_threads_galleries" type="number" min="1" placeholder="2">
+    </label>
+
+    <label title="How many image download threads to run per gallery. Higher values download images faster at the cost of more CPU and bandwidth.">
+      Image Threads
+      <input id="cfg_threads_images" type="number" min="1" placeholder="10">
+    </label>
+
+    <label title="How many times to retry a failed image download before giving up and marking the image as missing.">
+      Max Retries
+      <input id="cfg_max_retries" type="number" min="0" placeholder="5">
+    </label>
+
+    <label title="Route all traffic through the Tor network to anonymise downloads. Tor must be installed and running on the server.">
+      Use Tor
+      <input id="cfg_use_tor" type="checkbox">
+    </label>
+
+    <label title="Simulate a run without actually downloading anything. Useful for testing search results and configuration before committing to a full batch.">
+      Dry Run
+      <input id="cfg_dry_run" type="checkbox">
+    </label>
+
+    <label title="Verify HTTPS certificates when making requests. Disable only if you encounter SSL errors with your chosen mirrors.">
+      Verify SSL
+      <input id="cfg_verify_ssl" type="checkbox">
+    </label>
+
+    <label title="Run download threads as daemon threads so they are forcibly killed when the main process exits, rather than waiting for them to finish.">
+      Daemon Threads
+      <input id="cfg_use_daemon_threads" type="checkbox">
+    </label>
+
+    <label title="Suppress verbose log output. Only warnings and errors are shown, making it easier to spot problems in long runs.">
+      Reduce Logs
+      <input id="cfg_calm" type="checkbox">
+    </label>
+
+    <label title="Enable verbose debug logging, including detailed concurrency traces when supported.">
+      Debug Logs
+      <input id="cfg_debug" type="checkbox">
+    </label>
+
+  </div>
+  <button id="loadConfigBtn">Load Config</button>
+  <button id="saveConfigBtn">Save Config</button>
+  <p id="configMsg"></p>
+</section>
+
+<!-- ===== EXTENSIONS ===== -->
+<section>
+  <h3>Extensions</h3>
+  <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
+    Active Extension
+    <select id="cfg_extension">
+      <option value="">— none (built-in) —</option>
+    </select>
+  </label>
+  <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
+    Output Folder
+    <select id="cfg_output_folder_select">
+      <option value="">— select a folder —</option>
+      <option value="__custom__">Custom...</option>
+    </select>
+    <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
+  </label>
+  <div style="margin-top:8px;display:grid;gap:6px;max-width:460px">
+    <select id="extManageSelect" title="Manage extension installation and updates.">
+      <option value="">— extension management —</option>
+    </select>
+    <div>
+      <button id="extInstallBtn" type="button">Install</button>
+      <button id="extUninstallBtn" type="button">Uninstall</button>
+      <button id="extUpdateBtn" type="button">Update</button>
+    </div>
+    <small id="extManageMsg"></small>
+  </div>
+</section>
+
+<!-- ===== SEARCH HISTORY ===== -->
+<section>
+  <h3>Search History</h3>
+  <button id="refreshHistoryBtn">Refresh History</button>
+  <button id="clearCacheBtn">Clear Entire Cache</button>
+  <p id="historyMsg"></p>
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>Query Type</th>
+        <th>Query Target</th>
+        <th>No. of Galleries</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ===== SEARCH ===== -->
+<section>
+  <h3>Search</h3>
+  <div id="searchGrid">
+
+    <label title="How to search for galleries. Different modes reveal different options below.">
+      Search...
+      <select id="queryType">
+        <option value="homepage">The Homepage</option>
+        <option value="id_range">By ID Range</option>
+        <option value="ids">By Explicit IDs</option>
+        <option value="search">General Search (keyword)</option>
+        <option value="artist">By Artist</option>
+        <option value="group">By Group</option>
+        <option value="tag">By Tag</option>
+        <option value="character">By Character</option>
+        <option value="parody">By Parody / Series</option>
+        <option value="cache_key">By Cache Key</option>
+      </select>
+    </label>
+
+    <!-- search, artist, group, tag, character, parody -->
+    <label id="row_queryValue" title="The search term for the selected mode. For keyword search enter a phrase; for artist/group/tag/character/parody enter the name exactly as it appears on the site.">
+      Query
+      <input id="queryValue" type="text" placeholder="e.g. english">
+    </label>
+
+    <!-- ids only -->
+    <label id="row_idsValue" title="Comma-separated list of gallery IDs to fetch directly — no search needed.">
+      Gallery IDs
+      <input id="idsValue" type="text" placeholder="e.g. 177013,370138">
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_sort" title="Sort order for results. 'date' returns the newest galleries first; the 'popular-*' options rank by view count.">
+      Sort
+      <select id="sortValue">
+        <option value="date">date (newest first)</option>
+        <option value="popular">popular (all-time)</option>
+        <option value="popular-week">popular this week</option>
+        <option value="popular-month">popular this month</option>
+        <option value="popular-today">popular today</option>
+      </select>
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_startPage" title="Which page of results to start collecting from. Page 1 is the newest (date sort) or most popular.">
+      Start Page
+      <input id="startPage" type="number" min="1" value="1" placeholder="1">
+    </label>
+
+    <!-- homepage, search, artist, group, tag, character, parody -->
+    <label id="row_endPage" title="Which page to stop at. Enter a number, or 'all' to fetch every available page (can be slow for large queries).">
+      End Page
+      <input id="endPage" type="text" value="10" placeholder="10 or all">
+    </label>
+
+    <!-- id_range only -->
+    <label id="row_startId" title="The lowest gallery ID in the range to download. IDs are assigned sequentially—lower numbers are older entries.">
+      Start ID
+      <input id="startId" type="number" min="1" placeholder="e.g. 400000">
+    </label>
+
+    <!-- id_range only -->
+    <label id="row_endId" title="The highest gallery ID in the range. Leave blank to automatically use the latest uploaded gallery ID.">
+      End ID
+      <input id="endId" type="number" min="1" placeholder="leave blank = latest">
+    </label>
+
+  </div>
+  <button id="searchBtn">Search</button>
+  <button id="addAllBtn">Add All Results To Queue</button>
+  <button id="addSelectedBtn">Add Selected Results</button>
+  <p id="searchMsg"></p>
+  <p id="summaryMsg"></p>
+
+  <table id="resultsTable">
+    <thead>
+      <tr>
+        <th><input id="resultsSelectAll" type="checkbox"></th>
+        <th>ID</th>
+        <th>Title</th>
+        <th></th>
+        <th>Artists/Groups</th>
+        <th>Language</th>
+        <th>Pages</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="resultsPager" style="display:none;margin-top:8px">
+    <button id="resultsPrevPageBtn" type="button">Previous</button>
+    <span id="resultsPageInfo"></span>
+    <button id="resultsNextPageBtn" type="button">Next</button>
+  </div>
+
+  <div id="otherResultsPanel" style="display:none">
+    <h4>Other / Previous Search Results</h4>
+    <table id="otherResultsTable">
+      <thead>
+        <tr>
+          <th><input id="otherResultsSelectAll" type="checkbox"></th>
+          <th>ID</th>
+          <th>Title</th>
+          <th></th>
+          <th>Artists/Groups</th>
+          <th>Language</th>
+          <th>Pages</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="otherResultsPager" style="display:none;margin-top:8px">
+      <button id="otherResultsPrevPageBtn" type="button">Previous</button>
+      <span id="otherResultsPageInfo"></span>
+      <button id="otherResultsNextPageBtn" type="button">Next</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== GALLERY DETAIL MODAL ===== -->
+<div id="galleryDetailModal" class="detail-modal-bg" style="display:none">
+  <div id="galleryDetailPanel" class="detail-modal-panel">
+    <div class="detail-modal-header">
+      <strong id="gdTitle"></strong>
+      <button id="galleryDetailClose">&#x2715; Close</button>
+    </div>
+    <div class="detail-modal-body">
+      <p><strong>ID:</strong> <span id="gdId"></span></p>
+      <p><strong>Artists:</strong> <span id="gdArtists"></span></p>
+      <p><strong>Groups:</strong> <span id="gdGroups"></span></p>
+      <p><strong>Languages:</strong> <span id="gdLanguages"></span></p>
+      <p><strong>Pages:</strong> <span id="gdPages"></span></p>
+      <p><strong>Download Status:</strong> <span id="gdStatus">-</span></p>
+      <p><strong>Tags:</strong> <span id="gdTags"></span></p>
+      <p><strong>Characters:</strong> <span id="gdCharacters"></span></p>
+      <p><strong>Parodies:</strong> <span id="gdParodies"></span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESULTS FILTER ===== -->
+<div id="filterPanel" style="display:none">
+  <h4>Filter Results</h4>
+  <div id="filterGrid">
+    <label>Artists <input id="flt_artists" type="text" placeholder="comma-separated"></label>
+    <label>Groups <input id="flt_groups" type="text" placeholder="comma-separated"></label>
+    <label>Include Tags <input id="flt_tags" type="text" placeholder="comma-separated"></label>
+    <label>Exclude Tags <input id="flt_excludeTags" type="text" placeholder="comma-separated"></label>
+    <label>Languages <input id="flt_language" type="text" placeholder="comma-separated"></label>
+    <label>Min Pages <input id="flt_minPages" type="number" min="0" placeholder="0"></label>
+    <label>Max Pages <input id="flt_maxPages" type="number" min="0" placeholder="∞"></label>
+  </div>
+  <button id="applyFilterBtn">Apply Filters</button>
+  <button id="clearFilterBtn">Clear Filters</button>
+  <p id="filterMsg"></p>
+</div>
+
+<!-- ===== QUEUE ===== -->
+<section>
+  <h3>Selected Queue</h3>
+  <button id="refreshQueueBtn">Refresh Queue</button>
+  <button id="removeSelectedQueueBtn">Remove Selected</button>
+  <button id="clearQueueBtn">Clear Queue</button>
+  <p id="queueMsg"></p>
+
+  <table id="downloadQueueTable">
+    <thead>
+      <tr>
+        <th>DownloadNo</th>
+        <th>Status</th>
+        <th>IDs</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <table id="queueTable">
+    <thead>
+      <tr>
+        <th><input id="queueSelectAll" type="checkbox"></th>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Artists/Groups</th>
+        <th>Language</th>
+        <th>Pages</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentResults = [];
+let previousResults = [];
+let queueIds = new Set();
+let extensionOutputFolders = {};
+let extensionRecordsByName = {};
+let _resultsById = {};
+let filteredResultsRows = null;
+let activeResultsPage = 1;
+let otherResultsPage = 1;
+const RESULTS_PAGE_SIZE = 25;
+const selectedRows = {
+  '#resultsTable': new Set(),
+  '#otherResultsTable': new Set(),
+  '#queueTable': new Set(),
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function asText(v, fallback = '-') {
+  if (v === null || v === undefined || v === '') return fallback;
+  return String(v);
+}
+
+function dedupeRows(rows) {
+  const seen = new Set();
+  const unique = [];
+  rows.forEach(row => {
+    const gid = Number(row.id ?? row.gallery_id);
+    if (!Number.isFinite(gid) || seen.has(gid)) return;
+    seen.add(gid);
+    unique.push(row);
+  });
+  return unique;
+}
+
+function sortRowsByIdDesc(rows) {
+  return [...(rows || [])].sort((a, b) => {
+    const aId = Number(a?.id ?? a?.gallery_id);
+    const bId = Number(b?.id ?? b?.gallery_id);
+    const aVal = Number.isFinite(aId) ? aId : -Infinity;
+    const bVal = Number.isFinite(bId) ? bId : -Infinity;
+    return bVal - aVal;
+  });
+}
+
+function snapshotSelection(tableSelector) {
+  const tracked = selectedRows[tableSelector] || new Set();
+  document.querySelectorAll(`${tableSelector} tbody input[type="checkbox"]`).forEach(cb => {
+    const gid = Number(cb.value);
+    if (!Number.isFinite(gid)) return;
+    if (cb.checked) tracked.add(gid);
+    else tracked.delete(gid);
+  });
+  selectedRows[tableSelector] = tracked;
+}
+
+function selectedIds(tableSelector) {
+  snapshotSelection(tableSelector);
+  return Array.from(selectedRows[tableSelector] || []).filter(Number.isFinite);
+}
+
+function setSelectAll(selector, checked) {
+  const tracked = selectedRows[selector] || new Set();
+  document.querySelectorAll(`${selector} tbody input[type="checkbox"]`).forEach(cb => {
+    const gid = Number(cb.value);
+    cb.checked = checked;
+    if (!Number.isFinite(gid)) return;
+    if (checked) tracked.add(gid);
+    else tracked.delete(gid);
+  });
+  selectedRows[selector] = tracked;
+}
+
+function renderRows(tableSelector, rows, options = {}) {
+  const tbody = document.querySelector(`${tableSelector} tbody`);
+  const tracked = selectedRows[tableSelector] || new Set();
+  const showDetail = !!options.showDetail;
+  tbody.innerHTML = '';
+  rows.forEach(row => {
+    const idValue = row.id ?? row.gallery_id;
+    const artists = Array.isArray(row.artists) ? row.artists : [];
+    const groups = Array.isArray(row.groups) ? row.groups : [];
+    const langsArr = Array.isArray(row.languages) ? row.languages : [];
+    const tr = document.createElement('tr');
+    const detailCell = showDetail ? `<td><button class="detailBtn" data-id="${asText(idValue, '')}">Detail</button></td>` : '';
+    tr.innerHTML = `
+      <td><input type="checkbox" value="${asText(idValue, '')}" ${tracked.has(Number(idValue)) ? 'checked' : ''}></td>
+      <td>${asText(idValue)}</td>
+      <td>${asText(row.title, '(no title)')}</td>
+      ${detailCell}
+      <td>${asText([...artists, ...groups].join(', '), '-')}</td>
+      <td>${asText(langsArr.join(', '), '-')}</td>
+      <td>${asText(row.pages, '0')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const gid = Number(cb.value);
+      if (!Number.isFinite(gid)) return;
+      if (cb.checked) tracked.add(gid);
+      else tracked.delete(gid);
+    });
+  });
+
+  if (showDetail) {
+    tbody.querySelectorAll('.detailBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = _resultsById[Number(btn.dataset.id)];
+        if (row) openGalleryDetail(row);
+      });
+    });
+  }
+
+  selectedRows[tableSelector] = tracked;
+}
+
+function renderDownloadQueueRows(rows) {
+  const tbody = document.querySelector('#downloadQueueTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  (rows || []).forEach(row => {
+    const tr = document.createElement('tr');
+    const ids = Array.isArray(row.ids) ? row.ids.map(v => Number(v)).filter(Number.isFinite) : [];
+    tr.innerHTML = `
+      <td>${asText(row.download_no, '-')}</td>
+      <td>${asText((row.status || '').toUpperCase(), '-')}</td>
+      <td>${ids.length ? ids.join(', ') : '-'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function currentSearchRows() {
+  return dedupeRows(currentResults).filter(row => !queueIds.has(Number(row.id ?? row.gallery_id)));
+}
+
+function activeSearchRows() {
+  if (!Array.isArray(filteredResultsRows)) {
+    return currentSearchRows();
+  }
+  return dedupeRows(filteredResultsRows).filter(row => !queueIds.has(Number(row.id ?? row.gallery_id)));
+}
+
+function previousSearchRows() {
+  const currentIds = new Set(dedupeRows(currentResults).map(row => Number(row.id ?? row.gallery_id)).filter(Number.isFinite));
+  return dedupeRows(previousResults).filter(row => {
+    const gid = Number(row.id ?? row.gallery_id);
+    return Number.isFinite(gid) && !queueIds.has(gid) && !currentIds.has(gid);
+  });
+}
+
+function renderSearchTables() {
+  const activeRows = sortRowsByIdDesc(activeSearchRows());
+  const otherRows = sortRowsByIdDesc(previousSearchRows());
+
+  const activeTotalPages = Math.max(1, Math.ceil(activeRows.length / RESULTS_PAGE_SIZE));
+  const otherTotalPages = Math.max(1, Math.ceil(otherRows.length / RESULTS_PAGE_SIZE));
+  activeResultsPage = Math.min(Math.max(activeResultsPage, 1), activeTotalPages);
+  otherResultsPage = Math.min(Math.max(otherResultsPage, 1), otherTotalPages);
+
+  const activeStart = (activeResultsPage - 1) * RESULTS_PAGE_SIZE;
+  const otherStart = (otherResultsPage - 1) * RESULTS_PAGE_SIZE;
+  const activePageRows = activeRows.slice(activeStart, activeStart + RESULTS_PAGE_SIZE);
+  const otherPageRows = otherRows.slice(otherStart, otherStart + RESULTS_PAGE_SIZE);
+
+  _resultsById = {};
+  [...activeRows, ...otherRows].forEach(row => {
+    _resultsById[Number(row.id ?? row.gallery_id)] = row;
+  });
+
+  renderRows('#resultsTable', activePageRows, { showDetail: true });
+  renderRows('#otherResultsTable', otherPageRows, { showDetail: true });
+
+  const resultsPager = document.getElementById('resultsPager');
+  const resultsPageInfo = document.getElementById('resultsPageInfo');
+  const resultsPrevPageBtn = document.getElementById('resultsPrevPageBtn');
+  const resultsNextPageBtn = document.getElementById('resultsNextPageBtn');
+  if (resultsPager && resultsPageInfo && resultsPrevPageBtn && resultsNextPageBtn) {
+    resultsPager.style.display = activeRows.length ? '' : 'none';
+    resultsPageInfo.textContent = `Page ${activeResultsPage} of ${activeTotalPages} (${activeRows.length} total)`;
+    resultsPrevPageBtn.disabled = activeResultsPage <= 1;
+    resultsNextPageBtn.disabled = activeResultsPage >= activeTotalPages;
+  }
+
+  const otherResultsPanel = document.getElementById('otherResultsPanel');
+  const otherResultsPager = document.getElementById('otherResultsPager');
+  const otherResultsPageInfo = document.getElementById('otherResultsPageInfo');
+  const otherResultsPrevPageBtn = document.getElementById('otherResultsPrevPageBtn');
+  const otherResultsNextPageBtn = document.getElementById('otherResultsNextPageBtn');
+  if (otherResultsPanel) {
+    otherResultsPanel.style.display = otherRows.length ? '' : 'none';
+  }
+  if (otherResultsPager && otherResultsPageInfo && otherResultsPrevPageBtn && otherResultsNextPageBtn) {
+    otherResultsPager.style.display = otherRows.length ? '' : 'none';
+    otherResultsPageInfo.textContent = `Page ${otherResultsPage} of ${otherTotalPages} (${otherRows.length} total)`;
+    otherResultsPrevPageBtn.disabled = otherResultsPage <= 1;
+    otherResultsNextPageBtn.disabled = otherResultsPage >= otherTotalPages;
+  }
+
+  const addAllBtn = document.getElementById('addAllBtn');
+  const addSelectedBtn = document.getElementById('addSelectedBtn');
+  const hasRenderedResults = (activePageRows.length + otherPageRows.length) > 0;
+  if (addAllBtn) addAllBtn.style.display = hasRenderedResults ? '' : 'none';
+  if (addSelectedBtn) addSelectedBtn.style.display = hasRenderedResults ? '' : 'none';
+
+  document.getElementById('filterPanel').style.display = activeRows.length || otherRows.length ? '' : 'none';
+}
+
+function renderHistoryRows(rows) {
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(row => {
+    const key = asText(row.cache_key, '');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${asText(row.cache_type, '-')}</td>
+      <td>${asText(row.cache_target || '(none)', '-')}</td>
+      <td>${asText(row.ids_count, 0)}</td>
+      <td>
+        <button class="histSearchBtn" data-key="${key}">Search</button>
+        <button class="histDeleteBtn" data-key="${key}">Remove</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.histSearchBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key || '';
+      if (!key) return;
+      document.getElementById('queryType').value = 'cache_key';
+      updateSearchFields();
+      document.getElementById('queryValue').value = key;
+      runSearch();
+    });
+  });
+
+  tbody.querySelectorAll('.histDeleteBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.key || '';
+      if (!key) return;
+      await removeHistoryItem(key);
+    });
+  });
+}
+
+// ── Global status bar ─────────────────────────────────────────────────────────
+// ── Results table (with Detail button) ───────────────────────────────────────
+
+function renderResultsRows(rows) {
+  currentResults = dedupeRows(rows);
+  renderSearchTables();
+}
+
+// ── Gallery detail modal ───────────────────────────────────────────────────────
+
+function openGalleryDetail(row) {
+  const join = arr => Array.isArray(arr) && arr.length ? arr.join(', ') : '-';
+  document.getElementById('gdId').textContent = row.id ?? '-';
+  document.getElementById('gdTitle').textContent = String(row.clean_title || row.title || `Gallery ${row.id}`);
+  document.getElementById('gdArtists').textContent = join(row.artists);
+  document.getElementById('gdGroups').textContent = join(row.groups);
+  document.getElementById('gdLanguages').textContent = join(row.languages);
+  document.getElementById('gdPages').textContent = row.pages ?? '-';
+  try {
+    document.getElementById('gdStatus').textContent = String(row.status || '-');
+  } catch (e) {}
+  document.getElementById('gdTags').textContent = join(row.tags);
+  document.getElementById('gdCharacters').textContent = join(row.characters);
+  document.getElementById('gdParodies').textContent = join(row.parodies);
+  document.getElementById('galleryDetailModal').style.display = '';
+}
+
+function closeGalleryDetail() {
+  document.getElementById('galleryDetailModal').style.display = 'none';
+}
+
+// ── Global status bar ─────────────────────────────────────────────────────────
+
+function setGlobalStatus(msg) {
+  if (window.setGlobalStatusBadge) {
+    window.setGlobalStatusBadge(msg, { state: 'busy', durationMs: 12000 });
+    return;
+  }
+  const bar = document.getElementById('globalStatus');
+  if (bar) bar.textContent = msg;
+}
+
+function clearGlobalStatus() {
+  if (window.clearGlobalStatusBadge) {
+    window.clearGlobalStatusBadge();
+    return;
+  }
+  const bar = document.getElementById('globalStatus');
+  if (bar) bar.textContent = '';
+}
+
+// ── Search field visibility ───────────────────────────────────────────────────
+
+const SEARCH_FIELD_RULES = {
+  // row id  → array of query types that SHOW this row
+  row_queryValue: ['cache_key', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_idsValue:   ['ids'],
+  row_sort:       ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_startPage:  ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_endPage:    ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_startId:    ['id_range'],
+  row_endId:      ['id_range'],
+};
+
+function updateSearchFields() {
+  const type = document.getElementById('queryType').value;
+  const queryValue = document.getElementById('queryValue');
+  if (queryValue) {
+    if (type === 'cache_key') {
+      queryValue.placeholder = 'e.g. artist:enma';
+    } else {
+      queryValue.placeholder = 'e.g. english';
+    }
+  }
+  for (const [rowId, visibleFor] of Object.entries(SEARCH_FIELD_RULES)) {
+    const el = document.getElementById(rowId);
+    if (el) el.style.display = visibleFor.includes(type) ? '' : 'none';
+  }
+}
+
+document.getElementById('queryType').addEventListener('change', updateSearchFields);
+updateSearchFields(); // run on load
+
+// ── Extension dropdown ────────────────────────────────────────────────────────
+
+async function loadExtensions() {
+  try {
+    const res = await fetch('/api/scraper/extensions');
+    const data = await res.json();
+    const sel = document.getElementById('cfg_extension');
+    const manageSel = document.getElementById('extManageSelect');
+    extensionOutputFolders = {};
+    extensionRecordsByName = {};
+    // Clear all except the first "none" option
+    while (sel.options.length > 1) sel.remove(1);
+    manageSel.innerHTML = '<option value="">— extension management —</option>';
+    (data.extensions || []).forEach(ext => {
+      extensionRecordsByName[ext.name] = ext;
+      const opt = document.createElement('option');
+      opt.value = ext.name;
+      const vStr = ext.version ? ` v${ext.version}` : '';
+      const installStr = ext.installed ? ' (local - installed)' : ' (local - not installed)';
+      opt.textContent = (ext.label || ext.name) + vStr + installStr;
+      if (ext.update_available) opt.title = `Update available: v${ext.remote_version}`;
+      sel.appendChild(opt);
+
+      const localManageOpt = document.createElement('option');
+      localManageOpt.value = ext.name;
+      localManageOpt.textContent = `${ext.name} v${ext.version || '0'} (local - ${ext.installed ? 'installed' : 'not installed'})`;
+      manageSel.appendChild(localManageOpt);
+
+      if (ext.update_available) {
+        const remoteManageOpt = document.createElement('option');
+        remoteManageOpt.value = ext.name;
+        remoteManageOpt.textContent = `${ext.name} v${ext.remote_version || ext.version || '0'} (remote - update available)`;
+        manageSel.appendChild(remoteManageOpt);
+      }
+
+      if (ext.name && ext.default_output_folder) {
+        extensionOutputFolders[ext.name] = ext.default_output_folder;
+      }
+    });
+  } catch (e) {
+    // Non-fatal: extension list stays as "none"
+  }
+}
+
+// ── Output folder dropdown ────────────────────────────────────────────────────
+
+function setupOutputFolderDropdown(currentFolder) {
+  const sel = document.getElementById('cfg_output_folder_select');
+  const custom = document.getElementById('cfg_output_folder_custom');
+  const selectedExtension = document.getElementById('cfg_extension').value;
+  const extensionDefaultFolder = extensionOutputFolders[selectedExtension] || '';
+
+  // Populate known paths — always include the current value if non-empty
+  const knownPaths = [];
+  if (extensionDefaultFolder && !knownPaths.includes(extensionDefaultFolder)) {
+    knownPaths.push(extensionDefaultFolder);
+  }
+  if (currentFolder && !knownPaths.includes(currentFolder)) {
+    knownPaths.push(currentFolder);
+  }
+
+  // Rebuild options (keep blank + known paths + Custom)
+  while (sel.options.length > 1) sel.remove(1); // keep "— select a folder —"
+  knownPaths.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    sel.insertBefore(opt, sel.options[sel.options.length - 1]); // before Custom...
+    // Re-add Custom at end
+  });
+  // Always ensure Custom... is last
+  if (!sel.querySelector('option[value="__custom__"]')) {
+    const customOpt = document.createElement('option');
+    customOpt.value = '__custom__';
+    customOpt.textContent = 'Custom...';
+    sel.appendChild(customOpt);
+  }
+
+  // Set current selection
+  if (currentFolder) {
+    // Try to match an existing option
+    let matched = false;
+    for (const opt of sel.options) {
+      if (opt.value === currentFolder) { sel.value = currentFolder; matched = true; break; }
+    }
+    if (!matched) {
+      // Add it as a new option and select it
+      const opt = document.createElement('option');
+      opt.value = currentFolder;
+      opt.textContent = currentFolder;
+      sel.insertBefore(opt, sel.options[sel.options.length - 1]);
+      sel.value = currentFolder;
+    }
+  }
+  custom.style.display = 'none';
+}
+
+document.getElementById('cfg_output_folder_select').addEventListener('change', function () {
+  const custom = document.getElementById('cfg_output_folder_custom');
+  if (this.value === '__custom__') {
+    custom.style.display = '';
+    custom.focus();
+  } else {
+    custom.style.display = 'none';
+    custom.value = '';
+  }
+});
+
+function getOutputFolder() {
+  const sel = document.getElementById('cfg_output_folder_select');
+  if (sel.value === '__custom__') {
+    return document.getElementById('cfg_output_folder_custom').value.trim();
+  }
+  return sel.value;
+}
+
+document.getElementById('cfg_extension').addEventListener('change', function () {
+  const ext = this.value;
+  const extDefaultFolder = extensionOutputFolders[ext] || '';
+  setupOutputFolderDropdown(extDefaultFolder);
+});
+
+function selectedManagedExtensionName() {
+  const fromManage = (document.getElementById('extManageSelect').value || '').trim();
+  if (fromManage) return fromManage;
+  return (document.getElementById('cfg_extension').value || '').trim();
+}
+
+async function manageExtension(action) {
+  const msg = document.getElementById('extManageMsg');
+  const name = selectedManagedExtensionName();
+  if (!name) {
+    msg.textContent = 'Select an extension first.';
+    return;
+  }
+
+  const record = extensionRecordsByName[name] || {};
+  if (action === 'update' && !record.update_available) {
+    msg.textContent = `No update available for '${name}'.`;
+    return;
+  }
+
+  msg.textContent = `${action[0].toUpperCase() + action.slice(1)} '${name}'...`;
+  try {
+    const res = await fetch(`/api/scraper/extensions/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    msg.textContent = data.message || `${action} completed.`;
+    await loadExtensions();
+    await loadConfig();
+  } catch (err) {
+    msg.textContent = `${action} failed: ${err.message}`;
+  }
+}
+
+// ── Runtime status ────────────────────────────────────────────────────────────
+
+function formatHudDuration(seconds) {
+  const total = Number(seconds || 0);
+  if (!Number.isFinite(total) || total <= 0) return '0s';
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = Math.floor(total % 60);
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
+function formatHudBytesPerSecond(bytesPerSecond) {
+  const val = Number(bytesPerSecond || 0);
+  if (!Number.isFinite(val) || val <= 0) return '0 B/s';
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  let size = val;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+async function refreshStatus(force = false) {
+  // Use centralised status cache in base.html to avoid duplicate fast polling.
+  const data = await (window.getScraperStatus ? window.getScraperStatus(force) : (async () => {
+    // Fallback: if base helper absent, perform direct fetch.
+    const res = await fetch('/api/scraper/status');
+    return await res.json();
+  })());
+  if (!data) return;
+  const counts = data.counts || {};
+  const progress = data.progress || {};
+
+  const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+  const runTotal = Number(counts.total ?? progress.total_galleries ?? data.queue_total ?? 0);
+  const completedCount = Number(counts.completed ?? progress.completed ?? 0);
+  const failedCount = Number(counts.failed ?? progress.failed ?? 0);
+  const skippedCount = Number(counts.skipped ?? progress.skipped ?? 0);
+  const pagesTotal = Number(progress.total_pages ?? 0);
+  const pagesProcessed = Number(progress.pages_processed ?? 0);
+  const pagesPerSecond = Number(progress.pages_per_second ?? 0);
+
+  const parts = [
+    `Status: ${dynamicStatus}`,
+    `PID: ${asText(data.pid, 'N/A')}`,
+    `Queued Galleries: ${asText(runTotal, 0)}`,
+    `Completed: ${asText(completedCount, 0)}/${asText(runTotal, 0)}`,
+    `Failed: ${asText(failedCount, 0)}/${asText(runTotal, 0)}`,
+    `Skipped: ${asText(skippedCount, 0)}/${asText(runTotal, 0)}`,
+  ];
+  if (pagesTotal > 0) {
+    parts.push(`Pages: ${asText(pagesProcessed, 0)}/${asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
+  }
+  parts.push(`Speed: ${formatHudBytesPerSecond(progress.download_speed_bytes ?? 0)}`);
+  parts.push(`Uptime: ${formatHudDuration(data.uptime_seconds ?? 0)}`);
+  if (pagesTotal > 0) {
+    parts.push(`ETA: ${formatHudDuration(progress.eta_seconds ?? 0)}`);
+  }
+  const pretty = parts.join(' | ');
+
+  const dock = document.getElementById('dynamicBar');
+  const dockContent = document.getElementById('dynamicBarContent');
+  if (dock && dockContent) {
+    dock.style.display = '';
+    dockContent.textContent = pretty;
+  }
+}
+
+// ── Config load / save ────────────────────────────────────────────────────────
+
+async function loadConfig() {
+  const res = await fetch('/api/scraper/config');
+  const data = await res.json();
+  const c = data.config || {};
+
+  // Extension dropdown — load extensions first, then set value
+  await loadExtensions();
+  const extSel = document.getElementById('cfg_extension');
+  extSel.value = c.extension || '';
+
+  document.getElementById('cfg_mirrors').value = c.mirrors || '';
+  document.getElementById('cfg_language').value = c.language || '';
+  document.getElementById('cfg_title_type').value = c.title_type || 'pretty';
+  document.getElementById('cfg_excluded_tags').value = c.excluded_tags || '';
+
+  setupOutputFolderDropdown(c.output_folder || '');
+
+  document.getElementById('cfg_format').value = c.format || 'directory';
+  document.getElementById('cfg_threads_galleries').value = c.threads_galleries ?? '';
+  document.getElementById('cfg_threads_images').value = c.threads_images ?? '';
+  document.getElementById('cfg_max_retries').value = c.max_retries ?? '';
+  document.getElementById('cfg_use_tor').checked = !!c.use_tor;
+  document.getElementById('cfg_dry_run').checked = !!c.dry_run;
+  document.getElementById('cfg_verify_ssl').checked = !!c.verify_ssl;
+  document.getElementById('cfg_use_daemon_threads').checked = !!c.use_daemon_threads;
+  document.getElementById('cfg_calm').checked = !!c.calm;
+  document.getElementById('cfg_debug').checked = !!c.debug;
+
+  document.getElementById('configMsg').textContent = 'Configuration loaded.';
+}
+
+async function saveConfig() {
+  const payload = {
+    extension: document.getElementById('cfg_extension').value,
+    mirrors: document.getElementById('cfg_mirrors').value.trim(),
+    language: document.getElementById('cfg_language').value.trim(),
+    title_type: document.getElementById('cfg_title_type').value,
+    excluded_tags: document.getElementById('cfg_excluded_tags').value.trim(),
+    output_folder: getOutputFolder(),
+    format: document.getElementById('cfg_format').value,
+    threads_galleries: Number(document.getElementById('cfg_threads_galleries').value || 0),
+    threads_images: Number(document.getElementById('cfg_threads_images').value || 0),
+    max_retries: Number(document.getElementById('cfg_max_retries').value || 0),
+    use_tor: document.getElementById('cfg_use_tor').checked,
+    dry_run: document.getElementById('cfg_dry_run').checked,
+    verify_ssl: document.getElementById('cfg_verify_ssl').checked,
+    use_daemon_threads: document.getElementById('cfg_use_daemon_threads').checked,
+    calm: document.getElementById('cfg_calm').checked,
+    debug: document.getElementById('cfg_debug').checked
+  };
+
+  const res = await fetch('/api/scraper/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  document.getElementById('configMsg').textContent = data.message || 'Configuration updated.';
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
 
 async function runSearch() {
   const type = document.getElementById('queryType').value;

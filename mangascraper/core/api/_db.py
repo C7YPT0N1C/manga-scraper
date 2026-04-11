@@ -16,7 +16,7 @@ from mangascraper.core.api._constants import (
     DOWNLOAD_ROOT_MARKER_FILE,
 )
 from mangascraper.core.api._helpers import Helpers
-from mangascraper.core.api import (
+from mangascraper.core.api._db_helpers import (
     prune_all_caches,
     read_cached_metadata_entry,
     clear_cached_items,

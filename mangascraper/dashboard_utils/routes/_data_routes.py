@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/dashboard/routes/data_routes.py
+# mangascraper/dashboard/routes/_data_routes.py
 
 import os, time, io, requests, json, re, zipfile, tempfile, posixpath, mimetypes
 from urllib.parse import unquote

@@ -12,7 +12,7 @@ from mangascraper.core.api._constants import (
     CACHED_METADATA_TTL_SECONDS,
 )
 from mangascraper.core.api._helpers import Helpers
-from mangascraper.core.api import (
+from mangascraper.core.api._db_helpers import (
     read_cached_metadata_entry,
     clear_cached_items,
     prune_all_caches,

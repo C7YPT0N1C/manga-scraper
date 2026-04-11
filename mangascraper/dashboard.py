@@ -7,8 +7,8 @@ from flask_cors import CORS
 
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
-from mangascraper.dashboard_utils.routes.scraper_routes import scraper_bp
-from mangascraper.dashboard_utils.routes.data_routes import db_bp, gallery_bp, collections_bp
+from mangascraper.dashboard_utils.routes._scraper_routes import scraper_bp
+from mangascraper.dashboard_utils.routes._data_routes import db_bp, gallery_bp, collections_bp
 
 def create_app():
     base_dir = os.path.dirname(__file__)
@@ -152,9 +152,22 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(
-        host=orchestrator.DASHBOARD_HOST,
-        port=orchestrator.DASHBOARD_PORT,
-        debug=orchestrator.DASHBOARD_DEBUG,
-        use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
-    )
+    # Initialise SocketIO and run via Socket.IO server (eventlet/gevent)
+    try:
+        from mangascraper.dashboard_utils import socketio_ as socketio_helper
+        sio = socketio_helper.init_app(app)
+        sio.run(
+            app,
+            host=orchestrator.DASHBOARD_HOST,
+            port=orchestrator.DASHBOARD_PORT,
+            debug=orchestrator.DASHBOARD_DEBUG,
+            use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
+        )
+    except Exception:
+        # Fallback: run vanilla Flask if SocketIO not available
+        app.run(
+            host=orchestrator.DASHBOARD_HOST,
+            port=orchestrator.DASHBOARD_PORT,
+            debug=orchestrator.DASHBOARD_DEBUG,
+            use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
+        )
