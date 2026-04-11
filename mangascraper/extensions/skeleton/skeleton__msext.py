@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 # mangascraper/extensions/skeleton/skeleton__msext.py
 
-import os, time, json, requests, threading, subprocess, math, shutil, re, tarfile, zipfile
-from tqdm import tqdm
+"""
+This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
+"""
+
+import os, time, requests, shutil, re, zipfile
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core.api.api import *
 from mangascraper.extensions.extension_manager import (
-    calculate_extension_download_path,
-    cleanup_download_tree,
+    fetch_extension_download_path,
+    parse_gallery_id_from_title,
     find_latest_cover_id,
-    find_latest_gallery_entry,
-    parse_gallery_id,
     repair_covers_hook,
+    cleanup_download_tree,
 )
-
-# This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
-
-# ALL FUNCTIONS MUST BE THREAD SAFE. IF A FUNCTION MANIPULATES A GLOBAL VARIABLE, STORE AND UPDATE IT LOCALLY IF POSSIBLE. 
 
 ####################################################################################################################
 # Global variables
@@ -30,9 +28,7 @@ EXTENSION_NAME_CAPITALISED = EXTENSION_NAME.capitalize()
 EXTENSION_REFERRER = f"{EXTENSION_NAME_CAPITALISED} Extension" # Used for printing the extension's name.
 
 EXTENSION_INSTALL_PATH = "/opt/manga-scraper/downloads/" # Use this if extension installs external programs (like Suwayomi-Server)
-
-DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
-
+DEDICATED_DOWNLOAD_PATH = fetch_extension_download_path(EXTENSION_NAME)
 SUBFOLDER_STRUCTURE = ["creator", "title"] # SUBDIR_1, SUBDIR_2, etc
 
 # Used to optionally run stuff in hooks (for example, cleaning the download directory) roughly "RUNS_PER_X_BATCHES" times every "EVERY_X_BATCHES" batches.
@@ -41,17 +37,18 @@ MAX_X_BATCHES = 50
 EVERY_X_BATCHES = 10
 RUNS_PER_X_BATCHES = 1
 
-ARCHIVE_WAIT_SECONDS = 120
-ARCHIVE_POLL_INTERVAL = 0.5
+ARCHIVE_WAIT_SECONDS = 120 # How long the extension should wait for an archive-related operation to finish before treating it as timed out or moving on.
+ARCHIVE_POLL_INTERVAL = 0.5 # How often to check the status of an archive operation
 
 ####################################################################################################################
 # EXTENSION INSTALL / UNINSTALL HOOKS
 ####################################################################################################################
 
-# Hook for pre-run functionality. Use active_extension.pre_run_hook(ARGS) in downloader.
 def pre_run_hook():
     """
-    This is one this module's entrypoints.
+    Hook for pre-run functionality.
+    Use active_extension.pre_run_hook(ARGS) in downloader.
+    \nThis is the extension's entrypoint.
     """
     global DEDICATED_DOWNLOAD_PATH
     
@@ -59,8 +56,8 @@ def pre_run_hook():
     log(f"[{EXTENSION_REFERRER}] Debugging started.", "debug")
     
     orchestrator.refresh_globals()
-    DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
-    update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
+    DEDICATED_DOWNLOAD_PATH = fetch_extension_download_path(EXTENSION_NAME)
+    orchestrator.update_env("EXTENSION_DOWNLOAD_PATH", DEDICATED_DOWNLOAD_PATH) # Update download path in env
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would ensure download path exists: {DEDICATED_DOWNLOAD_PATH}")
@@ -79,7 +76,7 @@ def install_extension():
     global DEDICATED_DOWNLOAD_PATH, EXTENSION_INSTALL_PATH
     
     orchestrator.refresh_globals()
-    DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path(EXTENSION_NAME)
+    DEDICATED_DOWNLOAD_PATH = fetch_extension_download_path(EXTENSION_NAME)
     
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would install extension and create paths: {EXTENSION_INSTALL_PATH}, {DEDICATED_DOWNLOAD_PATH}")
@@ -126,11 +123,10 @@ def uninstall_extension():
 # CUSTOM VARIABLES / FUNCTIONS (Create your custom hooks here, add them into the corresponding CORE HOOK. Must be thread-safe.)
 ####################################################################################################################
 
-# Hook for testing functionality. Use active_extension.test_hook(ARGS) in downloader.
 def test_hook():
     """
-    Update environment variables used by this module.
-    Call this function at the start of any function that uses any these variables to ensure they are up to date.
+    Hook for testing functionality.
+    Use active_extension.test_hook(ARGS) in downloader.
     """
     
     orchestrator.refresh_globals()
@@ -139,7 +135,10 @@ def test_hook():
     log(f"[{EXTENSION_REFERRER}] Test Hook Called.", "debug")
 
 def _create_cover_link_or_copy(cover_source: str, cover_link: str, creator_name: str) -> bool:
-    """Create a symlink to the cover; fall back to copying for Windows/non-privileged environments."""
+    """
+    Create a symlink to the cover; fall back to copying for Windows/non-privileged environments.
+    """
+    
     try:
         os.symlink(cover_source, cover_link)
         logger.debug(f"[COVERS] Updated cover symlink for {creator_name}: {cover_link} -> {cover_source}")
@@ -159,12 +158,13 @@ def _create_cover_link_or_copy(cover_source: str, cover_link: str, creator_name:
 
 def maintain_gallery_covers():
     """
-    Maintain cover images for galleries.
+    Maintains cover images for galleries.
     
     Structure:
     - CreatorFolder/cover.ext → symlink to latest gallery cover
     - CreatorFolder/.covers/(GalleryID) GalleryTitle.ext → cover images
     """
+    
     if not os.path.isdir(DEDICATED_DOWNLOAD_PATH):
         return
     
@@ -272,6 +272,10 @@ def maintain_gallery_covers():
         logger.debug(f"[COVERS] Error in maintain_gallery_covers: {e}")
         
 def cleanup_hook():
+    """
+    Does housekeeping / maintenance tasks, for example, pruning temp files, removing stale artifacts, or normalising folders.
+    """
+    
     maintain_gallery_covers()
     repair_covers_hook(DEDICATED_DOWNLOAD_PATH, referrer=EXTENSION_REFERRER)
     cleanup_download_tree(DEDICATED_DOWNLOAD_PATH, remove_empty_artist_folder=True, log_scan_summary=True)
@@ -282,12 +286,13 @@ def cleanup_hook():
 # CORE HOOKS (Please add to the functions, try not to change or remove anything. Must be thread-safe.)
 ####################################################################################################################
 
-# Hook for downloading images. Use active_extension.download_images_hook(ARGS) in downloader.
 def download_images_hook(gallery, page, urls, path, downloader_session, pbar=None, creator=None, page_update_hook=None):
     """
-    Downloads an image from one of the provided URLs to the given path.
-    Tries mirrors in order until one succeeds, with retries per mirror.
-    Updates tqdm progress bar with current creator.
+    Hook for downloading images.
+    Use active_extension.download_images_hook(ARGS) in downloader.
+    \nDownloads an image from one of the provided URLs to the given path.
+    \nTries mirrors in order until one succeeds, with retries per mirror.
+    \nUpdates tqdm progress bar with current creator.
     """
 
     orchestrator.refresh_globals()
@@ -301,24 +306,25 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
         logger.warning("Shutdown event detected, aborting image download.")
         return False
 
-    if not urls:
+    if not urls: # If no URLs are returned for the Gallery.
         logger.warning(f"Gallery {gallery}: Page {page}: No URLs, skipping")
         if pbar and creator:
             pbar.set_postfix_str(f"Skipped Creator: {creator}")
         return False
 
-    if os.path.exists(path):
+    if os.path.exists(path): # If Gallery already exists, skip downloading it.
         log(f"Already exists, skipping: {path}", "debug")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
-    if orchestrator.dry_run:
+    if orchestrator.dry_run: # Dry Run
         logger.info(f"[DRY RUN] Gallery {gallery}: Would download {urls[0]} -> {path}")
         if pbar and creator:
             pbar.set_postfix_str(f"Creator: {creator}")
         return True
 
+    # Create a new downloader session if one doesn't exist.
     if not isinstance(downloader_session, requests.Session):
         downloader_session = requests.Session()
 
@@ -392,8 +398,12 @@ def download_images_hook(gallery, page, urls, path, downloader_session, pbar=Non
 
     return success
 
-# Hook for pre-batch functionality. Use active_extension.pre_batch_hook(ARGS) in downloader.
 def pre_batch_hook(gallery_list):
+    """
+    Hook for pre-batch functionality.
+    Use active_extension.pre_batch_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
@@ -408,8 +418,12 @@ def pre_batch_hook(gallery_list):
     
     return gallery_list
 
-# Hook for functionality before a gallery download. Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
 def pre_gallery_download_hook(gallery_id):
+    """
+    Hook for functionality before a gallery download.
+    Use active_extension.pre_gallery_download_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
@@ -421,8 +435,12 @@ def pre_gallery_download_hook(gallery_id):
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for functionality during a gallery download. Use active_extension.during_gallery_download_hook(ARGS) in downloader.
 def during_gallery_download_hook(gallery_id):
+    """
+    Hook for functionality during a gallery download.
+    Use active_extension.during_gallery_download_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
@@ -435,8 +453,12 @@ def during_gallery_download_hook(gallery_id):
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for functionality after a completed gallery download. Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
 def after_completed_gallery_download_hook(meta: dict, gallery_id):
+    """
+    Hook for functionality after a completed gallery download.
+    Use active_extension.after_completed_gallery_download_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
@@ -509,7 +531,7 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
                             cover_source = page1_file
                             cover_gallery_name = gallery_items[0]
                             cover_ext = ext
-                            cover_gallery_id = parse_gallery_id(cover_gallery_name)
+                            cover_gallery_id = parse_gallery_id_from_title(cover_gallery_name)
                 elif gallery_items[0].endswith('.cbz') or gallery_items[0].endswith('.zip'):
                     # If it's an archive, set the path for later use
                     gallery_paths[creator_name] = gallery_path
@@ -612,8 +634,12 @@ def after_completed_gallery_download_hook(meta: dict, gallery_id):
     except Exception as e:
         logger.error(f"Failed in post-download processing for Gallery {gallery_id}: {e}")
 
-# Hook for post-batch functionality. Use active_extension.post_batch_hook(ARGS) in downloader.
 def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
+    """
+    Hook for post-batch functionality.
+    Use active_extension.post_batch_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:
@@ -646,8 +672,12 @@ def post_batch_hook(current_batch_number: int, total_batch_numbers: int):
     #log_clarification("debug")
     #log("", "debug") # <-------- ADD STUFF IN PLACE OF THIS
 
-# Hook for post-run functionality. Use active_extension.post_run_hook(ARGS) in downloader.
 def post_run_hook():
+    """
+    Hook for post-run functionality.
+    Use active_extension.post_run_hook(ARGS) in downloader.
+    """
+    
     orchestrator.refresh_globals()
     
     if orchestrator.dry_run:

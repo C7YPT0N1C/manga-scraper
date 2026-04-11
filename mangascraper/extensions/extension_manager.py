@@ -830,7 +830,7 @@ def get_extension_manifest_info(extension_name: str) -> dict | None:
             return ext
     return None
 
-def calculate_extension_download_path(extension_name: str) -> str:
+def fetch_extension_download_path(extension_name: str) -> str:
     """
     Calculate the DEDICATED_DOWNLOAD_PATH for an extension.
     This helper function removes code duplication from skeleton and suwayomi extensions.
@@ -847,8 +847,8 @@ def calculate_extension_download_path(extension_name: str) -> str:
         str: The DEDICATED_DOWNLOAD_PATH for the extension
 
     Usage in extensions:
-        from mangascraper.extensions.extension_manager import calculate_extension_download_path
-        DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
+        from mangascraper.extensions.extension_manager import fetch_extension_download_path
+        DEDICATED_DOWNLOAD_PATH = fetch_extension_download_path("skeleton")
     """
 
     extension_name = str(extension_name or "").lower()
@@ -899,7 +899,7 @@ def calculate_extension_download_path(extension_name: str) -> str:
 # Shared Extension Helpers (Non-Hook)
 #######################################################################
 
-def parse_gallery_id(text: str) -> int | None:
+def parse_gallery_id_from_title(text: str) -> int | None:
     if not text:
         return None
     match = re.search(r"\((\d+)\)", str(text))
@@ -1006,7 +1006,7 @@ def find_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | No
         is_archive = is_cbz or is_zip
         if not (is_dir or is_archive):
             continue
-        entry_id = parse_gallery_id(name)
+        entry_id = parse_gallery_id_from_title(name)
         if entry_id is None:
             continue
         # For archives, strip extension for entry_name, and set is_dir False
@@ -1028,7 +1028,7 @@ def find_latest_cover_id(covers_folder: str) -> int | None:
         return None
     cover_ids = []
     for name in os.listdir(covers_folder):
-        entry_id = parse_gallery_id(name)
+        entry_id = parse_gallery_id_from_title(name)
         if entry_id is not None:
             cover_ids.append(entry_id)
     if not cover_ids:

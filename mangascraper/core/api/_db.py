@@ -1697,9 +1697,9 @@ class DB:
                 ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
                 base_ext_path = None
                 try:
-                    from mangascraper.extensions.extension_manager import calculate_extension_download_path
+                    from mangascraper.extensions.extension_manager import fetch_extension_download_path
                     ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
-                    base_ext_path = calculate_extension_download_path(ext_name)
+                    base_ext_path = fetch_extension_download_path(ext_name)
                 except Exception:
                     base_ext_path = getattr(orchestrator, "extension_download_path", getattr(orchestrator, "DEFAULT_EXTENSION_DOWNLOAD_PATH", ""))
                 if not ext_download_path:

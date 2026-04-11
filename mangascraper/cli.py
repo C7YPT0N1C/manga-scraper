@@ -919,62 +919,62 @@ def update_config(args):
     # If flag not provided, use current runtime config values.
     
     if args.extension is not None:
-        update_env("EXTENSION", args.extension)
+        orchestrator.update_env("EXTENSION", args.extension)
     
     # Handle mirrors (from CLI or interactive menu)
     if args.mirrors is not None:
-        update_env("NHENTAI_MIRRORS", args.mirrors)
+        orchestrator.update_env("NHENTAI_MIRRORS", args.mirrors)
 
     # Handle output folder (from CLI or interactive menu)
     if args.output_folder:
-        update_env("DOWNLOAD_PATH", args.output_folder)
-        update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
+        orchestrator.update_env("DOWNLOAD_PATH", args.output_folder)
+        orchestrator.update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
     
     # Handle max retries (from CLI or interactive menu)
     if hasattr(args, 'max_retries'):
-        update_env("MAX_RETRIES", args.max_retries)
+        orchestrator.update_env("MAX_RETRIES", args.max_retries)
     
     # Handle excluded tags
     if args.excluded_tags is not None:
-        update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
+        orchestrator.update_env("EXCLUDED_TAGS", [t.strip().lower() for t in args.excluded_tags.split(",")])
     
     # Only update if explicitly provided
     if hasattr(args, 'language'):
-        update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
+        orchestrator.update_env("LANGUAGE", [lang.strip().lower() for lang in args.language.split(",")])
     
     if hasattr(args, 'title_type'):
-        update_env("TITLE_TYPE", args.title_type)
+        orchestrator.update_env("TITLE_TYPE", args.title_type)
     
     if hasattr(args, 'format'):
-        update_env("GALLERY_FORMAT", args.format)
+        orchestrator.update_env("GALLERY_FORMAT", args.format)
     
     if hasattr(args, 'threads_galleries'):
-        update_env("THREADS_GALLERIES", args.threads_galleries)
+        orchestrator.update_env("THREADS_GALLERIES", args.threads_galleries)
     
     if hasattr(args, 'threads_images'):
-        update_env("THREADS_IMAGES", args.threads_images)
+        orchestrator.update_env("THREADS_IMAGES", args.threads_images)
     
     if hasattr(args, 'dry_run'):
-        update_env("DRY_RUN", args.dry_run)
+        orchestrator.update_env("DRY_RUN", args.dry_run)
     
     if hasattr(args, 'use_tor'):
-        update_env("USE_TOR", args.use_tor)
+        orchestrator.update_env("USE_TOR", args.use_tor)
     
     if hasattr(args, 'skip_post_batch'):
-        update_env("SKIP_POST_BATCH", args.skip_post_batch)
+        orchestrator.update_env("SKIP_POST_BATCH", args.skip_post_batch)
     
     if hasattr(args, 'skip_post_run'):
-        update_env("SKIP_POST_RUN", args.skip_post_run)
+        orchestrator.update_env("SKIP_POST_RUN", args.skip_post_run)
     
     if hasattr(args, 'calm'):
-        update_env("CALM", args.calm)
+        orchestrator.update_env("CALM", args.calm)
     
     if hasattr(args, 'debug'):
-        update_env("DEBUG", args.debug)
+        orchestrator.update_env("DEBUG", args.debug)
     
     # SSL verification: --disable-ssl-verify flag sets VERIFY_SSL to False
     if hasattr(args, 'disable_ssl_verify'):
-        update_env("VERIFY_SSL", False)
+        orchestrator.update_env("VERIFY_SSL", False)
     
     orchestrator.refresh_globals()
     
@@ -1119,7 +1119,7 @@ def main():
             sys.exit(0)
     
     # Update Config with Built Gallery List
-    update_env("GALLERIES", gallery_list)
+    orchestrator.update_env("GALLERIES", gallery_list)
     
     log_clarification("debug")
     log(f"Final Config:\n{config}", "debug")
