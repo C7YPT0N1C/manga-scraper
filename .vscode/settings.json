@@ -1,0 +1,5 @@
+{
+  "python.analysis.extraPaths": [
+    "mangascraper/core/libraries/dovetail"
+  ]
+}
