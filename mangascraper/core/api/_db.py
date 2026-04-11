@@ -15,8 +15,8 @@ from mangascraper.core.api._constants import (
     CACHED_METADATA_TTL_SECONDS,
     DOWNLOAD_ROOT_MARKER_FILE,
 )
-from mangascraper.core.api._helpers import (
-    Helpers,
+from mangascraper.core.api._helpers import Helpers
+from mangascraper.core.api import (
     prune_all_caches,
     read_cached_metadata_entry,
     clear_cached_items,

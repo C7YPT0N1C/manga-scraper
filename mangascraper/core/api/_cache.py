@@ -11,8 +11,8 @@ from mangascraper.core.api._constants import (
     CACHE_REFERENCES_TTL_SECONDS,
     CACHED_METADATA_TTL_SECONDS,
 )
-from mangascraper.core.api._helpers import (
-    Helpers,
+from mangascraper.core.api._helpers import Helpers
+from mangascraper.core.api import (
     read_cached_metadata_entry,
     clear_cached_items,
     prune_all_caches,
