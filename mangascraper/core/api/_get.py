@@ -105,10 +105,10 @@ class Get:
             if orchestrator.use_tor:
                 proxy = "socks5h://127.0.0.1:9050"
                 _constants.session.proxies = {"http": proxy, "https": proxy}
-                logger.info(f"Using Tor proxy: {proxy}")
+                logger.info(f"\nUsing Tor proxy: {proxy}")
             else:
                 _constants.session.proxies = {}
-                logger.info("Not using Tor proxy")
+                logger.info("\nNot using Tor proxy")
 
             if status == "rebuild":
                 log("Rebuilt HTTP session.", "debug")
