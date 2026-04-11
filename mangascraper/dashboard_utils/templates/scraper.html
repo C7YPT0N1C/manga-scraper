@@ -859,9 +859,14 @@ function formatHudBytesPerSecond(bytesPerSecond) {
   return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
 }
 
-async function refreshStatus() {
-  const res = await fetch('/api/scraper/status');
-  const data = await res.json();
+async function refreshStatus(force = false) {
+  // Use centralised status cache in base.html to avoid duplicate fast polling.
+  const data = await (window.getScraperStatus ? window.getScraperStatus(force) : (async () => {
+    // Fallback: if base helper absent, perform direct fetch.
+    const res = await fetch('/api/scraper/status');
+    return await res.json();
+  })());
+  if (!data) return;
   const counts = data.counts || {};
   const progress = data.progress || {};
 
@@ -1297,10 +1302,11 @@ document.getElementById('cfg_debug').addEventListener('change', (e) => {
 // ── Initialise ───────────────────────────────────────────────────────────────
 
 loadConfig();
-refreshStatus();
+// Prime the shared status cache (used by the dynamic bar); base.html also polls regularly.
+if (window.getScraperStatus) window.getScraperStatus();
 refreshQueue();
 refreshSearchHistory();
-setInterval(refreshStatus, 5000);
+// Note: do NOT poll refreshStatus here — base.html provides a single global poll.
 setInterval(refreshQueue, 15000);
 setInterval(refreshSearchHistory, 30000);
 </script>

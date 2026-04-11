@@ -118,55 +118,91 @@
       _applyDynamicBarCollapsedState();
     });
 
+    // Internal helper that actually performs the network fetch and updates the shared cache.
+    window.__scraperStatusPromise = window.__scraperStatusPromise || null;
+    window.__fetchScraperStatus = async function() {
+      if (window.__scraperStatusPromise) return window.__scraperStatusPromise;
+      window.__scraperStatusPromise = (async () => {
+        try {
+          // Debug trace to help identify unexpected frequent fetches
+          try { console.debug('[dynamicBar] fetching /api/scraper/status'); } catch (e) {}
+          const res = await fetch('/api/scraper/status');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          try {
+            window.__scraperStatusCache = { data: data, ts: Date.now() };
+            window.dispatchEvent(new CustomEvent('scraper-status', { detail: data }));
+          } catch (e) { /* ignore caching errors */ }
+          return data;
+        } catch (err) {
+          return null;
+        } finally {
+          window.__scraperStatusPromise = null;
+        }
+      })();
+      return window.__scraperStatusPromise;
+    };
+
     async function _updateDynamicBarGlobal() {
       const dock = document.getElementById('dynamicBar');
       const content = document.getElementById('dynamicBarContent');
       if (!dock || !content) return;
 
-      try {
-        const res = await fetch('/api/scraper/status');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const c = data.counts || {};
-        const p = data.progress || {};
-        if (window.__dynamicBarStatusOverrideUntil > 0 && Date.now() >= window.__dynamicBarStatusOverrideUntil) {
-          window.__dynamicBarStatusOverride = '';
-          window.__dynamicBarStatusOverrideUntil = 0;
-        }
-        const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
-        const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
-        const completedCount = Number(c.completed ?? p.completed ?? 0);
-        const failedCount = Number(c.failed ?? p.failed ?? 0);
-        const skippedCount = Number(c.skipped ?? p.skipped ?? 0);
-        const pagesTotal = Number(p.total_pages ?? 0);
-        const pagesProcessed = Number(p.pages_processed ?? 0);
-        const pagesPerSecond = Number(p.pages_per_second ?? 0);
-
-        const parts = [
-          `Status: ${dynamicStatus}`,
-          `PID: ${_asText(data.pid, 'N/A')}`,
-          `Queued Galleries: ${_asText(runTotal, 0)}`,
-          `Completed: ${_asText(completedCount, 0)}/${_asText(runTotal, 0)}`,
-          `Failed: ${_asText(failedCount, 0)}/${_asText(runTotal, 0)}`,
-          `Skipped: ${_asText(skippedCount, 0)}/${_asText(runTotal, 0)}`,
-        ];
-        if (pagesTotal > 0) {
-          parts.push(`Pages: ${_asText(pagesProcessed, 0)}/${_asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
-        }
-        parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
-        parts.push(`Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`);
-        if (pagesTotal > 0) {
-          parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
-        }
-        const line = parts.join(' | ');
-        content.textContent = line;
-        dock.style.display = '';
-      } catch (err) {
+      const data = await window.__fetchScraperStatus();
+      if (!data) {
         content.textContent = 'Status unavailable.';
-        // Keep the dynamic bar visible on API errors so users see the status message.
         try { dock.style.display = ''; } catch (e) { /* ignore */ }
+        return;
       }
+
+      const c = data.counts || {};
+      const p = data.progress || {};
+      if (window.__dynamicBarStatusOverrideUntil > 0 && Date.now() >= window.__dynamicBarStatusOverrideUntil) {
+        window.__dynamicBarStatusOverride = '';
+        window.__dynamicBarStatusOverrideUntil = 0;
+      }
+      const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+      const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
+      const completedCount = Number(c.completed ?? p.completed ?? 0);
+      const failedCount = Number(c.failed ?? p.failed ?? 0);
+      const skippedCount = Number(c.skipped ?? p.skipped ?? 0);
+      const pagesTotal = Number(p.total_pages ?? 0);
+      const pagesProcessed = Number(p.pages_processed ?? 0);
+      const pagesPerSecond = Number(p.pages_per_second ?? 0);
+
+      const parts = [
+        `Status: ${dynamicStatus}`,
+        `PID: ${_asText(data.pid, 'N/A')}`,
+        `Queued Galleries: ${_asText(runTotal, 0)}`,
+        `Completed: ${_asText(completedCount, 0)}/${_asText(runTotal, 0)}`,
+        `Failed: ${_asText(failedCount, 0)}/${_asText(runTotal, 0)}`,
+        `Skipped: ${_asText(skippedCount, 0)}/${_asText(runTotal, 0)}`,
+      ];
+      if (pagesTotal > 0) {
+        parts.push(`Pages: ${_asText(pagesProcessed, 0)}/${_asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
+      }
+      parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
+      parts.push(`Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`);
+      if (pagesTotal > 0) {
+        parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
+      }
+      const line = parts.join(' | ');
+      content.textContent = line;
+      dock.style.display = '';
     }
+
+    // Public helper used by page scripts to get the latest status without hammering the API.
+    // Usage: `await window.getScraperStatus(force)` where `force` (bool) forces an immediate fetch.
+    window.__scraperStatusCache = window.__scraperStatusCache || { data: null, ts: 0 };
+    window.getScraperStatus = async function(force = false) {
+      const now = Date.now();
+      const cache = window.__scraperStatusCache || { data: null, ts: 0 };
+      // Return cached value if recent and not forcing
+      if (!force && cache.data && (now - cache.ts) < 4000) return cache.data;
+      // Otherwise use the central fetcher which deduplicates in-flight requests
+      const data = await window.__fetchScraperStatus();
+      return data || null;
+    };
 
     window.__dynamicBarCollapsed = _loadDynamicBarCollapsedState();
     _applyDynamicBarCollapsedState();
