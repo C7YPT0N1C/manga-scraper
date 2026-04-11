@@ -1098,8 +1098,8 @@ def main():
 
     # --- Self-test mode ---
     if args.self_test:
-        from mangascraper.core import tester
-        ok = tester.main()
+        from mangascraper.core import test
+        ok = test.main()
         sys.exit(0 if ok else 1)
     
     # Build initial session.
