@@ -176,7 +176,6 @@ cython_debug/
 .pypirc
 
 # Other
-.vscode/
 *-workspace
 *.db
 docs/request.md
