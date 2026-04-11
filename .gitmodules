@@ -1,0 +1,3 @@
+[submodule "mangascraper/core/libraries/dovetail"]
+	path = mangascraper/core/libraries/dovetail
+	url = https://github.com/anthrosystems/dovetail.git
