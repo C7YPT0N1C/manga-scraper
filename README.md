@@ -163,7 +163,7 @@ manga-scraper --id-range 500000 500100
 ### Configuration
 - The config file is `/opt/manga-scraper/mangascraper/core/manga-scraper.env`.
 - CLI flags override config values for that run and update the env file.
-- Common keys: `EXTENSION`, `NHENTAI_MIRRORS`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
+- Common keys: `EXTENSION`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
 
 ### Gallery Selection
 - Use `--file` with a file containing IDs or NHentai URLs (one per line).

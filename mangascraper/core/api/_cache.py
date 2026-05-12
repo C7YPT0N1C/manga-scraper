@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_cache.py
 
 from __future__ import annotations

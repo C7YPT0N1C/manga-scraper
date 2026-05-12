@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_db.py
 
 from __future__ import annotations

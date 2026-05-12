@@ -367,6 +367,21 @@ def _load_extension_module(module_name: str, entry_point: str):
     spec.loader.exec_module(module)
     return module
 
+
+def _find_extension_api_module_path(extension_folder: str, extension_name: str) -> str | None:
+    """Search for a per-extension API module inside the extension folder.
+
+    Looks for any file matching `*__api.msext.py` and returns the first
+    match's absolute path, or None if none found.
+    """
+    try:
+        for fn in os.listdir(extension_folder):
+            if fn.lower().endswith("__api.msext.py"):
+                return os.path.join(extension_folder, fn)
+    except Exception:
+        pass
+    return None
+
 def _find_manifest_entry(manifest: dict, extension_name: str) -> dict | None:
     for ext in manifest.get("extensions", []):
         if ext.get("name", "").lower() == extension_name.lower():
@@ -432,7 +447,23 @@ def load_single_extension(
 
     module_name = f"mangascraper.extensions.{ext_entry['name']}.{ext_entry['entry_point'].replace('.py', '')}"
     try:
-        return _load_extension_module(module_name, entry_point)
+        module = _load_extension_module(module_name, entry_point)
+
+        # Attempt to load a per-extension API module (if present) and attach
+        # it to the loaded extension module as `module.api` for convenient
+        # access by the core code (Sleep, downloader, etc.).
+        ext_folder = os.path.dirname(entry_point)
+        api_path = _find_extension_api_module_path(ext_folder, ext_entry['name'])
+        if api_path:
+            api_module_name = f"mangascraper.extensions.{ext_entry['name']}.{os.path.splitext(os.path.basename(api_path))[0]}"
+            try:
+                api_module = _load_extension_module(api_module_name, api_path)
+                setattr(module, "api", api_module)
+                logger.debug(f"Extension '{ext_entry['name']}' API module loaded: {api_path}")
+            except Exception as e:
+                logger.warning(f"Extension '{ext_entry['name']}': Failed to load API module {api_path}: {e}")
+
+        return module
     except Exception as e:
         logger.warning(
             f"Extension: {ext_entry['name']}: Failed to load: {e}. Is an external program managing it?"
@@ -495,6 +526,24 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
             module_name = f"mangascraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
             try:
                 module = _load_extension_module(module_name, entry_point)
+
+                # Attempt to load an accompanying API module (if present) and
+                # attach it to the extension module so core code can consult
+                # per-extension configs without a separate loader.
+                try:
+                    ext_folder = os.path.dirname(entry_point)
+                    api_path = _find_extension_api_module_path(ext_folder, ext['name'])
+                    if api_path:
+                        api_module_name = f"mangascraper.extensions.{ext['name']}.{os.path.splitext(os.path.basename(api_path))[0]}"
+                        try:
+                            api_module = _load_extension_module(api_module_name, api_path)
+                            setattr(module, "api", api_module)
+                            logger.debug(f"Extension '{ext['name']}' API module loaded: {api_path}")
+                        except Exception as e:
+                            logger.warning(f"Extension '{ext['name']}': Failed to load API module {api_path}: {e}")
+                except Exception:
+                    pass
+
                 INSTALLED_EXTENSIONS.append(module)
                 if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
                     log(f"Extension: {ext['name']}: Loaded.", "debug")
@@ -626,6 +675,21 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
     entry_point_path = os.path.join(ext_folder, entry_point)
     try:
         module = _load_extension_module(module_name, entry_point_path)
+        # Try to load an accompanying API module if present and attach it
+        # to the entry module as `module.api` for core integration.
+        try:
+            ext_folder = os.path.dirname(entry_point_path)
+            api_path = _find_extension_api_module_path(ext_folder, extension_name)
+            if api_path:
+                api_module_name = f"mangascraper.extensions.{extension_name}.{os.path.splitext(os.path.basename(api_path))[0]}"
+                try:
+                    api_module = _load_extension_module(api_module_name, api_path)
+                    setattr(module, "api", api_module)
+                    logger.debug(f"Extension '{extension_name}' API module loaded during install: {api_path}")
+                except Exception as e:
+                    logger.warning(f"Extension '{extension_name}': Failed to load API module during install {api_path}: {e}")
+        except Exception:
+            pass
     except Exception as e:
         logger.error(f"Extension '{extension_name}': Failed to load entry point after install: {e}")
         return

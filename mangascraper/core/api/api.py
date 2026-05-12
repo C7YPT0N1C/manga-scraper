@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/api.py
 
 import atexit

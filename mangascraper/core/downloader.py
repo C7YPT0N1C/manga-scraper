@@ -10,8 +10,8 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core.api.api import *
-from dovetail import Dovetail
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
+from dovetail import Dovetail
 
 ####################################################################################################
 # Global Variables

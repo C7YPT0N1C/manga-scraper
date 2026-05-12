@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_fetch.py
 
 from __future__ import annotations
@@ -790,7 +791,12 @@ class Fetch:
 
         for gallery_id in tqdm(ids_to_fetch, desc="Fetching gallery metadata", unit="gallery"):
             try:
-                meta = Fetch.gallery_metadata(gallery_id)
+                try:
+                    meta = Fetch.gallery_metadata(gallery_id)
+                except RuntimeError:
+                    # Configuration-level failures (no mirrors / no API base) should
+                    # abort the entire metadata fetch operation so callers can cancel.
+                    raise
                 if meta and isinstance(meta, dict):
                     meta_entry = Cache.Save.cache(meta, gallery_id)
                     if meta_entry:
