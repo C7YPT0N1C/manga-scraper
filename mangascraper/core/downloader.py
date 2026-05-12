@@ -160,7 +160,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     log_clarification("warning")
     log(f"Starting {context} with {num_galleries} Galleries{total_pages_suffix}:")
     log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}\n")
-    log(f"Estimated Total API Hits: {total_api_hits}\n", "debug")
+    log(f"[API] Estimated Total API Hits: {total_api_hits}\n", "debug")
     
 # Space monitoring for progress display
 space_monitor = {

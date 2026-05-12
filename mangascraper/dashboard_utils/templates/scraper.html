@@ -2,13 +2,27 @@
 {% block content %}
 <h2>Scraper Control Panel</h2>
 
+<!-- Embedded Stats Pane (diagnostics-style) -->
+<div id="scraperStatsSubpage" style="display:none;">
+  <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.6rem">
+    <button id="statsBackBtn">◀ Back</button>
+    <h3 style="margin:0">Run Stats</h3>
+    <div style="margin-left:auto">
+      <button id="refreshStatsBtn">Refresh</button>
+    </div>
+  </div>
+  <div id="statsContent" style="margin-top:6px"></div>
+</div>
+
 <!-- ===== RUNTIME ===== -->
+<div id="scraperMainContent">
 <section>
   <h3>Runtime</h3>
   <button id="refreshAllBtn">Refresh Scraper</button>
   <button id="startBtn" title="Start a scraper run using only galleries currently selected in the queue.">Start Scraper</button>
   <button id="stopBtn">Stop Scraper</button>
-</section>
+  <button id="statsBtn" title="Open detailed scraper stats page">Stats</button>
+  </section>
 
 <!-- ===== CONFIGURATION ===== -->
 <section>
@@ -105,20 +119,20 @@
   <label title="The scraper extension to use. Extensions provide additional download targets or post-processing steps. Leave blank to use the built-in downloader.">
     Active Extension
     <select id="cfg_extension">
-      <option value="">— none (built-in) —</option>
+      <option value="">- none (built-in) -</option>
     </select>
   </label>
   <label title="Where downloaded galleries are saved on the server. Choose a preset path from the list, or select Custom... to type your own.">
     Output Folder
     <select id="cfg_output_folder_select">
-      <option value="">— select a folder —</option>
+      <option value="">- select a folder -</option>
       <option value="__custom__">Custom...</option>
     </select>
     <input id="cfg_output_folder_custom" type="text" placeholder="/path/to/downloads" style="display:none;margin-top:4px;">
   </label>
   <div style="margin-top:8px;display:grid;gap:6px;max-width:460px">
     <select id="extManageSelect" title="Manage extension installation and updates.">
-      <option value="">— extension management —</option>
+      <option value="">- extension management -</option>
     </select>
     <div>
       <button id="extInstallBtn" type="button">Install</button>
@@ -176,7 +190,7 @@
     </label>
 
     <!-- ids only -->
-    <label id="row_idsValue" title="Comma-separated list of gallery IDs to fetch directly — no search needed.">
+    <label id="row_idsValue" title="Comma-separated list of gallery IDs to fetch directly - no search needed.">
       Gallery IDs
       <input id="idsValue" type="text" placeholder="e.g. 177013,370138">
     </label>
@@ -687,26 +701,26 @@ async function loadExtensions() {
     extensionRecordsByName = {};
     // Clear all except the first "none" option
     while (sel.options.length > 1) sel.remove(1);
-    manageSel.innerHTML = '<option value="">— extension management —</option>';
+    manageSel.innerHTML = '<option value="">- extension management -</option>';
     (data.extensions || []).forEach(ext => {
       extensionRecordsByName[ext.name] = ext;
       const opt = document.createElement('option');
       opt.value = ext.name;
       const vStr = ext.version ? ` v${ext.version}` : '';
-      const installStr = ext.installed ? ' (local - installed)' : ' (local - not installed)';
+      const installStr = ext.installed ? ' (Local - installed)' : ' (Local - Not installed)';
       opt.textContent = (ext.label || ext.name) + vStr + installStr;
       if (ext.update_available) opt.title = `Update available: v${ext.remote_version}`;
       sel.appendChild(opt);
 
       const localManageOpt = document.createElement('option');
       localManageOpt.value = ext.name;
-      localManageOpt.textContent = `${ext.name} v${ext.version || '0'} (local - ${ext.installed ? 'installed' : 'not installed'})`;
+      localManageOpt.textContent = `${ext.name} v${ext.version || '0'} (Local - ${ext.installed ? 'installed' : 'Not installed'})`;
       manageSel.appendChild(localManageOpt);
 
       if (ext.update_available) {
         const remoteManageOpt = document.createElement('option');
         remoteManageOpt.value = ext.name;
-        remoteManageOpt.textContent = `${ext.name} v${ext.remote_version || ext.version || '0'} (remote - update available)`;
+        remoteManageOpt.textContent = `${ext.name} v${ext.remote_version || ext.version || '0'} (Remote - Update Available)`;
         manageSel.appendChild(remoteManageOpt);
       }
 
@@ -727,7 +741,7 @@ function setupOutputFolderDropdown(currentFolder) {
   const selectedExtension = document.getElementById('cfg_extension').value;
   const extensionDefaultFolder = extensionOutputFolders[selectedExtension] || '';
 
-  // Populate known paths — always include the current value if non-empty
+  // Populate known paths - always include the current value if non-empty
   const knownPaths = [];
   if (extensionDefaultFolder && !knownPaths.includes(extensionDefaultFolder)) {
     knownPaths.push(extensionDefaultFolder);
@@ -737,7 +751,7 @@ function setupOutputFolderDropdown(currentFolder) {
   }
 
   // Rebuild options (keep blank + known paths + Custom)
-  while (sel.options.length > 1) sel.remove(1); // keep "— select a folder —"
+  while (sel.options.length > 1) sel.remove(1); // keep "- select a folder -"
   knownPaths.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p;
@@ -912,7 +926,7 @@ async function loadConfig() {
   const data = await res.json();
   const c = data.config || {};
 
-  // Extension dropdown — load extensions first, then set value
+  // Extension dropdown - load extensions first, then set value
   await loadExtensions();
   const extSel = document.getElementById('cfg_extension');
   extSel.value = c.extension || '';
@@ -1226,6 +1240,172 @@ document.getElementById('stopBtn').onclick = async () => {
   clearGlobalStatus();
 };
 
+
+// Auto-refresh helpers for the stats pane
+let _statsAutoRefreshId = null;
+function startStatsAutoRefresh(intervalMs = 1500) {
+  stopStatsAutoRefresh();
+  try { loadRunStats(); } catch (e) {}
+  _statsAutoRefreshId = setInterval(() => {
+    try { loadRunStats(); } catch (e) {}
+  }, intervalMs);
+}
+function stopStatsAutoRefresh() {
+  if (_statsAutoRefreshId) {
+    clearInterval(_statsAutoRefreshId);
+    _statsAutoRefreshId = null;
+  }
+}
+
+document.getElementById('statsBtn').onclick = () => {
+  try {
+    document.getElementById('scraperMainContent').style.display = 'none';
+    document.getElementById('scraperStatsSubpage').style.display = '';
+    startStatsAutoRefresh();
+  } catch (e) {}
+};
+
+document.getElementById('statsBackBtn').onclick = () => {
+  try {
+    stopStatsAutoRefresh();
+    document.getElementById('scraperStatsSubpage').style.display = 'none';
+    document.getElementById('scraperMainContent').style.display = '';
+  } catch (e) {}
+};
+
+document.getElementById('refreshStatsBtn').onclick = () => loadRunStats();
+
+async function loadRunStats() {
+  const el = document.getElementById('statsContent');
+  if (!el) return;
+  // micro-loading only if nothing rendered yet
+  if (!el.querySelector('.stats-root')) el.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const [s, qres] = await Promise.all([
+      window.getScraperStatus ? window.getScraperStatus(true) : fetch('/api/scraper/status').then(r => r.json()).catch(() => ({})),
+      fetch('/api/scraper/queue').then(r => r.json()).catch(() => ({})),
+    ]);
+    if (!s) {
+      el.innerHTML = '<div class="muted">No status available.</div>';
+      return;
+    }
+
+    const c = s.counts || {};
+    const p = s.progress || {};
+    const queue_total = Number(s.queue_total || 0);
+    const total = Number(c.total || 0);
+    const completed = Number(c.completed || 0);
+    const failed = Number(c.failed || 0);
+    const skipped = Number(c.skipped || 0);
+
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const speed = typeof formatHudBytesPerSecond === 'function'
+      ? formatHudBytesPerSecond(p.download_speed_bytes ?? 0)
+      : (p.download_speed_bytes ? (p.download_speed_bytes / 1024).toFixed(1) + ' KB/s' : '0 B/s');
+
+    // Build persistent DOM once
+    if (!el.querySelector('.stats-root')) {
+      const root = document.createElement('div'); root.className = 'stats-root';
+
+      const overview = document.createElement('div'); overview.className = 'stats-overview'; overview.style.cssText = 'display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:12px';
+      const makeCard = (id, title, subtitle='') => {
+        const card = document.createElement('div'); card.className = 'panel stat-card'; card.style.minWidth = '140px'; card.style.padding = '10px'; card.style.borderRadius = '8px';
+        const t = document.createElement('div'); t.style.fontWeight = '600'; t.style.marginBottom = '6px'; t.textContent = title;
+        const v = document.createElement('div'); v.style.fontSize = '1.1rem'; v.id = id; v.textContent = '';
+        const sdiv = document.createElement('div'); sdiv.style.color = 'var(--ink-2)'; sdiv.style.fontSize = '0.85rem'; sdiv.id = id + '_sub'; sdiv.textContent = subtitle;
+        card.appendChild(t); card.appendChild(v); card.appendChild(sdiv); return card;
+      };
+      overview.appendChild(makeCard('stat_queued','Queued'));
+      overview.appendChild(makeCard('stat_total','Total'));
+      overview.appendChild(makeCard('stat_completed','Completed'));
+      overview.appendChild(makeCard('stat_failed','Failed'));
+      overview.appendChild(makeCard('stat_skipped','Skipped'));
+      overview.appendChild(makeCard('stat_progress','Progress', `Speed: ${speed}`));
+      overview.appendChild(makeCard('stat_uptime','Uptime'));
+
+      const galleryWrap = document.createElement('div'); galleryWrap.className = 'stats-gallery-list panel'; galleryWrap.style.padding = '8px'; galleryWrap.style.borderRadius = '8px';
+      const head = document.createElement('div'); head.style.fontWeight = '600'; head.style.marginBottom = '8px'; head.id = 'stats_gallery_count'; galleryWrap.appendChild(head);
+      const scroll = document.createElement('div'); scroll.style.overflow = 'auto'; scroll.style.maxHeight = '48vh';
+      const table = document.createElement('table'); table.style.width = '100%'; table.style.borderCollapse = 'collapse';
+      const thead = document.createElement('thead'); thead.innerHTML = '<tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.06)"><th style="padding:6px">ID</th><th>Title</th><th>Pages</th><th style="width:220px">Progress</th><th>Status</th></tr>';
+      const tbody = document.createElement('tbody'); tbody.id = 'statsGalleryBody'; table.appendChild(thead); table.appendChild(tbody); scroll.appendChild(table); galleryWrap.appendChild(scroll);
+
+      root.appendChild(overview); root.appendChild(galleryWrap); el.innerHTML = ''; el.appendChild(root);
+    }
+
+    // update overview
+    const setText = (id, text) => { const elv = document.getElementById(id); if (elv) elv.textContent = String(text); };
+    setText('stat_queued', queue_total);
+    setText('stat_total', total);
+    setText('stat_completed', completed);
+    setText('stat_failed', failed);
+    setText('stat_skipped', skipped);
+    setText('stat_progress', percent + '%');
+    const progressSub = document.getElementById('stat_progress_sub'); if (progressSub) progressSub.textContent = `Speed: ${speed}`;
+    setText('stat_uptime', formatHudDuration(s.uptime_seconds || 0));
+
+    // update per-gallery rows in-place
+    const queueRows = (qres && qres.queue) || (qres && Array.isArray(qres.ids) ? qres.ids.map(id=>({id,id})) : []);
+    const tbodyEl = document.getElementById('statsGalleryBody');
+    const headEl = document.getElementById('stats_gallery_count'); headEl.textContent = `Per-gallery status (${queueRows.length} entries)`;
+
+    const existing = {};
+    Array.from(tbodyEl.querySelectorAll('tr[data-gid]')).forEach(tr => existing[String(tr.dataset.gid)] = tr);
+
+    const currentId = Number(p.current_gallery_id || 0);
+    const pagesProcessed = Number(p.pages_processed || 0);
+    const totalPages = Number(p.total_pages || 0);
+    const seen = new Set();
+    for (const row of (queueRows || [])) {
+      const gid = Number(row.id || row.gallery_id || row);
+      if (!Number.isFinite(gid)) continue;
+      seen.add(String(gid));
+      let tr = existing[String(gid)];
+      const title = row.title || `Gallery ${gid}`;
+      const pages = Number(row.pages || 0);
+      const status = String(row.status || (gid === currentId ? 'started' : 'queued')).toUpperCase();
+
+      let progPct = 0; let progText = '-';
+      if (gid === currentId && totalPages > 0) {
+        progPct = Math.min(100, Math.round((pagesProcessed / totalPages) * 100));
+        progText = `${pagesProcessed}/${totalPages}`;
+      }
+
+      if (!tr) {
+        tr = document.createElement('tr'); tr.dataset.gid = String(gid);
+        tr.innerHTML = `
+          <td style="padding:6px;vertical-align:middle" class="g-id"></td>
+          <td style="padding:6px;vertical-align:middle" class="g-title"></td>
+          <td style="padding:6px;vertical-align:middle" class="g-pages"></td>
+          <td style="padding:6px;vertical-align:middle" class="g-progress"></td>
+          <td style="padding:6px;vertical-align:middle" class="g-status"></td>
+        `;
+        tbodyEl.appendChild(tr);
+      }
+
+      tr.querySelector('.g-id').textContent = gid;
+      tr.querySelector('.g-title').textContent = title;
+      tr.querySelector('.g-pages').textContent = pages;
+
+      const progCell = tr.querySelector('.g-progress'); progCell.innerHTML = '';
+      const barWrap = document.createElement('div'); barWrap.style.cssText = 'background:rgba(255,255,255,0.04);border-radius:6px;height:12px;overflow:hidden';
+      const bar = document.createElement('div'); bar.style.height = '12px'; bar.style.width = progPct + '%'; bar.style.background = progPct < 100 ? 'linear-gradient(90deg,#4ea3ff,#6aaaf8)' : 'linear-gradient(90deg,#4de0aa,#6ac97a)';
+      barWrap.appendChild(bar);
+      const progTextEl = document.createElement('div'); progTextEl.style.fontSize = '0.85rem'; progTextEl.style.color = 'var(--ink-1)'; progTextEl.style.marginTop = '6px'; progTextEl.textContent = progText;
+      progCell.appendChild(barWrap); progCell.appendChild(progTextEl);
+
+      tr.querySelector('.g-status').textContent = status;
+    }
+
+    // remove unseen
+    Array.from(tbodyEl.querySelectorAll('tr[data-gid]')).forEach(tr => { if (!seen.has(String(tr.dataset.gid))) tr.remove(); });
+
+  } catch (err) {
+    if (!el.querySelector('.stats-root')) el.innerHTML = '<div class="muted">Failed to load stats.</div>';
+    console.error('loadRunStats failed', err);
+  }
+}
+
 document.getElementById('loadConfigBtn').onclick = loadConfig;
 document.getElementById('saveConfigBtn').onclick = saveConfig;
 document.getElementById('extInstallBtn').onclick = async () => manageExtension('install');
@@ -1306,8 +1486,9 @@ loadConfig();
 if (window.getScraperStatus) window.getScraperStatus();
 refreshQueue();
 refreshSearchHistory();
-// Note: do NOT poll refreshStatus here — base.html provides a single global poll.
+// Note: do NOT poll refreshStatus here - base.html provides a single global poll.
 setInterval(refreshQueue, 15000);
 setInterval(refreshSearchHistory, 30000);
 </script>
+  </div>
 {% endblock %}

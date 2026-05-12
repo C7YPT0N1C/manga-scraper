@@ -31,7 +31,7 @@
       return { items: paginatedItems, totalPages, filteredCount };
     },
 
-    // Lightweight control updater — keeps existing page state management in templates.
+    // Lightweight control updater - keeps existing page state management in templates.
     updateSimpleControls(controlsEl, currentPage, totalPages, prevBtn, nextBtn, pageNumEl, totalPagesEl) {
       if (!controlsEl) return;
       let page = Number(currentPage) || 1;

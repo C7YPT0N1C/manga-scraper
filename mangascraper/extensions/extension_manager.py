@@ -708,8 +708,8 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
 
     if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
         log_clarification("debug")
-        logger.debug("[Extension Loader] Ready.")
-        log("[Extension Loader] Debugging Started.", "debug")
+        logger.debug("[ExtMng] Ready.")
+        log("[ExtMng] Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -739,7 +739,8 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
         if hasattr(ext, "pre_run_hook"):
             ext.pre_run_hook()
         log_clarification()
-        logger.info(f"Selected extension: {final_name}")
+        name = final_name.capitalize()
+        logger.info(f"Selected extension: {name}")
 
     return ext
 
@@ -790,7 +791,7 @@ def get_extension_download_path(extension_name: str) -> str:
         if override_norm != default_norm:
             resolved = _ensure_trailing_slash(override_download_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=override)"
             )
             return resolved
 
@@ -804,13 +805,13 @@ def get_extension_download_path(extension_name: str) -> str:
                     continue
                 resolved = _ensure_trailing_slash(manifest_path)
                 logger.debug(
-                    f"Extension download path resolved: {resolved} (source=manifest)"
+                    f"[ExtMng] Extension download path resolved: {resolved} (source=manifest)"
                 )
                 return resolved
 
     # Fall back to default
     resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    logger.debug(f"[ExtMng] Extension download path resolved: {resolved} (source=default)")
     return resolved
 
 def get_extension_manifest_info(extension_name: str) -> dict | None:
@@ -872,7 +873,7 @@ def fetch_extension_download_path(extension_name: str) -> str:
         if override_norm != default_norm:
             resolved = _ensure_trailing_slash(override_download_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=override)"
             )
             return resolved
 
@@ -886,13 +887,13 @@ def fetch_extension_download_path(extension_name: str) -> str:
         if manifest_path:
             resolved = _ensure_trailing_slash(manifest_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=manifest)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=manifest)"
             )
             return resolved
 
     # Fall back to default
     resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    logger.debug(f"[ExtMng] Extension download path resolved: {resolved} (source=default)")
     return resolved
 
 #######################################################################

@@ -1285,7 +1285,7 @@ def _load_gallery_browser_root_dataset(root_path: str) -> tuple[dict[str, dict],
     return creators, galleries_by_creator
 
 
-# ── DB routes — /api/db/... ───────────────────────────────────────────────────
+# ── DB routes - /api/db/... ───────────────────────────────────────────────────
 
 @db_bp.route("/list", methods=["GET"])
 def list_all():
@@ -1331,7 +1331,7 @@ def query_table(table_name):
     return jsonify(result)
 
 
-# ── Gallery routes — /api/gallery/... ────────────────────────────────────────
+# ── Gallery routes - /api/gallery/... ────────────────────────────────────────
 
 @gallery_bp.route("/list_locations", methods=["GET"])
 def list_locations():
@@ -1582,7 +1582,7 @@ def delete_file():
     return jsonify({"ok": True})
 
 
-# ── Collections routes — /api/collections/... ───────────────────────────────
+# ── Collections routes - /api/collections/... ───────────────────────────────
 
 @collections_bp.route("/list", methods=["GET"])
 def collections_list():

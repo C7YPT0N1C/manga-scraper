@@ -235,6 +235,8 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
 
+DEFAULT_USER_AGENT = "MangaScraper/5.0.0 (https://github.com/C7YPT0N1C/manga-scraper)"
+
 DEFAULT_DOWNLOAD_PATH = os.path.join(SCRAPER_DIR, "downloads")
 download_path = DEFAULT_DOWNLOAD_PATH  # public variable
 
@@ -660,7 +662,7 @@ def normalise_config():
     Normalise config with defaults persisted to Config in SQLite.
     """
     log_clarification("debug")
-    log("Populating Config...", "debug")
+    log("[CLI] Populating Config...", "debug")
 
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,

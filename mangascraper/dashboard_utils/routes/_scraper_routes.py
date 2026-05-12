@@ -878,6 +878,19 @@ def status():
     except Exception:
         counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
 
+    # Preserve the remembered run-total if available from the socket emitter
+    try:
+        from mangascraper.dashboard_utils import socketio_ as socketio_helper
+        last_total = 0
+        try:
+            last_total = int(socketio_helper.get_last_total() or 0)
+        except Exception:
+            last_total = 0
+        if (not counts.get('total') or int(counts.get('total') or 0) == 0) and last_total and last_total > 0:
+            counts['total'] = int(last_total)
+    except Exception:
+        pass
+
     # Live runtime progress (pages/sec, pages processed, ETA) with retry/backoff.
     progress = {}
     max_attempts = 3

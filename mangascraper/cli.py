@@ -913,7 +913,7 @@ def build_gallery_list(args):
 
 def update_config(args):
     log_clarification("debug")
-    log("Updating Config...", "debug")
+    log("[CLI] Updating Config...", "debug")
     
     # Only update persisted config for values explicitly provided via CLI flags.
     # If flag not provided, use current runtime config values.
@@ -979,8 +979,8 @@ def update_config(args):
     orchestrator.refresh_globals()
     
     log_clarification("debug") # NOTE: DEBUGGING
-    log(f"GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
-    log(f"IMAGE THREADS = {orchestrator.threads_images}", "debug")
+    log(f"[CLI] GALLERY THREADS = {orchestrator.threads_galleries}", "debug")
+    log(f"[CLI] IMAGE THREADS = {orchestrator.threads_images}", "debug")
 
 
 def launch_gui():
@@ -1006,13 +1006,13 @@ def launch_gui():
     # Open browser shortly after server starts to avoid racing startup.
     threading.Timer(1.0, _open_browser).start()
 
-    app = dashboard.create_app()
-    app.run(
-        host=host,
-        port=port,
-        debug=False,
-        use_reloader=False,
-    )
+    # Delegate startup to dashboard.main() which prefers Socket.IO runner.
+    try:
+        # Disable the reloader when launching from the CLI to avoid double-starts
+        dashboard.main(use_reloader=False)
+    except Exception:
+        # Ensure any unexpected errors propagate after logging
+        raise
 
 # ------------------------------------------------------------
 # Main
@@ -1098,7 +1098,7 @@ def main():
 
     # --- Self-test mode ---
     if args.self_test:
-        from mangascraper.core import test
+        from tests import test
         ok = test.main()
         sys.exit(0 if ok else 1)
     

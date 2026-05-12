@@ -76,6 +76,8 @@ def create_app():
     def scraper_page():
         return render_template("scraper.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
 
+    # Note: scraper stats view is embedded within the main /scraper page as a subpage/tab.
+
     @app.route("/database")
     def database_page():
         return render_template("diagnostics.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
@@ -150,9 +152,14 @@ def create_app():
 
     return app
 
-if __name__ == "__main__":
+def main(use_reloader: bool | None = None):
+    """Create and run the dashboard app, preferring Socket.IO runner.
+
+    Args:
+        use_reloader: If not None, override `orchestrator.DASHBOARD_USE_RELOADER`.
+    """
     app = create_app()
-    # Initialise SocketIO and run via Socket.IO server (eventlet/gevent)
+    effective_reloader = use_reloader if use_reloader is not None else orchestrator.DASHBOARD_USE_RELOADER
     try:
         from mangascraper.dashboard_utils import socketio_ as socketio_helper
         sio = socketio_helper.init_app(app)
@@ -161,13 +168,17 @@ if __name__ == "__main__":
             host=orchestrator.DASHBOARD_HOST,
             port=orchestrator.DASHBOARD_PORT,
             debug=orchestrator.DASHBOARD_DEBUG,
-            use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
+            use_reloader=effective_reloader,
         )
     except Exception:
-        # Fallback: run vanilla Flask if SocketIO not available
+        # Fallback: run vanilla Flask if Socket.IO not available
         app.run(
             host=orchestrator.DASHBOARD_HOST,
             port=orchestrator.DASHBOARD_PORT,
             debug=orchestrator.DASHBOARD_DEBUG,
-            use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
+            use_reloader=effective_reloader,
         )
+
+
+if __name__ == "__main__":
+    main()

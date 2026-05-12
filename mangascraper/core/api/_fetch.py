@@ -25,7 +25,7 @@ class Fetch:
     def _ensure_mirrors(session):
         """Fetch CDN/config from nhentai and update orchestrator.nhentai_mirrors once.
 
-        Non-fatal — failures will be ignored and the default mirrors remain.
+        Non-fatal - failures will be ignored and the default mirrors remain.
         """
         global _mirrors_loaded
         if _mirrors_loaded:
@@ -217,7 +217,7 @@ class Fetch:
                 expires_at = cache_entry.get("expires_at")
                 ids = Helpers.normalise_integer_list(cache_entry.get("ids", []))
                 if expires_at is None or expires_at > now:
-                    logger.debug(f"[DATABASE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
+                    logger.debug(f"[API] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
                     return (cache_key, ids)
                 else:
                     logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
