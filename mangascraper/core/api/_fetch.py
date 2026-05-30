@@ -681,30 +681,23 @@ class Fetch:
         max_workers = min(10, len(gallery_ids))
         orchestrator.refresh_globals()
 
-        try:
-            dvt = Dovetail(
-                max_workers=max(1, int(max_workers or 1)),
-                trace=bool(orchestrator.debug),
-                trace_logger=logger,
-                trace_prefix="DVT-MetadataPool",
-            )
-            log("[DOVETAIL] Metadata worker pool initialised.", "debug")
-        except Exception as e:
-            logger.error(f"[DOVETAIL] Failed to initialise metadata worker pool: {e}")
-            raise
-
         def _fetch_one(gallery_id: int):
             return Fetch.gallery_metadata(gallery_id)
 
-        try:
+        results = []
+        with Dovetail(
+            max_workers=max(1, int(max_workers or 1)),
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-MetadataPool",
+        ) as dvt:
+            log("[DOVETAIL] Metadata worker pool initialised.", "debug")
             results = dvt.task.map_blocking(
                 _fetch_one,
                 gallery_ids,
                 max_concurrency=max(1, int(max_workers or 1)),
                 return_exceptions=True,
             )
-        finally:
-            dvt.shutdown(wait=True)
 
         for gallery_id, result in tqdm(
             list(zip(gallery_ids, results)),

@@ -239,36 +239,34 @@ def run_gallery_batch(
     orchestrator.refresh_globals()
     gallery_workers = max(1, int(orchestrator.threads_galleries or 1))
 
-    try:
-        dvt = Dovetail(
-            max_workers=gallery_workers,
-            trace=bool(orchestrator.debug),
-            trace_logger=logger,
-            trace_prefix="DVT-GalleryPool",
-        )
-        log("[DOVETAIL] Gallery worker pool initialised.", "debug")
-    except Exception as e:
-        logger.error(f"[DOVETAIL] Failed to initialise gallery worker pool: {e}")
-        raise
-    _register_dovetail(dvt)
-
+    dvt = None
+    results: list = []
     def download_gallery_task(gallery_id: int):
         return process_gallery_sync(int(gallery_id))
 
     try:
-        outcomes = dvt.task.map_blocking(
-            download_gallery_task,
-            gallery_ids,
-            max_concurrency=gallery_workers,
-            return_exceptions=True,
-        )
-        return [out for out in outcomes if isinstance(out, Exception)]
+        with Dovetail(
+            max_workers=gallery_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-GalleryPool",
+        ) as dvt:
+            log("[DOVETAIL] Gallery worker pool initialised.", "debug")
+            _register_dovetail(dvt)
+            outcomes = dvt.task.map_blocking(
+                download_gallery_task,
+                gallery_ids,
+                max_concurrency=gallery_workers,
+                return_exceptions=True,
+            )
+            results = [out for out in outcomes if isinstance(out, Exception)]
     finally:
-        try:
-            _active_dovetails.remove(dvt)
-        except ValueError:
-            pass
-        dvt.shutdown(wait=True)
+        if dvt is not None:
+            try:
+                _active_dovetails.remove(dvt)
+            except ValueError:
+                pass
+    return results
 
 def _signal_handler(signum, frame):
     """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
@@ -688,19 +686,7 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
     orchestrator.refresh_globals()
     image_workers = max(1, int(orchestrator.threads_images or 1))
 
-    try:
-        dvt = Dovetail(
-            max_workers=image_workers,
-            trace=bool(orchestrator.debug),
-            trace_logger=logger,
-            trace_prefix="DVT-ImagePool",
-        )
-        log("[DOVETAIL] Image worker pool initialised.", "debug")
-    except Exception as e:
-        logger.error(f"[DOVETAIL] Failed to initialise image worker pool: {e}")
-        raise
-    _register_dovetail(dvt)
-
+    dvt = None
     def download_image_task(task_tuple):
         page, urls, path, _ = task_tuple
         return bool(
@@ -716,26 +702,35 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
         )
 
     try:
-        results = dvt.task.map_blocking(
-            download_image_task,
-            creator_tasks,
-            max_concurrency=image_workers,
-            return_exceptions=True,
-        )
-        all_succeeded = True
-        for result in results:
-            if isinstance(result, Exception):
-                all_succeeded = False
-                continue
-            if not result:
-                all_succeeded = False
-        return all_succeeded
+        with Dovetail(
+            max_workers=image_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-ImagePool",
+        ) as dvt:
+            log("[DOVETAIL] Image worker pool initialised.", "debug")
+            _register_dovetail(dvt)
+
+            results = dvt.task.map_blocking(
+                download_image_task,
+                creator_tasks,
+                max_concurrency=image_workers,
+                return_exceptions=True,
+            )
+            all_succeeded = True
+            for result in results:
+                if isinstance(result, Exception):
+                    all_succeeded = False
+                    continue
+                if not result:
+                    all_succeeded = False
+            return all_succeeded
     finally:
-        try:
-            _active_dovetails.remove(dvt)
-        except ValueError:
-            pass
-        dvt.shutdown(wait=True)
+        if dvt is not None:
+            try:
+                _active_dovetails.remove(dvt)
+            except ValueError:
+                pass
 
 #----------------------
 # ARCHIVE CONVERSION
