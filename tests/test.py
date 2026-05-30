@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/core/tester.py
+# mangascraper/core/test.py
 
 import os
 import time

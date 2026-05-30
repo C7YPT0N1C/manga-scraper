@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_db.py
 
 from __future__ import annotations
@@ -15,12 +16,7 @@ from mangascraper.core.api._constants import (
     CACHED_METADATA_TTL_SECONDS,
     DOWNLOAD_ROOT_MARKER_FILE,
 )
-from mangascraper.core.api._helpers import (
-    Helpers,
-    prune_all_caches,
-    read_cached_metadata_entry,
-    clear_cached_items,
-)
+from mangascraper.core.api._helpers import Helpers, prune_all_caches, read_cached_metadata_entry, clear_cached_items
 from mangascraper.core.api._smart_rules import evaluate_smart_rpn, smart_expression_to_rpn
 
 ####################################################################################################################
@@ -768,29 +764,41 @@ class DB:
                     continue
                 result.append((gid, Helpers.safe_text(row[1], ""), Helpers.safe_text(row[2], ""), Helpers.safe_text(row[3], "")))
             return result
+    @staticmethod
+    def fetch_rows_as_dicts(table_name: str, columns: list | None = None, where: str | None = None, params: tuple | None = None, limit: int | None = None) -> list[dict]:
+        """Select rows from a table and return a list of dicts keyed by column name.
 
-        @staticmethod
-        def fetch_rows_as_dicts(table_name: str, columns: list | None = None, where: str | None = None, params: tuple | None = None, limit: int | None = None) -> list[dict]:
-            """Select rows from a table and return a list of dicts keyed by column name.
+        - `columns` defaults to `None` meaning `*` (all columns).
+        - `where` may include placeholders (`?`) and `params` will be bound.
+        - `limit` can restrict returned rows.
 
-            - `columns` defaults to `None` meaning `*` (all columns).
-            - `where` may include placeholders (`?`) and `params` will be bound.
-            - `limit` can restrict returned rows.
+        This helper takes the DB lock and creates its own connection so callers
+        don't need to manage cursors or concern themselves with column ordering.
+        """
 
-            This helper takes the DB lock and creates its own connection so callers
-            don't need to manage cursors or concern themselves with column ordering.
-            """
+        with db_lock, DB.dbconnect() as conn:
+            cursor = conn.cursor()
+            columns_sql = ", ".join(columns) if columns else "*"
+            sql = f"SELECT {columns_sql} FROM {table_name}"
+            if where:
+                sql += " WHERE " + where
+            if limit and isinstance(limit, int) and limit > 0:
+                sql += " LIMIT " + str(int(limit))
+            cursor.execute(sql, params or ())
+            return DB.rows_to_dicts(cursor)
 
-            with db_lock, DB.dbconnect() as conn:
-                cursor = conn.cursor()
-                columns_sql = ", ".join(columns) if columns else "*"
-                sql = f"SELECT {columns_sql} FROM {table_name}"
-                if where:
-                    sql += " WHERE " + where
-                if limit and isinstance(limit, int) and limit > 0:
-                    sql += " LIMIT " + str(int(limit))
-                cursor.execute(sql, params or ())
-                return DB.rows_to_dicts(cursor)
+    @staticmethod
+    def rows_to_dicts(cursor) -> list[dict]:
+        """Convert a DB cursor's current result set into a list of dicts keyed by column name."""
+        cols = [c[0] for c in (cursor.description or [])]
+        rows = []
+        for r in cursor.fetchall():
+            row = {}
+            for i, v in enumerate(r):
+                key = cols[i] if i < len(cols) else str(i)
+                row[key] = v
+            rows.append(row)
+        return rows
 
     @staticmethod
     def remove_gallery_from_database(gallery_id: int) -> dict:
@@ -1024,13 +1032,13 @@ class DB:
                             if remaining == 0:
                                 cursor.execute("DELETE FROM Galleries WHERE id=?", (gid,))
                                 stats["removed_galleries"] += 1
-                                logger.info(f"[DATABASE_CLEANUP] Removed orphaned gallery {gid}")
+                                logger.info(f"[DATABASE] Removed orphaned gallery {gid}")
                         except Exception as e:
                             stats["errors"].append(f"Error removing gallery {gid}: {e}")
-                            logger.warning(f"[DATABASE_CLEANUP] Error removing gallery {gid}: {e}")
+                            logger.warning(f"[DATABASE] Error removing gallery {gid}: {e}")
                     conn.commit()
 
-            logger.debug("[DATABASE_CLEANUP] Checking gallery page counts...")
+            logger.debug("[DATABASE] Checking gallery page counts...")
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -1064,7 +1072,7 @@ class DB:
                     if actual_count >= 0 and actual_count < num_p:
                         missing_pages.append((gid, num_p, actual_count, num_p - actual_count, dpath))
                 except Exception as e:
-                    logger.debug(f"[DATABASE_CLEANUP] Error checking pages for gallery {gid}: {e}")
+                    logger.debug(f"[DATABASE] Error checking pages for gallery {gid}: {e}")
 
             with db_lock, DB.dbconnect() as conn:
                 cursor = conn.cursor()
@@ -1078,13 +1086,13 @@ class DB:
                     stats["errors"].append(str(err))
             except Exception as e:
                 stats["errors"].append(f"Smart collection refresh failed: {e}")
-                logger.warning(f"[DATABASE_CLEANUP] Smart collection refresh failed: {e}")
+                logger.warning(f"[DATABASE] Smart collection refresh failed: {e}")
 
             stats["page_checks"] = len(missing_pages)
-            logger.info(f"[DATABASE_CLEANUP] Cleanup complete: {stats}")
+            logger.info(f"[DATABASE] Cleanup complete: {stats}")
 
         except Exception as e:
-            logger.error(f"[DATABASE_CLEANUP] Fatal error during cleanup: {e}")
+            logger.error(f"[DATABASE] Fatal error during cleanup: {e}")
             stats["errors"].append(f"Fatal error: {e}")
 
         return stats
@@ -1697,9 +1705,9 @@ class DB:
                 ext_download_path = meta.get("extension_download_path") or meta.get("download_path") or None
                 base_ext_path = None
                 try:
-                    from mangascraper.extensions.extension_manager import calculate_extension_download_path
+                    from mangascraper.extensions.extension_manager import fetch_extension_download_path
                     ext_name = meta.get("extension_used") or meta.get("extension") or getattr(orchestrator, "extension", "skeleton")
-                    base_ext_path = calculate_extension_download_path(ext_name)
+                    base_ext_path = fetch_extension_download_path(ext_name)
                 except Exception:
                     base_ext_path = getattr(orchestrator, "extension_download_path", getattr(orchestrator, "DEFAULT_EXTENSION_DOWNLOAD_PATH", ""))
                 if not ext_download_path:
@@ -1725,7 +1733,8 @@ class DB:
 
             if gallery_title:
                 # Always store download_path in the canonical format: "(<id>) <clean_title>"
-                gallery_base = f"({int(gallery_id)}) {gallery_title}"
+                safe_gallery_title = Helpers.sanitise(gallery_title)
+                gallery_base = f"({int(gallery_id)}) {safe_gallery_title}"
                 if is_archive:
                     download_path = os.path.join(ext_download_path, cleaned_creator, f"{gallery_base}.{ext}")
                 else:

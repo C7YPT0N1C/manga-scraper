@@ -1,6 +1,2 @@
-"""Built-in skeleton extension package."""
-
-from . import skeleton__msext
-
-__all__ = ["skeleton__msext"]
+"""Skeleton extension package (version 7.3.0)."""
 

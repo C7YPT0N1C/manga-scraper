@@ -88,6 +88,23 @@ install_python_packages() {
     echo "Python packages installed."
 }
 
+sync_git_submodules() {
+    if [ ! -d "$SCRAPER_DIR/.git" ]; then
+        return
+    fi
+
+    if [ ! -f "$SCRAPER_DIR/.gitmodules" ]; then
+        echo "No submodules configured in this checkout."
+        return
+    fi
+
+    echo "Syncing git submodules..."
+    git -C "$SCRAPER_DIR" submodule sync --recursive || true
+    git -C "$SCRAPER_DIR" submodule update --init --recursive || {
+        echo "Warning: failed to initialise/update submodules. Continuing without submodule content."
+    }
+}
+
 install_filebrowser() {
         echo -e "\nInstalling FileBrowser..."
 
@@ -150,6 +167,8 @@ install_scraper() {
             echo "Could not update repo on branch $branch"
         }
     fi
+
+    sync_git_submodules
 
     # Setup Python venv
     if [ ! -d "$SCRAPER_DIR/venv" ]; then
@@ -315,6 +334,7 @@ start_update() {
     # Reset and fetch branch (force overwrite local changes)
     git fetch origin
     git reset --hard "origin/$branch" || { echo "Branch '$branch' not found!"; return 1; }
+    sync_git_submodules
 
     # Update Python environment
     source "$SCRAPER_DIR/venv/bin/activate"

@@ -131,7 +131,7 @@ class Build:
             else:
                 final_value = safe_mod or ""
 
-            logger.debug(f"[DATABASE]: Generated Cache Key '{search_type}:{final_value}'")
+            logger.debug(f"[API]: Generated Cache Key '{search_type}:{final_value}'")
             return f"{search_type}:{final_value}"
         return search_type
 

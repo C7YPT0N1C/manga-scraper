@@ -1,9 +1,10 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_fetch.py
 
 from __future__ import annotations
 import time, requests
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from dovetail import Dovetail
 
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import logger, log, log_clarification
@@ -25,7 +26,7 @@ class Fetch:
     def _ensure_mirrors(session):
         """Fetch CDN/config from nhentai and update orchestrator.nhentai_mirrors once.
 
-        Non-fatal — failures will be ignored and the default mirrors remain.
+        Non-fatal - failures will be ignored and the default mirrors remain.
         """
         global _mirrors_loaded
         if _mirrors_loaded:
@@ -217,7 +218,7 @@ class Fetch:
                 expires_at = cache_entry.get("expires_at")
                 ids = Helpers.normalise_integer_list(cache_entry.get("ids", []))
                 if expires_at is None or expires_at > now:
-                    logger.debug(f"[DATABASE] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
+                    logger.debug(f"[API] Using cached Gallery IDs for key '{cache_key}' (count: {len(ids)})")
                     return (cache_key, ids)
                 else:
                     logger.debug(f"Cache entry for {cache_key} expired (expires_at={expires_at}, now={now}). Will fetch from API.")
@@ -309,7 +310,7 @@ class Fetch:
                     if end_page is not None and page > end_page:
                         break
                     url = Build.url(qt, query_value, sort_value, page)
-                    log(f"Fetcher: Requesting URL: {url}", "debug")
+                    log(f"[Fetcher] Requesting URL: {url}", "debug")
                     resp = None
                     for api_attempt in range(1, orchestrator.max_retries + 1):
                         try:
@@ -441,14 +442,14 @@ class Fetch:
                         num_pages = len(images.get("pages", []))
                         orchestrator.total_gallery_images += num_pages
 
-                    log(f"Fetcher: {qt}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
+                    log(f"[Fetcher] {qt}{query_str}, Page {page}: Fetched {len(batch)} Gallery IDs", "info")
                     log(f"Current Total Images across All Galleries: {orchestrator.total_gallery_images}", "debug")
 
                     if not results:
-                        logger.info(f"Fetcher: {qt}{query_str}, Page {page}: No more results from NHentai, stopping.")
+                        logger.info(f"[Fetcher] {qt}{query_str}, Page {page}: No more results from NHentai, stopping.")
                         break
                     if not batch:
-                        logger.debug(f"Fetcher: {qt}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
+                        logger.debug(f"[Fetcher] {qt}{query_str}, Page {page}: All galleries filtered out, continuing to next page.")
                         page += 1
                         continue
 
@@ -520,7 +521,7 @@ class Fetch:
                 for mirror in orchestrator.nhentai_mirrors
             ]
 
-            log(f"Fetcher: Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
+            log(f"[Fetcher] Built image URLs for Gallery {meta.get('id','?')}: Page {page}: {urls}", "debug")
             return urls
 
         except Exception as e:
@@ -538,7 +539,21 @@ class Fetch:
         raw_cache = Cache.Load.cached_metadata()
         cached_meta = raw_cache.get(gallery_id)
         if cached_meta and isinstance(cached_meta, dict):
-            return cached_meta
+            # Only trust cached raw metadata when it has the minimum shape
+            # required by downloader/image URL logic.
+            images = cached_meta.get("images")
+            pages = images.get("pages") if isinstance(images, dict) else None
+            media_id = cached_meta.get("media_id")
+            if isinstance(pages, list) and media_id:
+                log(f"[Fetcher] Gallery {gallery_id}: Using cached raw metadata ({len(pages)} pages).", "debug")
+                return cached_meta
+            log(
+                f"[Fetcher] Gallery {gallery_id}: Cached raw metadata rejected "
+                f"(images_is_dict={isinstance(images, dict)}, pages_is_list={isinstance(pages, list)}, media_id_present={bool(media_id)}).",
+                "debug",
+            )
+        else:
+            log(f"[Fetcher] Gallery {gallery_id}: No cached raw metadata entry, fetching.", "debug")
 
         metadata_session = Get.session(referrer="API", status="return")
         url = f"{orchestrator.nhentai_api_base}/galleries/{gallery_id}"
@@ -546,7 +561,7 @@ class Fetch:
         for attempt in range(1, orchestrator.max_retries + 1):
             try:
                 log_clarification("debug")
-                log(f"Fetcher: Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
+                log(f"[Fetcher] Fetching metadata for Gallery: {gallery_id}, URL: {url}", "debug")
 
                 resp = metadata_session.get(url, timeout=(60, 60))
                 from mangascraper.core.api._sleep import Sleep
@@ -598,7 +613,7 @@ class Fetch:
                     pass
 
                 log_clarification("debug")
-                log(f"Fetcher: Fetched metadata for Gallery: {gallery_id}", "debug")
+                log(f"[Fetcher] Fetched metadata for Gallery: {gallery_id}", "debug")
                 return norm
 
             except requests.HTTPError as e:
@@ -651,7 +666,7 @@ class Fetch:
     @staticmethod
     def fetch_metadata_batch(gallery_ids: list) -> dict:
         """
-        Fetch metadata for multiple galleries efficiently using threading.
+        Fetch metadata for multiple galleries efficiently using Dovetail workers.
         Used for pre-fetching before filtering/sizing.
         """
         if not gallery_ids:
@@ -664,18 +679,38 @@ class Fetch:
         metadata = {}
         failed_ids = []
         max_workers = min(10, len(gallery_ids))
+        orchestrator.refresh_globals()
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(Fetch.gallery_metadata, gid): gid for gid in gallery_ids}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching metadata", unit="gallery"):
-                gallery_id = futures[future]
-                try:
-                    meta = future.result()
-                    if meta and isinstance(meta, dict):
-                        metadata[gallery_id] = meta
-                except Exception as e:
-                    logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {e}")
-                    failed_ids.append(gallery_id)
+        def _fetch_one(gallery_id: int):
+            return Fetch.gallery_metadata(gallery_id)
+
+        results = []
+        with Dovetail(
+            max_workers=max(1, int(max_workers or 1)),
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-MetadataPool",
+        ) as dvt:
+            log("[DOVETAIL] Metadata worker pool initialised.", "debug")
+            results = dvt.task.map_blocking(
+                _fetch_one,
+                gallery_ids,
+                max_concurrency=max(1, int(max_workers or 1)),
+                return_exceptions=True,
+            )
+
+        for gallery_id, result in tqdm(
+            list(zip(gallery_ids, results)),
+            total=len(gallery_ids),
+            desc="Fetching metadata",
+            unit="gallery",
+        ):
+            if isinstance(result, Exception):
+                logger.debug(f"Failed to fetch metadata for Gallery {gallery_id}: {result}")
+                failed_ids.append(gallery_id)
+                continue
+            if result and isinstance(result, dict):
+                metadata[gallery_id] = result
 
         if failed_ids:
             logger.warning(f"Failed to fetch metadata for {len(failed_ids)}/{len(gallery_ids)} galleries")
@@ -749,7 +784,12 @@ class Fetch:
 
         for gallery_id in tqdm(ids_to_fetch, desc="Fetching gallery metadata", unit="gallery"):
             try:
-                meta = Fetch.gallery_metadata(gallery_id)
+                try:
+                    meta = Fetch.gallery_metadata(gallery_id)
+                except RuntimeError:
+                    # Configuration-level failures (no mirrors / no API base) should
+                    # abort the entire metadata fetch operation so callers can cancel.
+                    raise
                 if meta and isinstance(meta, dict):
                     meta_entry = Cache.Save.cache(meta, gallery_id)
                     if meta_entry:

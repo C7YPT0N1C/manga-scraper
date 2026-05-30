@@ -1,51 +1,36 @@
 # manga-scraper
 
-- [**Overview and Disclaimer**](#overview-and-disclaimer)
-- [**Related Repository**](#related-repository)
-- [**Project Note (Vibecoding Disclaimer)**](#project-note-vibecoding-disclaimer)
-- [**Features**](#features)
-  - [Important Notes and Known Pitfalls](#important-notes-and-known-pitfalls)
-  - [**TO-DO LIST**](#to-do-list)
-- [**Installation**](#installation)
+- [Overview](#overview)
+- [Features](#features)
+- [Project Notes](#project-notes)
+- [Installation](#installation)
   - [System Requirements](#system-requirements)
   - [Installation Commands](#installation-commands)
-- [**Post Install**](#post-install)
-- [**Usage**](#usage)
+- [Post Install](#post-install)
+- [Usage](#usage)
   - [CLI Arguments](#cli-arguments)
   - [Examples](#examples)
-- [**Documentation**](#documentation)
+- [Documentation](#documentation)
 
-## Overview and Disclaimer
-manga-scraper is a Python scraper for a range of manga / doujin sites (such as Mangadex, nhentai), with extensions to extend functionality.
+## Overview
+`MangaScraper`is a Python scraper for a range of manga / doujin sites (such as Mangadex, nhentai), with extensions to extend functionality. `MangaScraper` uses:
+- **[Dovetail](https://github.com/anthrosystems/dovetail)** for more "precise" multithreading cuz asyncio is a pain in my ass. It's probably a skill issue but I love solving the problems I create for myself.
+- **[Filebrowser](https://github.com/filebrowser/filebrowser)** (Linux installs only) for remote file access from your browser!
 
-Uses **[Filebrowser](https://github.com/filebrowser/filebrowser)** for remote file access from your browser! **Please go support them!**
+**Please go support them!**
 
-The **[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server)** Extension automatically installs Suwayomi, creates a category for scraped galleries and adds them to it.
+The companion extension repository is **[manga-scraper-extensions](https://github.com/C7YPT0N1C/manga-scraper-extensions)**. Use that repository to review extension templates, available extension modules, and extension manifest details.
 
-This project supports two main ways of working:
-- CLI mode for automated scraping jobs.
-- Dashboard mode for easier browser-based control (runtime, search, queue, logs, and local gallery browsing).
+**For some context**, this project was originally created as a mass archiver for nhentai due to the *multiple* takedowns and legal threats the site faced. This issue has been *"resolved"*, but since I had already built a rather functional project, it has been (or at least is planned to be) slightly repurposed into:
+- A scraper / archiver for photo-based media in general, such as doujinshis, manga and manhwa.
+- A sort of test bench for [Dovetail](https://github.com/anthrosystems/dovetail).
 
-## Related Repository
-The companion extension repository is:
-
-- **[manga-scraper-extensions](https://github.com/C7YPT0N1C/manga-scraper-extensions)**
-
-Use that repository to review extension templates, available extension modules, and extension manifest details.
-
-## Project Note (Vibecoding Disclaimer)
-Parts of this project are vibecoded.
-
-That said, there have also been significant manual edits and ongoing maintenance done by the project owner. In particular, the dashboard is basically fully vibecoded, while core behaviour, fixes, and refinements have also been manually reviewed and adjusted by hand over time.
-
-**DISCLAIMERS:**
-- This project is intended for local use only. Do not expose it directly to the public internet. **These scripts run as root, so use at your own risk.**
-- A Windows version is not currently planned.
+We love the effects of sunk cost fallacy.
 
 ## Features
 - Core scraping workflows for nhentai and extension-based sources
 - Automation-focused CLI with query/filter/output controls
-- Dashboard for configuration, searching, queue management, runtime status, local gallery browsing, and logs
+- The dashboard for configuration, searching, queue management, runtime status, local gallery browsing, and logs
 - Extension support (install, remove, and switch active extension)
 - Output format support: `directory`, `zip`, and `cbz`
 - Multi-threaded downloads with retry handling
@@ -53,16 +38,22 @@ That said, there have also been significant manual edits and ongoing maintenance
 - Optional Tor/VPN-friendly networking configuration
 - Integrated ecosystem support for Filebrowser and Suwayomi
 
-## Important Notes and Known Pitfalls
-- Suwayomi is NOT a mass downloader, saving large amounts of galleries will make it tweak out if the server doesn't have enough resources.
-- Additional improvements are planned.
+~~A Windows version is not currently planned.~~ The dashboard provides a WebGUI for both Windows and Linux.
+
+## Project Notes
+### General Disclaimers
+- This project is intended for local use only. Do not expose it directly to the public internet. **This projects run as root, so use at your own risk.**
+- **To the owners of the sites that this project uses, this project tries its best to avoid hammering servers and staying within API rate limits, however, please do not hesitate to contact me if you no longer want this project to use your site.**
+
+### Vibecoding Disclaimer
+Some parts of the overall project have been vibecoded. That said, there have also been significant manual edits and ongoing maintenance done by the project owner. The dashboard in particular has been completely vibecoded (I suck at HTML/WebDev), however, core behaviour, fixes, and refinements have been manually reviewed and adjusted by hand.
 
 ## Installation
 ### System Requirements
-- OS: `Ubuntu / Linux server or VM`
+- OS: `Windows Desktop` or `Ubuntu / Linux server or VM`
 - RAM: `Recommended: ~4GB (scale based on need)`
-- Storage: **`A typical doujin is ~16MB; plan capacity accordingly.`**
-- Optional: `chafa` (for interactive "Read a gallery" mode)
+- Storage: **`A typical doujin is ~16MB (I think); plan capacity accordingly.`**
+- Networking: `You'd probably like to have a decent Internet connection lol`
 
 ### Installation Commands
 One Line Install: `wget -O mangascraper-install.sh https://github.com/C7YPT0N1C/manga-scraper/raw/branch/main/mangascraper-install.sh && sudo bash ./mangascraper-install.sh --install`
@@ -76,7 +67,6 @@ cd manga-scraper
 # Run the installer script
 chmod +x mangascraper-install.sh
 ./mangascraper-install.sh
-
 ```
 
 - Install: `mangascraper-install.sh (--install is optional)`
@@ -85,14 +75,17 @@ chmod +x mangascraper-install.sh
 - Uninstall: `mangascraper-install.sh --uninstall (or --remove)`
 
 ## Post Install
+- Dashboard available at: `http://<SERVER-IP-OR-DOMAIN>:6969/`
 - FileBrowser available at: `http://<SERVER-IP-OR-DOMAIN>:8080/`
   - User: `admin`
   - Password created on install.
     - You can change the password at any time using `filebrowser users update admin --password "PASSWORD"` --database /opt/filebrowser/filebrowser.db --perm.admin
-- Suwayomi Webpage available at: `http://<SERVER-IP-OR-DOMAIN>:4567/`
-- Suwayomi GraphQL Page available at: `http://<SERVER-IP-OR-DOMAIN>:4567/api/graphql` (primarily useful for development and debugging).
 
 ## Usage
+This project supports two main ways of working:
+- CLI mode for automated scraping jobs.
+- Dashboard mode for easier browser-based control (runtime, search, queue, logs, and local gallery browsing).
+
 ### CLI Arguments
 - An environment file for the scraper `config.env` will be automatically created during installation and can be found at `/opt/manga-scraper/config.env`.
 
@@ -170,7 +163,7 @@ manga-scraper --id-range 500000 500100
 ### Configuration
 - The config file is `/opt/manga-scraper/mangascraper/core/manga-scraper.env`.
 - CLI flags override config values for that run and update the env file.
-- Common keys: `EXTENSION`, `NHENTAI_MIRRORS`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
+- Common keys: `EXTENSION`, `GALLERY_FORMAT`, `THREADS_GALLERIES`, `THREADS_IMAGES`.
 
 ### Gallery Selection
 - Use `--file` with a file containing IDs or NHentai URLs (one per line).

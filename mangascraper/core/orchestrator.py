@@ -8,12 +8,13 @@ from datetime import datetime
 # DIRECTORIES
 ##########################################################################################
 
-# Use Linux defaults in production, but Windows-safe local defaults for development/testing.
+# Use install-directory defaults by default.
 _SOURCE_CHECKOUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 if os.name == "nt":
     _WINDOWS_FALLBACK_DIR = os.path.join(os.path.expanduser("~"), "manga-scraper")
-    if os.path.isdir(os.path.join(_SOURCE_CHECKOUT_DIR, "mangascraper")):
+    _USE_SOURCE_CHECKOUT = str(os.getenv("SCRAPER_DIR_USE_SOURCE_CHECKOUT", "")).strip().lower() in ("1", "true", "yes", "on")
+    if _USE_SOURCE_CHECKOUT and os.path.isdir(os.path.join(_SOURCE_CHECKOUT_DIR, "mangascraper")):
         _DEFAULT_SCRAPER_DIR = _SOURCE_CHECKOUT_DIR
     else:
         _DEFAULT_SCRAPER_DIR = _WINDOWS_FALLBACK_DIR
@@ -202,7 +203,7 @@ os.makedirs(SCRAPER_DIR, exist_ok=True)
 # ------------------------------------------------------------
 DEFAULT_DASHBOARD_HOST = "0.0.0.0"
 DEFAULT_DASHBOARD_PORT = 6969
-DEFAULT_DASHBOARD_DEBUG = True
+DEFAULT_DASHBOARD_DEBUG = False
 DEFAULT_DASHBOARD_USE_RELOADER = True
 
 DASHBOARD_HOST = DEFAULT_DASHBOARD_HOST
@@ -233,6 +234,8 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
 # ------------------------------------------------------------
 # NHentai Scraper Configuration Defaults
 # ------------------------------------------------------------
+
+DEFAULT_USER_AGENT = "MangaScraper/5.0.0 (https://github.com/C7YPT0N1C/manga-scraper)"
 
 DEFAULT_DOWNLOAD_PATH = os.path.join(SCRAPER_DIR, "downloads")
 download_path = DEFAULT_DOWNLOAD_PATH  # public variable
@@ -386,7 +389,7 @@ skip_post_run = DEFAULT_SKIP_POST_RUN
 DEFAULT_DRY_RUN = False
 dry_run = DEFAULT_DRY_RUN
 
-DEFAULT_CALM = True
+DEFAULT_CALM = False
 calm = DEFAULT_CALM
 
 DEFAULT_DEBUG = False
@@ -659,7 +662,7 @@ def normalise_config():
     Normalise config with defaults persisted to Config in SQLite.
     """
     log_clarification("debug")
-    log("Populating Config...", "debug")
+    log("[CLI] Populating Config...", "debug")
 
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,

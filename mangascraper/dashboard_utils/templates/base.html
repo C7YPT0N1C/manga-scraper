@@ -11,7 +11,11 @@
 </head>
 <body>
   <header class="topbar">
-    <h1><span class="logo-pill">MangaScraper</span> Dashboard</h1>
+    <h1>
+      <span class="logo-pill">MangaScraper</span>
+      Dashboard
+      <span id="topStatusBadge" class="top-status-badge" title="Live run status" style="margin-left:12px; font-size:0.9rem; display:inline-block; padding:2px 8px; border-radius:999px; background:#eee; color:#222;">Loading…</span>
+    </h1>
     <nav class="main-nav">
       <a href="/creators/">Home</a>
       <a href="/collections/">Collections</a>
@@ -32,7 +36,8 @@
     <div id="dynamicBarContent">Status unavailable.</div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/base.js') }}"></script>
+  <!-- Socket.IO client disabled in this build; fallback to HTTP polling only -->
   <script>
     window.__dynamicBarStatusOverride = '';
     window.__dynamicBarStatusOverrideUntil = 0;
@@ -118,60 +123,141 @@
       _applyDynamicBarCollapsedState();
     });
 
+    // Central cache for status updates (shared between socket and fetch)
+    window.__scraperStatusCache = window.__scraperStatusCache || { data: null, ts: 0 };
+    window.__scraperSocketConnected = false;
+
+    // Socket.IO disabled: use HTTP polling only to avoid unstable websocket behaviour
+    (function initSocketStub() {
+      console.debug('[dynamicBar] socket disabled; using HTTP polling only');
+      window.__scraperSocketConnected = false;
+    })();
+
+    // Internal helper that performs a fetch if no live socket is connected.
+    window.__scraperStatusPromise = window.__scraperStatusPromise || null;
+    window.__fetchScraperStatus = async function() {
+      // If socket connected, prefer cached value and avoid network fetch
+      if (window.__scraperSocketConnected) {
+        return window.__scraperStatusCache.data;
+      }
+      if (window.__scraperStatusPromise) return window.__scraperStatusPromise;
+      window.__scraperStatusPromise = (async () => {
+        try {
+          try { console.debug('[dynamicBar] fetching /api/scraper/status'); } catch (e) {}
+          const res = await fetch('/api/scraper/status');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          try {
+            window.__scraperStatusCache = { data: data, ts: Date.now() };
+            window.dispatchEvent(new CustomEvent('scraper-status', { detail: data }));
+          } catch (e) { /* ignore caching errors */ }
+          return data;
+        } catch (err) {
+          return null;
+        } finally {
+          window.__scraperStatusPromise = null;
+        }
+      })();
+      return window.__scraperStatusPromise;
+    };
+
     async function _updateDynamicBarGlobal() {
       const dock = document.getElementById('dynamicBar');
       const content = document.getElementById('dynamicBarContent');
       if (!dock || !content) return;
 
-      try {
-        const res = await fetch('/api/scraper/status');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const c = data.counts || {};
-        const p = data.progress || {};
-        if (window.__dynamicBarStatusOverrideUntil > 0 && Date.now() >= window.__dynamicBarStatusOverrideUntil) {
-          window.__dynamicBarStatusOverride = '';
-          window.__dynamicBarStatusOverrideUntil = 0;
-        }
-        const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
-        const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
-        const completedCount = Number(c.completed ?? p.completed ?? 0);
-        const failedCount = Number(c.failed ?? p.failed ?? 0);
-        const skippedCount = Number(c.skipped ?? p.skipped ?? 0);
-        const pagesTotal = Number(p.total_pages ?? 0);
-        const pagesProcessed = Number(p.pages_processed ?? 0);
-        const pagesPerSecond = Number(p.pages_per_second ?? 0);
-
-        const parts = [
-          `Status: ${dynamicStatus}`,
-          `PID: ${_asText(data.pid, 'N/A')}`,
-          `Queued Galleries: ${_asText(runTotal, 0)}`,
-          `Completed: ${_asText(completedCount, 0)}/${_asText(runTotal, 0)}`,
-          `Failed: ${_asText(failedCount, 0)}/${_asText(runTotal, 0)}`,
-          `Skipped: ${_asText(skippedCount, 0)}/${_asText(runTotal, 0)}`,
-        ];
-        if (pagesTotal > 0) {
-          parts.push(`Pages: ${_asText(pagesProcessed, 0)}/${_asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
-        }
-        parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
-        parts.push(`Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`);
-        if (pagesTotal > 0) {
-          parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
-        }
-        const line = parts.join(' | ');
-        content.textContent = line;
-        dock.style.display = '';
-      } catch (err) {
+      const data = await window.__fetchScraperStatus();
+      if (!data) {
         content.textContent = 'Status unavailable.';
-        // Keep the dynamic bar visible on API errors so users see the status message.
         try { dock.style.display = ''; } catch (e) { /* ignore */ }
+        return;
       }
+
+      const c = data.counts || {};
+      const p = data.progress || {};
+      if (window.__dynamicBarStatusOverrideUntil > 0 && Date.now() >= window.__dynamicBarStatusOverrideUntil) {
+        window.__dynamicBarStatusOverride = '';
+        window.__dynamicBarStatusOverrideUntil = 0;
+      }
+      const dynamicStatus = window.__dynamicBarStatusOverride || String(data.status || 'unknown').toUpperCase();
+      const runTotal = Number(p.total_galleries ?? data.queue_total ?? 0);
+      const completedCount = Number(c.completed ?? p.completed ?? 0);
+      const failedCount = Number(c.failed ?? p.failed ?? 0);
+      const skippedCount = Number(c.skipped ?? p.skipped ?? 0);
+      const pagesTotal = Number(p.total_pages ?? 0);
+      const pagesProcessed = Number(p.pages_processed ?? 0);
+      const pagesPerSecond = Number(p.pages_per_second ?? 0);
+
+      const parts = [
+        `Status: ${dynamicStatus}`,
+        `PID: ${_asText(data.pid, 'N/A')}`,
+        `Queued Galleries: ${_asText(runTotal, 0)}`,
+        `Completed: ${_asText(completedCount, 0)}/${_asText(runTotal, 0)}`,
+        `Failed: ${_asText(failedCount, 0)}/${_asText(runTotal, 0)}`,
+        `Skipped: ${_asText(skippedCount, 0)}/${_asText(runTotal, 0)}`,
+      ];
+      if (pagesTotal > 0) {
+        parts.push(`Pages: ${_asText(pagesProcessed, 0)}/${_asText(pagesTotal, 0)} (${pagesPerSecond.toFixed(2)} Pages/s)`);
+      }
+      parts.push(`Speed: ${_formatHudBytesPerSecond(p.download_speed_bytes ?? 0)}`);
+      parts.push(`Uptime: ${_formatHudDuration(data.uptime_seconds ?? 0)}`);
+      if (pagesTotal > 0) {
+        parts.push(`ETA: ${_formatHudDuration(p.eta_seconds ?? 0)}`);
+      }
+      const line = parts.join(' | ');
+      content.textContent = line;
+      dock.style.display = '';
     }
+
+    // Public helper used by page scripts to get the latest status without hammering the API.
+    // Usage: `await window.getScraperStatus(force)` where `force` (bool) forces an immediate fetch.
+    window.getScraperStatus = async function(force = false) {
+      const now = Date.now();
+      const cache = window.__scraperStatusCache || { data: null, ts: 0 };
+      // If socket connected and we are not forcing, return cached value
+      if (!force && window.__scraperSocketConnected) return cache.data;
+      // Return cached value if recent and not forcing
+      if (!force && cache.data && (now - cache.ts) < 4000) return cache.data;
+      // Otherwise use the central fetcher which deduplicates in-flight requests
+      const data = await window.__fetchScraperStatus();
+      return data || null;
+    };
 
     window.__dynamicBarCollapsed = _loadDynamicBarCollapsedState();
     _applyDynamicBarCollapsedState();
     _updateDynamicBarGlobal();
-    setInterval(_updateDynamicBarGlobal, 5000);
+    // Poll regularly (HTTP polling) when no socket is connected.
+    setInterval(() => {
+      try {
+        if (!window.__scraperSocketConnected) _updateDynamicBarGlobal();
+      } catch (e) {}
+    }, 2000);
+
+    // Top status badge updater (shared on all pages)
+    async function _updateTopBadge() {
+      try {
+        const data = await window.getScraperStatus();
+        const badge = document.getElementById('topStatusBadge');
+        if (!badge) return;
+        if (!data) {
+          badge.textContent = 'No status';
+          badge.style.background = '#eee';
+          return;
+        }
+        const counts = data.counts || {};
+        const queue = Number(data.queue_total || 0);
+        const total = Number(counts.total || 0);
+        const completed = Number(counts.completed || 0);
+        const failed = Number(counts.failed || 0);
+        badge.textContent = `Queued ${queue} • ${completed}/${total}`;
+        // subtle colouring
+        badge.style.background = total > 0 && completed < total ? '#ffd' : '#dfd';
+      } catch (e) {
+        // ignore
+      }
+    }
+    setInterval(_updateTopBadge, 3000);
+    _updateTopBadge();
   </script>
   {% block scripts %}{% endblock %}
 </body>

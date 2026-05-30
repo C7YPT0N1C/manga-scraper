@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_get.py
 
 from __future__ import annotations
@@ -29,16 +30,16 @@ class Get:
         - If status="return", returns the current session without rebuilding.
         """
         log_clarification("debug")
-        logger.debug("Fetcher: Ready.")
-        log("Fetcher: Debugging Started.", "debug")
+        logger.debug("[API] Ready.")
+        log("[API] Debugging Started.", "debug")
 
         orchestrator.refresh_globals()
 
         log_clarification("debug")
         if status == "none":
-            logger.debug(f"{referrer}: Requesting to only retrieve session.")
+            logger.debug(f"[{referrer}] Requesting to only retrieve session.")
         else:
-            logger.debug(f"{referrer}: Requesting to {status} session.")
+            logger.debug(f"[{referrer}] Requesting to {status} session.")
 
         with session_lock:
             # Refresh SSL verification on every access
@@ -52,9 +53,9 @@ class Get:
                 status = "build"
 
             if status == "rebuild":
-                log(f"Rebuilding HTTP session with cloudscraper for {referrer}", "debug")
+                log(f"[API] Rebuilding HTTP session with cloudscraper for {referrer}", "debug")
             else:
-                log(f"Building HTTP session with cloudscraper for {referrer}", "debug")
+                log(f"[API] Building HTTP session with cloudscraper for {referrer}", "debug")
 
             DefaultBrowserProfile = {"browser": "chrome", "platform": "windows", "mobile": False}
             RandomiseBrowserProfile = True
@@ -75,7 +76,7 @@ class Get:
 
             _constants.session.verify = orchestrator.verify_ssl
 
-            DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            DefaultUserAgent = orchestrator.DEFAULT_USER_AGENT
             RandomiseUserAgent = True
             user_agents = [
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
@@ -105,15 +106,15 @@ class Get:
             if orchestrator.use_tor:
                 proxy = "socks5h://127.0.0.1:9050"
                 _constants.session.proxies = {"http": proxy, "https": proxy}
-                logger.info(f"Using Tor proxy: {proxy}")
+                logger.info(f"\n[API] ! Using Tor proxy: {proxy} !")
             else:
                 _constants.session.proxies = {}
-                logger.info("Not using Tor proxy")
+                logger.info("\n[API] ! Not using Tor proxy !")
 
             if status == "rebuild":
-                log("Rebuilt HTTP session.", "debug")
+                log("[API] Rebuilt HTTP session.", "debug")
             else:
-                log("Built HTTP session.", "debug")
+                log("[API] Built HTTP session.", "debug")
 
             return _constants.session
 

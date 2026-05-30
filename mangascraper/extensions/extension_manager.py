@@ -367,6 +367,21 @@ def _load_extension_module(module_name: str, entry_point: str):
     spec.loader.exec_module(module)
     return module
 
+
+def _find_extension_api_module_path(extension_folder: str, extension_name: str) -> str | None:
+    """Search for a per-extension API module inside the extension folder.
+
+    Looks for any file matching `*__api.msext.py` and returns the first
+    match's absolute path, or None if none found.
+    """
+    try:
+        for fn in os.listdir(extension_folder):
+            if fn.lower().endswith("__api.msext.py"):
+                return os.path.join(extension_folder, fn)
+    except Exception:
+        pass
+    return None
+
 def _find_manifest_entry(manifest: dict, extension_name: str) -> dict | None:
     for ext in manifest.get("extensions", []):
         if ext.get("name", "").lower() == extension_name.lower():
@@ -432,7 +447,23 @@ def load_single_extension(
 
     module_name = f"mangascraper.extensions.{ext_entry['name']}.{ext_entry['entry_point'].replace('.py', '')}"
     try:
-        return _load_extension_module(module_name, entry_point)
+        module = _load_extension_module(module_name, entry_point)
+
+        # Attempt to load a per-extension API module (if present) and attach
+        # it to the loaded extension module as `module.api` for convenient
+        # access by the core code (Sleep, downloader, etc.).
+        ext_folder = os.path.dirname(entry_point)
+        api_path = _find_extension_api_module_path(ext_folder, ext_entry['name'])
+        if api_path:
+            api_module_name = f"mangascraper.extensions.{ext_entry['name']}.{os.path.splitext(os.path.basename(api_path))[0]}"
+            try:
+                api_module = _load_extension_module(api_module_name, api_path)
+                setattr(module, "api", api_module)
+                logger.debug(f"Extension '{ext_entry['name']}' API module loaded: {api_path}")
+            except Exception as e:
+                logger.warning(f"Extension '{ext_entry['name']}': Failed to load API module {api_path}: {e}")
+
+        return module
     except Exception as e:
         logger.warning(
             f"Extension: {ext_entry['name']}: Failed to load: {e}. Is an external program managing it?"
@@ -495,6 +526,24 @@ def load_installed_extensions(suppess_pre_run_hook: bool = False):
             module_name = f"mangascraper.extensions.{ext['name']}.{ext['entry_point'].replace('.py', '')}"
             try:
                 module = _load_extension_module(module_name, entry_point)
+
+                # Attempt to load an accompanying API module (if present) and
+                # attach it to the extension module so core code can consult
+                # per-extension configs without a separate loader.
+                try:
+                    ext_folder = os.path.dirname(entry_point)
+                    api_path = _find_extension_api_module_path(ext_folder, ext['name'])
+                    if api_path:
+                        api_module_name = f"mangascraper.extensions.{ext['name']}.{os.path.splitext(os.path.basename(api_path))[0]}"
+                        try:
+                            api_module = _load_extension_module(api_module_name, api_path)
+                            setattr(module, "api", api_module)
+                            logger.debug(f"Extension '{ext['name']}' API module loaded: {api_path}")
+                        except Exception as e:
+                            logger.warning(f"Extension '{ext['name']}': Failed to load API module {api_path}: {e}")
+                except Exception:
+                    pass
+
                 INSTALLED_EXTENSIONS.append(module)
                 if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
                     log(f"Extension: {ext['name']}: Loaded.", "debug")
@@ -626,6 +675,21 @@ def install_selected_extension(extension_name: str, reinstall: bool = False, pro
     entry_point_path = os.path.join(ext_folder, entry_point)
     try:
         module = _load_extension_module(module_name, entry_point_path)
+        # Try to load an accompanying API module if present and attach it
+        # to the entry module as `module.api` for core integration.
+        try:
+            ext_folder = os.path.dirname(entry_point_path)
+            api_path = _find_extension_api_module_path(ext_folder, extension_name)
+            if api_path:
+                api_module_name = f"mangascraper.extensions.{extension_name}.{os.path.splitext(os.path.basename(api_path))[0]}"
+                try:
+                    api_module = _load_extension_module(api_module_name, api_path)
+                    setattr(module, "api", api_module)
+                    logger.debug(f"Extension '{extension_name}' API module loaded during install: {api_path}")
+                except Exception as e:
+                    logger.warning(f"Extension '{extension_name}': Failed to load API module during install {api_path}: {e}")
+        except Exception:
+            pass
     except Exception as e:
         logger.error(f"Extension '{extension_name}': Failed to load entry point after install: {e}")
         return
@@ -708,8 +772,8 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
 
     if suppess_pre_run_hook == False: # Call the extension's pre run hook if not skipped
         log_clarification("debug")
-        logger.debug("Extension Loader: Ready.")
-        log("Extension Loader: Debugging Started.", "debug")
+        logger.debug("[ExtMng] Ready.")
+        log("[ExtMng] Debugging Started.", "debug")
 
     # Ensure local manifest is up-to-date
     update_local_manifest_from_remote()
@@ -739,7 +803,8 @@ def ensure_extension_runtime(name: str = "skeleton", suppess_pre_run_hook: bool 
         if hasattr(ext, "pre_run_hook"):
             ext.pre_run_hook()
         log_clarification()
-        logger.info(f"Selected extension: {final_name}")
+        name = final_name.capitalize()
+        logger.info(f"Selected extension: {name}")
 
     return ext
 
@@ -790,7 +855,7 @@ def get_extension_download_path(extension_name: str) -> str:
         if override_norm != default_norm:
             resolved = _ensure_trailing_slash(override_download_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=override)"
             )
             return resolved
 
@@ -804,13 +869,13 @@ def get_extension_download_path(extension_name: str) -> str:
                     continue
                 resolved = _ensure_trailing_slash(manifest_path)
                 logger.debug(
-                    f"Extension download path resolved: {resolved} (source=manifest)"
+                    f"[ExtMng] Extension download path resolved: {resolved} (source=manifest)"
                 )
                 return resolved
 
     # Fall back to default
     resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    logger.debug(f"[ExtMng] Extension download path resolved: {resolved} (source=default)")
     return resolved
 
 def get_extension_manifest_info(extension_name: str) -> dict | None:
@@ -830,7 +895,7 @@ def get_extension_manifest_info(extension_name: str) -> dict | None:
             return ext
     return None
 
-def calculate_extension_download_path(extension_name: str) -> str:
+def fetch_extension_download_path(extension_name: str) -> str:
     """
     Calculate the DEDICATED_DOWNLOAD_PATH for an extension.
     This helper function removes code duplication from skeleton and suwayomi extensions.
@@ -847,8 +912,8 @@ def calculate_extension_download_path(extension_name: str) -> str:
         str: The DEDICATED_DOWNLOAD_PATH for the extension
 
     Usage in extensions:
-        from mangascraper.extensions.extension_manager import calculate_extension_download_path
-        DEDICATED_DOWNLOAD_PATH = calculate_extension_download_path("skeleton")
+        from mangascraper.extensions.extension_manager import fetch_extension_download_path
+        DEDICATED_DOWNLOAD_PATH = fetch_extension_download_path("skeleton")
     """
 
     extension_name = str(extension_name or "").lower()
@@ -872,7 +937,7 @@ def calculate_extension_download_path(extension_name: str) -> str:
         if override_norm != default_norm:
             resolved = _ensure_trailing_slash(override_download_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=override)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=override)"
             )
             return resolved
 
@@ -886,20 +951,20 @@ def calculate_extension_download_path(extension_name: str) -> str:
         if manifest_path:
             resolved = _ensure_trailing_slash(manifest_path)
             logger.debug(
-                f"Extension download path resolved: {resolved} (source=manifest)"
+                f"[ExtMng] Extension download path resolved: {resolved} (source=manifest)"
             )
             return resolved
 
     # Fall back to default
     resolved = _ensure_trailing_slash(default_path)
-    logger.debug(f"Extension download path resolved: {resolved} (source=default)")
+    logger.debug(f"[ExtMng] Extension download path resolved: {resolved} (source=default)")
     return resolved
 
 #######################################################################
 # Shared Extension Helpers (Non-Hook)
 #######################################################################
 
-def parse_gallery_id(text: str) -> int | None:
+def parse_gallery_id_from_title(text: str) -> int | None:
     if not text:
         return None
     match = re.search(r"\((\d+)\)", str(text))
@@ -1006,7 +1071,7 @@ def find_latest_gallery_entry(creator_folder: str) -> tuple[int | None, str | No
         is_archive = is_cbz or is_zip
         if not (is_dir or is_archive):
             continue
-        entry_id = parse_gallery_id(name)
+        entry_id = parse_gallery_id_from_title(name)
         if entry_id is None:
             continue
         # For archives, strip extension for entry_name, and set is_dir False
@@ -1028,7 +1093,7 @@ def find_latest_cover_id(covers_folder: str) -> int | None:
         return None
     cover_ids = []
     for name in os.listdir(covers_folder):
-        entry_id = parse_gallery_id(name)
+        entry_id = parse_gallery_id_from_title(name)
         if entry_id is not None:
             cover_ids.append(entry_id)
     if not cover_ids:

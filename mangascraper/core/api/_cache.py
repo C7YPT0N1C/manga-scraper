@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/_cache.py
 
 from __future__ import annotations
@@ -11,12 +12,7 @@ from mangascraper.core.api._constants import (
     CACHE_REFERENCES_TTL_SECONDS,
     CACHED_METADATA_TTL_SECONDS,
 )
-from mangascraper.core.api._helpers import (
-    Helpers,
-    read_cached_metadata_entry,
-    clear_cached_items,
-    prune_all_caches,
-)
+from mangascraper.core.api._helpers import Helpers, read_cached_metadata_entry, clear_cached_items, prune_all_caches
 
 ####################################################################################################################
 # CACHE CLASS
@@ -137,11 +133,11 @@ class Cache:
                 lookup_key = Helpers.safe_text(cache_key, "")
                 references_entry = read_cached_metadata_entry(cache_key=lookup_key)["references"].get(str(lookup_key))
                 if not references_entry or not isinstance(references_entry, dict):
-                    logger.debug(f"[CacheLoad] cache_key='{lookup_key}' returned no references entry")
+                    logger.debug(f"[Cache] cache_key='{lookup_key}' returned no references entry")
                     return []
                 ids = references_entry.get("ids")
                 if not ids or not isinstance(ids, list):
-                    logger.debug(f"[CacheLoad] cache_key='{lookup_key}' had empty/non-list ids payload")
+                    logger.debug(f"[Cache] cache_key='{lookup_key}' had empty/non-list ids payload")
                     return []
                 normalised_ids = []
                 for gid in ids:
@@ -150,7 +146,7 @@ class Cache:
                     except (TypeError, ValueError):
                         continue
                 logger.debug(
-                    f"[CacheLoad] cache_key='{lookup_key}' loaded ids_raw={len(ids)} ids_normalised={len(normalised_ids)}"
+                    f"[Cache] cache_key='{lookup_key}' loaded ids_raw={len(ids)} ids_normalised={len(normalised_ids)}"
                 )
                 return normalised_ids
 

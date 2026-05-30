@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # mangascraper/core/downloader.py
 
-import os, sys, time, random, concurrent.futures, math, zipfile, shutil, signal, tempfile, threading
+import os, sys, time, random, math, zipfile, shutil, signal, tempfile, threading
+from typing import Callable
 from tqdm import tqdm
 from tqdm.contrib.concurrent import thread_map
 
@@ -10,6 +11,7 @@ from mangascraper.core.orchestrator import *
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core.api.api import *
 from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
+from dovetail import Dovetail
 
 ####################################################################################################
 # Global Variables
@@ -54,12 +56,12 @@ def _ensure_managed_download_root(root_path: str, extension_name: str = ""):
             with open(marker_path, "w", encoding="utf-8") as f:
                 f.write(marker_text)
     except Exception as e:
-        logger.warning(f"Downloader: Could not write marker file at '{marker_path}': {e}")
+        logger.warning(f"[Downloader] Could not write marker file at '{marker_path}': {e}")
 
     try:
         scraperapi.DB.upsert_download_location(safe_root, extension_used=extension_label)
     except Exception as e:
-        logger.warning(f"Downloader: Could not upsert download location '{safe_root}': {e}")
+        logger.warning(f"[Downloader] Could not upsert download location '{safe_root}': {e}")
 
 ####################################################################################################
 # Select extension (skeleton fallback)
@@ -78,7 +80,7 @@ def load_extension(suppess_pre_run_hook: bool = False):
     extension_name = getattr(active_extension, "__name__", "")
     
     if suppess_pre_run_hook==False:
-        logger.debug(f"Downloader: Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
+        logger.debug(f"[Downloader] Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
         log_clarification()
         log(f"Downloading Galleries To: {download_location}")
 
@@ -158,7 +160,7 @@ def time_estimate(context: str, id_list: list, average_gallery_download_time: in
     log_clarification("warning")
     log(f"Starting {context} with {num_galleries} Galleries{total_pages_suffix}:")
     log(f"Estimated Time: {fmt_time(best_case)} - {fmt_time(worst_case)}\n")
-    log(f"Estimated Total API Hits: {total_api_hits}\n", "debug")
+    log(f"[API] Estimated Total API Hits: {total_api_hits}\n", "debug")
     
 # Space monitoring for progress display
 space_monitor = {
@@ -167,22 +169,22 @@ space_monitor = {
     "galleries_processed": 0,
 }
 
-# Thread pool management for graceful shutdown
-_active_executors = []
+# Dovetail worker-pool management for graceful shutdown
+_active_dovetails = []
 _shutdown_event = None
 
-def _register_executor(executor):
-    """Register a ThreadPoolExecutor for graceful shutdown."""
-    _active_executors.append(executor)
+def _register_dovetail(dovetail: Dovetail):
+    """Register a Dovetail instance for graceful shutdown."""
+    _active_dovetails.append(dovetail)
 
 def _shutdown_all_executors(wait=True):
-    """Shutdown all registered executors gracefully."""
-    for executor in _active_executors:
+    """Shutdown all registered Dovetail pools gracefully."""
+    for dovetail in _active_dovetails:
         try:
-            executor.shutdown(wait=wait)
+            dovetail.shutdown(wait=wait)
         except Exception as e:
             logger.warning(f"Error shutting down executor: {e}")
-    _active_executors.clear()
+    _active_dovetails.clear()
 
 
 def _is_db_locked_error(error: Exception) -> bool:
@@ -193,7 +195,7 @@ def _is_db_locked_error(error: Exception) -> bool:
 def _wait_for_db_unlock(context: str = "database") -> None:
     orchestrator.refresh_globals()
     wait_seconds = max(1.0, float(getattr(orchestrator, "min_retry_sleep", 1) or 1))
-    logger.warning(f"Downloader: {context} is locked. Waiting {wait_seconds:.1f}s before retrying...")
+    logger.warning(f"[Downloader] {context} is locked. Waiting {wait_seconds:.1f}s before retrying...")
     time.sleep(wait_seconds)
 
 
@@ -206,6 +208,65 @@ def _call_db_with_lock_wait(func, *args, context: str = "database", **kwargs):
                 _wait_for_db_unlock(context=context)
                 continue
             raise
+
+
+def _safe_symlink_or_copy(src: str, dest: str) -> bool:
+    """Prefer symlink; fall back to copying (file/dir) when symlink is unavailable."""
+    try:
+        os.symlink(src, dest)
+        return True
+    except Exception as symlink_error:
+        try:
+            if os.path.isdir(src):
+                shutil.copytree(src, dest)
+            else:
+                shutil.copy2(src, dest)
+            logger.debug(f"[Downloader] Symlink unavailable; copied instead: {src} -> {dest} ({symlink_error})")
+            return True
+        except Exception as copy_error:
+            logger.warning(
+                f"[Downloader] Failed to create link/copy for '{dest}': symlink={symlink_error}; copy={copy_error}"
+            )
+            return False
+
+
+def run_gallery_batch(
+    gallery_ids: list[int],
+    process_gallery_sync: Callable[[int], None],
+) -> list[Exception]:
+    """Run sync gallery processors with async orchestration via Dovetail."""
+
+    orchestrator.refresh_globals()
+    gallery_workers = max(1, int(orchestrator.threads_galleries or 1))
+
+    dvt = None
+    results: list = []
+    def download_gallery_task(gallery_id: int):
+        return process_gallery_sync(int(gallery_id))
+
+    try:
+        with Dovetail(
+            max_workers=gallery_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-GalleryPool",
+        ) as dvt:
+            log("[DOVETAIL] Gallery worker pool initialised.", "debug")
+            _register_dovetail(dvt)
+            outcomes = dvt.task.map_blocking(
+                download_gallery_task,
+                gallery_ids,
+                max_concurrency=gallery_workers,
+                return_exceptions=True,
+            )
+            results = [out for out in outcomes if isinstance(out, Exception)]
+    finally:
+        if dvt is not None:
+            try:
+                _active_dovetails.remove(dvt)
+            except ValueError:
+                pass
+    return results
 
 def _signal_handler(signum, frame):
     """Handle Ctrl+C (SIGINT) and SIGTERM for graceful shutdown."""
@@ -470,7 +531,7 @@ def update_skipped_galleries(ReturnReport: bool, meta=None, Reason: str = "No Re
             skipped_galleries[gid] = entry
 
     log_clarification("debug")
-    log(f"Downloader: Skipped Gallery {gid} ({gallery_title}): {Reason}", "debug")
+    log(f"[Downloader] Skipped Gallery {gid} ({gallery_title}): {Reason}", "debug")
 
 def update_failed_galleries(ReturnReport: bool, gallery_id=None, meta=None, Reason: str = "No Reason Given."):
     global failed_galleries
@@ -499,7 +560,7 @@ def update_failed_galleries(ReturnReport: bool, gallery_id=None, meta=None, Reas
 
     gid = scraperapi.Helpers.normalise_integer(gallery_id)
     if gid is None:
-        logger.warning("Downloader: update_failed_galleries called without a valid gallery_id.")
+        logger.warning("[Downloader] update_failed_galleries called without a valid gallery_id.")
         return
 
     cached_meta = scraperapi.Cache.Load.cache(gallery_id=gid) or {}
@@ -528,7 +589,7 @@ def update_failed_galleries(ReturnReport: bool, gallery_id=None, meta=None, Reas
 
     log_clarification("debug")
     log(
-        f"Downloader: Recorded failed gallery: {gid} ({entry['title']}) | Creators: {', '.join(entry['creators'])} | Reason: {entry['reason']}",
+        f"[Downloader] Recorded failed gallery: {gid} ({entry['title']}) | Creators: {', '.join(entry['creators'])} | Reason: {entry['reason']}",
         "debug",
     )
 
@@ -548,7 +609,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     if num_pages == 0:
         logger.warning(
-            f"Downloader: Skipping Gallery: {gallery_id}\n"
+            f"[Downloader] Skipping Gallery: {gallery_id}\n"
             "Reason: No Pages.\n"
             f"Title: {gallery_title}\n"
         )
@@ -565,7 +626,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
         )
         if all_exist:
             logger.info(
-                f"Downloader: Skipping Gallery: {gallery_id}\n"
+                f"[Downloader] Skipping Gallery: {gallery_id}\n"
                 "Reason: Already Downloaded.\n"
                 f"Title: {gallery_title}\n"
                 f"In Folder: {doujin_folder.removesuffix(gallery_title)}"
@@ -580,7 +641,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Excluded Tags ---
     excluded_gallery_tags = [tag.lower() for tag in excluded_tags]
-    gallery_tags = [t.lower() for t in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "tag")]
+    gallery_tags = [t.lower() for t in scraperapi.Get.meta_tags("[Downloader] Should_Download_Gallery", meta, "tag")]
     blocked_tags = []
     
     for tag in gallery_tags:
@@ -589,7 +650,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     # --- Allowed Languages ---
     allowed_gallery_language = [lang.lower() for lang in orchestrator.language]
-    gallery_langs = [l.lower() for l in scraperapi.Get.meta_tags("Downloader: Should_Download_Gallery", meta, "language")]
+    gallery_langs = [l.lower() for l in scraperapi.Get.meta_tags("[Downloader] Should_Download_Gallery", meta, "language")]
     blocked_langs = []
 
     if allowed_gallery_language:
@@ -605,7 +666,7 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
     
     if blocked_tags or blocked_langs:
         logger.info(
-            f"Downloader: Skipping Gallery: {gallery_id}\n"
+            f"[Downloader] Skipping Gallery: {gallery_id}\n"
             "Reason: Blocked Tags In Metadata.\n"
             f"Title: {gallery_title}\n"
             f"Filtered tags: {blocked_tags}\n"
@@ -617,28 +678,59 @@ def should_download_gallery(meta, gallery_title, num_pages, iteration: dict = No
 
     return True
 
-def submit_creator_tasks(executor, creator_tasks, gallery_id, local_session, safe_creator_name):
+def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_name):
     """
     Submit download tasks for a single creator's pages.
     """
-    
-    futures = [
-        executor.submit(
-            active_extension.download_images_hook,
-            gallery_id, page, urls, path, local_session, None, safe_creator_name
+
+    orchestrator.refresh_globals()
+    image_workers = max(1, int(orchestrator.threads_images or 1))
+
+    dvt = None
+    def download_image_task(task_tuple):
+        page, urls, path, _ = task_tuple
+        return bool(
+            active_extension.download_images_hook(
+                gallery_id,
+                page,
+                urls,
+                path,
+                local_session,
+                None,
+                safe_creator_name,
+            )
         )
-        for page, urls, path, _ in creator_tasks
-    ]
-    
-    # No per-gallery progress bar here; progress is handled by the batch-wide tqdm in start_batch via page_update_hook
-    all_succeeded = True
-    for future in concurrent.futures.as_completed(futures):
-        try:
-            if not future.result():
-                all_succeeded = False
-        except Exception:
-            all_succeeded = False
-    return all_succeeded
+
+    try:
+        with Dovetail(
+            max_workers=image_workers,
+            trace=bool(orchestrator.debug),
+            trace_logger=logger,
+            trace_prefix="DVT-ImagePool",
+        ) as dvt:
+            log("[DOVETAIL] Image worker pool initialised.", "debug")
+            _register_dovetail(dvt)
+
+            results = dvt.task.map_blocking(
+                download_image_task,
+                creator_tasks,
+                max_concurrency=image_workers,
+                return_exceptions=True,
+            )
+            all_succeeded = True
+            for result in results:
+                if isinstance(result, Exception):
+                    all_succeeded = False
+                    continue
+                if not result:
+                    all_succeeded = False
+            return all_succeeded
+    finally:
+        if dvt is not None:
+            try:
+                _active_dovetails.remove(dvt)
+            except ValueError:
+                pass
 
 #----------------------
 # ARCHIVE CONVERSION
@@ -666,14 +758,15 @@ def finalise_gallery_format(
         return gallery_folder
     
     if not os.path.exists(gallery_folder):
-        logger.warning(f"Downloader: Gallery folder not found: {gallery_folder}")
+        logger.warning(f"[Downloader] Gallery folder not found: {gallery_folder}")
         return gallery_folder
     
     # Get base path and create archive path
     parent_dir = os.path.dirname(gallery_folder)
     folder_name = os.path.basename(gallery_folder)
     archive_ext = ".cbz" if format_type == "cbz" else ".zip"
-    archive_path = os.path.join(final_parent_dir or parent_dir, folder_name + archive_ext)
+    archive_filename = scraperapi.Helpers.archive_filename(folder_name, archive_ext)
+    archive_path = os.path.join(final_parent_dir or parent_dir, archive_filename)
     temp_archive_path = None
     
     try:
@@ -684,7 +777,7 @@ def finalise_gallery_format(
         ])
         
         if not image_files:
-            logger.warning(f"Downloader: No images found in {gallery_folder}")
+            logger.warning(f"[Downloader] No images found in {gallery_folder}")
             return gallery_folder
         
         use_temp_archive = _is_network_share(final_parent_dir or parent_dir)
@@ -700,7 +793,7 @@ def finalise_gallery_format(
         else:
             archive_target = archive_path
 
-        logger.debug(f"Downloader: Creating {format_type} archive for Gallery {gallery_id}: {archive_target}")
+        logger.debug(f"[Downloader] Creating {format_type} archive for Gallery {gallery_id}: {archive_target}")
         
         # Create zip/cbz archive with images in sorted order
         with zipfile.ZipFile(archive_target, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -713,17 +806,17 @@ def finalise_gallery_format(
             os.makedirs(os.path.dirname(archive_path), exist_ok=True)
             try:
                 os.replace(archive_target, archive_path)
-                logger.debug(f"Downloader: Moved archive for Gallery {gallery_id} from temp folder to download folder: {archive_target} -> {archive_path}")
+                logger.debug(f"[Downloader] Moved archive for Gallery {gallery_id} from temp folder to download folder: {archive_target} -> {archive_path}")
             except OSError:
                 shutil.move(archive_target, archive_path)
-                logger.debug(f"Downloader: Moved archive for Gallery {gallery_id} from temp folder to download folder (shutil.move fallback): {archive_target} -> {archive_path}")
+                logger.debug(f"[Downloader] Moved archive for Gallery {gallery_id} from temp folder to download folder (shutil.move fallback): {archive_target} -> {archive_path}")
         
-        logger.debug(f"Downloader: Created {format_type} archive for Gallery {gallery_id}")
+        logger.debug(f"[Downloader] Created {format_type} archive for Gallery {gallery_id}")
         
         return archive_path
         
     except Exception as e:
-        logger.error(f"Downloader: Failed to create {format_type} archive for Gallery {gallery_id}: {e}")
+        logger.error(f"[Downloader] Failed to create {format_type} archive for Gallery {gallery_id}: {e}")
         if temp_archive_path and os.path.exists(temp_archive_path):
             try:
                 os.unlink(temp_archive_path)
@@ -735,7 +828,7 @@ def finalise_gallery_format(
 # MAIN
 ####################################################################################################
 
-def process_galleries(batch_ids):
+def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None = None):
     orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
@@ -750,7 +843,7 @@ def process_galleries(batch_ids):
             )
         else:
             log_clarification()
-            logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as started.")
+            logger.info(f"[DRY RUN] [Downloader] Would mark Gallery {gallery_id} as started.")
 
         gallery_attempts = 0
 
@@ -762,14 +855,16 @@ def process_galleries(batch_ids):
                 log_clarification("debug")
                 logger.debug("######################## GALLERY START ########################")
                 log_clarification("debug")
-                logger.debug(f"Downloader: Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{orchestrator.max_retries})")
+                logger.debug(f"[Downloader] Starting Gallery: {gallery_id} (Attempt {gallery_attempts}/{orchestrator.max_retries})")
 
                 meta = scraperapi.Fetch.gallery_metadata(gallery_id)
                 if not meta or not isinstance(meta, dict):
-                    logger.warning(f"Downloader: Failed to fetch metadata for Gallery: {gallery_id}")
+                    logger.warning(f"[Downloader] Failed to fetch metadata for Gallery: {gallery_id}")
                     if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
                         update_failed_galleries(False, gallery_id=gallery_id, Reason="Failed to fetch metadata.")
                         scraperapi.DB.Gallery.fail(gallery_id)
+                        if on_gallery_status:
+                            on_gallery_status("failed")
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
@@ -806,7 +901,9 @@ def process_galleries(batch_ids):
                         )
                     else:
                         log_clarification()
-                        logger.info(f"[DRY RUN] Downloader: Would mark Gallery {gallery_id} as skipped.")
+                        logger.info(f"[DRY RUN] [Downloader] Would mark Gallery {gallery_id} as skipped.")
+                    if on_gallery_status:
+                        on_gallery_status("skipped")
                     break  # exit retry loop, skip gallery
 
                 use_local_archive = (
@@ -822,7 +919,7 @@ def process_galleries(batch_ids):
 
                 # --- Prepare primary folder (first creator only) ---
                 primary_creator = scraperapi.Helpers.sanitise(creators[0]) if creators else "Unknown"
-                log(f"Downloader: Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
+                log(f"[Downloader] Primary Creator for Gallery: {gallery_id}: {primary_creator}", "debug")
                 primary_folder = build_gallery_path(
                     meta,
                     {"creator": [creators[0]]},
@@ -830,7 +927,7 @@ def process_galleries(batch_ids):
                 )
 
                 if orchestrator.dry_run:
-                    log(f"[DRY RUN] Downloader: Would create primary folder for {creators[0]}: {primary_folder}", "debug")
+                    log(f"[DRY RUN] [Downloader] Would create primary folder for {creators[0]}: {primary_folder}", "debug")
                 else:
                     os.makedirs(primary_folder, exist_ok=True)
 
@@ -842,7 +939,7 @@ def process_galleries(batch_ids):
                     page = i + 1
                     img_urls = scraperapi.Fetch.image_urls(meta, page)
                     if not img_urls:
-                        logger.warning(f"Downloader: Skipping Page {page} for {primary_creator}: Failed to get URLs")
+                        logger.warning(f"[Downloader] Skipping Page {page} for {primary_creator}: Failed to get URLs")
                         update_skipped_galleries(False, meta, "Failed to get URLs.", reportable=False)
                         continue
 
@@ -854,17 +951,12 @@ def process_galleries(batch_ids):
                 # --- Download images (once, in primary creator's folder) ---
                 if tasks:
                     page_downloads_succeeded = True
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=threads_images) as executor:
-                        _register_executor(executor)
-                        try:
-                            if not orchestrator.dry_run:
-                                local_session = scraperapi.Get.session(referrer="Downloader", status="return")
-                                page_downloads_succeeded = submit_creator_tasks(executor, tasks, gallery_id, local_session, primary_creator)
-                            else:
-                                for _ in tasks:
-                                    time.sleep(0.1)  # fake delay
-                        finally:
-                            _active_executors.remove(executor)
+                    if not orchestrator.dry_run:
+                        local_session = scraperapi.Get.session(referrer="Downloader", status="return")
+                        page_downloads_succeeded = submit_creator_tasks(tasks, gallery_id, local_session, primary_creator)
+                    else:
+                        for _ in tasks:
+                            time.sleep(0.1)  # fake delay
 
                     if not page_downloads_succeeded:
                         raise RuntimeError(f"One or more pages failed for Gallery {gallery_id}")
@@ -888,24 +980,29 @@ def process_galleries(batch_ids):
                     # If archiving, append the extension for the symlink target
                     if orchestrator.gallery_format != "directory":
                         archive_ext = ".cbz" if orchestrator.gallery_format == "cbz" else ".zip"
-                        extra_folder = extra_folder + archive_ext
+                        extra_parent = os.path.dirname(extra_folder)
+                        extra_name = os.path.basename(extra_folder)
+                        extra_folder = os.path.join(
+                            extra_parent,
+                            scraperapi.Helpers.archive_filename(extra_name, archive_ext),
+                        )
                     parent_dir = os.path.dirname(extra_folder)
                     os.makedirs(parent_dir, exist_ok=True)  # ensure parent exists
 
                     if orchestrator.dry_run:
                         target_name = "archive" if orchestrator.gallery_format != "directory" else "primary folder"
-                        log(f"[DRY RUN] Downloader: Would symlink {extra_folder} -> {target_name}", "debug")
+                        log(f"[DRY RUN] [Downloader] Would symlink {extra_folder} -> {target_name}", "debug")
                     else:
                         if os.path.normcase(os.path.normpath(extra_folder)) == os.path.normcase(os.path.normpath(finalised_path)):
-                            logger.debug(f"Downloader: Skipping self-symlink for Gallery {gallery_id}: {extra_folder}")
+                            logger.debug(f"[Downloader] Skipping self-symlink for Gallery {gallery_id}: {extra_folder}")
                             continue
                         if os.path.islink(extra_folder):
                             os.unlink(extra_folder)  # remove old symlink only
                         elif os.path.exists(extra_folder):
-                            logger.warning(f"Downloader: Extra path already exists and is not a symlink: {extra_folder}")
-                            continue  # skip creating symlink if real folder exists
-                        os.symlink(finalised_path, extra_folder)
-                        logger.debug(f"Downloader: Symlinked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
+                            logger.warning(f"[Downloader] Extra path already exists and is not a symlink/copy target: {extra_folder}")
+                            continue  # skip replacing real existing content
+                        if _safe_symlink_or_copy(finalised_path, extra_folder):
+                            logger.debug(f"[Downloader] Linked {primary_creator} -> {extra_creator_safe} (target: {os.path.basename(finalised_path)})")
 
                 if not orchestrator.dry_run:
                     _call_db_with_lock_wait(
@@ -934,8 +1031,10 @@ def process_galleries(batch_ids):
                     space_monitor["total_actual_bytes"] += actual_bytes
                     space_monitor["galleries_processed"] += 1
 
-                logger.debug(f"Downloader: Completed Gallery: {gallery_id}")
+                logger.debug(f"[Downloader] Completed Gallery: {gallery_id}")
                 log_clarification()
+                if on_gallery_status:
+                    on_gallery_status("completed")
                 break  # exit retry loop on success
 
             except Exception as e:
@@ -943,7 +1042,7 @@ def process_galleries(batch_ids):
                     _wait_for_db_unlock(context=f"Gallery {gallery_id} database")
                     gallery_attempts = max(gallery_attempts - 1, 0)
                     continue
-                logger.error(f"Downloader: Error processing Gallery: {gallery_id}: {e}")
+                logger.error(f"[Downloader] Error processing Gallery: {gallery_id}: {e}")
                 if not orchestrator.dry_run and gallery_attempts >= orchestrator.max_retries:
                     update_failed_galleries(False, gallery_id=gallery_id, meta=meta, Reason=str(e))
                     _call_db_with_lock_wait(
@@ -951,6 +1050,8 @@ def process_galleries(batch_ids):
                         gallery_id,
                         context=f"Gallery {gallery_id} fail",
                     )
+                    if on_gallery_status:
+                        on_gallery_status("failed")
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None, overall_start_index: int = 0, overall_total_galleries: int | None = None):
     # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
@@ -999,8 +1100,17 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     # Shared state for progress
     page_lock = threading.Lock()
     progress_state = {"pages": 0, "gallery": 1}
+    gallery_state = {"completed": 0, "failed": 0, "skipped": 0}
     batch_started_at = time.perf_counter()
     total_gallery_count = overall_total_galleries or len(batch_list)
+
+    def _set_progress_postfix() -> None:
+        page_progress.set_postfix_str(
+            f"Completed: {gallery_state['completed']} | Failed: {gallery_state['failed']} | Skipped: {gallery_state['skipped']}",
+            refresh=False,
+        )
+
+    _set_progress_postfix()
     scraperapi.RuntimeProgress.update(
         current_gallery_number=min(overall_start_index + 1, total_gallery_count) if batch_list else 0,
         current_gallery_id=batch_list[0] if batch_list else None,
@@ -1020,6 +1130,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                    progress_state["pages"] > gallery_milestones[progress_state["gallery"] - 1]):
                 progress_state["gallery"] += 1
             page_progress.set_description(f"Gallery {min(progress_state['gallery'], len(batch_list))} / {len(batch_list)}")
+            _set_progress_postfix()
             page_progress.update(1)
 
             elapsed = max(time.perf_counter() - batch_started_at, 0.001)
@@ -1039,6 +1150,13 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
                 download_speed_bytes=round(space_monitor["total_actual_bytes"] / elapsed, 2) if space_monitor["total_actual_bytes"] > 0 else 0,
             )
 
+    def gallery_status_hook(status: str):
+        with page_lock:
+            if status in gallery_state:
+                gallery_state[status] += 1
+            _set_progress_postfix()
+            page_progress.refresh()
+
     # Patch the download_images_hook to call our page_update_hook after each page
     orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
     def wrapped_download_images_hook(*args, **kwargs):
@@ -1051,13 +1169,13 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
     if orig_download_images_hook:
         active_extension.download_images_hook = wrapped_download_images_hook
 
-    # Each gallery is processed in parallel with its own thread
-    with concurrent.futures.ThreadPoolExecutor(max_workers=orchestrator.threads_galleries) as executor:
-        futures = [executor.submit(process_galleries, [gid]) for gid in batch_list]
-        for f in concurrent.futures.as_completed(futures):
-            if _shutdown_event and _shutdown_event.is_set():
-                logger.warning("Shutdown event detected in batch, aborting remaining galleries.")
-                break
+    # Each gallery is processed in parallel via the in-module Dovetail coordinator.
+    errors = run_gallery_batch(
+        gallery_ids=[int(gid) for gid in batch_list],
+        process_gallery_sync=lambda gid: process_galleries([int(gid)], on_gallery_status=gallery_status_hook),
+    )
+    for exc in errors:
+        logger.error(f"[Downloader] Gallery task failed: {exc}")
 
     # Restore original hook
     if orig_download_images_hook:
@@ -1073,8 +1191,8 @@ def start_downloader(gallery_list=None):
     global galleries, failed_galleries, skipped_galleries
     
     log_clarification("debug")
-    logger.debug("Downloader: Ready.")
-    log("Downloader: Debugging Started.", "debug")
+    logger.debug("[Downloader] Ready.")
+    log("[Downloader] Debugging Started.", "debug")
 
     with failed_galleries_lock:
         failed_galleries = {}
@@ -1141,7 +1259,13 @@ def start_downloader(gallery_list=None):
         log_clarification()
         logger.info(f"Downloading Batch {current_out_of_total_batch_number} with {len(batch_list)} Galleries...")
     
-        start_batch(current_batch_number, total_batch_numbers, batch_list, overall_start_index=batch_num, overall_total_galleries=len(gallery_list)) # Start batch.
+        start_batch(
+            current_batch_number,
+            total_batch_numbers,
+            batch_list,
+            overall_start_index=batch_num,
+            overall_total_galleries=len(gallery_list),
+        )  # Start batch.
         
         if batch_num + BATCH_SIZE < len(gallery_list): # Not last batch
             log_clarification()

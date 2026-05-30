@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# mangascraper/core/api/_smart_rules.py
 
 import re
 

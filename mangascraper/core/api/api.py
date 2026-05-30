@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # mangascraper/core/api/api.py
 
 import atexit
@@ -17,6 +18,9 @@ from mangascraper.core.api._constants import (
     _DASH_PATTERN,
     _UNDERSCORE_PATTERN,
     _SYMBOL_TRANSLATION_TABLE,
+)
+from mangascraper.core.api._helpers import (
+    Helpers,
 )
 from mangascraper.core.api._helpers import (
     Helpers,

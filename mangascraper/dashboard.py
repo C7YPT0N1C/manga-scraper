@@ -7,8 +7,8 @@ from flask_cors import CORS
 
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
-from mangascraper.dashboard_utils.routes.scraper_routes import scraper_bp
-from mangascraper.dashboard_utils.routes.data_routes import db_bp, gallery_bp, collections_bp
+from mangascraper.dashboard_utils.routes._scraper_routes import scraper_bp
+from mangascraper.dashboard_utils.routes._data_routes import db_bp, gallery_bp, collections_bp
 
 def create_app():
     base_dir = os.path.dirname(__file__)
@@ -75,6 +75,8 @@ def create_app():
     @app.route("/scraper")
     def scraper_page():
         return render_template("scraper.html", gallery_viewer_config=orchestrator.DASHBOARD_OTHER_VIEWS_CONFIG)
+
+    # Note: scraper stats view is embedded within the main /scraper page as a subpage/tab.
 
     @app.route("/database")
     def database_page():
@@ -148,24 +150,35 @@ def create_app():
     def reader_collection_redirect(collection_id):
         return redirect(f'/collections/{collection_id}/')
 
-    @app.route('/reader/stream/')
-    def reader_stream_page():
-        # Stream page: standalone reader
-        return render_template(
-            'reader.html',
-            gallery_viewer_config=orchestrator.DASHBOARD_GALLERY_VIEW_CONFIG,
-            reader_context={
-                'type': 'stream',
-            },
-        )
-
     return app
 
-if __name__ == "__main__":
+def main(use_reloader: bool | None = None):
+    """Create and run the dashboard app, preferring Socket.IO runner.
+
+    Args:
+        use_reloader: If not None, override `orchestrator.DASHBOARD_USE_RELOADER`.
+    """
     app = create_app()
-    app.run(
-        host=orchestrator.DASHBOARD_HOST,
-        port=orchestrator.DASHBOARD_PORT,
-        debug=orchestrator.DASHBOARD_DEBUG,
-        use_reloader=orchestrator.DASHBOARD_USE_RELOADER,
-    )
+    effective_reloader = use_reloader if use_reloader is not None else orchestrator.DASHBOARD_USE_RELOADER
+    try:
+        from mangascraper.dashboard_utils import socketio_ as socketio_helper
+        sio = socketio_helper.init_app(app)
+        sio.run(
+            app,
+            host=orchestrator.DASHBOARD_HOST,
+            port=orchestrator.DASHBOARD_PORT,
+            debug=orchestrator.DASHBOARD_DEBUG,
+            use_reloader=effective_reloader,
+        )
+    except Exception:
+        # Fallback: run vanilla Flask if Socket.IO not available
+        app.run(
+            host=orchestrator.DASHBOARD_HOST,
+            port=orchestrator.DASHBOARD_PORT,
+            debug=orchestrator.DASHBOARD_DEBUG,
+            use_reloader=effective_reloader,
+        )
+
+
+if __name__ == "__main__":
+    main()

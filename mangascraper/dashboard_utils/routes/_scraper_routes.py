@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# mangascraper/dashboard/routes/scraper_routes.py
+# mangascraper/dashboard/routes/_scraper_routes.py
 
 import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile, re
+from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
 from mangascraper.core.api import api as scraperapi
@@ -19,6 +20,7 @@ _last_run_status = "stopped"
 _last_exit_code = None
 _active_download_no = None
 _active_queue_file = None
+_active_run_gallery_ids = []
 
 _SEARCH_TYPES = {
     "homepage",
@@ -118,6 +120,7 @@ def _current_config() -> dict:
         "use_daemon_threads": bool(orchestrator.use_daemon_threads),
         "max_retries": int(orchestrator.max_retries),
         "calm": bool(orchestrator.calm),
+        "debug": bool(orchestrator.debug),
     }
 
 
@@ -138,6 +141,7 @@ def _update_config(payload: dict) -> dict:
         "use_daemon_threads": ("USE_DAEMON_THREADS", _safe_bool),
         "max_retries": ("MAX_RETRIES", _safe_int),
         "calm": ("CALM", _safe_bool),
+        "debug": ("DEBUG", _safe_bool),
     }
 
     applied = {}
@@ -168,24 +172,40 @@ def _normalise_cli_args(payload) -> list[str]:
     return []
 
 
-def _status_counts() -> dict:
+def _status_counts(started_after: str | None = None, gallery_ids: list[int] | None = None) -> dict:
     # Use fetch_rows_as_dicts() to read rows as dicts to avoid positional index errors.
-    try:
-        rows = scraperapi.DB.fetch_rows_as_dicts("Galleries", columns=["id", "status", "started_at", "completed_at"]) or []
-    except Exception:
-        rows = []
+    rows = []
+    for attempt in range(1, 4):
+        try:
+            rows = scraperapi.DB.fetch_rows_as_dicts("Galleries", columns=["id", "status", "started_at", "completed_at"]) or []
+            break
+        except Exception as exc:
+            if "locked" not in str(exc).lower() or attempt >= 3:
+                rows = []
+                break
+            time.sleep(0.2 * attempt)
 
     counts = {
-        "total": len(rows),
+        "total": 0,
         "started": 0,
         "completed": 0,
         "failed": 0,
         "skipped": 0,
     }
 
+    id_filter = set(_normalise_ids(gallery_ids or [])) if gallery_ids else None
+
     for row in rows:
         if not isinstance(row, dict):
             continue
+        gid = _safe_int(row.get("id"), None)
+        if id_filter is not None and (gid is None or gid not in id_filter):
+            continue
+        if started_after:
+            started_at = str(row.get("started_at") or "").strip()
+            if not started_at or started_at < started_after:
+                continue
+        counts["total"] += 1
         status = str(row.get("status") or "").strip().lower()
         if status in counts:
             counts[status] += 1
@@ -193,11 +213,46 @@ def _status_counts() -> dict:
     return counts
 
 
-def _queue_total() -> int:
+def _current_run_gallery_ids() -> list[int]:
+    with _process_lock:
+        in_memory_ids = list(_active_run_gallery_ids or [])
+    if in_memory_ids:
+        return _normalise_ids(in_memory_ids)
+
     try:
-        return len(scraperapi.Cache.Load.queued_galleries() or [])
+        jobs = scraperapi.DB.DownloadQueue.list(statuses=["running", "queued"])
     except Exception:
-        return 0
+        jobs = []
+
+    with _process_lock:
+        active_no = _active_download_no
+
+    if active_no is not None:
+        for job in jobs:
+            if _safe_int(job.get("download_no"), None) == active_no:
+                return _normalise_ids(job.get("ids") or [])
+
+    for job in jobs:
+        if str(job.get("status") or "").strip().lower() == "running":
+            return _normalise_ids(job.get("ids") or [])
+
+    return []
+
+
+def _queue_total() -> int:
+    selected_ids = []
+    download_ids = []
+    try:
+        selected_ids = _normalise_ids(scraperapi.Cache.Load.queued_galleries() or [])
+    except Exception:
+        selected_ids = []
+    try:
+        jobs = scraperapi.DB.DownloadQueue.list(statuses=["queued", "running"])
+        for job in jobs:
+            download_ids.extend(_normalise_ids(job.get("ids") or []))
+    except Exception:
+        download_ids = []
+    return len(set(selected_ids + download_ids))
 
 
 def _write_queue_ids_file(ids: list[int]) -> str:
@@ -236,7 +291,7 @@ def _finalise_completed_download_job() -> int | None:
 
 
 def _start_next_queued_download() -> dict | None:
-    global _active_download_no, _active_queue_file
+    global _active_download_no, _active_queue_file, _active_run_gallery_ids
 
     with _process_lock:
         if _is_running() or _active_download_no is not None:
@@ -268,6 +323,7 @@ def _start_next_queued_download() -> dict | None:
     with _process_lock:
         _active_download_no = int(download_no)
         _active_queue_file = queue_file
+        _active_run_gallery_ids = list(ids)
 
     return {
         "download_no": int(download_no),
@@ -712,6 +768,31 @@ def queue_clear():
 
 @scraper_bp.route("/queue/start", methods=["POST"])
 def queue_start():
+    global _progress_port, _progress_token, _scraper_process, _started_at, _last_run_status, _last_exit_code
+
+    # Reconcile process state here as well (not only in /status), so callers
+    # like the creator streamer can reliably start queued work.
+    with _process_lock:
+        running = _is_running()
+        if not running and _scraper_process is not None:
+            polled_code = _scraper_process.poll()
+            if polled_code is not None:
+                _last_exit_code = int(polled_code)
+                if _last_run_status != "stopped":
+                    _last_run_status = "completed" if _last_exit_code == 0 else "stopped"
+                _scraper_process = None
+                _started_at = None
+                _progress_port = None
+                _progress_token = None
+
+        if not _is_running() and _active_download_no is None:
+            try:
+                scraperapi.DB.DownloadQueue.remove_by_status("running")
+            except Exception:
+                pass
+
+    _finalise_completed_download_job()
+
     ids = scraperapi.Cache.Load.queued_galleries()
     enqueued_job = None
     if ids:
@@ -778,24 +859,52 @@ def status():
             _progress_port = None
             _progress_token = None
 
-    # Read progress and counts with retry/backoff to survive transient high-IO failures.
-    progress = {}
+    run_started_iso = None
+    if started_at:
+        try:
+            run_started_iso = datetime.fromtimestamp(float(started_at), timezone.utc).isoformat()
+        except Exception:
+            run_started_iso = None
+
+    run_gallery_ids = _current_run_gallery_ids()
+
+    # DB-derived counts should not depend on live progress endpoint reliability.
     counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+    try:
+        if run_gallery_ids:
+            counts = _status_counts(gallery_ids=run_gallery_ids)
+        else:
+            counts = _status_counts(started_after=run_started_iso)
+    except Exception:
+        counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
+
+    # Preserve the remembered run-total if available from the socket emitter
+    try:
+        from mangascraper.dashboard_utils import socketio_ as socketio_helper
+        last_total = 0
+        try:
+            last_total = int(socketio_helper.get_last_total() or 0)
+        except Exception:
+            last_total = 0
+        if (not counts.get('total') or int(counts.get('total') or 0) == 0) and last_total and last_total > 0:
+            counts['total'] = int(last_total)
+    except Exception:
+        pass
+
+    # Live runtime progress (pages/sec, pages processed, ETA) with retry/backoff.
+    progress = {}
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
             progress = _read_runtime_progress() if running else {}
-            counts = _status_counts() if running else {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
             break
         except Exception:
-            # On transient failure, wait using adaptive API sleep and retry a few times.
             if attempt >= max_attempts:
                 try:
                     scraperapi.logger.exception("[DashboardStatus] Failed to read runtime progress after retries.")
                 except Exception:
                     pass
                 progress = {}
-                counts = {"total": 0, "started": 0, "completed": 0, "failed": 0, "skipped": 0}
                 break
             try:
                 wait = float(scraperapi.Sleep.dynamic("api", attempt))

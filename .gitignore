@@ -176,8 +176,8 @@ cython_debug/
 .pypirc
 
 # Other
-.vscode/
 *-workspace
 *.db
 docs/request.md
 Doujinshi_IDs.txt
+mangascraper/core/mangascraper.db-journal

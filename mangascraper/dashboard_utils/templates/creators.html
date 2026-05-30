@@ -15,11 +15,6 @@
 	<span id="refreshStatus"></span>
 </div>
 
-<div id="modeTabs">
-	<button class="modeTab active" data-mode="local">Local Galleries</button>
-	<button class="modeTab" data-mode="stream">Stream Gallery by ID</button>
-</div>
-
 <div id="localPane" class="modePane">
 	<div id="localNav">
 		<span id="localBreadcrumb"><a href="#" id="crumbRoot">Creators</a></span>
@@ -46,22 +41,11 @@
 	</div>
 </div>
 
-<div id="streamPane" class="modePane" style="display:none">
-	<div id="streamControls">
-		<label for="streamIdInput">Gallery ID:</label>
-		<input type="number" id="streamIdInput" min="1" placeholder="e.g. 123456">
-		<button id="streamStartBtn">Open</button>
-	</div>
-	<p id="streamStatus">Enter a gallery ID and click Open.</p>
-	<p id="streamPathInfo"></p>
-</div>
-
 <div id="readerOverlay" style="display:none">
 	<div id="readerHeader">
 		<button id="readerClose">&#x2715; Close</button>
 		<span id="readerTitle"></span>
 		<span id="readerCounter"></span>
-		<button id="streamDownloadBtn" type="button" style="display:none">Download This Gallery</button>
 	</div>
 	<div id="readerBody">
 		<button id="prevBtn" class="navBtn">&#8592;</button>
@@ -123,8 +107,6 @@ function normalisePageSize(value, fallback) {
 document.documentElement.style.setProperty('--gallery-tile-min-width', `${Number(VIEWER_CONFIG.tileMinWidthPx || 120)}px`);
 document.documentElement.style.setProperty('--gallery-tile-aspect-ratio', String(VIEWER_CONFIG.tileAspectRatio || '2 / 3'));
 
-let _activeStreamId = null;
-let _readerFromStream = false;
 let _currentCreator = null;
 let _allCreators = [];
 let _allGalleries = [];
@@ -152,7 +134,16 @@ let _filterBarVisible = true;
 // ── Utility ────────────────────────────────────────────────────────────────
 async function apiFetch(url) {
 	const res = await fetch(url);
-	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	if (!res.ok) {
+		let details = '';
+		try {
+			const payload = await res.json();
+			details = String(payload?.error || payload?.message || '').trim();
+		} catch {
+			// ignore JSON parse errors and fall back to status text
+		}
+		throw new Error(details ? `HTTP ${res.status}: ${details}` : `HTTP ${res.status}`);
+	}
 	return res.json();
 }
 
@@ -408,16 +399,6 @@ function setupFiltersForGalleries(filters) {
 	filterGroup.appendChild(createSelectFilter('tag', 'Tag', filters.tags || [], 'All tags'));
 }
 
-document.querySelectorAll('.modeTab').forEach(btn => {
-	btn.addEventListener('click', () => {
-		document.querySelectorAll('.modeTab').forEach(b => b.classList.remove('active'));
-		document.querySelectorAll('.modePane').forEach(p => p.style.display = 'none');
-		btn.classList.add('active');
-		const pane = document.getElementById(btn.dataset.mode + 'Pane');
-		if (pane) pane.style.display = '';
-	});
-});
-
 async function toggleCreatorFavourite(creatorName, targetValue) {
 	const status = document.getElementById('refreshStatus');
 	try {
@@ -577,8 +558,24 @@ function createGalleryGrid(items, itemType, onClick) {
 	}
 
 	items.forEach(item => {
-		const square = document.createElement('div');
+		const isGalleryItem = itemType === 'gallery';
+		const square = document.createElement(isGalleryItem ? 'a' : 'div');
 		square.className = 'gallery-square';
+		if (isGalleryItem) {
+			const creator = _currentCreator;
+			const galleryId = Number(
+				(typeof item === 'object' && item !== null
+					? (item.gallery_id ?? item.id ?? null)
+					: null) || parseGalleryId(itemLabel(item)) || 0
+			);
+			if (creator && Number.isFinite(galleryId) && galleryId > 0) {
+				square.href = `/reader/creators/${creatorSlug(creator)}/${galleryId}/`;
+			} else {
+				square.href = '#';
+			}
+			square.style.textDecoration = 'none';
+			square.style.color = 'inherit';
+		}
 
 		const imageDiv = document.createElement('div');
 		imageDiv.className = 'gallery-square-image';
@@ -645,21 +642,22 @@ function createGalleryGrid(items, itemType, onClick) {
 		square.appendChild(metaDiv);
 		square.appendChild(controlsDiv);
 
-		square.addEventListener('mousedown', (event) => {
-			if (itemType === 'gallery' && event.button === 1) {
-				// Middle click: open reader in new tab
-				const creator = _currentCreator;
-				const galleryId = typeof item === 'object' && item.gallery_id ? item.gallery_id : parseGalleryId(itemLabel(item));
-				if (creator && galleryId) {
-					window.open(`/reader/creators/${creatorSlug(creator)}/${galleryId}/`, '_blank');
-				}
-			}
-		});
-		square.addEventListener('click', () => {
+		square.addEventListener('click', (event) => {
 			if (itemType === 'creator') {
 				onClick(itemLabel(item));
 				return;
 			}
+			if (
+				event.button !== 0 ||
+				event.ctrlKey ||
+				event.metaKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				// Let native link behaviors handle modified clicks and new-tab/window actions.
+				return;
+			}
+			event.preventDefault();
 			openGalleryDetail(item);
 		});
 		el.appendChild(square);
@@ -795,7 +793,6 @@ async function loadPages(creator, gallery, options = {}) {
 			document.getElementById('localList').className = '';
 			return;
 		}
-		_readerFromStream = false;
 		// Use full title for now (do not strip numeric prefix)
 		openReader(pages, galleryDisplayName, () => {
 			document.getElementById('localPane').style.display = '';
@@ -834,70 +831,13 @@ document.getElementById('itemsPerPageSelect').addEventListener('change', event =
 	refreshDisplay();
 });
 
-document.getElementById('streamStartBtn').addEventListener('click', startStream);
-document.getElementById('streamDownloadBtn').addEventListener('click', downloadStreamGallery);
-document.getElementById('streamIdInput').addEventListener('keydown', e => {
-	if (e.key === 'Enter') startStream();
-});
-
-async function startStream() {
-	const input = document.getElementById('streamIdInput');
-	const status = document.getElementById('streamStatus');
-	const id = parseInt(input.value, 10);
-	if (!id || id < 1) { status.textContent = 'Please enter a valid gallery ID.'; return; }
-
-	status.textContent = `Fetching metadata for #${id}...`;
-	try {
-		const data = await apiFetch(`/api/gallery/stream/${id}`);
-		if (data.error) { status.textContent = 'Error: ' + data.error; return; }
-		_activeStreamId = id;
-		_readerFromStream = true;
-		status.textContent = `Loaded ${data.page_count} pages. Opening reader...`;
-		openReader(data.page_urls, data.title || `Gallery #${id}`, closeStream);
-	} catch (err) {
-		status.textContent = 'Failed: ' + err.message;
-	}
-}
-
-async function downloadStreamGallery() {
-	const input = document.getElementById('streamIdInput');
-	const status = document.getElementById('streamStatus');
-	const id = parseInt(input.value, 10);
-	if (!id || id < 1) {
-		status.textContent = 'Please enter a valid gallery ID first.';
-		return;
-	}
-	try {
-		await fetch('/api/scraper/queue/add', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ids: [id] })
-		});
-		status.textContent = `Gallery #${id} added to queue.`;
-	} catch (err) {
-		status.textContent = `Could not queue gallery #${id}: ${err.message}`;
-	}
-}
-
-async function closeStream() {
-	if (_activeStreamId === null) return;
-	try {
-		await fetch(`/api/gallery/stream/${_activeStreamId}/close`, { method: 'POST' });
-	} catch { /* best effort */ }
-	_activeStreamId = null;
-	document.getElementById('streamPathInfo').textContent = '';
-	document.getElementById('streamStatus').textContent = 'Session closed.';
-}
-
 function openReader(pages, title, onClose) {
 	reader.pages = pages;
 	reader.index = 0;
 	reader.title = title;
 	reader.onClose = onClose;
 	document.getElementById('readerTitle').textContent = title;
-	document.getElementById('streamDownloadBtn').style.display = _readerFromStream ? '' : 'none';
 	document.getElementById('localPane').style.display = 'none';
-	document.getElementById('streamPane').style.display = 'none';
 	document.getElementById('readerOverlay').style.display = '';
 	showPage();
 }
@@ -927,10 +867,7 @@ document.addEventListener('keydown', e => {
 document.getElementById('readerClose').addEventListener('click', closeReader);
 function closeReader() {
 	document.getElementById('readerOverlay').style.display = 'none';
-	document.getElementById('streamDownloadBtn').style.display = 'none';
-	// Re-show the active mode pane
-	const activeMode = document.querySelector('.modeTab.active').dataset.mode;
-	document.getElementById(activeMode + 'Pane').style.display = '';
+	document.getElementById('localPane').style.display = '';
 	if (reader.onClose) reader.onClose();
 }
 
