@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/core/downloader.py
+# mangascraper/core/downloader/download_manager.py
 
 import os, sys, time, random, math, zipfile, shutil, signal, tempfile, threading
 from typing import Callable

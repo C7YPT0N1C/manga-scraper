@@ -59,12 +59,6 @@ Key points to follow from the docs:
 
 Practical changes (minimal disruption to other sites):
 
-1. Add an nhentai adapter
-   - Add a small module (e.g. `mangascraper/extensions/nhentai_adapter.py`) to
-     handle nhentai-specific flows. The main scraper uses domain detection
-     to route requests to the adapter for `nhentai.net` and otherwise
-     retains current logic.
-
 2. Fetch gallery detail & cdn servers
    - Use `GET /api/v2/galleries/{id}` for page list and media paths.
    - Use `GET /api/v2/cdn` to obtain servers and cache for a short TTL

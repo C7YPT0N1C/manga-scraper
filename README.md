@@ -13,13 +13,11 @@
 - [Documentation](#documentation)
 
 ## Overview
-`MangaScraper`is a Python scraper for a range of manga / doujin sites (such as Mangadex, nhentai), with extensions to extend functionality. `MangaScraper` uses:
+`MangaScraper`is a Python web scraper for manga / doujin sites. `MangaScraper` uses:
 - **[Dovetail](https://github.com/anthrosystems/dovetail)** for more "precise" multithreading cuz asyncio is a pain in my ass. It's probably a skill issue but I love solving the problems I create for myself.
 - **[Filebrowser](https://github.com/filebrowser/filebrowser)** (Linux installs only) for remote file access from your browser!
 
 **Please go support them!**
-
-The companion extension repository is **[manga-scraper-extensions](https://github.com/C7YPT0N1C/manga-scraper-extensions)**. Use that repository to review extension templates, available extension modules, and extension manifest details.
 
 **For some context**, this project was originally created as a mass archiver for nhentai due to the *multiple* takedowns and legal threats the site faced. This issue has been *"resolved"*, but since I had already built a rather functional project, it has been (or at least is planned to be) slightly repurposed into:
 - A scraper / archiver for photo-based media in general, such as doujinshis, manga and manhwa.
@@ -171,11 +169,7 @@ manga-scraper --id-range 500000 500100
 - Query flags (`--artist`, `--group`, `--tag`, `--character`, `--parody`, `--search`) accept an optional sort and page range.
 
 ### Output Formats
-- `zip` or `cbz`: archives the gallery and removes the original folder after post-processing.
-
-### Extensions
-- Install or remove extensions with `--install-extension` and `--uninstall-extension`.
-- Extensions live under `mangascraper/extensions/` and can define hooks like pre/post-download handlers.
+- `cbz` or `zip`: archives the gallery and removes the original folder after post-processing.
 
 ### Troubleshooting
 - Check logs in `/tmp/manga-scraper/logs` for detailed errors.

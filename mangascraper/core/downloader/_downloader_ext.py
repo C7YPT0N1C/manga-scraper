@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# mangascraper/extensions/skeleton/skeleton__msext.py
+# mangascraper/core/downloader/_download_ext.py
 
 """
 This is a skeleton/example extension for manga-scraper. It is also used as the default extension if none is specified.
