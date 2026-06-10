@@ -32,7 +32,7 @@ We love the effects of sunk cost fallacy.
 - Automation-focused CLI with query/filter/output controls
 - The dashboard for configuration, searching, queue management, runtime status, local gallery browsing, and logs
 - Extension support (install, remove, and switch active extension)
-- Output format support: `directory`, `zip`, and `cbz`
+- Output format support: `zip`, and `cbz`
 - Multi-threaded downloads with retry handling
 - Disk space estimation and run-time space checks
 - Optional Tor/VPN-friendly networking configuration
@@ -171,7 +171,6 @@ manga-scraper --id-range 500000 500100
 - Query flags (`--artist`, `--group`, `--tag`, `--character`, `--parody`, `--search`) accept an optional sort and page range.
 
 ### Output Formats
-- `directory`: keeps the gallery as a folder of images.
 - `zip` or `cbz`: archives the gallery and removes the original folder after post-processing.
 
 ### Extensions

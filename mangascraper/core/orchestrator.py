@@ -5,7 +5,7 @@ import os, sys, logging, math, threading, ast, tempfile, sqlite3
 from datetime import datetime
 
 ##########################################################################################
-# DIRECTORIES
+# Scraper Configuration Defaults
 ##########################################################################################
 
 # Use install-directory defaults by default.
@@ -30,6 +30,28 @@ CORE_DIR = os.path.join(SCRAPER_DIR, "mangascraper", "core")
 TEMP_DIR = os.path.join(tempfile.gettempdir(), "manga-scraper")
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(CORE_DIR, exist_ok=True)
+
+DEFAULT_USER_AGENT = "MangaScraper/5.0.0 (https://github.com/C7YPT0N1C/manga-scraper)"
+
+DEFAULT_DOWNLOAD_PATH = os.path.join(SCRAPER_DIR, "downloads")
+download_path = DEFAULT_DOWNLOAD_PATH  # public variable
+
+DEFAULT_DOUJIN_TXT_PATH = os.path.join(SCRAPER_DIR, "Doujinshi_IDs.txt")
+if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
+    # Create an empty file with instructions for the user
+    with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
+        f.write(
+            "# Add one NHentai gallery per line. Supported formats:\n"
+            "# 1) Plain gallery ID: e.g. 123456\n"
+            "# 2) Full gallery URL: e.g. https://nhentai.net/g/123456/\n"
+            "# 3) NHentai Homepage URL: e.g. https://nhentai.net/ or https://nhentai.net/?page=2/\n"
+            "#    Optional page parameter supported (e.g. '?page=2') (fetches pages 1 to 2)\n"
+            "# 4) Artist / Group / Tag / Character / Parody URLs: e.g. https://nhentai.net/artist/ARTIST/ or https://nhentai.net/group/GROUP/popular-week, etc\n"
+            "#    Optional page parameter supported (e.g. '?page=3') (fetches pages 1 to 3)\n"
+            "# 5) Search URLs: e.g. https://nhentai.net/search/?q=QUERY\n"
+            "# Lines that do not match these formats will be skipped.\n"
+        )
+doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
 
 ##########################################################################################
 # LOGGER
@@ -195,7 +217,7 @@ def with_env_lock(func, *args, **kwargs):
 CONFIG_DB_PATH = os.path.join(CORE_DIR, "mangascraper.db")
 CONFIG_TABLE = "Config"
 
-# Ensure NHentai directory exists
+# Ensure scraper directory exists
 os.makedirs(SCRAPER_DIR, exist_ok=True)
 
 # ------------------------------------------------------------
@@ -232,43 +254,6 @@ DASHBOARD_OTHER_VIEWS_CONFIG = {
 }
 
 # ------------------------------------------------------------
-# NHentai Scraper Configuration Defaults
-# ------------------------------------------------------------
-
-DEFAULT_USER_AGENT = "MangaScraper/5.0.0 (https://github.com/C7YPT0N1C/manga-scraper)"
-
-DEFAULT_DOWNLOAD_PATH = os.path.join(SCRAPER_DIR, "downloads")
-download_path = DEFAULT_DOWNLOAD_PATH  # public variable
-
-DEFAULT_DOUJIN_TXT_PATH = os.path.join(SCRAPER_DIR, "Doujinshi_IDs.txt")
-if not os.path.exists(DEFAULT_DOUJIN_TXT_PATH):
-    # Create an empty file with instructions for the user
-    with open(DEFAULT_DOUJIN_TXT_PATH, "w", encoding="utf-8") as f:
-        f.write(
-            "# Add one NHentai gallery per line. Supported formats:\n"
-            "# 1) Plain gallery ID: e.g. 123456\n"
-            "# 2) Full gallery URL: e.g. https://nhentai.net/g/123456/\n"
-            "# 3) NHentai Homepage URL: e.g. https://nhentai.net/ or https://nhentai.net/?page=2/\n"
-            "#    Optional page parameter supported (e.g. '?page=2') (fetches pages 1 to 2)\n"
-            "# 4) Artist / Group / Tag / Character / Parody URLs: e.g. https://nhentai.net/artist/ARTIST/ or https://nhentai.net/group/GROUP/popular-week, etc\n"
-            "#    Optional page parameter supported (e.g. '?page=3') (fetches pages 1 to 3)\n"
-            "# 5) Search URLs: e.g. https://nhentai.net/search/?q=QUERY\n"
-            "# Lines that do not match these formats will be skipped.\n"
-        )
-doujin_txt_path = DEFAULT_DOUJIN_TXT_PATH
-
-
-# ------------------------------------------------------------
-# Extensions
-# ------------------------------------------------------------
-DEFAULT_EXTENSION = "skeleton"
-extension = DEFAULT_EXTENSION
-
-DEFAULT_EXTENSION_DOWNLOAD_PATH = DEFAULT_DOWNLOAD_PATH
-extension_download_path = DEFAULT_EXTENSION_DOWNLOAD_PATH
-
-
-# ------------------------------------------------------------
 # APIs and Mirrors
 # ------------------------------------------------------------
 DEFAULT_NHENTAI_API_BASE = "https://nhentai.net/api/v2"
@@ -295,7 +280,7 @@ DEFAULT_PAGE_RANGE_START = 1
 page_range_start = DEFAULT_PAGE_RANGE_START
 
 DEFAULT_PAGE_RANGE_END = 10
-page_range_end = DEFAULT_PAGE_RANGE_END
+page_range_end = 2
 
 DEFAULT_RANGE_START = 500000
 range_start = DEFAULT_RANGE_START
@@ -309,7 +294,7 @@ galleries = DEFAULT_GALLERIES
 total_gallery_images = 0
 
 DEFAULT_ARCHIVING = False
-archiving = DEFAULT_RANGE_END
+archiving = DEFAULT_ARCHIVING
 
 
 # ------------------------------------------------------------
@@ -329,7 +314,7 @@ title_type = DEFAULT_TITLE_TYPE.lower()
 # ------------------------------------------------------------
 # Gallery Format
 # ------------------------------------------------------------
-DEFAULT_GALLERY_FORMAT = "directory"
+DEFAULT_GALLERY_FORMAT = "cbz"
 gallery_format = DEFAULT_GALLERY_FORMAT
 
 # ------------------------------------------------------------
@@ -362,7 +347,7 @@ threads_images = min(max(MIN_THREADS_IMAGES, calculated_threads_images), MAX_THR
 DEFAULT_USE_DAEMON_THREADS = True
 use_daemon_threads = DEFAULT_USE_DAEMON_THREADS
 
-DEFAULT_MAX_RETRIES = 5
+DEFAULT_MAX_RETRIES = 3
 max_retries = DEFAULT_MAX_RETRIES
 
 DEFAULT_MIN_RETRY_SLEEP = 0.5
@@ -429,11 +414,9 @@ def _is_legacy_linux_download_path(path_text: str) -> bool:
 def _normalise_path_default_for_windows(key: str, value):
     if os.name != "nt":
         return value
-    if key in ("DOWNLOAD_PATH", "EXTENSION_DOWNLOAD_PATH", "DOUJIN_TXT_PATH") and _is_legacy_linux_download_path(value):
+    if key in ("DOWNLOAD_PATH", "DOUJIN_TXT_PATH") and _is_legacy_linux_download_path(value):
         if key == "DOWNLOAD_PATH":
             return DEFAULT_DOWNLOAD_PATH
-        if key == "EXTENSION_DOWNLOAD_PATH":
-            return DEFAULT_EXTENSION_DOWNLOAD_PATH
         if key == "DOUJIN_TXT_PATH":
             return DEFAULT_DOUJIN_TXT_PATH
     return value
@@ -573,8 +556,6 @@ else:
 config = {
     "DOUJIN_TXT_PATH": os.getenv("DOUJIN_TXT_PATH", DEFAULT_DOUJIN_TXT_PATH),
     "DOWNLOAD_PATH": os.getenv("DOWNLOAD_PATH", DEFAULT_DOWNLOAD_PATH),
-    "EXTENSION": os.getenv("EXTENSION", DEFAULT_EXTENSION),
-    "EXTENSION_DOWNLOAD_PATH": os.getenv("EXTENSION_DOWNLOAD_PATH", DEFAULT_EXTENSION_DOWNLOAD_PATH),
     "NHENTAI_API_BASE": os.getenv("NHENTAI_API_BASE", DEFAULT_NHENTAI_API_BASE),
     "NHENTAI_MIRRORS": MIRRORS_LIST,
     "PAGE_SORT": os.getenv("PAGE_SORT", DEFAULT_PAGE_SORT),
@@ -626,8 +607,6 @@ def refresh_globals():
         for key, default in {
             "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
             "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
-            "EXTENSION": DEFAULT_EXTENSION,
-            "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
             "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
             "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
             "PAGE_SORT": DEFAULT_PAGE_SORT,
@@ -667,8 +646,6 @@ def normalise_config():
     defaults = {
         "DOUJIN_TXT_PATH": DEFAULT_DOUJIN_TXT_PATH,
         "DOWNLOAD_PATH": DEFAULT_DOWNLOAD_PATH,
-        "EXTENSION": DEFAULT_EXTENSION,
-        "EXTENSION_DOWNLOAD_PATH": DEFAULT_EXTENSION_DOWNLOAD_PATH,
         "NHENTAI_API_BASE": DEFAULT_NHENTAI_API_BASE,
         "NHENTAI_MIRRORS": DEFAULT_NHENTAI_MIRRORS,
         "VERIFY_SSL": DEFAULT_VERIFY_SSL,

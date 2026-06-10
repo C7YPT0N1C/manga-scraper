@@ -121,7 +121,7 @@ Practical changes (minimal disruption to other sites):
    nhentai API calls; add `User-Agent` config.
 3. Implement `POST /api/v2/galleries/{id}/download` archive flow with
    queueing and per-stream throttling.
-4. Extend `Sleep.api_wait_for_url()` to use site-specific buckets and
+4. Extend `Sleep.api_rate_limits()` to use site-specific buckets and
    choose anonymous vs authenticated buckets.
 5. Implement 429-aware backoff: parse `Retry-After` and rate-limit headers
    and log/instrument occurrences.

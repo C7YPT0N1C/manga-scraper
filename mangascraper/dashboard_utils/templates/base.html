@@ -37,7 +37,55 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/base.js') }}"></script>
-  <!-- Socket.IO client disabled in this build; fallback to HTTP polling only -->
+  <!-- Socket.IO client: enable live updates when available (use Socket.IO v4 client compatible with python-socketio v5) -->
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js" integrity="" crossorigin="anonymous"></script>
+  <script>
+    (function initSocketClient(){
+      try {
+        // Connect to the scraper namespace for run/status/search events
+        const ns = '/scraper';
+        // Force polling transport for now (works reliably across environments).
+        // This avoids websocket upgrade failures while troubleshooting.
+        const s = io(ns, { path: '/socket.io', transports: ['polling'], upgrade: false });
+        window.__scraperSocket = s;
+        window.__scraperSocketConnected = false;
+
+        s.on('connect', () => {
+          window.__scraperSocketConnected = true;
+          console.debug('[socket] connected to', ns);
+        });
+        s.on('disconnect', () => {
+          window.__scraperSocketConnected = false;
+          console.debug('[socket] disconnected from', ns);
+        });
+
+        s.on('scraper:status', (data) => {
+          try { window.__scraperStatusCache = { data: data, ts: Date.now() }; } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('scraper-status', { detail: data })); } catch (e) {}
+          try { console.debug('[socket] received scraper:status', data); } catch (e) {}
+        });
+
+        s.on('scraper:progress', (data) => {
+          try { window.__scraperStatusCache = { data: data, ts: Date.now() }; } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('scraper-progress', { detail: data })); } catch (e) {}
+          try { console.debug('[socket] received scraper:progress', data); } catch (e) {}
+        });
+
+        // Search updates: emit custom DOM events so pages can react
+        s.on('scraper:search:ids', (payload) => {
+          try { window.dispatchEvent(new CustomEvent('scraper-search-ids', { detail: payload })); } catch (e) {}
+          try { console.debug('[socket] received scraper:search:ids', payload); } catch (e) {}
+        });
+        s.on('scraper:search:metadata', (payload) => {
+          try { window.dispatchEvent(new CustomEvent('scraper-search-metadata', { detail: payload })); } catch (e) {}
+          try { console.debug('[socket] received scraper:search:metadata', payload); } catch (e) {}
+        });
+      } catch (err) {
+        console.debug('[socket] failed to initialise client, falling back to HTTP polling', err);
+        window.__scraperSocketConnected = false;
+      }
+    })();
+  </script>
   <script>
     window.__dynamicBarStatusOverride = '';
     window.__dynamicBarStatusOverrideUntil = 0;

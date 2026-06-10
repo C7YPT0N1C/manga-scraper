@@ -178,9 +178,13 @@ function stripGalleryId(title) {
 }
 
 function getDisplayTitleForItem(item, itemType) {
+	if (item && typeof item === 'object' && itemType === 'gallery') {
+		const preferred = item.raw_title || item.title || item.clean_title || item.label || item.name || '';
+		return String(preferred).trim();
+	}
 	if (item && typeof item === 'object' && item.clean_title) return String(item.clean_title);
 	const raw = typeof item === 'string' ? item : (item.label || item.name || '');
-	if (itemType === 'gallery') return stripGalleryId(raw); // TODO: Why does stripGalleryId(raw) have to be used instead of clean_title from the db?
+	if (itemType === 'gallery') return stripGalleryId(raw);
 	return raw;
 }
 
@@ -452,7 +456,7 @@ async function toggleGalleryFavourite(galleryId, galleryName, targetValue) {
 }
 
 function _renderGalleryDetail(gallery) {
-	const rawTitle = String(gallery.label || gallery.name || 'Gallery');
+	const rawTitle = String(gallery.raw_title || gallery.title || gallery.clean_title || gallery.label || gallery.name || 'Gallery');
 	const title = rawTitle;
 	const pageCount = Number(gallery.page_count || 0);
 	const languageList = normaliseList(gallery.languages);
@@ -467,7 +471,7 @@ function _renderGalleryDetail(gallery) {
 		coverUrl = `/api/gallery/cover/${encodeURIComponent(_currentCreator)}/${encodeURIComponent(title)}`;
 	}
 
-	document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || title);
+	document.getElementById('galleryDetailTitle').textContent = title;
 	document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
 	document.getElementById('galleryDetailCreators').textContent = creatorList.length ? creatorList.join(', ') : 'Unknown';
 	document.getElementById('galleryDetailParodies').textContent = parodyList.length ? parodyList.join(', ') : 'None';

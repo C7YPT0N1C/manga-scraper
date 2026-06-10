@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import DEFAULT_PAGE_SORT, logger
 from mangascraper.core.api import api as scraperapi
-from mangascraper.core import downloader as scraper_downloader
+from mangascraper.core.downloader import download_manager as scraper_downloader
 
 ####################################################################################################################
 # GLOBAL VARIABLES

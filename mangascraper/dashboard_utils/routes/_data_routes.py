@@ -151,7 +151,7 @@ def _resolve_file_browser_root(requested_root: str | None = None) -> str:
         if os.path.isabs(candidate) and os.path.isdir(candidate):
             return candidate
 
-    # Default to DB-managed download roots first (ordered with skeleton priority).
+    # Default to DB-managed download roots first.
     managed_roots = _available_roots()
     if managed_roots:
         preferred = os.path.realpath(str(managed_roots[0].get("root_path") or "").strip())
@@ -1937,7 +1937,7 @@ def list_pages(creator, gallery):
             name for name in os.listdir(gallery_path)
             if os.path.splitext(name)[1].lower() in IMAGE_EXTS
         )
-        return jsonify({"creator": creator, "gallery": gallery, "pages": pages, "mode": "directory", "root_path": base})
+        return jsonify({"creator": creator, "gallery": gallery, "pages": pages, "mode": "archive", "root_path": base})
 
     if _is_archive(gallery_path):
         pages = _archive_pages(gallery_path)
@@ -1981,7 +1981,7 @@ def list_pages_by_id(gallery_id):
                 name for name in os.listdir(resolved_path)
                 if os.path.splitext(name)[1].lower() in IMAGE_EXTS
             )
-            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": root, "title": friendly_title})
+            return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": root, "title": friendly_title})
 
         if _is_archive(resolved_path):
             pages = _archive_pages(resolved_path)
@@ -1999,7 +1999,7 @@ def list_pages_by_id(gallery_id):
                     name for name in os.listdir(resolved_gp)
                     if os.path.splitext(name)[1].lower() in IMAGE_EXTS
                 )
-                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "directory", "root_path": "", "title": friendly_title})
+                return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": "", "title": friendly_title})
             if _is_archive(resolved_gp):
                 pages = _archive_pages(resolved_gp)
                 return jsonify({"gallery_id": int(gallery_id), "pages": pages, "mode": "archive", "root_path": "", "title": friendly_title})

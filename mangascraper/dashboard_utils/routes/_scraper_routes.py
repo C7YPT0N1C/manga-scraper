@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # mangascraper/dashboard/routes/_scraper_routes.py
 
-import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile, re
+import os, time, sys, threading, subprocess, socket, secrets, shlex, tempfile, re, logging
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
@@ -9,6 +9,7 @@ from mangascraper.core.api import api as scraperapi
 from mangascraper.core import orchestrator
 
 scraper_bp = Blueprint("scraper", __name__)
+logger = logging.getLogger(__name__)
 
 _process_lock = threading.Lock()
 _scraper_process = None
@@ -21,6 +22,9 @@ _last_exit_code = None
 _active_download_no = None
 _active_queue_file = None
 _active_run_gallery_ids = []
+_search_job_lock = threading.Lock()
+_search_jobs: dict[str, dict] = {}
+_search_job_ttl_seconds = 3600
 
 _SEARCH_TYPES = {
     "homepage",
@@ -88,9 +92,14 @@ def _queue_rows(ids: list[int], metadata: dict | None = None) -> list[dict]:
     rows = []
     for gid in ids:
         meta = metadata.get(gid) or metadata.get(str(gid)) or {}
+        raw_title = str(meta.get("raw_title") or "").strip()
+        plain_title = str(meta.get("title") or "").strip()
+        clean_title = str(meta.get("clean_title") or "").strip()
         rows.append({
             "id": gid,
-            "title": meta.get("title") or f"Gallery {gid}",
+            "title": raw_title or plain_title or clean_title or f"Gallery {gid}",
+            "raw_title": raw_title,
+            "clean_title": clean_title,
             "artists": meta.get("artists") or [],
             "groups": meta.get("groups") or [],
             "tags": meta.get("tags") or [],
@@ -102,16 +111,186 @@ def _queue_rows(ids: list[int], metadata: dict | None = None) -> list[dict]:
     return rows
 
 
+def _search_job_cleanup() -> None:
+    cutoff = time.time() - _search_job_ttl_seconds
+    with _search_job_lock:
+        stale_job_ids = [
+            job_id
+            for job_id, job in _search_jobs.items()
+            if str(job.get("status") or "").strip().lower() in {"complete", "failed"}
+            and float(job.get("updated_at") or 0) < cutoff
+        ]
+        for job_id in stale_job_ids:
+            _search_jobs.pop(job_id, None)
+
+
+def _search_job_create(payload: dict) -> str:
+    job_id = secrets.token_urlsafe(12)
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Search queued.",
+        "created_at": now,
+        "updated_at": now,
+        "payload": payload,
+        "cache_key": None,
+        "ids": [],
+        "summary": {},
+        "results": [],
+        "error": None,
+    }
+    with _search_job_lock:
+        _search_jobs[job_id] = job
+    _search_job_cleanup()
+    return job_id
+
+
+def _search_job_update(job_id: str, **updates) -> dict | None:
+    now = time.time()
+    with _search_job_lock:
+        job = _search_jobs.get(job_id)
+        if not job:
+            return None
+        job.update(updates)
+        job["updated_at"] = now
+        job.setdefault("created_at", now)
+        return dict(job)
+
+
+def _search_job_get(job_id: str) -> dict | None:
+    _search_job_cleanup()
+    with _search_job_lock:
+        job = _search_jobs.get(job_id)
+        return dict(job) if job else None
+
+
+def _search_payload_to_result(payload: dict) -> dict:
+    payload = payload or {}
+
+    query_type = str(payload.get("query_type") or "homepage").strip().lower()
+    if query_type not in _SEARCH_TYPES:
+        raise ValueError(f"Unsupported query_type '{query_type}'.")
+
+    query_value = str(payload.get("query_value") or "").strip()
+    parsed_prefixed = _parse_prefixed_query(query_value)
+    if parsed_prefixed and query_type in {"search", "artist", "group", "tag", "character", "parody"}:
+        query_type, query_value = parsed_prefixed
+    sort_value = str(payload.get("sort") or orchestrator.DEFAULT_PAGE_SORT).strip()
+    sort_value = orchestrator.get_valid_sort_value(sort_value)
+    start_page_input = payload.get("start_page")
+    start_page = _safe_int(start_page_input, orchestrator.DEFAULT_PAGE_RANGE_START)
+    end_page_input = payload.get("end_page")
+    end_page = None if end_page_input in (None, "", "all") else _safe_int(end_page_input, orchestrator.DEFAULT_PAGE_RANGE_END)
+    fetch_all_pages = _safe_bool(payload.get("fetch_all_pages"), end_page is None)
+    if fetch_all_pages:
+        end_page = None
+
+    cache_key = None
+    ids = []
+
+    if query_type == "cache_key":
+        if not query_value:
+            raise ValueError("cache_key is required for query_type=cache_key.")
+        cache_key = query_value
+        try:
+            scraperapi.logger.debug(
+                f"[DashboardSearch] query_type=cache_key request key='{cache_key}' sort='{sort_value}' "
+                f"start_page={start_page} end_page={end_page} fetch_all_pages={fetch_all_pages}"
+            )
+        except Exception:
+            pass
+        ids = scraperapi.Cache.Load.cache(cache_key=cache_key)
+        try:
+            scraperapi.logger.info(
+                f"[DashboardSearch] cache_key='{cache_key}' resolved {len(ids)} IDs"
+            )
+            preview = ",".join(str(gid) for gid in ids[:10]) if ids else ""
+            scraperapi.logger.debug(
+                f"[DashboardSearch] cache_key='{cache_key}' ids_preview='{preview}'"
+            )
+        except Exception:
+            pass
+    elif query_type == "id_range":
+        start_id = _safe_int(payload.get("start_id"), None)
+        end_id = _safe_int(payload.get("end_id"), None)
+        if start_id is None:
+            raise ValueError("start_id is required for id_range searches.")
+        if end_id is None:
+            end_id = scraperapi.Fetch.latest_gallery_id() or start_id
+        if start_id > end_id:
+            start_id, end_id = end_id, start_id
+        ids = list(range(start_id, end_id + 1))
+    elif query_type == "ids":
+        ids = _normalise_ids(payload.get("ids") or query_value)
+        if not ids:
+            raise ValueError("Provide IDs for query_type=ids.")
+    else:
+        search_value = query_value
+        try:
+            cache_key, ids = scraperapi.Fetch.gallery_ids(
+                query_type,
+                search_value,
+                sort_value,
+                start_page,
+                end_page,
+                fetch_as_archival=fetch_all_pages,
+            )
+        except Exception as e:
+            try:
+                scraperapi.logger.debug(f"Search fetch failed: {e}")
+            except Exception:
+                pass
+            ids = []
+
+    if not ids:
+        return {
+            "message": "No galleries found.",
+            "cache_key": cache_key,
+            "ids": [],
+            "summary": {},
+            "results": [],
+        }
+
+    metadata = scraperapi.Fetch.all_galleries_metadata(ids, cache_key=cache_key) if ids else {}
+    rows = _queue_rows(sorted(ids, reverse=True), metadata)
+    summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
+
+    return {
+        "message": f"Loaded {len(ids)} galleries.",
+        "cache_key": cache_key,
+        "ids": ids,
+        "summary": summary,
+        "results": rows,
+    }
+
+
+def _search_job_run(job_id: str, payload: dict) -> None:
+    _search_job_update(job_id, status="running", message="Search in progress...", error=None)
+    try:
+        result = _search_payload_to_result(payload)
+        result["status"] = "complete"
+        result.setdefault("message", f"Loaded {len(result.get('ids') or [])} galleries.")
+        result.setdefault("error", None)
+        _search_job_update(job_id, **result)
+    except Exception as exc:
+        logger.exception("Search job %s failed", job_id)
+        _search_job_update(
+            job_id,
+            status="failed",
+            message=f"Search failed: {exc}",
+            error=str(exc),
+        )
+
+
 def _current_config() -> dict:
     orchestrator.refresh_globals()
     return {
-        "extension": orchestrator.extension,
-        "mirrors": ",".join(orchestrator.nhentai_mirrors or []),
         "verify_ssl": bool(orchestrator.verify_ssl),
         "language": ",".join(orchestrator.language or []),
         "title_type": orchestrator.title_type,
         "excluded_tags": ",".join(orchestrator.excluded_tags or []),
-        "output_folder": orchestrator.extension_download_path,
+        "output_folder": orchestrator.download_path,
         "format": orchestrator.gallery_format,
         "use_tor": bool(orchestrator.use_tor),
         "dry_run": bool(orchestrator.dry_run),
@@ -132,7 +311,7 @@ def _update_config(payload: dict) -> dict:
         "language": ("LANGUAGE", str),
         "title_type": ("TITLE_TYPE", str),
         "excluded_tags": ("EXCLUDED_TAGS", str),
-        "output_folder": ("EXTENSION_DOWNLOAD_PATH", str),
+        "output_folder": ("DEFAULT_DOWNLOAD_PATH", str), # TODO: Might be wrong
         "format": ("GALLERY_FORMAT", str),
         "use_tor": ("USE_TOR", _safe_bool),
         "dry_run": ("DRY_RUN", _safe_bool),
@@ -384,102 +563,6 @@ def _start_process(cli_args: list[str]):
     return {"message": "Scraper started.", "args": cli_args}, None
 
 
-@scraper_bp.route("/extensions", methods=["GET"])
-def list_extensions():
-    """Return installed extensions from the local manifest with remote version comparison."""
-    import json as _json
-    import re as _re
-
-    def _ver(v):
-        parts = _re.findall(r'\d+', str(v))
-        return tuple(int(p) for p in parts) if parts else (0,)
-
-    try:
-        from mangascraper.extensions.extension_manager import load_local_manifest
-        manifest = load_local_manifest()
-
-        # Try local sibling repo for version comparison (no network required)
-        master_map = {}
-        try:
-            _base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-            _mpath = os.path.join(_base, '..', 'manga-scraper-extensions', 'master_manifest.json')
-            if os.path.isfile(_mpath):
-                with open(_mpath, 'r', encoding='utf-8') as _f:
-                    _remote = _json.load(_f)
-                for _e in (_remote.get('extensions') or []):
-                    if _e.get('name'):
-                        master_map[_e['name']] = _e.get('version', '0')
-        except Exception:
-            pass
-
-        extensions = []
-        for ext in (manifest.get("extensions") or []):
-            name = ext.get("name", "")
-            if not name:
-                continue
-            local_v = ext.get("version", "0")
-            remote_v = master_map.get(name, local_v)
-            update_available = _ver(remote_v) > _ver(local_v)
-            extensions.append({
-                "name": name,
-                "label": name,
-                "description": ext.get("description", ""),
-                "version": local_v,
-                "remote_version": remote_v,
-                "update_available": update_available,
-                "installed": ext.get("installed", False),
-                "default_output_folder": str(ext.get("image_download_path") or ""),
-            })
-    except Exception:
-        extensions = []
-    return jsonify({"extensions": extensions})
-
-
-@scraper_bp.route("/extensions/install", methods=["POST"])
-def extension_install():
-    payload = request.get_json(silent=True) or {}
-    name = str(payload.get("name") or "").strip().lower()
-    if not name:
-        return jsonify({"message": "Extension name is required."}), 400
-
-    try:
-        from mangascraper.extensions.extension_manager import install_selected_extension
-        install_selected_extension(name, reinstall=False, prompt_for_update=False)
-        return jsonify({"message": f"Install requested for extension '{name}'."})
-    except Exception as e:
-        return jsonify({"message": f"Failed to install extension '{name}': {e}"}), 500
-
-
-@scraper_bp.route("/extensions/uninstall", methods=["POST"])
-def extension_uninstall():
-    payload = request.get_json(silent=True) or {}
-    name = str(payload.get("name") or "").strip().lower()
-    if not name:
-        return jsonify({"message": "Extension name is required."}), 400
-
-    try:
-        from mangascraper.extensions.extension_manager import uninstall_selected_extension
-        uninstall_selected_extension(name)
-        return jsonify({"message": f"Uninstall requested for extension '{name}'."})
-    except Exception as e:
-        return jsonify({"message": f"Failed to uninstall extension '{name}': {e}"}), 500
-
-
-@scraper_bp.route("/extensions/update", methods=["POST"])
-def extension_update():
-    payload = request.get_json(silent=True) or {}
-    name = str(payload.get("name") or "").strip().lower()
-    if not name:
-        return jsonify({"message": "Extension name is required."}), 400
-
-    try:
-        from mangascraper.extensions.extension_manager import install_selected_extension
-        install_selected_extension(name, reinstall=True, prompt_for_update=False)
-        return jsonify({"message": f"Update requested for extension '{name}'."})
-    except Exception as e:
-        return jsonify({"message": f"Failed to update extension '{name}': {e}"}), 500
-
-
 @scraper_bp.route("/self-test", methods=["POST"])
 def run_self_test():
     """Run core self-tests in a separate process and return a concise result."""
@@ -522,106 +605,22 @@ def search_galleries():
     if query_type not in _SEARCH_TYPES:
         return jsonify({"message": f"Unsupported query_type '{query_type}'."}), 400
 
-    query_value = str(payload.get("query_value") or "").strip()
-    parsed_prefixed = _parse_prefixed_query(query_value)
-    if parsed_prefixed and query_type in {"search", "artist", "group", "tag", "character", "parody"}:
-        query_type, query_value = parsed_prefixed
-    sort_value = str(payload.get("sort") or orchestrator.DEFAULT_PAGE_SORT).strip()
-    sort_value = orchestrator.get_valid_sort_value(sort_value)
-    start_page = _safe_int(payload.get("start_page"), orchestrator.DEFAULT_PAGE_RANGE_START)
-    end_page_input = payload.get("end_page")
-    end_page = None if end_page_input in (None, "", "all") else _safe_int(end_page_input, orchestrator.DEFAULT_PAGE_RANGE_END)
-    fetch_all_pages = _safe_bool(payload.get("fetch_all_pages"), end_page is None)
-
-    cache_key = None
-    ids = []
-
-    if query_type == "cache_key":
-        if not query_value:
-            return jsonify({"message": "cache_key is required for query_type=cache_key."}), 400
-        cache_key = query_value
-        try:
-            scraperapi.logger.debug(
-                f"[DashboardSearch] query_type=cache_key request key='{cache_key}' sort='{sort_value}' "
-                f"start_page={start_page} end_page={end_page} fetch_all_pages={fetch_all_pages}"
-            )
-        except Exception:
-            pass
-        ids = scraperapi.Cache.Load.cache(cache_key=cache_key)
-        try:
-            scraperapi.logger.info(
-                f"[DashboardSearch] cache_key='{cache_key}' resolved {len(ids)} IDs"
-            )
-            preview = ",".join(str(gid) for gid in ids[:10]) if ids else ""
-            scraperapi.logger.debug(
-                f"[DashboardSearch] cache_key='{cache_key}' ids_preview='{preview}'"
-            )
-        except Exception:
-            pass
-    elif query_type == "id_range":
-        start_id = _safe_int(payload.get("start_id"), None)
-        end_id = _safe_int(payload.get("end_id"), None)
-        if start_id is None:
-            return jsonify({"message": "start_id is required for id_range searches."}), 400
-        if end_id is None:
-            end_id = scraperapi.Fetch.latest_gallery_id() or start_id
-        if start_id > end_id:
-            start_id, end_id = end_id, start_id
-        ids = list(range(start_id, end_id + 1))
-    elif query_type == "ids":
-        ids = _normalise_ids(payload.get("ids") or query_value)
-        if not ids:
-            return jsonify({"message": "Provide IDs for query_type=ids."}), 400
-    else:
-        search_value = sort_value if query_type == "homepage" else query_value
-        cache_key, ids = scraperapi.Fetch.gallery_ids(
-            query_type,
-            search_value,
-            sort_value,
-            start_page,
-            end_page,
-            fetch_as_archival=fetch_all_pages,
-        )
-
-    if not ids:
-        if query_type == "cache_key":
-            try:
-                scraperapi.logger.debug(
-                    f"[DashboardSearch] cache_key='{cache_key}' produced no IDs; returning empty result set"
-                )
-            except Exception:
-                pass
-        return jsonify({
-            "message": "No galleries found.",
-            "cache_key": cache_key,
-            "ids": [],
-            "summary": {},
-            "results": [],
-        })
-
-    # Hydrate metadata so the dashboard can show proper titles/artists instead of placeholders.
-    metadata = scraperapi.Fetch.all_galleries_metadata(ids, cache_key=None)
-    try:
-        missing_meta_ids = [int(gid) for gid in ids if int(gid) not in set(int(k) for k in (metadata or {}).keys())]
-        scraperapi.logger.info(
-            f"[DashboardSearch] query_type='{query_type}' ids={len(ids)} metadata={len(metadata or {})} missing={len(missing_meta_ids)}"
-        )
-        if missing_meta_ids:
-            scraperapi.logger.warning(
-                "[DashboardSearch] Missing metadata IDs: " + ",".join(str(gid) for gid in missing_meta_ids[:50])
-            )
-    except Exception:
-        pass
-    rows = _queue_rows(sorted(ids, reverse=True), metadata)
-    summary = scraperapi.Get.metadata_summary(metadata) if metadata else {}
+    job_id = _search_job_create(payload)
+    worker = threading.Thread(target=_search_job_run, args=(job_id, payload), daemon=True)
+    worker.start()
 
     return jsonify({
-        "message": f"Loaded {len(ids)} galleries.",
-        "cache_key": cache_key,
-        "ids": ids,
-        "summary": summary,
-        "results": rows,
-    })
+        "message": "Search queued.",
+        "job_id": job_id,
+        "status": "queued",
+    }), 202
+
+@scraper_bp.route("/search/jobs/<job_id>", methods=["GET"])
+def search_job_status(job_id):
+    job = _search_job_get(job_id)
+    if not job:
+        return jsonify({"message": "Search job not found.", "job_id": job_id}), 404
+    return jsonify(job)
 
 
 @scraper_bp.route("/cache/clear", methods=["POST"])
@@ -725,6 +724,31 @@ def search_history_remove():
 
     cleared = scraperapi.Cache.clear_cache(cache_key=cache_key)
     return jsonify({"message": f"Removed search history item '{cache_key}'.", "cleared": cleared})
+
+
+@scraper_bp.route("/search/emit_test", methods=["POST"])
+def search_emit_test():
+    """Emit a test scraper:search:ids and scraper:search:metadata payload to connected clients.
+    Useful for debugging client delivery without running a full search.
+    """
+    payload = request.get_json(silent=True) or {}
+    # default test payload
+    ids = payload.get('ids') or [12345, 12346]
+    cache_key = payload.get('cache_key') or 'test:manual'
+    try:
+        from mangascraper.dashboard_utils.socketio_ import socketio as _sio
+        if _sio:
+            _sio.emit('scraper:search:ids', {"cache_key": cache_key, "ids": ids}, namespace='/scraper')
+            # send minimal metadata for first id
+            meta = {str(ids[0]): {"title": "Test Gallery", "pages": 1}}
+            _sio.emit('scraper:search:metadata', {"ids": ids, "metadata": meta}, namespace='/scraper')
+            return jsonify({"message": "Emitted test payload.", "ids": ids}), 200
+    except Exception as e:
+        try:
+            scraperapi.logger.debug(f"Test emit failed: {e}")
+        except Exception:
+            pass
+    return jsonify({"message": "SocketIO not initialised or emit failed."}), 500
 
 
 @scraper_bp.route("/queue", methods=["GET"])

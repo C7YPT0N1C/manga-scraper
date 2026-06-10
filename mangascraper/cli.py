@@ -6,11 +6,7 @@ import os, time, sys, argparse, re, subprocess, urllib.parse, webbrowser, thread
 from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.api import api as scraperapi
-from mangascraper.core.downloader import start_downloader
-from mangascraper.extensions.extension_manager import (
-    ensure_extension_cli,
-    uninstall_selected_extension,
-)
+from mangascraper.core.downloader import download_manager
 
 ####################################################################################################################
 # GLOBAL VARIABLES
@@ -115,7 +111,6 @@ def parse_args():
     )
 
     installer_group = parser.add_argument_group("Installer / updater")
-    extension_group = parser.add_argument_group("Extensions")
     source_group = parser.add_argument_group("Gallery selection")
     filters_group = parser.add_argument_group("Filters")
     output_group = parser.add_argument_group("Output")
@@ -132,25 +127,6 @@ def parse_args():
     installer_group.add_argument("--update-config", dest="update_config_db", action="store_true", help="Sync runtime configuration to database")
     installer_group.add_argument("--uninstall", "--remove", action="store_true", help="Uninstall manga-scraper")
 
-    # Extension selection / management
-    extension_group.add_argument("--install-extension", type=str, help="Install an extension by name")
-    extension_group.add_argument("--uninstall-extension", type=str, help="Uninstall an extension by name")
-    extension_group.add_argument(
-        "--extension",
-        dest="extension",
-        type=str,
-        default=None,
-        help="Extension to use",
-    )
-    
-    # NHentai mirror URLs
-    source_group.add_argument(
-        "--mirrors",
-        dest="mirrors",
-        type=str,
-        default=None,
-        help="Comma-separated list of NHentai mirror URLs",
-    )
     source_group.add_argument(
         "--disable-ssl-verify",
         action="store_true",
@@ -237,7 +213,7 @@ def parse_args():
         help="Download by search query. Usage: --search QUERY [SORT] [START] [END] [ARCHIVE]. ARCHIVE is archive=true or archive=false. Repeatable.",
     )
     
-    # NHentai Archival
+    # Archival
     source_group.add_argument(
         "--archive",
         action="append",
@@ -278,8 +254,8 @@ def parse_args():
         "--output-format",
         dest="format",
         type=str,
-        default=argparse.SUPPRESS,
-        choices=["directory", "zip", "cbz"],
+        default="cbz",
+        choices=["zip", "cbz"],
         help="Output format for downloaded galleries",
     )
 
@@ -788,12 +764,8 @@ def _get_summary_cache_keys(args) -> str | None:
     valid_sorts = ("date", "recent", "popular_today", "today", "popular_week", "week", "popular", "all_time")
 
     if args.homepage:
-        sort_val = DEFAULT_PAGE_SORT
-        if args.homepage:
-            first = str(args.homepage[0]).lower()
-            if first in valid_sorts:
-                sort_val = first
-        return scraperapi.Cache.cache_key("homepage", sort_val)
+        # Homepage sorting is not supported, use homepage cache key
+        return scraperapi.Cache.cache_key("homepage")
 
     if args.artist and len(args.artist) == 1:
         return scraperapi.Cache.cache_key("artist", args.artist[0][0])
@@ -917,18 +889,10 @@ def update_config(args):
     
     # Only update persisted config for values explicitly provided via CLI flags.
     # If flag not provided, use current runtime config values.
-    
-    if args.extension is not None:
-        orchestrator.update_env("EXTENSION", args.extension)
-    
-    # Handle mirrors (from CLI or interactive menu)
-    if args.mirrors is not None:
-        orchestrator.update_env("NHENTAI_MIRRORS", args.mirrors)
 
     # Handle output folder (from CLI or interactive menu)
     if args.output_folder:
         orchestrator.update_env("DOWNLOAD_PATH", args.output_folder)
-        orchestrator.update_env("EXTENSION_DOWNLOAD_PATH", args.output_folder)
     
     # Handle max retries (from CLI or interactive menu)
     if hasattr(args, 'max_retries'):
@@ -1056,17 +1020,6 @@ def main():
     elif args.uninstall:
         run_installer("--uninstall")
         
-    # ------------------------------------------------------------
-    # Handle extension installation / uninstallation
-    # ------------------------------------------------------------
-    if args.install_extension:
-        ensure_extension_cli(args.install_extension)
-        return
-    
-    if args.uninstall_extension:
-        uninstall_selected_extension(args.uninstall_extension)
-        return
-
     logger.debug("[CLI] Ready.")
     log("[CLI] Debugging Started.", "debug")
     
@@ -1144,7 +1097,7 @@ def main():
     # ------------------------------------------------------------
     # Download galleries
     # ------------------------------------------------------------
-    start_downloader(gallery_list) # Start download
+    download_manager.start_downloader(gallery_list) # Start download
 
 if __name__ == "__main__":
     main()

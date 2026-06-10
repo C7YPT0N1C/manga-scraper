@@ -2,7 +2,7 @@
 {% block content %}
 <h2>Scraper Control Panel</h2>
 
-<!-- Embedded Stats Pane (diagnostics-style) -->
+<!-- Embedded Stats Pane -->
 <div id="scraperStatsSubpage" style="display:none;">
   <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.6rem">
     <button id="statsBackBtn">◀ Back</button>
@@ -14,25 +14,12 @@
   <div id="statsContent" style="margin-top:6px"></div>
 </div>
 
-<!-- ===== RUNTIME ===== -->
+<!-- ===== SCRAPER PAGE ===== -->
 <div id="scraperMainContent">
-<section>
-  <h3>Runtime</h3>
-  <button id="refreshAllBtn">Refresh Scraper</button>
-  <button id="startBtn" title="Start a scraper run using only galleries currently selected in the queue.">Start Scraper</button>
-  <button id="stopBtn">Stop Scraper</button>
-  <button id="statsBtn" title="Open detailed scraper stats page">Stats</button>
-  </section>
-
 <!-- ===== CONFIGURATION ===== -->
 <section>
   <h3>Configuration</h3>
   <div id="configGrid">
-
-    <label title="Comma-separated list of image mirror URLs to try when downloading images. The first reachable mirror is used.">
-      Mirrors
-      <input id="cfg_mirrors" type="text" placeholder="https://i.nhentai.net">
-    </label>
 
     <label title="Filter galleries by language. Comma-separated (e.g. english,japanese). Leave blank to allow all languages.">
       Language(s)
@@ -53,10 +40,9 @@
       <input id="cfg_excluded_tags" type="text" placeholder="e.g. guro,snuff">
     </label>
 
-    <label title="How galleries are stored on disk: as a plain folder of images, a .zip archive, or a .cbz comic archive.">
+    <label title="How galleries are stored on disk: as a .zip archive or a .cbz comic archive.">
       Format
       <select id="cfg_format">
-        <option value="directory">directory</option>
         <option value="zip">zip</option>
         <option value="cbz">cbz</option>
       </select>
@@ -87,7 +73,7 @@
       <input id="cfg_dry_run" type="checkbox">
     </label>
 
-    <label title="Verify HTTPS certificates when making requests. Disable only if you encounter SSL errors with your chosen mirrors.">
+    <label title="Verify HTTPS certificates when making requests. Disable only if you encounter SSL errors.">
       Verify SSL
       <input id="cfg_verify_ssl" type="checkbox">
     </label>
@@ -216,7 +202,7 @@
     <!-- homepage, search, artist, group, tag, character, parody -->
     <label id="row_endPage" title="Which page to stop at. Enter a number, or 'all' to fetch every available page (can be slow for large queries).">
       End Page
-      <input id="endPage" type="text" value="10" placeholder="10 or all">
+      <input id="endPage" type="text" placeholder="1, 2, 10, etc or all">
     </label>
 
     <!-- id_range only -->
@@ -319,6 +305,15 @@
   <button id="clearFilterBtn">Clear Filters</button>
   <p id="filterMsg"></p>
 </div>
+
+<!-- ===== RUNTIME ===== -->
+<section>
+  <h3>Runtime</h3>
+  <button id="refreshAllBtn">Refresh Scraper</button>
+  <button id="startBtn" title="Start a scraper run using only galleries currently selected in the queue.">Start Scraper</button>
+  <button id="stopBtn">Stop Scraper</button>
+  <button id="statsBtn" title="Open detailed scraper stats page">Stats</button>
+</section>
 
 <!-- ===== QUEUE ===== -->
 <section>
@@ -619,7 +614,7 @@ function renderResultsRows(rows) {
 function openGalleryDetail(row) {
   const join = arr => Array.isArray(arr) && arr.length ? arr.join(', ') : '-';
   document.getElementById('gdId').textContent = row.id ?? '-';
-  document.getElementById('gdTitle').textContent = String(row.clean_title || row.title || `Gallery ${row.id}`);
+  document.getElementById('gdTitle').textContent = String(row.raw_title || row.title || row.clean_title || `Gallery ${row.id}`);
   document.getElementById('gdArtists').textContent = join(row.artists);
   document.getElementById('gdGroups').textContent = join(row.groups);
   document.getElementById('gdLanguages').textContent = join(row.languages);
@@ -663,7 +658,7 @@ const SEARCH_FIELD_RULES = {
   // row id  → array of query types that SHOW this row
   row_queryValue: ['cache_key', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_idsValue:   ['ids'],
-  row_sort:       ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
+  row_sort:       ['search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_startPage:  ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_endPage:    ['homepage', 'search', 'artist', 'group', 'tag', 'character', 'parody'],
   row_startId:    ['id_range'],
@@ -931,7 +926,6 @@ async function loadConfig() {
   const extSel = document.getElementById('cfg_extension');
   extSel.value = c.extension || '';
 
-  document.getElementById('cfg_mirrors').value = c.mirrors || '';
   document.getElementById('cfg_language').value = c.language || '';
   document.getElementById('cfg_title_type').value = c.title_type || 'pretty';
   document.getElementById('cfg_excluded_tags').value = c.excluded_tags || '';
@@ -955,7 +949,6 @@ async function loadConfig() {
 async function saveConfig() {
   const payload = {
     extension: document.getElementById('cfg_extension').value,
-    mirrors: document.getElementById('cfg_mirrors').value.trim(),
     language: document.getElementById('cfg_language').value.trim(),
     title_type: document.getElementById('cfg_title_type').value,
     excluded_tags: document.getElementById('cfg_excluded_tags').value.trim(),
@@ -982,6 +975,58 @@ async function saveConfig() {
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
+
+function _applySearchPayload(data) {
+  const ids = Array.isArray(data.ids) ? data.ids : [];
+  const results = Array.isArray(data.results) ? data.results : [];
+  const rowById = new Map(results.map(r => [Number(r.id), r]));
+  const incomingResults = ids.map(id => rowById.get(Number(id)) || {
+    id,
+    title: `Gallery ${id}`,
+    raw_title: '',
+    clean_title: '',
+    artists: [],
+    groups: [],
+    tags: [],
+    characters: [],
+    parodies: [],
+    languages: [],
+    pages: 0,
+  });
+
+  previousResults = [];
+  currentResults = incomingResults;
+  renderSearchTables();
+
+  const s = data.summary || {};
+  document.getElementById('summaryMsg').textContent = Object.keys(s).length
+    ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
+    : 'Summary: none';
+
+  document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentSearchRows().length} current results.`;
+}
+
+async function _waitForSearchJob(jobId) {
+  while (true) {
+    const res = await fetch(`/api/scraper/search/jobs/${encodeURIComponent(jobId)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || `Search job ${jobId} failed`);
+    }
+
+    if (data.status === 'failed') {
+      throw new Error(data.error || data.message || 'Search failed');
+    }
+
+    if (data.status === 'complete') {
+      _applySearchPayload(data);
+      return;
+    }
+
+    document.getElementById('searchMsg').textContent = data.message || 'Search in progress...';
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
+}
 
 async function runSearch() {
   const type = document.getElementById('queryType').value;
@@ -1010,7 +1055,7 @@ async function runSearch() {
     end_page: endPageRaw,
     start_id: Number(document.getElementById('startId').value || 0),
     end_id: Number(document.getElementById('endId').value || 0),
-    fetch_all_pages: false,
+    fetch_all_pages: endPageNum === null,
   };
 
   document.getElementById('searchMsg').textContent = '';
@@ -1031,31 +1076,13 @@ async function runSearch() {
     });
     const data = await res.json();
 
-    const ids = Array.isArray(data.ids) ? data.ids : [];
-    const results = Array.isArray(data.results) ? data.results : [];
-    const rowById = new Map(results.map(r => [Number(r.id), r]));
-    const incomingResults = ids.map(id => rowById.get(Number(id)) || {
-      id,
-      title: `Gallery ${id}`,
-      artists: [],
-      groups: [],
-      tags: [],
-      characters: [],
-      parodies: [],
-      languages: [],
-      pages: 0,
-    });
+    if (data.job_id) {
+      document.getElementById('searchMsg').textContent = data.message || 'Search queued...';
+      await _waitForSearchJob(data.job_id);
+      return;
+    }
 
-    previousResults = [];
-    currentResults = incomingResults;
-    renderSearchTables();
-
-    const s = data.summary || {};
-    document.getElementById('summaryMsg').textContent = Object.keys(s).length
-      ? `Summary: ${asText(s.total_galleries, 0)} galleries | ${asText(s.unique_artists, 0)} artists | ${asText(s.unique_tags, 0)} tags | pages ${asText(s.min_pages, 0)}-${asText(s.max_pages, 0)} avg ${Math.round(Number(s.avg_pages || 0))}`
-      : 'Summary: none';
-
-      document.getElementById('searchMsg').textContent = data.message || `Loaded ${currentSearchRows().length} current results.`;
+    _applySearchPayload(data);
   } catch (err) {
     document.getElementById('searchMsg').textContent = `Search failed: ${err.message}`;
   } finally {
@@ -1489,6 +1516,55 @@ refreshSearchHistory();
 // Note: do NOT poll refreshStatus here - base.html provides a single global poll.
 setInterval(refreshQueue, 15000);
 setInterval(refreshSearchHistory, 30000);
+// Listen for server-side search events (ids and hydrated metadata)
+window.addEventListener('scraper-search-ids', (e) => {
+  try {
+    const payload = e.detail || {};
+    try { console.debug('handler: scraper-search-ids', payload); } catch (e) {}
+    const ids = Array.isArray(payload.ids) ? payload.ids : [];
+    const incoming = ids.map(id => ({
+      id: Number(id),
+      title: `Gallery ${id}`,
+      artists: [], groups: [], tags: [], characters: [], parodies: [], languages: [], pages: 0,
+    }));
+    previousResults = [];
+    currentResults = incoming;
+    renderSearchTables();
+    document.getElementById('searchMsg').textContent = payload.cache_key ? `Loaded ${ids.length} (cache)` : `Search results arriving...`;
+  } catch (err) { console.error('scraper-search-ids handler failed', err); }
+});
+
+window.addEventListener('scraper-search-metadata', (e) => {
+  try {
+    const payload = e.detail || {};
+    try { console.debug('handler: scraper-search-metadata', payload); } catch (e) {}
+    const ids = Array.isArray(payload.ids) ? payload.ids.map(Number) : [];
+    const metadata = payload.metadata || {};
+    const byId = new Map(currentResults.map(r => [Number(r.id), r]));
+    ids.forEach(id => {
+      const meta = metadata[String(id)] || metadata[id] || null;
+      if (!meta) return;
+      const row = byId.get(Number(id));
+      const merged = Object.assign({}, row || {}, {
+        id: Number(id),
+        title: meta.raw_title || meta.title || meta.clean_title || (row && row.title) || `Gallery ${id}`,
+        raw_title: meta.raw_title || (row && row.raw_title) || '',
+        clean_title: meta.clean_title || (row && row.clean_title) || '',
+        artists: meta.artists || (row && row.artists) || [],
+        groups: meta.groups || (row && row.groups) || [],
+        tags: meta.tags || (row && row.tags) || [],
+        characters: meta.characters || (row && row.characters) || [],
+        parodies: meta.parodies || (row && row.parodies) || [],
+        languages: meta.languages || (row && row.languages) || [],
+        pages: meta.pages || (row && row.pages) || 0,
+      });
+      byId.set(Number(id), merged);
+    });
+    currentResults = sortRowsByIdDesc(Array.from(byId.values()));
+    renderSearchTables();
+    document.getElementById('searchMsg').textContent = `Loaded ${currentSearchRows().length} results (live).`;
+  } catch (err) { console.error('scraper-search-metadata handler failed', err); }
+});
 </script>
-  </div>
+</div>
 {% endblock %}

@@ -10,6 +10,7 @@ socketio = None
 # dynamic bar can continue showing the previous run's total after the run
 # completes (avoids showing e.g. Completed: 7/0).
 _last_total = 0
+_scraper_namespace_sids = set()
 
 def init_app(app, poll_interval: float = 2.0):
     """Initialise SocketIO for the Flask `app` and start a background emitter that
@@ -152,7 +153,9 @@ def init_app(app, poll_interval: float = 2.0):
                 # Live runtime progress (page counts, speeds) - attempt fetch but
                 # don't make it mandatory for emitting counts.
                 try:
-                    progress = scraperapi.RuntimeProgress.fetch(timeout_seconds=0.35) or {}
+                    # Call fetch with explicit None for port/token so the function
+                    # does not treat the timeout value as the port (bugfix).
+                    progress = scraperapi.RuntimeProgress.fetch(None, None, timeout_seconds=0.35) or {}
                 except Exception:
                     progress = {}
 
@@ -169,7 +172,7 @@ def init_app(app, poll_interval: float = 2.0):
                 try:
                     if status_payload != last_status_payload:
                         try:
-                            scraperapi.logger.debug(f"[SocketEmitter] emitting status counts={status_payload.get('counts')} queue_total={status_payload.get('queue_total')}")
+                            scraperapi.logger.debug(f"[SocketEmitter] emitting status counts={status_payload.get('counts')} queue_total={status_payload.get('queue_total')} connected_sids={list(_scraper_namespace_sids)}")
                         except Exception:
                             pass
                         socketio.emit('scraper:status', status_payload, namespace='/scraper')
@@ -189,6 +192,7 @@ def init_app(app, poll_interval: float = 2.0):
                     now_t = time.time()
                     if progress and progress != last_progress and (now_t - last_progress_emit) >= 1.0:
                         try:
+                            scraperapi.logger.debug(f"[SocketEmitter] emitting progress connected_sids={list(_scraper_namespace_sids)}")
                             socketio.emit('scraper:progress', progress, namespace='/scraper')
                             last_progress = progress
                             last_progress_emit = now_t
@@ -202,6 +206,39 @@ def init_app(app, poll_interval: float = 2.0):
                 # swallow background errors and retry
                 current_sleep = min(max_sleep, current_sleep * 1.5)
             time.sleep(current_sleep)
+
+    # Ensure the '/scraper' namespace accepts connections by providing
+    # lightweight connect/disconnect handlers. Without a registered
+    # handler the server may reject namespace connect attempts with
+    # CONNECT_ERROR ('Unable to connect'). Register handlers before
+    # starting the emitter thread and returning the socketio instance.
+    try:
+        from flask import request as _fl_request
+
+        @socketio.on('connect', namespace='/scraper')
+        def _scraper_connect():
+            try:
+                sid = getattr(_fl_request, 'sid', None)
+                if sid:
+                    _scraper_namespace_sids.add(sid)
+                scraperapi.logger.debug(f'[SocketIO] client connected to /scraper (sid={sid})')
+            except Exception:
+                pass
+            # Allow connection
+            return True
+
+        @socketio.on('disconnect', namespace='/scraper')
+        def _scraper_disconnect():
+            try:
+                sid = getattr(_fl_request, 'sid', None)
+                if sid and sid in _scraper_namespace_sids:
+                    _scraper_namespace_sids.discard(sid)
+                scraperapi.logger.debug(f'[SocketIO] client disconnected from /scraper (sid={sid})')
+            except Exception:
+                pass
+    except Exception:
+        # Defensive: if registration fails, continue without crashing.
+        pass
 
     t = threading.Thread(target=_bg_loop, daemon=True, name='socketio-scraper-emitter')
     t.start()

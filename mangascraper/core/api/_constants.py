@@ -34,7 +34,7 @@ CACHED_METADATA_TTL_SECONDS  = 60 * 60 * 24 * 31  # 31 days
 DOWNLOAD_ROOT_MARKER_FILE = ".manga-scraper.dir"
 DOWNLOAD_ROOT_MARKER_WARNING = (
     "This folder is managed by manga-scraper.\n"
-    "If you remove this file while this folder still contains galleries, it could break things.\n"
+    "If you remove this file, it WILL break things.\n"
 )
 
 ####################################################################################################################

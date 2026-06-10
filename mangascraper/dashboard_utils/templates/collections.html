@@ -237,7 +237,7 @@ function closeReader() {
 }
 
 function renderGalleryDetail(gallery) {
-  const title = String(gallery.title || gallery.name || `Gallery ${gallery.gallery_id || ''}`).trim();
+  const title = String(gallery.raw_title || gallery.title || gallery.clean_title || gallery.name || `Gallery ${gallery.gallery_id || ''}`).trim();
   const creators = normaliseList(gallery.creators);
   const tags = normaliseList(gallery.tags);
   const parodies = normaliseList(gallery.parodies);
@@ -245,7 +245,7 @@ function renderGalleryDetail(gallery) {
   const pageCount = Number(gallery.page_count || 0);
   const galleryId = Number(gallery.gallery_id || 0);
 
-  document.getElementById('galleryDetailTitle').textContent = String(gallery.clean_title || title);
+  document.getElementById('galleryDetailTitle').textContent = title;
   document.getElementById('galleryDetailId').textContent = galleryId > 0 ? String(galleryId) : 'Unknown';
   document.getElementById('galleryDetailCreators').textContent = creators.length ? creators.join(', ') : 'Unknown';
   document.getElementById('galleryDetailParodies').textContent = parodies.length ? parodies.join(', ') : 'None';
@@ -305,7 +305,9 @@ async function openGalleryDetail(item) {
   const galleryId = Number(item.gallery_id || 0);
   _detailGallery = {
     gallery_id: galleryId,
-    title: String(item.title || `Gallery ${galleryId}`),
+    title: String(item.raw_title || item.title || item.clean_title || `Gallery ${galleryId}`),
+    raw_title: String(item.raw_title || ''),
+    clean_title: String(item.clean_title || ''),
     page_count: Number(item.page_count || 0),
     status: String(item.status || ''),
     favourite: Number(item.favourite) ? 1 : 0,
@@ -446,7 +448,7 @@ function renderItems(items) {
 
   pageItems.forEach(item => {
     const galleryId = Number(item.gallery_id || 0);
-    const title = String(item.title || `Gallery ${galleryId}`).trim();
+    const title = String(item.raw_title || item.title || item.clean_title || `Gallery ${galleryId}`).trim();
     const pageCount = Number(item.page_count || 0);
     const status = String(item.status || '').trim();
     const sourceFlags = [item.is_manual ? 'manual' : '', item.is_rule ? 'rule' : ''].filter(Boolean);
@@ -462,7 +464,7 @@ function renderItems(items) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'gallery-square-title';
-    titleDiv.textContent = String(item.clean_title || stripGalleryId(title)); // TODO: Why does stripGalleryId(title) need to be used instead of clean_title from the db?
+    titleDiv.textContent = title;
 
     const metaDiv = document.createElement('div');
     metaDiv.className = 'gallery-square-meta';

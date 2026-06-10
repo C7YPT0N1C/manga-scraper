@@ -10,14 +10,13 @@ from mangascraper.core import orchestrator
 from mangascraper.core.orchestrator import *
 from mangascraper.core.api import api as scraperapi
 from mangascraper.core.api.api import *
-from mangascraper.extensions.extension_manager import get_selected_extension  # Import active extension
+from mangascraper.core.downloader import _downloader_ext
 from dovetail import Dovetail
 
 ####################################################################################################
 # Global Variables
 ####################################################################################################
 
-active_extension = "skeleton"
 download_location = ""
 ARCHIVE_TEMP_ROOT = os.path.join(orchestrator.TEMP_DIR, "archive_temp")
 
@@ -27,15 +26,19 @@ failed_galleries = {}
 failed_galleries_lock = threading.Lock()
 
 
-def _ensure_managed_download_root(root_path: str, extension_name: str = ""):
+def _ensure_managed_download_root(suppess_pre_run_hook: bool = False):
     """Ensure marker file and DownloadLocations entry for a managed download root."""
-    safe_root = str(root_path or "").strip()
+    
+    global download_location
+    
+    orchestrator.refresh_globals()
+    
+    safe_root = str(orchestrator.download_path or "").strip()
     if not safe_root:
         return
 
     marker_path = os.path.join(safe_root, scraperapi.DOWNLOAD_ROOT_MARKER_FILE)
     marker_text = scraperapi.DOWNLOAD_ROOT_MARKER_WARNING
-    extension_label = str(extension_name or "").strip()
 
     if orchestrator.dry_run:
         logger.info(f"[DRY RUN] Would ensure managed download marker at: {marker_path}")
@@ -59,29 +62,13 @@ def _ensure_managed_download_root(root_path: str, extension_name: str = ""):
         logger.warning(f"[Downloader] Could not write marker file at '{marker_path}': {e}")
 
     try:
-        scraperapi.DB.upsert_download_location(safe_root, extension_used=extension_label)
+        scraperapi.DB.upsert_download_location(safe_root)
     except Exception as e:
         logger.warning(f"[Downloader] Could not upsert download location '{safe_root}': {e}")
-
-####################################################################################################
-# Select extension (skeleton fallback)
-####################################################################################################
-
-def load_extension(suppess_pre_run_hook: bool = False):
-    global active_extension, download_location
     
-    orchestrator.refresh_globals()
-
-    ext_name = orchestrator.extension
-    active_extension = get_selected_extension(ext_name, suppess_pre_run_hook=suppess_pre_run_hook)
-    
-    # Prefer extension-specific download path, fallback to config/global default
-    download_location = getattr(active_extension, "DEDICATED_DOWNLOAD_PATH", None) or download_path
-    extension_name = getattr(active_extension, "__name__", "")
+    download_location = safe_root
     
     if suppess_pre_run_hook==False:
-        logger.debug(f"[Downloader] Using extension: {getattr(active_extension, '__name__', 'skeleton')} ({active_extension})")
-        log_clarification()
         log(f"Downloading Galleries To: {download_location}")
 
     if not orchestrator.dry_run:
@@ -89,8 +76,6 @@ def load_extension(suppess_pre_run_hook: bool = False):
     else:
         if suppess_pre_run_hook==False:
             logger.info(f"[DRY RUN] Would Download Galleries To: {download_location}")
-
-    _ensure_managed_download_root(download_location, extension_name=extension_name)
 
 ####################################################################################################
 # UTILITIES
@@ -349,7 +334,7 @@ def pre_download_checks(gallery_ids: list) -> tuple:
         try:
             meta = scraperapi.Fetch.gallery_metadata(gallery_id)
             if meta and isinstance(meta, dict):
-                estimated_size, _, _ = scraperapi.Build.gallery_size_estimate(meta, use_head_requests=False)
+                estimated_size, _, _ = scraperapi.Build.gallery_size_estimate(meta)
                 gallery_sizes.append((gallery_id, estimated_size))
                 download_estimated += estimated_size
         except Exception as e:
@@ -448,20 +433,19 @@ def build_gallery_path(meta, iteration: dict = None, base_path: str | None = Non
     
     gallery_metas = scraperapi.Helpers.summary(
         meta,
-        active_extension.EXTENSION_REFERRER,
+        _downloader_ext.MODULE_REFERRER,
     )
 
     if iteration:
         for k, v in iteration.items():
             gallery_metas[k] = v
 
-    template = getattr(active_extension, "SUBFOLDER_STRUCTURE", ["creator", "title"])
     path_parts = [base_path or download_location]
     raw_creators = scraperapi.Helpers.creator_candidates(meta)
     primary_raw_creator = raw_creators[0] if raw_creators else "Unknown Creator"
     primary_display_creator = scraperapi.Helpers.sanitise(primary_raw_creator)
 
-    for key in template:
+    for key in _downloader_ext.SUBFOLDER_STRUCTURE:
         value = gallery_metas.get(key, "Unknown")
         if key == "creator":
             current_base = os.path.join(*path_parts)
@@ -690,7 +674,7 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
     def download_image_task(task_tuple):
         page, urls, path, _ = task_tuple
         return bool(
-            active_extension.download_images_hook(
+            _downloader_ext.download_images_hook(
                 gallery_id,
                 page,
                 urls,
@@ -832,13 +816,11 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
     orchestrator.refresh_globals()
     
     for gallery_id in batch_ids:
-        extension_name = getattr(active_extension, "__name__", "skeleton")
         if not orchestrator.dry_run:
             _call_db_with_lock_wait(
                 scraperapi.DB.Gallery.start,
                 gallery_id,
                 download_location,
-                extension_name,
                 context=f"Gallery {gallery_id} start",
             )
         else:
@@ -851,7 +833,7 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
             meta = None
             gallery_attempts += 1
             try:
-                active_extension.pre_gallery_download_hook(gallery_id)
+                _downloader_ext.pre_gallery_download_hook(gallery_id)
                 log_clarification("debug")
                 logger.debug("######################## GALLERY START ########################")
                 log_clarification("debug")
@@ -868,10 +850,10 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
                     continue
 
                 num_pages = len(meta.get("images", {}).get("pages", []))
-                active_extension.during_gallery_download_hook(gallery_id)
+                _downloader_ext.during_gallery_download_hook(gallery_id)
                 gallery_metas = scraperapi.Helpers.summary(
                     meta,
-                    active_extension.EXTENSION_REFERRER,
+                    _downloader_ext.MODULE_REFERRER,
                 )
 
                 creator_entries = scraperapi.Helpers.resolve_creator_entries(meta, download_location)
@@ -879,7 +861,7 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
                 gallery_title = gallery_metas["title"]
                 
                 # Estimate size for progress tracking
-                estimated_size, _, img_count = scraperapi.Build.gallery_size_estimate(meta, use_head_requests=False)
+                estimated_size, _, img_count = scraperapi.Build.gallery_size_estimate(meta)
                 space_monitor["total_estimated_bytes"] += estimated_size * 2 # keep this here i think
                 
                 time.sleep(scraperapi.Sleep.dynamic("gallery", attempt=gallery_attempts)) # Sleep before starting gallery.
@@ -1010,7 +992,7 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
                         gallery_id,
                         context=f"Gallery {gallery_id} complete",
                     )
-                    active_extension.after_completed_gallery_download_hook(meta, gallery_id)
+                    _downloader_ext.after_completed_gallery_download_hook(meta, gallery_id)
                     if use_local_archive and os.path.isdir(primary_folder):
                         shutil.rmtree(primary_folder, ignore_errors=True)
                     
@@ -1054,10 +1036,7 @@ def process_galleries(batch_ids, on_gallery_status: Callable[[str], None] | None
                         on_gallery_status("failed")
 
 def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, batch_list=None, overall_start_index: int = 0, overall_total_galleries: int | None = None):
-    # Load extension. active_extension.pre_run_hook() is called by extension_loader when extension is loaded.
-    load_extension(suppess_pre_run_hook=True) # Load extension without calling pre_run_hook again.
-    
-    active_extension.pre_batch_hook(batch_list)
+    _downloader_ext.pre_batch_hook(batch_list)
 
     log_clarification()
     logger.info(
@@ -1158,7 +1137,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
             page_progress.refresh()
 
     # Patch the download_images_hook to call our page_update_hook after each page
-    orig_download_images_hook = getattr(active_extension, "download_images_hook", None)
+    orig_download_images_hook = _downloader_ext.download_images_hook
     def wrapped_download_images_hook(*args, **kwargs):
         if _shutdown_event and _shutdown_event.is_set():
             logger.warning("Shutdown event detected in download_images_hook, aborting page download.")
@@ -1167,7 +1146,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
         page_update_hook()
         return result
     if orig_download_images_hook:
-        active_extension.download_images_hook = wrapped_download_images_hook
+        _downloader_ext.download_images_hook = wrapped_download_images_hook
 
     # Each gallery is processed in parallel via the in-module Dovetail coordinator.
     errors = run_gallery_batch(
@@ -1179,9 +1158,9 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
 
     # Restore original hook
     if orig_download_images_hook:
-        active_extension.download_images_hook = orig_download_images_hook
+        _downloader_ext.download_images_hook = orig_download_images_hook
     page_progress.close()
-    active_extension.post_batch_hook(current_batch_number, total_batch_numbers)
+    _downloader_ext.post_batch_hook(current_batch_number, total_batch_numbers)
 
 def start_downloader(gallery_list=None):
     """
@@ -1232,7 +1211,7 @@ def start_downloader(gallery_list=None):
     
     time_estimate(f"Run", gallery_list)
     
-    load_extension(suppess_pre_run_hook=False) # Load extension and call pre_run_hook.
+    _ensure_managed_download_root(suppess_pre_run_hook=False) # Call pre_run_hook.
     
     # Estimate total download size and prompt if space insufficient
     if not orchestrator.dry_run:
@@ -1299,7 +1278,7 @@ def start_downloader(gallery_list=None):
     log_clarification()
     log(f"All ({len(gallery_list)}) Galleries Processed In {human_runtime}.\n")
 
-    active_extension.post_run_hook()
+    _downloader_ext.post_run_hook()
     
     # Clean up temp archive folder if used
     if orchestrator.gallery_format != "directory" and _is_network_share(download_location):
