@@ -176,7 +176,7 @@ cython_debug/
 .pypirc
 
 # Other
-*-workspace
+*.code-workspace
 *.db
 docs/request.md
 Doujinshi_IDs.txt
