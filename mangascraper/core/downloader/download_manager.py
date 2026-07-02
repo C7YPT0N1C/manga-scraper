@@ -584,7 +584,7 @@ def run_gallery_batch(
     try:
         with Dovetail(
             max_workers=gallery_workers,
-            trace=bool(orchestrator.debug),
+            trace=bool(orchestrator.dovetail_debug),
             trace_logger=logger,
             trace_prefix="DVT-GalleryPool",
         ) as dvt:
@@ -630,7 +630,7 @@ def submit_creator_tasks(creator_tasks, gallery_id, local_session, safe_creator_
     try:
         with Dovetail(
             max_workers=image_workers,
-            trace=bool(orchestrator.debug),
+            trace=bool(orchestrator.dovetail_debug),
             trace_logger=logger,
             trace_prefix="DVT-ImagePool",
         ) as dvt:
@@ -1076,7 +1076,7 @@ def start_batch(current_batch_number: int = 1, total_batch_numbers: int = 1, bat
 
     def _set_progress_postfix() -> None:
         page_progress.set_postfix_str(
-            f"Completed: {gallery_state['completed']} | Failed: {gallery_state['failed']} | Skipped: {gallery_state['skipped']}",
+            f"Completed: {gallery_state['completed']}/{total_gallery_count} | Failed: {gallery_state['failed']} | Skipped: {gallery_state['skipped']}", # TODO: Make this look pretty in the terminal
             refresh=False,
         )
 

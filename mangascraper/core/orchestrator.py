@@ -379,6 +379,7 @@ calm = DEFAULT_CALM
 
 DEFAULT_DEBUG = False
 debug = DEFAULT_DEBUG
+dovetail_debug = False # Debugging for Dovetail TODO: Add CLI flag for this 
 
 # ------------------------------------------------------------
 # Helper: safe int from env
